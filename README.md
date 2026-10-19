@@ -18,6 +18,18 @@
 - `refs`: пересчёт вершин вынесен в решатель, передаваемый функцией (`PointSolver`). Выбор решателя (PlaneGCS) — отдельно.
 - Не перенесено: `sketch`, `body3d`, `library`, `bendmap`, `keymap`, `commands`, `layout`, `ribbon`, `ui_model`, `settings`, `units`, `icons`.
 
+## Eigen (зависимость решателя)
+Для 3D- и 2D-эскизов нужна библиотека Eigen (MPL-2.0), в репозиторий она не входит. CMake ищет её в таком порядке:
+
+1. Системная установка `Eigen3` (CMake-пакет `Eigen3`, версия 3.3 или новее).
+2. Каталог из переменной `BENDCORE_EIGEN_DIR` (внутри него папка `Eigen/`), например:
+
+    cmake -S . -B build -DBENDCORE_EIGEN_DIR=/path/to/eigen-5.0.0
+
+3. Папка `third_party/eigen-5.0.0` внутри репозитория, если вы её туда положили.
+
+Проверено с Eigen 5.0.0 (C++20, GCC 13 и Clang 18). Версия 3.4.90 из зеркала master не компилируется в C++20.
+
 ## WebAssembly (браузер и Capacitor)
 Пресеты `CMakePresets.json`: `host` (нативно) и `wasm` (Emscripten). Для `wasm` нужен активированный emsdk
 (переменная `EMSDK` задаётся `emsdk_env.sh` / `emsdk_env.bat`):
