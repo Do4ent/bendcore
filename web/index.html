@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bendcore — проверка WASM</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; }
+    pre { background: #f4f4f4; padding: 12px; border-radius: 6px; white-space: pre-wrap; }
+    .ok { color: #137333; font-weight: 600; }
+    .fail { color: #b3261e; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>bendcore: проверка WebAssembly-сборки</h1>
+  <p>Квадрат 10×10 на 2D-эскизе (7.9). Ожидается статус «определено», степени свободы 0.</p>
+  <div id="result">Загрузка модуля…</div>
+  <pre id="log"></pre>
+
+  <script type="module">
+    import { loadBendcore, Sketch2D } from './bendcore.mjs';
+
+    const out = document.getElementById('result');
+    const log = document.getElementById('log');
+    const say = (msg) => { log.textContent += msg + '\n'; };
+
+    try {
+      const core = await loadBendcore();
+      say('tangentLength(50, 90) = ' + core.tangentLength(50, 90).toFixed(6) + ' (ожидается 50.000000)');
+
+      const s = new Sketch2D(core);
+      const p0 = s.addPoint(0, 0);
+      const p1 = s.addPoint(10.5, 0.4);
+      const p2 = s.addPoint(10.2, 9.8);
+      const p3 = s.addPoint(0.3, 10.1);
+      s.fixPoint(p0);
+      s.constrainHorizontal(p0, p1);
+      s.constrainVertical(p1, p2);
+      s.constrainHorizontal(p3, p2);
+      s.constrainVertical(p0, p3);
+      s.constrainDistance(p0, p1, 10);
+      s.constrainDistance(p1, p2, 10);
+
+      const r = s.solve();
+      const ok = r.status === 'определено' && r.dof === 0;
+      out.innerHTML = ok
+        ? '<span class="ok">Тест пройден</span>'
+        : '<span class="fail">Тест не пройден</span>';
+      say('status = ' + r.status + ', dof = ' + r.dof);
+      say('p2 = ' + JSON.stringify(s.point(p2)));
+      s.dispose();
+    } catch (err) {
+      out.innerHTML = '<span class="fail">Ошибка загрузки или вычисления</span>';
+      say(String(err && err.stack ? err.stack : err));
+    }
+  </script>
+</body>
+</html>

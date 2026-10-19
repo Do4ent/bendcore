@@ -1,0 +1,10 @@
+build/
+build-*/
+*.o
+*.a
+*.so
+*.dll
+.DS_Store
+.vs/
+.vscode/
+__pycache__/

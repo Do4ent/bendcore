@@ -1,0 +1,125 @@
+cmake_minimum_required(VERSION 3.20)
+project(bendcore LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Детерминизм (спецификация, платформа): без fast-math, без контракции выражений.
+if(MSVC)
+  add_compile_options(/fp:precise /fp:contract-)
+else()
+  add_compile_options(-ffp-contract=off -fno-fast-math)
+endif()
+
+# WebAssembly (Emscripten): исключения нужны (ядро бросает std::invalid_argument при неверных данных).
+if(EMSCRIPTEN)
+  add_compile_options(-fexceptions)
+  add_link_options(-fexceptions)
+endif()
+
+# Eigen (MPL-2.0): системный или каталог BENDCORE_EIGEN_DIR (содержит папку Eigen/) — для решателя эскиза.
+find_package(Eigen3 3.3 QUIET NO_MODULE)
+if(NOT TARGET Eigen3::Eigen)
+  set(BENDCORE_EIGEN_DIR "" CACHE PATH "Каталог Eigen (внутри папка Eigen/), если нет системного Eigen")
+  find_path(BENDCORE_EIGEN_INCLUDE Eigen/Core HINTS ${BENDCORE_EIGEN_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/third_party/eigen-5.0.0 ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/eigen-5.0.0 REQUIRED)
+  add_library(bendcore_eigen INTERFACE)
+  target_include_directories(bendcore_eigen SYSTEM INTERFACE ${BENDCORE_EIGEN_INCLUDE})
+else()
+  add_library(bendcore_eigen INTERFACE)
+  target_link_libraries(bendcore_eigen INTERFACE Eigen3::Eigen)
+endif()
+
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp)
+target_include_directories(bendcore_core PUBLIC include)
+target_link_libraries(bendcore_core PRIVATE bendcore_eigen)
+
+enable_testing()
+
+# Тест: нативно — запуск исполняемого файла; WebAssembly — запуск через node (код возврата = результат теста).
+find_program(BENDCORE_NODE node)
+function(bendcore_add_test name target)
+  if(EMSCRIPTEN)
+    if(NOT BENDCORE_NODE)
+      message(FATAL_ERROR "Для тестов WebAssembly нужен node в PATH (BENDCORE_NODE)")
+    endif()
+    target_link_options(${target} PRIVATE -sEXIT_RUNTIME=1)
+    add_test(NAME ${name} COMMAND ${BENDCORE_NODE} $<TARGET_FILE:${target}>)
+  else()
+    add_test(NAME ${name} COMMAND ${target})
+  endif()
+endfunction()
+
+add_executable(test_tubegeom tests/test_tubegeom.cpp)
+target_link_libraries(test_tubegeom PRIVATE bendcore_core)
+bendcore_add_test(tubegeom test_tubegeom)
+
+add_executable(test_blank_comp tests/test_blank_comp.cpp)
+target_link_libraries(test_blank_comp PRIVATE bendcore_core)
+bendcore_add_test(blank_comp test_blank_comp)
+
+add_executable(test_calib tests/test_calib.cpp)
+target_link_libraries(test_calib PRIVATE bendcore_core)
+bendcore_add_test(calib test_calib)
+
+add_executable(test_ports tests/test_ports.cpp)
+target_link_libraries(test_ports PRIVATE bendcore_core)
+bendcore_add_test(ports test_ports)
+
+add_executable(test_refs tests/test_refs.cpp)
+target_link_libraries(test_refs PRIVATE bendcore_core)
+bendcore_add_test(refs test_refs)
+
+# PlaneGCS (LGPL-2.1-or-later, извлечён из FreeCAD Sketcher, см. third_party/planegcs/NOTICE.md) — 2D-эскизы.
+# Нативно собирается динамической библиотекой (условие LGPL). В WebAssembly динамических библиотек нет:
+# собирается статически внутрь того же модуля (вопрос LGPL для WASM вынесен на юриста, см. README).
+set(PGCS_DIR third_party/planegcs)
+if(EMSCRIPTEN)
+  set(PGCS_LIB_TYPE STATIC)
+else()
+  set(PGCS_LIB_TYPE SHARED)
+endif()
+add_library(planegcs ${PGCS_LIB_TYPE}
+  ${PGCS_DIR}/Geo.cpp ${PGCS_DIR}/Constraints.cpp ${PGCS_DIR}/SubSystem.cpp
+  ${PGCS_DIR}/GCS.cpp ${PGCS_DIR}/qp_eq.cpp)
+target_include_directories(planegcs PUBLIC ${PGCS_DIR})
+target_link_libraries(planegcs PUBLIC bendcore_eigen)
+set_target_properties(planegcs PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+if(MSVC)
+  target_compile_options(planegcs PRIVATE /fp:precise /fp:contract-)
+else()
+  target_compile_options(planegcs PRIVATE -ffp-contract=off -fno-fast-math -Wall -Wextra)
+endif()
+
+add_executable(test_planegcs tests/test_planegcs.cpp)
+target_link_libraries(test_planegcs PRIVATE planegcs)
+bendcore_add_test(planegcs test_planegcs)
+
+# 2D-эскиз чертежа (7.9) поверх PlaneGCS: отдельная библиотека, ядро без LGPL-зависимости.
+add_library(bendcore_sketch2d STATIC src/sketch2d.cpp)
+target_include_directories(bendcore_sketch2d PUBLIC include)
+target_link_libraries(bendcore_sketch2d PUBLIC planegcs)
+
+add_executable(test_sketch tests/test_sketch.cpp)
+target_link_libraries(test_sketch PRIVATE bendcore_core)
+bendcore_add_test(sketch test_sketch)
+
+add_executable(test_sketch2d tests/test_sketch2d.cpp)
+target_link_libraries(test_sketch2d PRIVATE bendcore_sketch2d)
+bendcore_add_test(sketch2d test_sketch2d)
+
+# WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
+# Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.
+if(EMSCRIPTEN)
+  add_executable(bendcore_wasm src/wasm/bindings.cpp)
+  target_link_libraries(bendcore_wasm PRIVATE bendcore_sketch2d bendcore_core)
+  set_target_properties(bendcore_wasm PROPERTIES
+    OUTPUT_NAME bendcore
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/web)
+  target_link_options(bendcore_wasm PRIVATE
+    --bind --no-entry
+    -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createBendcore
+    -sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 -sNO_EXIT_RUNTIME=1)
+  # Страница и JS-обёртка копируются рядом с модулем (открывать через http-сервер, не file://).
+  file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/web/ DESTINATION ${CMAKE_BINARY_DIR}/web)
+endif()
