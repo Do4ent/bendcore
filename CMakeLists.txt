@@ -30,7 +30,7 @@ else()
   target_link_libraries(bendcore_eigen INTERFACE Eigen3::Eigen)
 endif()
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp)
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp)
 target_include_directories(bendcore_core PUBLIC include)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen)
 
@@ -69,6 +69,10 @@ bendcore_add_test(ports test_ports)
 add_executable(test_refs tests/test_refs.cpp)
 target_link_libraries(test_refs PRIVATE bendcore_core)
 bendcore_add_test(refs test_refs)
+
+add_executable(test_axis tests/test_axis.cpp)
+target_link_libraries(test_axis PRIVATE bendcore_core)
+bendcore_add_test(axis test_axis)
 
 # PlaneGCS (LGPL-2.1-or-later, извлечён из FreeCAD Sketcher, см. third_party/planegcs/NOTICE.md) — 2D-эскизы.
 # Нативно собирается динамической библиотекой (условие LGPL). В WebAssembly динамических библиотек нет:
@@ -121,10 +125,12 @@ if(BENDCORE_WITH_OCCT)
   if(NOT BENDCORE_OCCT_LIBS)
     message(FATAL_ERROR "В ${BENDCORE_OCCT_DIR}/lib нет libTK*.a (только статическая сборка поддержана)")
   endif()
-  add_executable(test_tube_occt tests/test_tube_occt.cpp)
-  target_include_directories(test_tube_occt SYSTEM PRIVATE "${BENDCORE_OCCT_DIR}/include/opencascade")
-  target_link_libraries(test_tube_occt PRIVATE bendcore_core
+  add_library(bendcore_occt STATIC src/occt/tube_body_occt.cpp)
+  target_include_directories(bendcore_occt SYSTEM PRIVATE "${BENDCORE_OCCT_DIR}/include/opencascade")
+  target_link_libraries(bendcore_occt PUBLIC bendcore_core
     -Wl,--start-group ${BENDCORE_OCCT_LIBS} -Wl,--end-group pthread dl m)
+  add_executable(test_tube_occt tests/test_tube_occt.cpp)
+  target_link_libraries(test_tube_occt PRIVATE bendcore_occt)
   bendcore_add_test(tube_occt test_tube_occt)
 endif()
 

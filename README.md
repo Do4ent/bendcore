@@ -53,7 +53,8 @@ JS-интерфейс: `web/bendcore.mjs` — `loadBendcore()` и класс `Sk
 - Сборка и тесты WASM ещё не проверены: эта часть написана без доступа к Emscripten. Первый запуск может потребовать правок флагов.
 
 ## Open CASCADE: тело трубы (проверка)
-Проверка «труба из пути как тело» (`tests/test_tube_occt.cpp`) собирается только при `BENDCORE_WITH_OCCT=ON`.
+Тело трубы (`geom::make_solid_tube`, `src/occt/tube_body_occt.cpp`) собирается только при `BENDCORE_WITH_OCCT=ON`. Осевая линия по кускам — `axis_pieces` (`axis.hpp`, без OCCT, проверяется `test_axis`).
+Тест `test_tube_occt`: три пути (плоский гиб, поворот A, пространственный) — валидность и объём π·r²·L.
 Нужна статическая сборка OCCT (тег V8.0.1) с модулями Foundation, ModelingData, ModelingAlgorithms, установленная в каталог:
 
     cmake -S /path/to/OCCT -B occt-build -G Ninja -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
