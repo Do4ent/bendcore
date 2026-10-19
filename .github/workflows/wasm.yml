@@ -31,7 +31,7 @@ jobs:
           set -o pipefail
           ./scripts/build_wasm.sh 2>&1 | tee build-wasm.log
 
-      - name: Ошибки сборки в аннотации (только при падении)
+      - name: Ошибки в аннотации (только при падении)
         if: failure()
         shell: bash
         run: |
@@ -39,6 +39,9 @@ jobs:
           grep -n -i -E "error|fatal|failed|undefined reference|not found" build-wasm.log 2>/dev/null \
             | grep -v -i "warning" | head -n 15 \
             | while IFS= read -r line; do echo "::error title=build-wasm::${line:0:900}"; done
+          for f in playwright-install.log page-check.log; do
+            [ -f "$f" ] && tail -n 15 "$f" | while IFS= read -r line; do echo "::error title=$f::${line:0:900}"; done
+          done
           echo "--- хвост лога ---"
           tail -n 30 build-wasm.log 2>/dev/null | while IFS= read -r line; do echo "::error title=tail::${line:0:900}"; done || true
 
@@ -53,12 +56,19 @@ jobs:
             build-wasm/CMakeFiles/CMakeError.log
           if-no-files-found: warn
 
+      - name: Установка Playwright и Chromium
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p /tmp/wasm-check && cd /tmp/wasm-check && npm init -y >/dev/null
+          { npm install --no-audit --no-fund playwright@1.49.1 && npx playwright install --with-deps chromium; } 2>&1 | tee "$GITHUB_WORKSPACE/playwright-install.log"
+
       - name: Проверка страницы web/index.html в браузере
         shell: bash
         run: |
-          mkdir -p /tmp/wasm-check && cd /tmp/wasm-check && npm init -y >/dev/null && npm install --no-audit --no-fund playwright@1.49.1
-          npx playwright install --with-deps chromium
-          cp scripts/check_wasm_page.mjs /tmp/wasm-check/ && node /tmp/wasm-check/check_wasm_page.mjs "$GITHUB_WORKSPACE/build-wasm/web"
+          set -o pipefail
+          cp scripts/check_wasm_page.mjs /tmp/wasm-check/
+          node /tmp/wasm-check/check_wasm_page.mjs "$GITHUB_WORKSPACE/build-wasm/web" 2>&1 | tee page-check.log
 
       - name: Выходные файлы
         if: success()
