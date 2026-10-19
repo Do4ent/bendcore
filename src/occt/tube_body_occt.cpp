@@ -1,6 +1,7 @@
 #include "bendcore/tube_body.hpp"
 
 #include "bendcore/axis.hpp"
+#include "bendcore/ports.hpp"
 
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
@@ -32,7 +33,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <TopExp.hxx>
+#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
+#include <TopTools_ListOfShape.hxx>
+#include <BRepAdaptor_Curve.hxx>
+#include <BRepAdaptor_Surface.hxx>
+#include <GeomAbs_CurveType.hxx>
+#include <GeomAbs_SurfaceType.hxx>
+#include <gp_Circ.hxx>
+#include <algorithm>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace bendcore::geom {
 namespace {
@@ -66,13 +78,10 @@ TopoDS_Edge make_edge(const AxisPiece& p) {
 
 }  // namespace
 
-TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
+static TopoDS_Solid build_solid(const Path& path, double od_mm) {
     // 256 отсчётов на виток: ошибка длины спирали ~ 1e-5 относительно точной.
     const auto pieces = axis_pieces(path, {0.0, 0.0, 0.0}, 256);
     if (pieces.empty()) throw std::invalid_argument("путь без участков");
-
-    TubeSolidResult res;
-    res.axis_length = axis_length(path);
 
     BRepBuilderAPI_MakeWire spineMaker;
     for (const auto& p : pieces) spineMaker.Add(make_edge(p));
@@ -106,13 +115,68 @@ TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
     if (!shellEx.More()) throw std::invalid_argument("сшивка не дала оболочку");
     BRepBuilderAPI_MakeSolid makeSolid(TopoDS::Shell(shellEx.Current()));
     const TopoDS_Solid solid = makeSolid.Solid();
+    return solid;
+}
 
+TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
+    TubeSolidResult res;
+    res.axis_length = axis_length(path);
+    const TopoDS_Solid solid = build_solid(path, od_mm);
     BRepCheck_Analyzer analyzer(solid);
     res.valid = analyzer.IsValid();
     GProp_GProps props;
     BRepGProp::VolumeProperties(solid, props);
     res.volume = props.Mass();
     return res;
+}
+
+std::vector<Port> end_ports(const Path& path, double od_mm) {
+    const TopoDS_Solid solid = build_solid(path, od_mm);
+    GProp_GProps props;
+    BRepGProp::VolumeProperties(solid, props);
+    const gp_Pnt massCentre = props.CentreOfMass();
+
+    // Кромки концов: окружности, у которых одна из граней — плоская (торец). Стыки участков — окружности
+    // между двумя цилиндрическими гранями, их пропускаем.
+    TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+    TopExp::MapShapesAndAncestors(solid, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+
+    std::vector<Port> ports;
+    std::vector<std::string> names;
+    for (int i = 1; i <= edgeFaces.Extent(); ++i) {
+        const TopoDS_Edge edge = TopoDS::Edge(edgeFaces.FindKey(i));
+        BRepAdaptor_Curve curve(edge);
+        if (curve.GetType() != GeomAbs_Circle) continue;
+
+        bool atEnd = false;
+        for (const TopoDS_Shape& face : edgeFaces.FindFromIndex(i)) {
+            BRepAdaptor_Surface surface(TopoDS::Face(face));
+            atEnd = atEnd || surface.GetType() == GeomAbs_Plane;
+        }
+        if (!atEnd) continue;
+
+        const gp_Circ circ = curve.Circle();
+        gp_Dir axis = circ.Axis().Direction();
+        const gp_Pnt centre = circ.Location();
+        // наружу — от центра масс тела к торцу
+        if (axis.X() * (centre.X() - massCentre.X()) + axis.Y() * (centre.Y() - massCentre.Y()) +
+                axis.Z() * (centre.Z() - massCentre.Z()) < 0) {
+            axis.Reverse();
+        }
+        Port port;
+        port.pos = {centre.X(), centre.Y(), centre.Z()};
+        port.direction = {axis.X(), axis.Y(), axis.Z()};
+        port.od = 2.0 * circ.Radius();
+        // окружность торца может делиться швом на две дуги с одинаковым центром — один порт
+        const bool duplicate = std::any_of(ports.begin(), ports.end(), [&](const Port& q) {
+            return norm(sub(q.pos, port.pos)) < 1e-4 && dot(q.direction, port.direction) > 0.9999;
+        });
+        if (duplicate) continue;
+        port.name = auto_name("tube", names);
+        names.push_back(port.name);
+        ports.push_back(port);
+    }
+    return ports;
 }
 
 }  // namespace bendcore::geom

@@ -2,6 +2,9 @@
 // (включается при BENDCORE_WITH_OCCT). Версия 1: сплошной круглый профиль, без стенки и концов.
 #pragma once
 
+#include <vector>
+
+#include "bendcore/ports.hpp"
 #include "bendcore/tubegeom.hpp"
 
 namespace bendcore::geom {
@@ -14,5 +17,9 @@ struct TubeSolidResult {
 
 // Сплошная труба ∅od по осевой линии path. Исключение std::invalid_argument при неверном пути.
 TubeSolidResult make_solid_tube(const Path& path, double od_mm);
+
+// Порты по кромкам концов тела (окружности на плоских торцах). Направление — наружу из трубы.
+// Стыки участков и швы не дают портов. Версия 1: только кромки; ручные способы — отдельно.
+std::vector<Port> end_ports(const Path& path, double od_mm);
 
 }  // namespace bendcore::geom

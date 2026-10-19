@@ -55,6 +55,7 @@ JS-интерфейс: `web/bendcore.mjs` — `loadBendcore()` и класс `Sk
 ## Open CASCADE: тело трубы (проверка)
 Тело трубы (`geom::make_solid_tube`, `src/occt/tube_body_occt.cpp`) собирается только при `BENDCORE_WITH_OCCT=ON`. Осевая линия по кускам — `axis_pieces` (`axis.hpp`, без OCCT, проверяется `test_axis`): прямые, дуги и спираль.
 Тест `test_tube_occt`: пять путей (плоский гиб, поворот A, пространственный, две спирали) — валидность и объём π·r²·L.
+`geom::end_ports(path, od)` — порты по кромкам концов (окружности на плоских торцах), направление наружу от центра масс. Ручные способы создания портов (цилиндрическая грань, точка с направлением) пока не сделаны.
 Нужна статическая сборка OCCT (тег V8.0.1) с модулями Foundation, ModelingData, ModelingAlgorithms, установленная в каталог:
 
     cmake -S /path/to/OCCT -B occt-build -G Ninja -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
