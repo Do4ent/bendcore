@@ -1,0 +1,35 @@
+name: WebAssembly
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  wasm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Зависимости (Ninja, Eigen)
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev
+
+      - name: Установка emsdk
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          # Версия совпадает с emsdk из архива, см. emscripten-version.txt. Проверить при первом запуске.
+          version: '6.0.12'
+          actions-cache-folder: emsdk-cache
+
+      - name: Сборка и тесты WASM
+        env:
+          BENDCORE_EIGEN_DIR: /usr/include/eigen3
+        run: ./scripts/build_wasm.sh
+
+      - name: Выходные файлы
+        uses: actions/upload-artifact@v4
+        with:
+          name: bendcore-wasm
+          path: build-wasm/web/
+          if-no-files-found: error
