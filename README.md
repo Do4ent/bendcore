@@ -51,3 +51,22 @@ JS-интерфейс: `web/bendcore.mjs` — `loadBendcore()` и класс `Sk
 - PlaneGCS собирается статически в тот же модуль (динамических библиотек в WASM нет). Вопрос LGPL для такой сборки и для iOS (Capacitor) — юристу.
 - Исключения включены (`-fexceptions`): ядро бросает `std::invalid_argument` при неверных данных.
 - Сборка и тесты WASM ещё не проверены: эта часть написана без доступа к Emscripten. Первый запуск может потребовать правок флагов.
+
+## Open CASCADE: тело трубы (проверка)
+Проверка «труба из пути как тело» (`tests/test_tube_occt.cpp`) собирается только при `BENDCORE_WITH_OCCT=ON`.
+Нужна статическая сборка OCCT (тег V8.0.1) с модулями Foundation, ModelingData, ModelingAlgorithms, установленная в каталог:
+
+    cmake -S /path/to/OCCT -B occt-build -G Ninja -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
+      -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF -DBUILD_MODULE_Draw=OFF \
+      -DBUILD_SAMPLES=OFF -DUSE_TBB=OFF -DUSE_FREETYPE=OFF -DUSE_FREEIMAGE=OFF -DUSE_RAPIDJSON=OFF \
+      -DUSE_VTK=OFF -DUSE_OPENGL=OFF -DBUILD_Inspector=OFF
+    cmake --build occt-build && cmake --install occt-build --prefix /path/to/occt-install
+
+    cmake -S . -B build-occt -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=/path/to/occt-install
+    cmake --build build-occt && ctest --test-dir build-occt -R tube_occt
+
+Особенности:
+- Конфиг OCCT из `cmake --install` для статической сборки неполный, поэтому библиотеки подключаются напрямую из `lib/libTK*.a`.
+- Заголовки в `include/opencascade` при установке копируются не все: при сборке нужно скопировать недостающие из `occt-build/include/opencascade`.
+- Тело трубы: `BRepOffsetAPI_MakePipe` даёт только боковую поверхность, торцы добавляются вручную, затем сшивка в solid.
+- Проверено на Linux (GCC 13). Сборка на Windows (MSVC, `.lib`) этим блоком не покрыта.

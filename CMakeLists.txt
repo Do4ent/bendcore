@@ -108,6 +108,26 @@ add_executable(test_sketch2d tests/test_sketch2d.cpp)
 target_link_libraries(test_sketch2d PRIVATE bendcore_sketch2d)
 bendcore_add_test(sketch2d test_sketch2d)
 
+# Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
+# Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
+# содержит нераскрытые переменные, поэтому библиотеки подключаются напрямую из lib/libTK*.a.
+set(BENDCORE_OCCT_DIR "" CACHE PATH "Каталог установки Open CASCADE (include/opencascade, lib/libTK*.a)")
+option(BENDCORE_WITH_OCCT "Собрать проверку тела трубы на Open CASCADE" OFF)
+if(BENDCORE_WITH_OCCT)
+  if(NOT BENDCORE_OCCT_DIR)
+    message(FATAL_ERROR "BENDCORE_WITH_OCCT=ON: укажите BENDCORE_OCCT_DIR")
+  endif()
+  file(GLOB BENDCORE_OCCT_LIBS "${BENDCORE_OCCT_DIR}/lib/libTK*.a")
+  if(NOT BENDCORE_OCCT_LIBS)
+    message(FATAL_ERROR "В ${BENDCORE_OCCT_DIR}/lib нет libTK*.a (только статическая сборка поддержана)")
+  endif()
+  add_executable(test_tube_occt tests/test_tube_occt.cpp)
+  target_include_directories(test_tube_occt SYSTEM PRIVATE "${BENDCORE_OCCT_DIR}/include/opencascade")
+  target_link_libraries(test_tube_occt PRIVATE bendcore_core
+    -Wl,--start-group ${BENDCORE_OCCT_LIBS} -Wl,--end-group pthread dl m)
+  bendcore_add_test(tube_occt test_tube_occt)
+endif()
+
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.
 if(EMSCRIPTEN)
