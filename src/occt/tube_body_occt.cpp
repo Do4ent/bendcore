@@ -11,6 +11,10 @@
 #include <BRepGProp.hxx>
 #include <BRepOffsetAPI_MakePipe.hxx>
 #include <GC_MakeArcOfCircle.hxx>
+#include <GeomAPI_PointsToBSpline.hxx>
+#include <Geom_BSplineCurve.hxx>
+#include <GeomAbs_Shape.hxx>
+#include <TColgp_Array1OfPnt.hxx>
 #include <GProp_GProps.hxx>
 #include <Geom_TrimmedCurve.hxx>
 #include <Standard_Handle.hxx>
@@ -36,51 +40,47 @@ namespace {
 gp_Pnt to_pnt(const Vec3& v) { return gp_Pnt(v[0], v[1], v[2]); }
 gp_Dir to_dir(const Vec3& v) { return gp_Dir(v[0], v[1], v[2]); }
 
-// Касательная на конце куска, по направлению обхода дуги (знак из середины дуги).
-Vec3 tangent_at_start(const AxisPiece& p) {
-    if (p.kind == AxisPiece::Kind::Line) return unit(sub(p.p1, p.p0));
-    const Vec3 r0 = sub(p.p0, p.centre);
-    const double s = dot(cross(r0, sub(p.mid, p.centre)), p.axis) >= 0 ? 1.0 : -1.0;
-    return mul(unit(cross(p.axis, r0)), s);
-}
-
-Vec3 tangent_at_end(const AxisPiece& p) {
-    if (p.kind == AxisPiece::Kind::Line) return unit(sub(p.p1, p.p0));
-    const Vec3 r0 = sub(p.p0, p.centre);
-    const double s = dot(cross(r0, sub(p.mid, p.centre)), p.axis) >= 0 ? 1.0 : -1.0;
-    return mul(unit(cross(p.axis, sub(p.p1, p.centre))), s);
-}
-
 TopoDS_Edge make_edge(const AxisPiece& p) {
-    if (p.kind == AxisPiece::Kind::Line) {
+    switch (p.kind) {
+    case AxisPiece::Kind::Line:
         return BRepBuilderAPI_MakeEdge(to_pnt(p.p0), to_pnt(p.p1)).Edge();
+    case AxisPiece::Kind::Arc: {
+        GC_MakeArcOfCircle arc(to_pnt(p.p0), to_pnt(p.mid), to_pnt(p.p1));
+        if (!arc.IsDone()) throw std::invalid_argument("не строится дуга оси");
+        Handle(Geom_TrimmedCurve) curve = arc.Value();
+        return BRepBuilderAPI_MakeEdge(curve).Edge();
     }
-    GC_MakeArcOfCircle arc(to_pnt(p.p0), to_pnt(p.mid), to_pnt(p.p1));
-    if (!arc.IsDone()) throw std::invalid_argument("не строится дуга оси");
-    Handle(Geom_TrimmedCurve) curve = arc.Value();
-    return BRepBuilderAPI_MakeEdge(curve).Edge();
+    case AxisPiece::Kind::Spiral: {
+        // Отсчёты центральной линии аппроксимируются B-сплайном (степень до 8, C2, допуск 1e-4 мм).
+        TColgp_Array1OfPnt points(1, static_cast<Standard_Integer>(p.pts.size()));
+        for (std::size_t k = 0; k < p.pts.size(); ++k) {
+            points.SetValue(static_cast<Standard_Integer>(k) + 1, to_pnt(p.pts[k]));
+        }
+        GeomAPI_PointsToBSpline fit(points, 3, 8, GeomAbs_C2, 1e-4);
+        if (!fit.IsDone()) throw std::invalid_argument("не строится сплайн спирали");
+        return BRepBuilderAPI_MakeEdge(fit.Curve()).Edge();
+    }
+    }
+    throw std::invalid_argument("неизвестный кусок оси");
 }
 
 }  // namespace
 
 TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
-    const auto pieces = axis_pieces(path);
+    // 256 отсчётов на виток: ошибка длины спирали ~ 1e-5 относительно точной.
+    const auto pieces = axis_pieces(path, {0.0, 0.0, 0.0}, 256);
     if (pieces.empty()) throw std::invalid_argument("путь без участков");
 
     TubeSolidResult res;
-    for (const auto& p : pieces) {
-        res.axis_length += p.kind == AxisPiece::Kind::Line
-                               ? norm(sub(p.p1, p.p0))
-                               : p.R * std::acos(std::clamp(dot(unit(sub(p.p0, p.centre)), unit(sub(p.p1, p.centre))), -1.0, 1.0));
-    }
+    res.axis_length = axis_length(path);
 
     BRepBuilderAPI_MakeWire spineMaker;
     for (const auto& p : pieces) spineMaker.Add(make_edge(p));
     const TopoDS_Wire spine = spineMaker.Wire();
 
     const double r = od_mm / 2.0;
-    const Vec3 t0 = tangent_at_start(pieces.front());
-    const Vec3 t1 = tangent_at_end(pieces.back());
+    const Vec3 t0 = pieces.front().t0;
+    const Vec3 t1 = pieces.back().t1;
     const gp_Circ startCirc(gp_Ax2(to_pnt(pieces.front().p0), to_dir(t0)), r);
     const gp_Circ endCirc(gp_Ax2(to_pnt(pieces.back().p1), to_dir(t1)), r);
 
@@ -96,7 +96,7 @@ TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
     BRepBuilderAPI_MakeFace faceStart(profileMaker.Wire());
     BRepBuilderAPI_MakeFace faceEnd(endWire.Wire());
 
-    BRepBuilderAPI_Sewing sewing(1e-4);
+    BRepBuilderAPI_Sewing sewing(1e-3);
     sewing.Add(pipe.Shape());
     sewing.Add(faceStart.Face());
     sewing.Add(faceEnd.Face());

@@ -53,8 +53,8 @@ JS-интерфейс: `web/bendcore.mjs` — `loadBendcore()` и класс `Sk
 - Сборка и тесты WASM ещё не проверены: эта часть написана без доступа к Emscripten. Первый запуск может потребовать правок флагов.
 
 ## Open CASCADE: тело трубы (проверка)
-Тело трубы (`geom::make_solid_tube`, `src/occt/tube_body_occt.cpp`) собирается только при `BENDCORE_WITH_OCCT=ON`. Осевая линия по кускам — `axis_pieces` (`axis.hpp`, без OCCT, проверяется `test_axis`).
-Тест `test_tube_occt`: три пути (плоский гиб, поворот A, пространственный) — валидность и объём π·r²·L.
+Тело трубы (`geom::make_solid_tube`, `src/occt/tube_body_occt.cpp`) собирается только при `BENDCORE_WITH_OCCT=ON`. Осевая линия по кускам — `axis_pieces` (`axis.hpp`, без OCCT, проверяется `test_axis`): прямые, дуги и спираль.
+Тест `test_tube_occt`: пять путей (плоский гиб, поворот A, пространственный, две спирали) — валидность и объём π·r²·L.
 Нужна статическая сборка OCCT (тег V8.0.1) с модулями Foundation, ModelingData, ModelingAlgorithms, установленная в каталог:
 
     cmake -S /path/to/OCCT -B occt-build -G Ninja -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
@@ -69,5 +69,6 @@ JS-интерфейс: `web/bendcore.mjs` — `loadBendcore()` и класс `Sk
 Особенности:
 - Конфиг OCCT из `cmake --install` для статической сборки неполный, поэтому библиотеки подключаются напрямую из `lib/libTK*.a`.
 - Заголовки в `include/opencascade` при установке копируются не все: при сборке нужно скопировать недостающие из `occt-build/include/opencascade`.
-- Тело трубы: `BRepOffsetAPI_MakePipe` даёт только боковую поверхность, торцы добавляются вручную, затем сшивка в solid.
+- Тело трубы: `BRepOffsetAPI_MakePipe` даёт только боковую поверхность, торцы добавляются вручную, затем сшивка в solid (допуск сшивки 1e-3 мм).
+- Спираль: отсчёты центральной линии (256 на виток) аппроксимируются B-сплайном (степень до 8, допуск 1e-4 мм). Сплайн с допуском сшивки 1e-4 давал незамкнутое тело, поэтому допуск 1e-3.
 - Проверено на Linux (GCC 13). Сборка на Windows (MSVC, `.lib`) этим блоком не покрыта.

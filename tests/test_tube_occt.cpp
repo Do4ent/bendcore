@@ -17,7 +17,7 @@ static void check(bool ok, const char* what) {
     }
 }
 
-static void check_body(const Path& path, double od, const char* name) {
+static void check_body(const Path& path, double od, const char* name, double rel_tol = 1e-4) {
     const double pi = std::acos(-1.0);
     const double r = od / 2.0;
     const double L = axis_length(path);
@@ -26,7 +26,7 @@ static void check_body(const Path& path, double od, const char* name) {
     std::printf("%s: объём %.4f мм³, π·r²·L %.4f мм³, валидно=%d\n", name, res.volume, V_expected, res.valid ? 1 : 0);
     check(res.valid, name);
     check(std::abs(res.axis_length - L) < 1e-6, name);
-    check(std::abs(res.volume - V_expected) <= 1e-4 * V_expected, name);
+    check(std::abs(res.volume - V_expected) <= rel_tol * V_expected, name);
 }
 
 int main() {
@@ -35,6 +35,9 @@ int main() {
                "два гиба, второй с поворотом A");
     check_body({Straight{20}, Bend{30, 45, 45}, Straight{20}, Bend{30, 45, 0}, Straight{10}}, 12.0,
                "пространственный путь");
+    // Спираль: отсчёты и сплайн дают приближение длины, допуск 1e-3.
+    check_body({Straight{50}, Spiral{50, 30, 2, +1}, Straight{50}}, 20.0, "спираль в прямых", 1e-3);
+    check_body({Straight{40}, Bend{50, 90}, Spiral{50, 30, 1.5, -1}, Straight{20}}, 20.0, "гиб и спираль", 1e-3);
     if (failures == 0) std::printf("OK tube_occt\n");
     return failures == 0 ? 0 : 1;
 }
