@@ -59,6 +59,38 @@ static void check_end_ports() {
     check(norm(sub(pe.direction, endDir)) < 1e-6, "наружу в конце = касательная");
 }
 
+// Труба со стенкой: объём π·(r² − r_в²)·L (точно при r < радиуса гиба), кольцевые торцы дают порты по наружной окружности.
+static void check_wall() {
+    const double pi = std::acos(-1.0);
+    const double r = 10.0;
+    const double wall = 2.0;
+    const double ri = r - wall;
+    const Path path{Straight{100}, Bend{50, 90}, Straight{100}};
+    const double L = axis_length(path);
+    const auto res = geom::make_tube(path, 2.0 * r, wall);
+    const double V_expected = pi * (r * r - ri * ri) * L;
+    std::printf("стенка 2 мм: объём %.4f мм³, π·(r²−r_в²)·L %.4f мм³, валидно=%d\n", res.volume, V_expected,
+                res.valid ? 1 : 0);
+    check(res.valid, "стенка: тело валидно");
+    check(std::abs(res.volume - V_expected) <= 1e-4 * V_expected, "стенка: объём");
+
+    const auto ports = geom::end_ports(path, 2.0 * r, wall);
+    check(ports.size() == 2, "стенка: два порта на концах (кольца дают по одному)");
+    for (const auto& port : ports) check(std::abs(port.od - 2.0 * r) < 1e-6, "стенка: ∅ порта = наружный ∅");
+}
+
+// Порт на грани: ближайшая точка наружной поверхности к (50, 5, 0) — (50, 10, 0), наружу — +Y.
+static void check_face_port() {
+    const double r = 10.0;
+    const Path path{Straight{100}};
+    const Port port = geom::face_port(path, 2.0 * r, Vec3{50.0, 5.0, 0.0}, "грань");
+    std::printf("порт на грани: pos (%.3f, %.3f, %.3f), dir (%.3f, %.3f, %.3f), od %.3f\n", port.pos[0], port.pos[1],
+                port.pos[2], port.direction[0], port.direction[1], port.direction[2], port.od);
+    check(norm(sub(port.pos, Vec3{50.0, 10.0, 0.0})) < 1e-4, "порт на грани: точка на поверхности");
+    check(norm(sub(port.direction, Vec3{0.0, 1.0, 0.0})) < 1e-4, "порт на грани: нормаль наружу");
+    check(std::abs(port.od - 2.0 * r) < 1e-9, "порт на грани: ∅");
+}
+
 int main() {
     check_body({Straight{100}, Bend{50, 90}, Straight{100}}, 20.0, "плоский гиб 90°");
     check_body({Straight{50}, Bend{40, 60, 0}, Straight{30}, Bend{40, -70, 90}, Straight{40}}, 16.0,
@@ -69,6 +101,8 @@ int main() {
     check_body({Straight{50}, Spiral{50, 30, 2, +1}, Straight{50}}, 20.0, "спираль в прямых", 1e-3);
     check_body({Straight{40}, Bend{50, 90}, Spiral{50, 30, 1.5, -1}, Straight{20}}, 20.0, "гиб и спираль", 1e-3);
     check_end_ports();
+    check_wall();
+    check_face_port();
     // Порты только на концах: швы и стыки спирали и гибов портов не дают.
     check(geom::end_ports({Straight{50}, Spiral{50, 30, 2, +1}, Straight{50}}, 20.0).size() == 2, "спираль: два порта");
     check(geom::end_ports({Straight{40}, Bend{50, 90}, Spiral{50, 30, 1.5, -1}, Straight{20}}, 20.0).size() == 2,

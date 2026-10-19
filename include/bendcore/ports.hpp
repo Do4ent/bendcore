@@ -40,6 +40,10 @@ std::vector<Issue> check_connection(const Port& port, const Path& path, double o
                                     char end = 'A', std::optional<Vec3> end_pos = std::nullopt,
                                     std::optional<Vec3> end_dir = std::nullopt);
 
+// Порт «по точке + направлению + ∅» (5.3): ручной способ. direction — наружу, нормируется.
+// Исключение std::invalid_argument при od <= 0 или нулевом направлении.
+Port manual_port(const Vec3& pos, const Vec3& direction, double od, const std::string& name);
+
 std::string auto_name(const std::string& component, const std::vector<std::string>& existing);
 std::optional<Issue> socket_hint(const Port& port, double E_current, bool decided = false);
 std::pair<Vec3, Vec3> start_from_port(const Port& port);   // позиция и направление порта

@@ -67,4 +67,5 @@ EMSCRIPTEN_BINDINGS(bendcore_module) {
         .function("circleRadius", &Sketch::circle_radius);
 
     function("tangentLength", &bendcore::tangent_length);
+    function("wrap180", &bendcore::wrap180);
 }

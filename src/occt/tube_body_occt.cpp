@@ -3,26 +3,39 @@
 #include "bendcore/axis.hpp"
 #include "bendcore/ports.hpp"
 
+#include <BRepAdaptor_Curve.hxx>
+#include <BRepAdaptor_Surface.hxx>
+#include <BRepAlgoAPI_Cut.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeSolid.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepBuilderAPI_Sewing.hxx>
 #include <BRepCheck_Analyzer.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
+#include <BRepGProp_Face.hxx>
 #include <BRepOffsetAPI_MakePipe.hxx>
 #include <GC_MakeArcOfCircle.hxx>
-#include <GeomAPI_PointsToBSpline.hxx>
-#include <Geom_BSplineCurve.hxx>
-#include <GeomAbs_Shape.hxx>
-#include <TColgp_Array1OfPnt.hxx>
 #include <GProp_GProps.hxx>
+#include <GeomAPI_PointsToBSpline.hxx>
+#include <GeomAbs_CurveType.hxx>
+#include <GeomAbs_Shape.hxx>
+#include <GeomAbs_SurfaceType.hxx>
+#include <Geom_BSplineCurve.hxx>
 #include <Geom_TrimmedCurve.hxx>
 #include <Standard_Handle.hxx>
+#include <TColgp_Array1OfPnt.hxx>
 #include <TopAbs_ShapeEnum.hxx>
+#include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
+#include <TopTools_ListOfShape.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
+#include <TopoDS_Shape.hxx>
 #include <TopoDS_Shell.hxx>
 #include <TopoDS_Solid.hxx>
 #include <TopoDS_Wire.hxx>
@@ -30,18 +43,11 @@
 #include <gp_Circ.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Vec.hxx>
 
 #include <algorithm>
 #include <cmath>
-#include <TopExp.hxx>
-#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
-#include <TopTools_ListOfShape.hxx>
-#include <BRepAdaptor_Curve.hxx>
-#include <BRepAdaptor_Surface.hxx>
-#include <GeomAbs_CurveType.hxx>
-#include <GeomAbs_SurfaceType.hxx>
-#include <gp_Circ.hxx>
-#include <algorithm>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -76,9 +82,8 @@ TopoDS_Edge make_edge(const AxisPiece& p) {
     throw std::invalid_argument("неизвестный кусок оси");
 }
 
-}  // namespace
-
-static TopoDS_Solid build_solid(const Path& path, double od_mm) {
+// Сплошное тело радиуса radius по пути (с торцами).
+TopoDS_Solid build_solid(const Path& path, double radius) {
     // 256 отсчётов на виток: ошибка длины спирали ~ 1e-5 относительно точной.
     const auto pieces = axis_pieces(path, {0.0, 0.0, 0.0}, 256);
     if (pieces.empty()) throw std::invalid_argument("путь без участков");
@@ -87,11 +92,10 @@ static TopoDS_Solid build_solid(const Path& path, double od_mm) {
     for (const auto& p : pieces) spineMaker.Add(make_edge(p));
     const TopoDS_Wire spine = spineMaker.Wire();
 
-    const double r = od_mm / 2.0;
     const Vec3 t0 = pieces.front().t0;
     const Vec3 t1 = pieces.back().t1;
-    const gp_Circ startCirc(gp_Ax2(to_pnt(pieces.front().p0), to_dir(t0)), r);
-    const gp_Circ endCirc(gp_Ax2(to_pnt(pieces.back().p1), to_dir(t1)), r);
+    const gp_Circ startCirc(gp_Ax2(to_pnt(pieces.front().p0), to_dir(t0)), radius);
+    const gp_Circ endCirc(gp_Ax2(to_pnt(pieces.back().p1), to_dir(t1)), radius);
 
     BRepBuilderAPI_MakeWire profileMaker;
     profileMaker.Add(BRepBuilderAPI_MakeEdge(startCirc).Edge());
@@ -114,32 +118,54 @@ static TopoDS_Solid build_solid(const Path& path, double od_mm) {
     TopExp_Explorer shellEx(sewing.SewedShape(), TopAbs_SHELL);
     if (!shellEx.More()) throw std::invalid_argument("сшивка не дала оболочку");
     BRepBuilderAPI_MakeSolid makeSolid(TopoDS::Shell(shellEx.Current()));
-    const TopoDS_Solid solid = makeSolid.Solid();
-    return solid;
+    return makeSolid.Solid();
 }
 
-TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
+// Тело трубы: сплошное (wall = 0) или наружное минус внутреннее (0 < wall < r).
+TopoDS_Shape build_body(const Path& path, double od_mm, double wall_mm) {
+    if (!(od_mm > 0.0)) throw std::invalid_argument("∅ трубы должен быть больше нуля");
+    if (wall_mm < 0.0) throw std::invalid_argument("толщина стенки не может быть отрицательной");
+    const double r = od_mm / 2.0;
+    const TopoDS_Solid outer = build_solid(path, r);
+    if (wall_mm == 0.0) return outer;
+    if (wall_mm >= r) throw std::invalid_argument("стенка не меньше радиуса трубы");
+
+    const TopoDS_Solid inner = build_solid(path, r - wall_mm);
+    BRepAlgoAPI_Cut cut(outer, inner);
+    if (!cut.IsDone()) throw std::invalid_argument("вычитание внутреннего тела не выполнено");
+    TopExp_Explorer solidEx(cut.Shape(), TopAbs_SOLID);
+    if (!solidEx.More()) throw std::invalid_argument("вычитание не дало тело");
+    return solidEx.Current();
+}
+
+}  // namespace
+
+TubeSolidResult make_tube(const Path& path, double od_mm, double wall_mm) {
     TubeSolidResult res;
     res.axis_length = axis_length(path);
-    const TopoDS_Solid solid = build_solid(path, od_mm);
-    BRepCheck_Analyzer analyzer(solid);
+    const TopoDS_Shape body = build_body(path, od_mm, wall_mm);
+    BRepCheck_Analyzer analyzer(body);
     res.valid = analyzer.IsValid();
     GProp_GProps props;
-    BRepGProp::VolumeProperties(solid, props);
+    BRepGProp::VolumeProperties(body, props);
     res.volume = props.Mass();
     return res;
 }
 
-std::vector<Port> end_ports(const Path& path, double od_mm) {
-    const TopoDS_Solid solid = build_solid(path, od_mm);
+TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
+    return make_tube(path, od_mm, 0.0);
+}
+
+std::vector<Port> end_ports(const Path& path, double od_mm, double wall_mm) {
+    const TopoDS_Shape body = build_body(path, od_mm, wall_mm);
     GProp_GProps props;
-    BRepGProp::VolumeProperties(solid, props);
+    BRepGProp::VolumeProperties(body, props);
     const gp_Pnt massCentre = props.CentreOfMass();
 
     // Кромки концов: окружности, у которых одна из граней — плоская (торец). Стыки участков — окружности
-    // между двумя цилиндрическими гранями, их пропускаем.
+    // между двумя цилиндрическими гранями, их пропускаем. У трубы со стенкой торец — кольцо (две окружности).
     TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
-    TopExp::MapShapesAndAncestors(solid, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+    TopExp::MapShapesAndAncestors(body, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
     std::vector<Port> ports;
     std::vector<std::string> names;
@@ -167,16 +193,64 @@ std::vector<Port> end_ports(const Path& path, double od_mm) {
         port.pos = {centre.X(), centre.Y(), centre.Z()};
         port.direction = {axis.X(), axis.Y(), axis.Z()};
         port.od = 2.0 * circ.Radius();
-        // окружность торца может делиться швом на две дуги с одинаковым центром — один порт
-        const bool duplicate = std::any_of(ports.begin(), ports.end(), [&](const Port& q) {
+
+        // Окружность торца делится швом на две дуги с одним центром (один порт), а внутренняя окружность
+        // кольца — с тем же центром и направлением, но меньшим ∅: для порта берётся наружная.
+        auto same = [&](const Port& q) {
             return norm(sub(q.pos, port.pos)) < 1e-4 && dot(q.direction, port.direction) > 0.9999;
-        });
-        if (duplicate) continue;
+        };
+        auto found = std::find_if(ports.begin(), ports.end(), same);
+        if (found != ports.end()) {
+            found->od = std::max(found->od, port.od);
+            continue;
+        }
         port.name = auto_name("tube", names);
         names.push_back(port.name);
         ports.push_back(port);
     }
     return ports;
+}
+
+Port face_port(const Path& path, double od_mm, const Vec3& pick, const std::string& name, double wall_mm) {
+    const TopoDS_Shape body = build_body(path, od_mm, wall_mm);
+    const gp_Pnt target = to_pnt(pick);
+
+    // Ближайшая грань тела к точке pick: расстояние до каждой грани, минимум.
+    double best = std::numeric_limits<double>::infinity();
+    TopoDS_Face bestFace;
+    double bestU = 0.0;
+    double bestV = 0.0;
+    gp_Pnt bestPoint;
+    bool found = false;
+    TopExp_Explorer faceEx(body, TopAbs_FACE);
+    for (; faceEx.More(); faceEx.Next()) {
+        const TopoDS_Face face = TopoDS::Face(faceEx.Current());
+        BRepExtrema_DistShapeShape dist(BRepBuilderAPI_MakeVertex(target).Vertex(), face);
+        if (!dist.IsDone() || dist.NbSolution() == 0) continue;
+        if (dist.Value() < best) {
+            best = dist.Value();
+            bestFace = face;
+            bestPoint = dist.PointOnShape2(1);
+            dist.ParOnFaceS2(1, bestU, bestV);
+            found = true;
+        }
+    }
+    if (!found) throw std::invalid_argument("грань тела не найдена");
+
+    // Нормаль наружу в найденной точке: BRepGProp_Face учитывает ориентацию грани в теле.
+    BRepGProp_Face gface(bestFace);
+    gp_Pnt surfacePoint;
+    gp_Vec normal;
+    gface.Normal(bestU, bestV, surfacePoint, normal);
+    if (normal.Magnitude() < 1e-12) throw std::invalid_argument("нормаль грани вырождена");
+    normal.Normalize();
+
+    Port port;
+    port.name = name;
+    port.pos = {bestPoint.X(), bestPoint.Y(), bestPoint.Z()};
+    port.direction = {normal.X(), normal.Y(), normal.Z()};
+    port.od = od_mm;
+    return port;
 }
 
 }  // namespace bendcore::geom

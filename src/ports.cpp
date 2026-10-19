@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
 
 namespace bendcore {
 
@@ -68,6 +69,17 @@ std::vector<Issue> check_connection(const Port& port, const Path& path, double o
         if (ang > port.tol_ang) issues.push_back({"warning", -1, "направление конца отклонено от порта"});
     }
     return issues;
+}
+
+Port manual_port(const Vec3& pos, const Vec3& direction, double od, const std::string& name) {
+    if (!(od > 0.0)) throw std::invalid_argument("∅ порта должен быть больше нуля");
+    if (!(norm(direction) > 1e-12)) throw std::invalid_argument("направление порта нулевое");
+    Port port;
+    port.name = name;
+    port.pos = pos;
+    port.direction = unit(direction);
+    port.od = od;
+    return port;
 }
 
 std::string auto_name(const std::string& component, const std::vector<std::string>& existing) {

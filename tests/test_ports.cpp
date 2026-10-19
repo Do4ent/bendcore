@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
 
 using namespace bendcore;
 
@@ -73,7 +74,22 @@ static void test_candidates_and_start() {
     check(auto_name("Станок", {"Станок.П1"}) == "Станок.П2", "auto_name: следующий свободный номер");
 }
 
+// Ручной порт «по точке + направлению + ∅»: направление нормируется; неверные данные — исключение.
+static void test_manual_port() {
+    const Port p = manual_port({1.0, 2.0, 3.0}, {0.0, 0.0, 5.0}, 20.0, "ручной");
+    check(p.name == "ручной" && p.od == 20.0, "manual_port: имя и ∅");
+    check(std::abs(p.direction[2] - 1.0) < 1e-12 && std::abs(norm(p.direction) - 1.0) < 1e-12, "manual_port: направление нормировано");
+    check(p.pos[0] == 1.0 && p.pos[1] == 2.0 && p.pos[2] == 3.0, "manual_port: положение");
+    bool threw_od = false;
+    bool threw_dir = false;
+    try { manual_port({0, 0, 0}, {1, 0, 0}, 0.0, "x"); } catch (const std::invalid_argument&) { threw_od = true; }
+    try { manual_port({0, 0, 0}, {0, 0, 0}, 20.0, "x"); } catch (const std::invalid_argument&) { threw_dir = true; }
+    check(threw_od, "manual_port: ∅ <= 0 — исключение");
+    check(threw_dir, "manual_port: нулевое направление — исключение");
+}
+
 int main() {
+    test_manual_port();
     test_checks();
     test_occupancy();
     test_candidates_and_start();
