@@ -18,6 +18,9 @@ command -v emcc >/dev/null || { echo "ОШИБКА: emcc не найден по�
 command -v node >/dev/null || { echo "ОШИБКА: node не найден (нужен для тестов WASM)" >&2; exit 2; }
 
 cd "$ROOT"
+echo "== emcc: $(emcc --version | head -1)"
+echo "== cmake: $(cmake --version | head -1)"
+echo "== node: $(node --version)"
 # Eigen: BENDCORE_EIGEN_DIR — каталог, в котором лежит папка Eigen/ (например /usr/include/eigen3).
 CMAKE_EXTRA=()
 if [[ -n "${BENDCORE_EIGEN_DIR:-}" ]]; then

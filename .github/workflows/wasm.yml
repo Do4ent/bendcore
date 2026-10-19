@@ -23,11 +23,27 @@ jobs:
           actions-cache-folder: emsdk-cache
 
       - name: Сборка и тесты WASM
+        shell: bash
         env:
           BENDCORE_EIGEN_DIR: /usr/include/eigen3
-        run: ./scripts/build_wasm.sh
+        # Полный лог сохраняется в файл (для диагностики при падении), код возврата — от скрипта.
+        run: |
+          set -o pipefail
+          ./scripts/build_wasm.sh 2>&1 | tee build-wasm.log
+
+      - name: Логи сборки (при любом результате)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bendcore-wasm-logs
+          path: |
+            build-wasm.log
+            build-wasm/CMakeFiles/CMakeOutput.log
+            build-wasm/CMakeFiles/CMakeError.log
+          if-no-files-found: warn
 
       - name: Выходные файлы
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: bendcore-wasm
