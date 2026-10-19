@@ -31,6 +31,17 @@ jobs:
           set -o pipefail
           ./scripts/build_wasm.sh 2>&1 | tee build-wasm.log
 
+      - name: Ошибки сборки в аннотации (только при падении)
+        if: failure()
+        shell: bash
+        run: |
+          # Блоб-хранилище логов может быть недоступно; строки ошибок выводим аннотациями (читаются через API).
+          grep -n -i -E "error|fatal|failed|undefined reference|not found" build-wasm.log 2>/dev/null \
+            | grep -v -i "warning" | head -n 15 \
+            | while IFS= read -r line; do echo "::error title=build-wasm::${line:0:900}"; done
+          echo "--- хвост лога ---"
+          tail -n 30 build-wasm.log 2>/dev/null | while IFS= read -r line; do echo "::error title=tail::${line:0:900}"; done || true
+
       - name: Логи сборки (при любом результате)
         if: always()
         uses: actions/upload-artifact@v4
