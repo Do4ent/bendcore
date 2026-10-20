@@ -191,7 +191,10 @@ static void test_json_format_fields() {
 }
 
 int main() {
+#ifndef __EMSCRIPTEN__
+    // В WebAssembly файлы примеров не видны модулю (нет --preload-file): проверяются только парсеры на строках.
     test_examples();
+#endif
     test_json_format_fields();
     test_csv();
     test_json_matches_csv();
