@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bendcore — просмотр трубы</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; margin: 16px; background: Canvas; color: CanvasText; }
+    h1 { font-size: 1.25rem; margin: 0 0 12px; }
+    textarea { width: 100%; box-sizing: border-box; min-height: 180px; font: 13px ui-monospace, monospace; }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 8px 0; }
+    label { display: inline-flex; gap: 6px; align-items: center; }
+    input[type=number] { width: 6em; }
+    input[type=range] { width: 180px; }
+    button { padding: 6px 14px; }
+    #status { font-size: 14px; margin: 8px 0; min-height: 1.2em; }
+    .err { color: #b3261e; }
+    svg { width: 100%; max-width: 720px; height: auto; background: #f7f7f9; border-radius: 6px; display: block; }
+    @media (prefers-color-scheme: dark) { svg { background: #1d1f24; } }
+    .axis { stroke: #888; stroke-width: 1; }
+    .pipe { fill: none; stroke: #2b6cb0; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+    .port { stroke: #c05621; stroke-width: 3; }
+    .portDot { fill: #c05621; }
+    .label { font-size: 13px; fill: CanvasText; }
+  </style>
+</head>
+<body>
+  <h1>bendcore: просмотр трубы</h1>
+  <p>Вставьте CSV или JSON (формат — README, раздел «Импорт»), затем нажмите «Показать». Ось трубы строится ядром (ломаная из точек оси); порты — стрелки по направлению наружу.</p>
+
+  <div class="row">
+    <label>формат
+      <select id="format">
+        <option value="csv">CSV</option>
+        <option value="json">JSON</option>
+      </select>
+    </label>
+    <label>∅, мм <input id="od" type="number" value="20" min="0.1" step="0.1"></label>
+    <label>стенка, мм <input id="wall" type="number" value="0" min="0" step="0.1"></label>
+    <button id="show" type="button">Показать</button>
+  </div>
+
+  <textarea id="text" spellcheck="false" aria-label="Текст трубы"></textarea>
+
+  <div class="row">
+    <label>поворот вокруг Z <input id="yaw" type="range" min="0" max="360" value="30"></label>
+    <label>наклон <input id="pitch" type="range" min="-90" max="90" value="-25"></label>
+  </div>
+
+  <div id="status">Загрузка модуля…</div>
+  <svg id="view" viewBox="0 0 600 400" role="img" aria-label="Проекция трубы"></svg>
+
+  <script type="module">
+    import { loadBendcore, importTube, axisLength, tracePath } from './bendcore.mjs';
+
+    const SAMPLES = {
+      csv: `kind,length,radius,angle,rotation,pitch,turns,direction,x,y,z,dx,dy,dz,od,name
+straight,50,,,,,,,,,,,,,,
+bend,,50,90,0,,,,,,,,,,
+straight,30,,,,,,,,,,,,,,
+bend,,50,-60,90,,,,,,,,,,
+spiral,,30,,,10,2,-1,,,,,,,,
+straight,20,,,,,,,,,,,,,,
+port,,,,,,,,10,20,30,0,0,1,16,P1`,
+      json: `{
+  "format": "bendcore-tube",
+  "version": 1,
+  "path": [
+    {"kind": "straight", "length": 50},
+    {"kind": "bend", "radius": 50, "angle": 90, "rotation": 0},
+    {"kind": "straight", "length": 30},
+    {"kind": "bend", "radius": 50, "angle": -60, "rotation": 90},
+    {"kind": "spiral", "radius": 30, "pitch": 10, "turns": 2, "direction": -1},
+    {"kind": "straight", "length": 20}
+  ],
+  "ports": [
+    {"name": "P1", "pos": [10, 20, 30], "direction": [0, 0, 1], "od": 16}
+  ]
+}`,
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const W = 600, H = 400;
+    let core = null;
+    let last = null;   // { model, points, length }
+
+    function setStatus(text, isError = false) {
+      const el = $('status');
+      el.textContent = text;
+      el.className = isError ? 'err' : '';
+    }
+
+    function el(name, attrs = {}, text = null) {
+      const node = document.createElementNS(SVG_NS, name);
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+      if (text !== null) node.textContent = text;
+      return node;
+    }
+
+    // Поворот вокруг Z, затем вокруг X (наклон).
+    function rotate(p, yawDeg, pitchDeg) {
+      const yaw = yawDeg * Math.PI / 180, pitch = pitchDeg * Math.PI / 180;
+      const x1 = p.x * Math.cos(yaw) - p.y * Math.sin(yaw);
+      const y1 = p.x * Math.sin(yaw) + p.y * Math.cos(yaw);
+      const z1 = p.z;
+      return {
+        x: x1,
+        y: y1 * Math.cos(pitch) - z1 * Math.sin(pitch),
+        z: y1 * Math.sin(pitch) + z1 * Math.cos(pitch),
+      };
+    }
+
+    function draw() {
+      const svg = $('view');
+      svg.replaceChildren();
+      if (!last) return;
+      const yaw = Number($('yaw').value), pitch = Number($('pitch').value);
+
+      const pts = last.points.map((p) => rotate(p, yaw, pitch));
+      const ports = last.model.ports.map((p) => ({
+        name: p.name,
+        pos: rotate(p.pos, yaw, pitch),
+        dir: rotate(p.direction, yaw, pitch),
+      }));
+      const all = [...pts, ...ports.map((p) => p.pos)];
+      if (all.length === 0) return;
+      const minX = Math.min(...all.map((p) => p.x)), maxX = Math.max(...all.map((p) => p.x));
+      const minY = Math.min(...all.map((p) => p.y)), maxY = Math.max(...all.map((p) => p.y));
+      const span = Math.max(maxX - minX, maxY - minY, 1);
+      const scale = (Math.min(W, H) - 80) / span;
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+      const sx = (p) => W / 2 + (p.x - cx) * scale;
+      const sy = (p) => H / 2 - (p.y - cy) * scale;
+
+      svg.append(el('line', { x1: 0, y1: H / 2, x2: W, y2: H / 2, class: 'axis' }));
+      svg.append(el('line', { x1: W / 2, y1: 0, x2: W / 2, y2: H, class: 'axis' }));
+
+      if (pts.length >= 2) {
+        svg.append(el('polyline', { class: 'pipe', points: pts.map((p) => `${sx(p)},${sy(p)}`).join(' ') }));
+      }
+      for (const p of ports) {
+        const len = 30;
+        const x2 = sx(p.pos) + p.dir.x * len, y2 = sy(p.pos) - p.dir.y * len;
+        svg.append(el('line', { x1: sx(p.pos), y1: sy(p.pos), x2, y2, class: 'port' }));
+        svg.append(el('circle', { cx: sx(p.pos), cy: sy(p.pos), r: 4, class: 'portDot' }));
+        svg.append(el('text', { x: sx(p.pos) + 8, y: sy(p.pos) - 8, class: 'label' }, p.name));
+      }
+    }
+
+    async function show() {
+      try {
+        const format = $('format').value;
+        const od = Number($('od').value);
+        const wall = Number($('wall').value);
+        const tube = importTube(core, format, $('text').value, { id: 'труба', od, wall });
+        const points = tracePath(core, tube.path ?? [], 32);
+        const length = tube.path ? axisLength(core, tube.path) : 0;
+        last = { model: tube, points, length };
+        setStatus(`Участков: ${tube.path ? tube.path.length : 0}, точек оси: ${points.length}, `
+          + `длина оси: ${length.toFixed(1)} мм, портов: ${tube.ports.length}`);
+        draw();
+      } catch (err) {
+        last = null;
+        $('view').replaceChildren();
+        setStatus(String(err.message ?? err), true);
+      }
+    }
+
+    $('format').addEventListener('change', () => {
+      $('text').value = SAMPLES[$('format').value];
+    });
+    $('show').addEventListener('click', show);
+    $('yaw').addEventListener('input', draw);
+    $('pitch').addEventListener('input', draw);
+
+    try {
+      core = await loadBendcore();
+      $('text').value = SAMPLES.csv;
+      await show();
+    } catch (err) {
+      setStatus('Ошибка загрузки модуля: ' + String(err.stack ?? err), true);
+    }
+  </script>
+</body>
+</html>

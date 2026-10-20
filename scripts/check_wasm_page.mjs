@@ -25,21 +25,30 @@ const url = `http://127.0.0.1:${server.address().port}/index.html`;
 const browser = await chromium.launch();
 let code = 1;
 try {
-  const page = await browser.newPage();
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(url);
-  await page.waitForFunction(() => {
-    const t = document.getElementById('result')?.textContent ?? '';
-    return t.includes('Тест') || t.includes('Ошибка');
-  }, null, { timeout: 60000 });
-  const result = (await page.textContent('#result')).trim();
-  const log = (await page.textContent('#log')).trim();
-  console.log(`Результат: ${result}`);
-  console.log(log);
-  if (errors.length) console.log('Ошибки в консоли:\n' + errors.join('\n'));
-  code = result === 'Тест пройден' ? 0 : 1;
+  // index.html: результат «Тест пройден». view.html: статус с числом точек оси (импорт и трассировка прошли).
+  const checks = [
+    { file: 'index.html', wait: (t) => t.includes('Тест') || t.includes('Ошибка'), ok: (t) => t === 'Тест пройден' },
+    { file: 'view.html', wait: (t) => t.includes('точек оси') || t.includes('Ошибка'), ok: (t) => t.includes('точек оси') },
+  ];
+  code = 0;
+  for (const c of checks) {
+    const page = await browser.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    await page.goto(`http://127.0.0.1:${server.address().port}/${c.file}`);
+    const resultSel = c.file === 'index.html' ? '#result' : '#status';
+    await page.waitForFunction((sel) => {
+      const t = document.querySelector(sel)?.textContent ?? '';
+      return t.includes('Тест') || t.includes('точек оси') || t.includes('Ошибка');
+    }, resultSel, { timeout: 60000 });
+    const result = (await page.textContent(resultSel)).trim();
+    console.log(`[${c.file}] ${result}`);
+    if (c.file === 'index.html') console.log((await page.textContent('#log')).trim());
+    if (errors.length) console.log(`[${c.file}] ошибки в консоли:\n` + errors.join('\n'));
+    if (!c.ok(result) || errors.length) code = 1;
+    await page.close();
+  }
 } finally {
   await browser.close();
   server.close();
