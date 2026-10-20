@@ -79,6 +79,7 @@ jobs:
           if-no-files-found: error
 
 
+
   # Тело трубы на Open CASCADE (тесты test_tube_occt и остальные). Сборка OCCT кэшируется отдельно от установки.
   occt:
     runs-on: ubuntu-24.04
@@ -95,14 +96,19 @@ jobs:
           path: ~/occt-build
           key: occt-build-V8.0.1-ubuntu-24.04-v1
 
+      - name: Исходники OCCT V8.0.1
+        shell: bash
+        run: |
+          [ -d ~/occt-src ] || git clone --depth 1 --branch V8.0.1 https://github.com/Open-Cascade-SAS/OCCT.git ~/occt-src
+
       - name: Сборка OCCT V8.0.1 (статически, минимальный набор модулей)
         if: steps.occt-build-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -o pipefail
           {
-            git clone --depth 1 --branch V8.0.1 https://github.com/Open-Cascade-SAS/OCCT.git ~/occt-src
             cmake -S ~/occt-src -B ~/occt-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INSTALL_PREFIX="$HOME/occt-install" \
               -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
               -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF -DBUILD_MODULE_Draw=OFF \
               -DBUILD_SAMPLES=OFF -DUSE_TBB=OFF -DUSE_FREETYPE=OFF -DUSE_FREEIMAGE=OFF -DUSE_RAPIDJSON=OFF \
@@ -122,7 +128,9 @@ jobs:
         run: |
           set -o pipefail
           {
-            cmake --install ~/occt-build --prefix ~/occt-install
+            # Переконфигурация с префиксом установки: иначе заголовки ставятся в /usr/local (абсолютный путь в скрипте).
+            cmake -S ~/occt-src -B ~/occt-build -DCMAKE_INSTALL_PREFIX="$HOME/occt-install"
+            cmake --install ~/occt-build
             # Установка копирует не все заголовки: добираем недостающие из дерева сборки (как в README).
             cp -rn ~/occt-build/include/opencascade/. ~/occt-install/include/opencascade/
           } 2>&1 | tee "$GITHUB_WORKSPACE/occt-install.log"
@@ -133,7 +141,7 @@ jobs:
         run: |
           for f in occt-build.log occt-install.log; do
             [ -f "$f" ] || continue
-            grep -n -i -A4 -E "error|failed|fatal" "$f" | head -n 30 | while IFS= read -r line; do echo "::error title=$f::${line:0:900}"; done
+            grep -n -A6 -E "CMake Error|error:|FATAL" "$f" | head -n 30 | while IFS= read -r line; do echo "::error title=$f::${line:0:900}"; done
           done
 
       - name: Сборка и тесты с Open CASCADE
