@@ -39,7 +39,8 @@ Port face_port(const Path& path, double od_mm, const Vec3& pick, const std::stri
 TubeModel complete_model(const TubeModel& model);
 
 // Труба из файла STEP (тело целиком, без пути): порты — кромки торцов, od — наибольший ∅ порта.
-// Толщина стенки не определяется (wall = 0). Исключение std::invalid_argument, если файл не читается или тела нет.
+// Стенка — по внутренней окружности торца: (∅нар − ∅вн) / 2. Если торцы дают разные значения или
+// внутренней окружности нет, wall = 0 (стенка не определена). Исключение std::invalid_argument, если файл не читается или тела нет.
 TubeModel load_step(const std::string& file, const std::string& id);
 
 // Запись тела трубы по пути в STEP (обмен и тесты). Исключение std::invalid_argument при ошибке записи.

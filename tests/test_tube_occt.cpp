@@ -124,6 +124,7 @@ static void check_step_roundtrip(double wall, const char* file, const char* name
     check(m.source == "step" && m.id == "из STEP", "STEP: источник и id");
     check(m.ports.size() == 2, name);
     check(std::abs(m.od - od) < 1e-6, name);
+    check(std::abs(m.wall - wall) < 1e-6, name);
     check(!m.path.has_value(), name);
 }
 

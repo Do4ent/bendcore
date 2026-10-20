@@ -161,7 +161,9 @@ TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
 }
 
 // Порты по кромкам торцов готового тела. taken — имена, которые уже заняты (авто-имена их обходят).
-static std::vector<Port> ports_of_body(const TopoDS_Shape& body, const std::vector<std::string>& taken) {
+// circles (если задан) получает все окружности торцов до объединения: наружные и внутренние кольца.
+static std::vector<Port> ports_of_body(const TopoDS_Shape& body, const std::vector<std::string>& taken,
+                                       std::vector<Port>* circles = nullptr) {
     GProp_GProps props;
     BRepGProp::VolumeProperties(body, props);
     const gp_Pnt massCentre = props.CentreOfMass();
@@ -197,6 +199,7 @@ static std::vector<Port> ports_of_body(const TopoDS_Shape& body, const std::vect
         port.pos = {centre.X(), centre.Y(), centre.Z()};
         port.direction = {axis.X(), axis.Y(), axis.Z()};
         port.od = 2.0 * circ.Radius();
+        if (circles) circles->push_back(port);
 
         // Окружность торца делится швом на две дуги с одним центром (один порт), а внутренняя окружность
         // кольца — с тем же центром и направлением, но меньшим ∅: для порта берётся наружная.
@@ -284,10 +287,29 @@ TubeModel load_step(const std::string& file, const std::string& id) {
     TubeModel m;
     m.id = id;
     m.source = "step";
-    m.ports = ports_of_body(solidEx.Current(), {});
+    std::vector<Port> circles;
+    m.ports = ports_of_body(solidEx.Current(), {}, &circles);
     if (m.ports.empty()) throw std::invalid_argument("у тела нет торцов с окружностями: порты не найдены");
     for (const Port& p : m.ports) m.od = std::max(m.od, p.od);
-    m.wall = 0.0;
+
+    // Стенка: у каждого торца внутренняя окружность того же центра и направления; стенка = (∅нар − ∅вн) / 2.
+    // Если торцы дают разные стенки или внутренних окружностей нет у части торцов, стенка не определена (0).
+    double wall = -1.0;
+    bool consistent = true;
+    for (const Port& p : m.ports) {
+        double inner = 0.0;
+        for (const Port& c : circles) {
+            const bool sameEnd = norm(sub(c.pos, p.pos)) < 1e-4 && dot(c.direction, p.direction) > 0.9999;
+            if (sameEnd && c.od < p.od - 1e-6) inner = std::max(inner, c.od);
+        }
+        const double w = inner > 0.0 ? (p.od - inner) / 2.0 : 0.0;
+        if (wall < 0.0) {
+            wall = w;
+        } else if (std::abs(w - wall) > 1e-6) {
+            consistent = false;
+        }
+    }
+    m.wall = (consistent && wall > 0.0) ? wall : 0.0;
     return m;
 }
 
