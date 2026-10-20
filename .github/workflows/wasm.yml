@@ -94,7 +94,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/occt-build
-          key: occt-build-V8.0.1-ubuntu-24.04-v1
+          key: occt-build-V8.0.1-dataexchange-ubuntu-24.04-v2
 
       - name: Исходники OCCT V8.0.1
         shell: bash
@@ -110,7 +110,7 @@ jobs:
             cmake -S ~/occt-src -B ~/occt-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX="$HOME/occt-install" \
               -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
-              -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF -DBUILD_MODULE_Draw=OFF \
+              -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_Draw=OFF \
               -DBUILD_SAMPLES=OFF -DUSE_TBB=OFF -DUSE_FREETYPE=OFF -DUSE_FREEIMAGE=OFF -DUSE_RAPIDJSON=OFF \
               -DUSE_VTK=OFF -DUSE_OPENGL=OFF -DBUILD_Inspector=OFF
             cmake --build ~/occt-build --parallel
@@ -121,7 +121,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/occt-build
-          key: occt-build-V8.0.1-ubuntu-24.04-v1
+          key: occt-build-V8.0.1-dataexchange-ubuntu-24.04-v2
 
       - name: Установка OCCT
         shell: bash

@@ -31,7 +31,7 @@ else()
   target_link_libraries(bendcore_eigen INTERFACE Eigen3::Eigen)
 endif()
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp)
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp)
 target_include_directories(bendcore_core PUBLIC include)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen)
 
@@ -70,6 +70,10 @@ bendcore_add_test(ports test_ports)
 add_executable(test_refs tests/test_refs.cpp)
 target_link_libraries(test_refs PRIVATE bendcore_core)
 bendcore_add_test(refs test_refs)
+
+add_executable(test_import tests/test_import.cpp)
+target_link_libraries(test_import PRIVATE bendcore_core)
+bendcore_add_test(import test_import)
 
 add_executable(test_axis tests/test_axis.cpp)
 target_link_libraries(test_axis PRIVATE bendcore_core)

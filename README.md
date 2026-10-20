@@ -65,7 +65,7 @@ JS-интерфейс: `web/bendcore.mjs` — `loadBendcore()` и класс `Sk
 Нужна статическая сборка OCCT (тег V8.0.1) с модулями Foundation, ModelingData, ModelingAlgorithms, установленная в каталог:
 
     cmake -S /path/to/OCCT -B occt-build -G Ninja -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
-      -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF -DBUILD_MODULE_Draw=OFF \
+      -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_Draw=OFF \
       -DBUILD_SAMPLES=OFF -DUSE_TBB=OFF -DUSE_FREETYPE=OFF -DUSE_FREEIMAGE=OFF -DUSE_RAPIDJSON=OFF \
       -DUSE_VTK=OFF -DUSE_OPENGL=OFF -DBUILD_Inspector=OFF
     cmake --build occt-build && cmake --install occt-build --prefix /path/to/occt-install
@@ -79,3 +79,18 @@ JS-интерфейс: `web/bendcore.mjs` — `loadBendcore()` и класс `Sk
 - Тело трубы: `BRepOffsetAPI_MakePipe` даёт только боковую поверхность, торцы добавляются вручную, затем сшивка в solid (допуск сшивки 1e-3 мм).
 - Спираль: отсчёты центральной линии (256 на виток) аппроксимируются B-сплайном (степень до 8, допуск 1e-4 мм). Сплайн с допуском сшивки 1e-4 давал незамкнутое тело, поэтому допуск 1e-3.
 - Проверено на Linux (GCC 13). Сборка на Windows (MSVC, `.lib`) этим блоком не покрыта.
+
+## Импорт трубы и модель портов
+`tube_model.hpp` (без OCCT): `TubeModel` — путь (если есть), ∅, стенка, порты. `import_csv` и `import_json` читают путь и ручные порты, `make_model` собирает модель.
+
+CSV: первая строка — заголовок, колонки `kind` (straight | bend | spiral | port) и далее:
+`length` (straight), `radius`, `angle`, `rotation` (bend), `pitch`, `turns`, `direction` (spiral), `x, y, z, dx, dy, dz, od, name` (port). Пустые ячейки — «не задано». Имена без запятых.
+
+JSON: `{"path": [...], "ports": [...]}`; участки с теми же полями, порт: `{"name", "pos": [x,y,z], "direction": [dx,dy,dz], "od"}`.
+
+`tube_body.hpp` (OCCT):
+- `complete_model(model)` — к ручным портам добавляет концевые порты трубы по пути.
+- `load_step(file, id)` — труба из STEP: порты по кромкам торцов, ∅ — наибольший из портов, стенка не определяется.
+- `export_step(path, od, wall, file)` — запись тела в STEP. Тесты сверяют круговой проход.
+
+STEP требует модуль OCCT `DataExchange` (включён по умолчанию; в сборке выше флаг не указывается).

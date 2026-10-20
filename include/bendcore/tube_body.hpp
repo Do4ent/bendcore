@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "bendcore/ports.hpp"
+#include "bendcore/tube_model.hpp"
 #include "bendcore/tubegeom.hpp"
 
 namespace bendcore::geom {
@@ -32,5 +33,16 @@ std::vector<Port> end_ports(const Path& path, double od_mm, double wall_mm = 0.0
 // Порт на грани тела (цилиндр, тор или торец): точка поверхности, ближайшая к pick, и нормаль наружу в ней.
 // ∅ порта = od_mm. Если pick внутри тела или снаружи, всё равно берётся ближайшая точка поверхности.
 Port face_port(const Path& path, double od_mm, const Vec3& pick, const std::string& name, double wall_mm = 0.0);
+
+// Полная модель: для трубы по пути добавляет концевые порты к ручным (тело — по path, od и wall модели).
+// Труба из STEP (пути нет) возвращается без изменений. Порты с тем же центром и направлением не дублируются.
+TubeModel complete_model(const TubeModel& model);
+
+// Труба из файла STEP (тело целиком, без пути): порты — кромки торцов, od — наибольший ∅ порта.
+// Толщина стенки не определяется (wall = 0). Исключение std::invalid_argument, если файл не читается или тела нет.
+TubeModel load_step(const std::string& file, const std::string& id);
+
+// Запись тела трубы по пути в STEP (обмен и тесты). Исключение std::invalid_argument при ошибке записи.
+void export_step(const Path& path, double od_mm, double wall_mm, const std::string& file);
 
 }  // namespace bendcore::geom

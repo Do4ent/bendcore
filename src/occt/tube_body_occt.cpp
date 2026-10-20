@@ -3,6 +3,10 @@
 #include "bendcore/axis.hpp"
 #include "bendcore/ports.hpp"
 
+#include <IFSelect_ReturnStatus.hxx>
+#include <STEPControl_Reader.hxx>
+#include <STEPControl_Writer.hxx>
+
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
@@ -156,8 +160,8 @@ TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
     return make_tube(path, od_mm, 0.0);
 }
 
-std::vector<Port> end_ports(const Path& path, double od_mm, double wall_mm) {
-    const TopoDS_Shape body = build_body(path, od_mm, wall_mm);
+// Порты по кромкам торцов готового тела. taken — имена, которые уже заняты (авто-имена их обходят).
+static std::vector<Port> ports_of_body(const TopoDS_Shape& body, const std::vector<std::string>& taken) {
     GProp_GProps props;
     BRepGProp::VolumeProperties(body, props);
     const gp_Pnt massCentre = props.CentreOfMass();
@@ -168,7 +172,7 @@ std::vector<Port> end_ports(const Path& path, double od_mm, double wall_mm) {
     TopExp::MapShapesAndAncestors(body, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
     std::vector<Port> ports;
-    std::vector<std::string> names;
+    std::vector<std::string> names = taken;
     for (int i = 1; i <= edgeFaces.Extent(); ++i) {
         const TopoDS_Edge edge = TopoDS::Edge(edgeFaces.FindKey(i));
         BRepAdaptor_Curve curve(edge);
@@ -211,6 +215,10 @@ std::vector<Port> end_ports(const Path& path, double od_mm, double wall_mm) {
     return ports;
 }
 
+std::vector<Port> end_ports(const Path& path, double od_mm, double wall_mm) {
+    return ports_of_body(build_body(path, od_mm, wall_mm), {});
+}
+
 Port face_port(const Path& path, double od_mm, const Vec3& pick, const std::string& name, double wall_mm) {
     const TopoDS_Shape body = build_body(path, od_mm, wall_mm);
     const gp_Pnt target = to_pnt(pick);
@@ -251,6 +259,47 @@ Port face_port(const Path& path, double od_mm, const Vec3& pick, const std::stri
     port.direction = {normal.X(), normal.Y(), normal.Z()};
     port.od = od_mm;
     return port;
+}
+
+TubeModel complete_model(const TubeModel& model) {
+    if (!model.path) return model;
+    TubeModel out = model;
+    std::vector<std::string> taken;
+    for (const Port& p : model.ports) taken.push_back(p.name);
+    const std::vector<Port> ends = ports_of_body(build_body(*model.path, model.od, model.wall), taken);
+    out.ports.insert(out.ports.end(), ends.begin(), ends.end());
+    return out;
+}
+
+TubeModel load_step(const std::string& file, const std::string& id) {
+    STEPControl_Reader reader;
+    if (reader.ReadFile(file.c_str()) != IFSelect_RetDone) {
+        throw std::invalid_argument("STEP не читается: " + file);
+    }
+    if (reader.TransferRoots() <= 0) throw std::invalid_argument("в STEP нет переносимых тел");
+    const TopoDS_Shape shape = reader.OneShape();
+    TopExp_Explorer solidEx(shape, TopAbs_SOLID);
+    if (!solidEx.More()) throw std::invalid_argument("в STEP нет твёрдого тела");
+
+    TubeModel m;
+    m.id = id;
+    m.source = "step";
+    m.ports = ports_of_body(solidEx.Current(), {});
+    if (m.ports.empty()) throw std::invalid_argument("у тела нет торцов с окружностями: порты не найдены");
+    for (const Port& p : m.ports) m.od = std::max(m.od, p.od);
+    m.wall = 0.0;
+    return m;
+}
+
+void export_step(const Path& path, double od_mm, double wall_mm, const std::string& file) {
+    const TopoDS_Shape body = build_body(path, od_mm, wall_mm);
+    STEPControl_Writer writer;
+    if (writer.Transfer(body, STEPControl_AsIs) != IFSelect_RetDone) {
+        throw std::invalid_argument("STEP: передача тела не выполнена");
+    }
+    if (writer.Write(file.c_str()) != IFSelect_RetDone) {
+        throw std::invalid_argument("STEP: запись не выполнена: " + file);
+    }
 }
 
 }  // namespace bendcore::geom

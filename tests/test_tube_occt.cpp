@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
 
 using namespace bendcore;
 
@@ -91,7 +92,56 @@ static void check_face_port() {
     check(std::abs(port.od - 2.0 * r) < 1e-9, "порт на грани: ∅");
 }
 
+// Полная модель: ручной порт + концевые порты; авто-имена не совпадают с ручным.
+static void check_complete_model() {
+    const double r = 10.0;
+    TubeModel m;
+    m.id = "t";
+    m.source = "csv";
+    m.od = 2.0 * r;
+    m.path = Path{Straight{100}, Bend{50, 90}, Straight{100}};
+    m.ports.push_back(manual_port({50.0, 0.0, 0.0}, {0.0, -1.0, 0.0}, 2.0 * r, "tube.П1"));
+    const TubeModel full = geom::complete_model(m);
+    check(full.ports.size() == 3, "полная модель: ручной порт и два концевых");
+    if (full.ports.size() == 3) {
+        check(full.ports[0].name == "tube.П1", "полная модель: ручной порт сохранён");
+        check(full.ports[1].name != "tube.П1" && full.ports[2].name != "tube.П1", "полная модель: имена не совпадают");
+        check(full.ports[1].name != full.ports[2].name, "полная модель: концевые имена различаются");
+    }
+    TubeModel stepModel;
+    stepModel.source = "step";
+    stepModel.od = 20.0;
+    check(!geom::complete_model(stepModel).path.has_value(), "полная модель: труба из STEP без изменений");
+}
+
+// Круговой проход: тело → STEP → load_step. ∅ и число концевых портов сохраняются.
+static void check_step_roundtrip(double wall, const char* file, const char* name) {
+    const double od = 20.0;
+    const Path path{Straight{100}, Bend{50, 90}, Straight{100}};
+    geom::export_step(path, od, wall, file);
+    const TubeModel m = geom::load_step(file, "из STEP");
+    std::printf("%s: портов %zu, ∅ %.4f\n", name, m.ports.size(), m.od);
+    check(m.source == "step" && m.id == "из STEP", "STEP: источник и id");
+    check(m.ports.size() == 2, name);
+    check(std::abs(m.od - od) < 1e-6, name);
+    check(!m.path.has_value(), name);
+}
+
+static void check_step_errors() {
+    bool threw = false;
+    try {
+        geom::load_step("no_such_file_bendcore.step", "x");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    check(threw, "STEP: несуществующий файл — исключение");
+}
+
 int main() {
+    check_complete_model();
+    check_step_roundtrip(0.0, "tube_roundtrip_solid.step", "STEP сплошной: два порта");
+    check_step_roundtrip(2.0, "tube_roundtrip_wall.step", "STEP со стенкой: два порта по наружной окружности");
+    check_step_errors();
     check_body({Straight{100}, Bend{50, 90}, Straight{100}}, 20.0, "плоский гиб 90°");
     check_body({Straight{50}, Bend{40, 60, 0}, Straight{30}, Bend{40, -70, 90}, Straight{40}}, 16.0,
                "два гиба, второй с поворотом A");
