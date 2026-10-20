@@ -81,6 +81,62 @@ val portJs(const bendcore::Port& p) {
     return o;
 }
 
+// Путь из JS-массива участков в формате importTube: {kind: straight|bend|spiral, ...}.
+// Ошибки (неизвестный kind, нет поля) — исключения, ловятся в обёртках ниже.
+bendcore::Path pathFromJs(const val& arr) {
+    bendcore::Path path;
+    const unsigned n = arr["length"].as<unsigned>();
+    for (unsigned i = 0; i < n; ++i) {
+        const val it = arr[i];
+        const std::string kind = it["kind"].as<std::string>();
+        if (kind == "straight") {
+            path.push_back(bendcore::Straight{it["length"].as<double>()});
+        } else if (kind == "bend") {
+            path.push_back(bendcore::Bend{it["radius"].as<double>(), it["angle"].as<double>(),
+                                          it["rotation"].as<double>()});
+        } else if (kind == "spiral") {
+            path.push_back(bendcore::Spiral{it["radius"].as<double>(), it["pitch"].as<double>(),
+                                            it["turns"].as<double>(), static_cast<int>(it["direction"].as<double>())});
+        } else {
+            throw std::invalid_argument("неизвестный участок пути: " + kind);
+        }
+    }
+    return path;
+}
+
+val okJs(const val& value) {
+    val o = val::object();
+    o.set("ok", true);
+    o.set("value", value);
+    return o;
+}
+
+val errJs(const std::string& message) {
+    val o = val::object();
+    o.set("ok", false);
+    o.set("error", message);
+    return o;
+}
+
+val axisLengthJs(const val& path) {
+    try {
+        return okJs(val(bendcore::axis_length(pathFromJs(path))));
+    } catch (const std::exception& e) {
+        return errJs(e.what());
+    }
+}
+
+// Ломаная оси: массив {x, y, z}. steps — число отсчётов на гиб.
+val tracePathJs(const val& path, int steps) {
+    try {
+        val points = val::array();
+        for (const auto& p : bendcore::trace(pathFromJs(path), steps)) points.call<void>("push", vec3Js(p));
+        return okJs(points);
+    } catch (const std::exception& e) {
+        return errJs(e.what());
+    }
+}
+
 val importTubeJs(const std::string& format, const std::string& text, const std::string& id, double od, double wall) {
     val out = val::object();
     try {
@@ -146,4 +202,6 @@ EMSCRIPTEN_BINDINGS(bendcore_module) {
     function("tangentLength", &bendcore::tangent_length);
     function("wrap180", &bendcore::wrap180);
     function("importTube", &importTubeJs);
+    function("axisLength", &axisLengthJs);
+    function("tracePath", &tracePathJs);
 }

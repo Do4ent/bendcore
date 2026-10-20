@@ -49,6 +49,7 @@
 JS-интерфейс: `web/bendcore.mjs` — `loadBendcore()` и класс `Sketch2D` (методы в camelCase, `solve()` возвращает обычный объект).
 Мост собран через embind (`src/wasm/bindings.cpp`): Sketch2D, `tangentLength`, `wrap180`, импорт трубы.
 Импорт: `importTube(core, 'csv' | 'json', text, { id, od, wall })` из `web/bendcore.mjs` возвращает модель (путь, порты) или бросает Error с причиной.
+Ядро без OCCT: `axisLength(core, path)` — длина оси; `tracePath(core, path, steps)` — ломаная оси `{x, y, z}`. Путь — массив участков в формате `importTube`.
 
 Особенности WASM-сборки:
 - PlaneGCS собирается статически в тот же модуль (динамических библиотек в WASM нет). Вопрос LGPL для такой сборки и для iOS (Capacitor) — юристу.

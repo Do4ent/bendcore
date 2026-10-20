@@ -28,6 +28,20 @@ export function importTube(core, format, text, { id = 'труба', od, wall = 0
   return r;
 }
 
+// Длина оси пути (мм). path — массив участков, как в importTube(...).path.
+export function axisLength(core, path) {
+  const r = core.axisLength(path);
+  if (!r.ok) throw new Error(r.error);
+  return r.value;
+}
+
+// Ломаная оси пути: массив {x, y, z} (мм). steps — отсчётов на гиб, по умолчанию 64.
+export function tracePath(core, path, steps = 64) {
+  const r = core.tracePath(path, steps);
+  if (!r.ok) throw new Error(r.error);
+  return r.value;
+}
+
 // Оболочка над эскизом (7.9). Номера точек, отрезков, окружностей и ограничений — целые числа ≥ 1 (ограничения).
 export class Sketch2D {
   constructor(core) {

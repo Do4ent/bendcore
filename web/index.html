@@ -18,7 +18,7 @@
   <pre id="log"></pre>
 
   <script type="module">
-    import { loadBendcore, Sketch2D, importTube } from './bendcore.mjs';
+    import { loadBendcore, Sketch2D, importTube, axisLength, tracePath } from './bendcore.mjs';
 
     const out = document.getElementById('result');
     const log = document.getElementById('log');
@@ -38,8 +38,12 @@
       let importError = false;
       try { importTube(core, 'csv', 'kind,length\nwave,1\n', { od: 20 }); } catch (e) { importError = true; }
       say('импорт с ошибкой: исключение ' + (importError ? 'есть' : 'нет') + ' (ожидается есть)');
+      const lenOk = Math.abs(axisLength(core, tube.path) - 50) < 1e-9;
+      const pts = tracePath(core, tube.path);
+      const traceOk = pts.length >= 2 && Math.abs(pts[pts.length - 1].x - 50) < 1e-9;
+      say('длина оси ' + axisLength(core, tube.path) + ' (ожидается 50); конец трассы x = ' + pts[pts.length - 1].x);
       const importOk = tube.path.length === 1 && tube.path[0].kind === 'straight' && tube.path[0].length === 50
-        && tube.ports.length === 1 && tube.ports[0].name === 'A' && importError;
+        && tube.ports.length === 1 && tube.ports[0].name === 'A' && importError && lenOk && traceOk;
 
       const s = new Sketch2D(core);
       const p0 = s.addPoint(0, 0);
