@@ -44,9 +44,16 @@ int main() {
     check(ok.body.find("\"mesh\":{\"vertices\":[") != std::string::npos, "пример: есть сетка");
     check(ok.body.find("\"valid\":true") != std::string::npos, "пример: сплошное тело валидно");
 
-    // Со стенкой: ответ 200 и поле valid. Спираль со стенкой пока невалидна (ограничение ядра).
+    // Со стенкой: тело валидно (шаг спирали не меньше ∅).
     const Response hollow = tube_response("csv", csv, 16.0, 2.0, 0.05);
-    check(hollow.status == 200 && hollow.body.find("\"valid\":") != std::string::npos, "пример со стенкой: ответ 200");
+    check(hollow.status == 200 && hollow.body.find("\"valid\":true") != std::string::npos, "пример со стенкой: валидно");
+
+    // Шаг спирали меньше ∅ — витки пересекаются: 400, тело не строится.
+    const Response overlap = tube_response("csv", csv, 16.0, 0.0, 0.05);
+    const std::string tight = "kind,length,radius,angle,rotation,pitch,turns,direction\nstraight,50\nspiral,,30,,,10,2,-1\n";
+    const Response selfCut = tube_response("csv", tight, 16.0, 0.0, 0.05);
+    check(selfCut.status == 400 && selfCut.body.find("витки пересекаются") != std::string::npos, "шаг < ∅: 400");
+    (void)overlap;
 
     // Формат, отклонение и файл без пути — ошибки 400 с полем error.
     const Response badFormat = tube_response("xml", csv, 16.0, 2.0, 0.05);

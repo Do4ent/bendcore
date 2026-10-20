@@ -163,7 +163,24 @@ static void check_mesh(const Path& path, double od, double wall, const char* nam
     check(std::abs(vMesh - vBody) <= 1e-2 * vBody, name);
 }
 
+// Путь с самопересечением (шаг спирали меньше ∅, гиб R меньше r) отклоняется до построения тела.
+static void check_self_contact_rejected() {
+    auto rejected = [](const Path& path, double od, double wall) {
+        try {
+            geom::make_tube(path, od, wall);
+        } catch (const std::invalid_argument&) {
+            return true;
+        }
+        return false;
+    };
+    check(rejected({Straight{50}, Spiral{30, 10, 2, -1}, Straight{20}}, 16.0, 0.0), "шаг 10 < ∅ 16: отказ (сплошная)");
+    check(rejected({Straight{50}, Spiral{30, 10, 2, -1}, Straight{20}}, 16.0, 2.0), "шаг 10 < ∅ 16: отказ (стенка)");
+    check(rejected({Straight{50}, Bend{5, 90}, Straight{20}}, 16.0, 0.0), "гиб R 5 < r 8: отказ");
+    check(!rejected({Straight{50}, Spiral{30, 20, 2, -1}, Straight{20}}, 16.0, 2.0), "шаг 20 ≥ ∅ 16: принимается");
+}
+
 int main() {
+    check_self_contact_rejected();
     check_mesh({Straight{100}, Bend{50, 90}, Straight{100}}, 20.0, 0.0, "сетка: гиб 90°");
     check_mesh({Straight{100}, Bend{50, 90}, Straight{100}}, 20.0, 2.0, "сетка: гиб 90° со стенкой");
     check_complete_model();

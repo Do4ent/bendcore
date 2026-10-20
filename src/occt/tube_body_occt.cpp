@@ -130,11 +130,27 @@ TopoDS_Solid build_solid(const Path& path, double radius) {
     return makeSolid.Solid();
 }
 
+// Геометрия, которой у тела быть не может: гиб или виток тоньше трубы (R < r), шаг спирали меньше ∅
+// (витки пересекают друг друга). Такой путь отклоняется до построения, иначе тело невалидно или объём завышен.
+void check_self_contact(const Path& path, double r) {
+    for (const auto& item : path) {
+        if (const auto* b = std::get_if<Bend>(&item)) {
+            if (b->R < r) throw std::invalid_argument("радиус гиба меньше радиуса трубы: тело самопересекается");
+        } else if (const auto* s = std::get_if<Spiral>(&item)) {
+            if (s->R < r) throw std::invalid_argument("радиус витка меньше радиуса трубы: тело самопересекается");
+            if (std::abs(s->p) < 2.0 * r) {
+                throw std::invalid_argument("шаг спирали меньше наружного ∅: витки пересекаются");
+            }
+        }
+    }
+}
+
 // Тело трубы: сплошное (wall = 0) или с осевым отверстием (0 < wall < r).
 TopoDS_Shape build_body(const Path& path, double od_mm, double wall_mm) {
     if (!(od_mm > 0.0)) throw std::invalid_argument("∅ трубы должен быть больше нуля");
     if (wall_mm < 0.0) throw std::invalid_argument("толщина стенки не может быть отрицательной");
     const double r = od_mm / 2.0;
+    check_self_contact(path, r);
     if (wall_mm == 0.0) return build_solid(path, r);
     if (wall_mm >= r) throw std::invalid_argument("стенка не меньше радиуса трубы");
 
