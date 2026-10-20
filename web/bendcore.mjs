@@ -19,6 +19,15 @@ export function loadBendcore(options = {}) {
   return modulePromise;
 }
 
+// Импорт трубы из текста CSV или JSON (формат — README, примеры в examples/). Возвращает модель:
+// { id, source, od, wall, path: [участки] | null, ports: [{ name, pos: {x,y,z}, direction: {x,y,z}, od }] }.
+// При ошибке бросает Error с текстом причины (номер строки для CSV, описание для JSON).
+export function importTube(core, format, text, { id = 'труба', od, wall = 0 } = {}) {
+  const r = core.importTube(format, text, id, od, wall);
+  if (!r.ok) throw new Error(r.error);
+  return r;
+}
+
 // Оболочка над эскизом (7.9). Номера точек, отрезков, окружностей и ограничений — целые числа ≥ 1 (ограничения).
 export class Sketch2D {
   constructor(core) {

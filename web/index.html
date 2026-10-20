@@ -18,7 +18,7 @@
   <pre id="log"></pre>
 
   <script type="module">
-    import { loadBendcore, Sketch2D } from './bendcore.mjs';
+    import { loadBendcore, Sketch2D, importTube } from './bendcore.mjs';
 
     const out = document.getElementById('result');
     const log = document.getElementById('log');
@@ -28,6 +28,18 @@
       const core = await loadBendcore();
       say('tangentLength(50, 90) = ' + core.tangentLength(50, 90).toFixed(6) + ' (ожидается 50.000000)');
       say('wrap180(190) = ' + core.wrap180(190).toFixed(6) + ' (ожидается -170.000000)');
+
+      // Импорт: CSV с прямой и портом; ошибочная строка должна дать исключение.
+      const header = ['kind','length','radius','angle','rotation','pitch','turns','direction','x','y','z','dx','dy','dz','od','name'];
+      const row = (cells) => header.map((h) => cells[h] ?? '').join(',');
+      const csv = [header.join(','), row({kind:'straight', length:50}), row({kind:'port', x:0, y:0, z:0, dx:-1, dy:0, dz:0, od:20, name:'A'})].join('\n');
+      const tube = importTube(core, 'csv', csv, { od: 20 });
+      say('импорт CSV: участков ' + tube.path.length + ', портов ' + tube.ports.length + ' (ожидается 1 и 1)');
+      let importError = false;
+      try { importTube(core, 'csv', 'kind,length\nwave,1\n', { od: 20 }); } catch (e) { importError = true; }
+      say('импорт с ошибкой: исключение ' + (importError ? 'есть' : 'нет') + ' (ожидается есть)');
+      const importOk = tube.path.length === 1 && tube.path[0].kind === 'straight' && tube.path[0].length === 50
+        && tube.ports.length === 1 && tube.ports[0].name === 'A' && importError;
 
       const s = new Sketch2D(core);
       const p0 = s.addPoint(0, 0);
@@ -43,7 +55,7 @@
       s.constrainDistance(p1, p2, 10);
 
       const r = s.solve();
-      const ok = r.status === 'определено' && r.dof === 0 && Math.abs(core.wrap180(190) + 170) < 1e-9;
+      const ok = r.status === 'определено' && r.dof === 0 && Math.abs(core.wrap180(190) + 170) < 1e-9 && importOk;
       out.innerHTML = ok
         ? '<span class="ok">Тест пройден</span>'
         : '<span class="fail">Тест не пройден</span>';
