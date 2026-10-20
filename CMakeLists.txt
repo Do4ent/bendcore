@@ -138,6 +138,17 @@ if(BENDCORE_WITH_OCCT)
   add_executable(test_tube_occt tests/test_tube_occt.cpp)
   target_link_libraries(test_tube_occt PRIVATE bendcore_occt)
   bendcore_add_test(tube_occt test_tube_occt)
+
+  # Сервис тела трубы и HTTP-сервер bendcore_server (без внешних библиотек).
+  add_library(bendcore_server_core STATIC src/server/tube_service.cpp)
+  target_include_directories(bendcore_server_core PUBLIC include)
+  target_link_libraries(bendcore_server_core PUBLIC bendcore_occt)
+  add_executable(bendcore_server src/server/main.cpp)
+  target_link_libraries(bendcore_server PRIVATE bendcore_server_core)
+  add_executable(test_server tests/test_server.cpp)
+  target_link_libraries(test_server PRIVATE bendcore_server_core)
+  target_compile_definitions(test_server PRIVATE BENDCORE_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
+  bendcore_add_test(server test_server)
 endif()
 
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.

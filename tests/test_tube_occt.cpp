@@ -138,7 +138,34 @@ static void check_step_errors() {
     check(threw, "STEP: несуществующий файл — исключение");
 }
 
+// Сетка: объём, посчитанный по треугольникам (теорема о дивергенции), совпадает с объёмом тела.
+static double mesh_volume(const geom::TubeMesh& mesh) {
+    double v = 0.0;
+    for (std::size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
+        const double* a = &mesh.vertices[3 * mesh.indices[t]];
+        const double* b = &mesh.vertices[3 * mesh.indices[t + 1]];
+        const double* c = &mesh.vertices[3 * mesh.indices[t + 2]];
+        v += a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+    }
+    return v / 6.0;
+}
+
+static void check_mesh(const Path& path, double od, double wall, const char* name) {
+    const geom::TubeMesh mesh = geom::make_mesh(path, od, wall, 0.01);
+    const std::size_t nv = mesh.vertices.size() / 3;
+    bool indicesOk = !mesh.indices.empty() && mesh.indices.size() % 3 == 0;
+    for (int i : mesh.indices) indicesOk = indicesOk && i >= 0 && static_cast<std::size_t>(i) < nv;
+    const double vMesh = mesh_volume(mesh);
+    const double vBody = geom::make_tube(path, od, wall).volume;
+    std::printf("%s: вершин %zu, треугольников %zu, объём сетки %.4f, объём тела %.4f\n", name, nv,
+                mesh.indices.size() / 3, vMesh, vBody);
+    check(indicesOk, name);
+    check(std::abs(vMesh - vBody) <= 1e-2 * vBody, name);
+}
+
 int main() {
+    check_mesh({Straight{100}, Bend{50, 90}, Straight{100}}, 20.0, 0.0, "сетка: гиб 90°");
+    check_mesh({Straight{100}, Bend{50, 90}, Straight{100}}, 20.0, 2.0, "сетка: гиб 90° со стенкой");
     check_complete_model();
     check_step_roundtrip(0.0, "tube_roundtrip_solid.step", "STEP сплошной: два порта");
     check_step_roundtrip(2.0, "tube_roundtrip_wall.step", "STEP со стенкой: два порта по наружной окружности");
