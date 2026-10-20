@@ -87,7 +87,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Зависимости (Ninja, Eigen)
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev libx11-dev
 
       - name: Кэш сборки OCCT V8.0.1
         id: occt-build-cache
