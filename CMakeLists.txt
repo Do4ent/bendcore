@@ -118,6 +118,20 @@ add_executable(test_sketch2d tests/test_sketch2d.cpp)
 target_link_libraries(test_sketch2d PRIVATE bendcore_sketch2d)
 bendcore_add_test(sketch2d test_sketch2d)
 
+# Импорт DWFx (этап 1 переноса из BendPipe-Pro): чтение ZIP-контейнера. Нужен zlib; по умолчанию выключено,
+# чтобы сборка WebAssembly и сборка без zlib не менялись.
+option(BENDCORE_WITH_DWFX "Собрать чтение контейнера DWFx (ZIP, нужен zlib)" OFF)
+if(BENDCORE_WITH_DWFX)
+  find_package(ZLIB REQUIRED)
+  add_library(bendcore_dwfx STATIC src/dwfx/zip_reader.cpp)
+  target_include_directories(bendcore_dwfx PUBLIC include)
+  target_link_libraries(bendcore_dwfx PUBLIC ZLIB::ZLIB)
+
+  add_executable(test_dwfx_zip tests/test_dwfx_zip.cpp)
+  target_link_libraries(test_dwfx_zip PRIVATE bendcore_dwfx)
+  bendcore_add_test(dwfx_zip test_dwfx_zip)
+endif()
+
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
 # Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
 # содержит нераскрытые переменные, поэтому библиотеки подключаются напрямую из lib/libTK*.a.
