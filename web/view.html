@@ -41,6 +41,19 @@
     <button id="show" type="button">Показать</button>
   </div>
 
+  <div class="row">
+    <label>порт: x <input id="mx" type="number" value="0" step="any"></label>
+    <label>y <input id="my" type="number" value="0" step="any"></label>
+    <label>z <input id="mz" type="number" value="0" step="any"></label>
+    <label>направление: dx <input id="mdx" type="number" value="0" step="any"></label>
+    <label>dy <input id="mdy" type="number" value="1" step="any"></label>
+    <label>dz <input id="mdz" type="number" value="0" step="any"></label>
+    <label>∅ <input id="mod" type="number" value="20" min="0.1" step="0.1"></label>
+    <label>имя <input id="mname" type="text" size="8" placeholder="авто"></label>
+    <button id="btnAddPort" type="button">Добавить порт</button>
+  </div>
+  <p>Порты, добавленные вручную, сохраняются до следующего «Показать».</p>
+
   <textarea id="text" spellcheck="false" aria-label="Текст трубы"></textarea>
 
   <div class="row">
@@ -52,7 +65,7 @@
   <svg id="view" viewBox="0 0 600 400" role="img" aria-label="Проекция трубы"></svg>
 
   <script type="module">
-    import { loadBendcore, importTube, axisLength, tracePath } from './bendcore.mjs';
+    import { loadBendcore, importTube, axisLength, tracePath, manualPort } from './bendcore.mjs';
 
     const SAMPLES = {
       csv: `kind,length,radius,angle,rotation,pitch,turns,direction,x,y,z,dx,dy,dz,od,name
@@ -112,6 +125,37 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
       };
     }
 
+    // Имя для нового порта: P<n>, пока такое имя занято — следующее.
+    function nextName() {
+      const used = new Set(last.model.ports.map((p) => p.name));
+      let n = last.model.ports.length + 1;
+      while (used.has(`P${n}`)) n += 1;
+      return `P${n}`;
+    }
+
+    function statusFor(model, points, length) {
+      return `Участков: ${model.path ? model.path.length : 0}, точек оси: ${points.length}, `
+        + `длина оси: ${length.toFixed(1)} мм, портов: ${model.ports.length}`;
+    }
+
+    function addPort() {
+      try {
+        if (!last) throw new Error('Сначала покажите трубу');
+        const num = (id) => Number($(id).value);
+        const port = manualPort(core, {
+          pos: [num('mx'), num('my'), num('mz')],
+          direction: [num('mdx'), num('mdy'), num('mdz')],
+          od: num('mod'),
+          name: $('mname').value.trim() || nextName(),
+        });
+        last.model.ports.push(port);
+        draw();
+        setStatus(statusFor(last.model, last.points, last.length));
+      } catch (err) {
+        setStatus(String(err.message ?? err), true);
+      }
+    }
+
     function draw() {
       const svg = $('view');
       svg.replaceChildren();
@@ -158,8 +202,7 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
         const points = tracePath(core, tube.path ?? [], 32);
         const length = tube.path ? axisLength(core, tube.path) : 0;
         last = { model: tube, points, length };
-        setStatus(`Участков: ${tube.path ? tube.path.length : 0}, точек оси: ${points.length}, `
-          + `длина оси: ${length.toFixed(1)} мм, портов: ${tube.ports.length}`);
+        setStatus(statusFor(tube, points, length));
         draw();
       } catch (err) {
         last = null;
@@ -172,6 +215,7 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
       $('text').value = SAMPLES[$('format').value];
     });
     $('show').addEventListener('click', show);
+    $('btnAddPort').addEventListener('click', addPort);
     $('yaw').addEventListener('input', draw);
     $('pitch').addEventListener('input', draw);
 

@@ -46,6 +46,12 @@ try {
     console.log(`[${c.file}] ${result}`);
     if (c.file === 'index.html') console.log((await page.textContent('#log')).trim());
     if (errors.length) console.log(`[${c.file}] ошибки в консоли:\n` + errors.join('\n'));
+    if (c.file === 'view.html') {
+      // Ручной порт: по умолчанию в форме (0,0,0; направление +Y; ∅ 20) — к импортированному P1 даёт два порта.
+      await page.click('#btnAddPort');
+      await page.waitForFunction(() => document.getElementById('status').textContent.includes('портов: 2'), null, { timeout: 20000 });
+      console.log('[view.html] ручной порт добавлен: ' + (await page.textContent('#status')).trim());
+    }
     if (!c.ok(result) || errors.length) code = 1;
     await page.close();
   }

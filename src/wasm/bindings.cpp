@@ -137,6 +137,15 @@ val tracePathJs(const val& path, int steps) {
     }
 }
 
+// Порт по точке, направлению и ∅ (manual_port). Ошибки — полем ok=false.
+val manualPortJs(double x, double y, double z, double dx, double dy, double dz, double od, const std::string& name) {
+    try {
+        return okJs(portJs(bendcore::manual_port({x, y, z}, {dx, dy, dz}, od, name)));
+    } catch (const std::exception& e) {
+        return errJs(e.what());
+    }
+}
+
 val importTubeJs(const std::string& format, const std::string& text, const std::string& id, double od, double wall) {
     val out = val::object();
     try {
@@ -203,5 +212,6 @@ EMSCRIPTEN_BINDINGS(bendcore_module) {
     function("wrap180", &bendcore::wrap180);
     function("importTube", &importTubeJs);
     function("axisLength", &axisLengthJs);
+    function("manualPort", &manualPortJs);
     function("tracePath", &tracePathJs);
 }

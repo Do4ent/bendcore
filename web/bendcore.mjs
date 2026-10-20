@@ -42,6 +42,14 @@ export function tracePath(core, path, steps = 64) {
   return r.value;
 }
 
+// Порт по точке, направлению и ∅ (ручной способ). Возвращает { name, pos: {x,y,z}, direction: {x,y,z}, od }.
+// direction нормируется ядром; пустое name — порт без имени (его назначит вызывающий код).
+export function manualPort(core, { pos, direction, od, name = '' }) {
+  const r = core.manualPort(pos[0], pos[1], pos[2], direction[0], direction[1], direction[2], od, name);
+  if (!r.ok) throw new Error(r.error);
+  return r.value;
+}
+
 // Оболочка над эскизом (7.9). Номера точек, отрезков, окружностей и ограничений — целые числа ≥ 1 (ограничения).
 export class Sketch2D {
   constructor(core) {
