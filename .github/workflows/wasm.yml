@@ -77,3 +77,42 @@ jobs:
           name: bendcore-wasm
           path: build-wasm/web/
           if-no-files-found: error
+
+  # Тело трубы на Open CASCADE (тесты test_tube_occt и остальные): OCCT собирается один раз и кэшируется.
+  occt:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Зависимости (Ninja, Eigen)
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev
+
+      - name: Кэш установки OCCT
+        id: occt-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/occt-install
+          key: occt-V8.0.1-ubuntu-24.04-v1
+
+      - name: Сборка OCCT V8.0.1 (статически, минимальный набор модулей)
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch V8.0.1 https://github.com/Open-Cascade-SAS/OCCT.git "$RUNNER_TEMP/occt-src"
+          cmake -S "$RUNNER_TEMP/occt-src" -B "$RUNNER_TEMP/occt-build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
+            -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF -DBUILD_MODULE_Draw=OFF \
+            -DBUILD_SAMPLES=OFF -DUSE_TBB=OFF -DUSE_FREETYPE=OFF -DUSE_FREEIMAGE=OFF -DUSE_RAPIDJSON=OFF \
+            -DUSE_VTK=OFF -DUSE_OPENGL=OFF -DBUILD_Inspector=OFF
+          cmake --build "$RUNNER_TEMP/occt-build" --parallel
+          cmake --install "$RUNNER_TEMP/occt-build" --prefix "$HOME/occt-install"
+          # Установка копирует не все заголовки: добираем недостающие из дерева сборки (как в README).
+          cp -rn "$RUNNER_TEMP/occt-build/include/opencascade/." "$HOME/occt-install/include/opencascade/"
+
+      - name: Сборка и тесты с Open CASCADE
+        env:
+          BENDCORE_EIGEN_DIR: /usr/include/eigen3
+        run: |
+          cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=Release -DBENDCORE_WITH_OCCT=ON \
+            -DBENDCORE_OCCT_DIR="$HOME/occt-install" -DBENDCORE_EIGEN_DIR="$BENDCORE_EIGEN_DIR"
+          cmake --build build-occt --parallel
+          ctest --test-dir build-occt --output-on-failure
