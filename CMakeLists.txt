@@ -73,6 +73,7 @@ bendcore_add_test(refs test_refs)
 
 add_executable(test_import tests/test_import.cpp)
 target_link_libraries(test_import PRIVATE bendcore_core)
+target_compile_definitions(test_import PRIVATE BENDCORE_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
 bendcore_add_test(import test_import)
 
 add_executable(test_axis tests/test_axis.cpp)

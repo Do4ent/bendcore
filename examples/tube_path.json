@@ -1,0 +1,15 @@
+{
+  "format": "bendcore-tube",
+  "version": 1,
+  "path": [
+    {"kind": "straight", "length": 50},
+    {"kind": "bend", "radius": 50, "angle": 90, "rotation": 0},
+    {"kind": "straight", "length": 30},
+    {"kind": "bend", "radius": 50, "angle": -60, "rotation": 90},
+    {"kind": "spiral", "radius": 30, "pitch": 10, "turns": 2, "direction": -1},
+    {"kind": "straight", "length": 20}
+  ],
+  "ports": [
+    {"name": "P1", "pos": [10, 20, 30], "direction": [0, 0, 1], "od": 16}
+  ]
+}

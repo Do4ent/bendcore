@@ -86,7 +86,9 @@ JS-интерфейс: `web/bendcore.mjs` — `loadBendcore()` и класс `Sk
 CSV: первая строка — заголовок, колонки `kind` (straight | bend | spiral | port) и далее:
 `length` (straight), `radius`, `angle`, `rotation` (bend), `pitch`, `turns`, `direction` (spiral), `x, y, z, dx, dy, dz, od, name` (port). Пустые ячейки — «не задано». Имена без запятых.
 
-JSON: `{"path": [...], "ports": [...]}`; участки с теми же полями, порт: `{"name", "pos": [x,y,z], "direction": [dx,dy,dz], "od"}`.
+JSON (формат версии 1): `{"format": "bendcore-tube", "version": 1, "path": [...], "ports": [...]}`. `format` и `version` необязательны, но при наличии проверяются. Участки — те же поля, что в CSV; порт: `{"name", "pos": [x,y,z], "direction": [dx,dy,dz], "od"}`, имя необязательно.
+
+Единицы: мм и градусы. Примеры одного и того же содержимого: `examples/tube_path.csv` и `examples/tube_path.json`; тест `test_import` проверяет, что они дают одинаковую модель.
 
 `tube_body.hpp` (OCCT):
 - `complete_model(model)` — к ручным портам добавляет концевые порты трубы по пути.

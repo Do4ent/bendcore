@@ -3,6 +3,8 @@
 
 #include <cmath>
 #include <cstdio>
+#include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -155,7 +157,42 @@ static void test_make_model() {
     check(throws_invalid([&] { make_model("x", "csv", dup, 20.0); }), "модель: повтор имени порта — ошибка");
 }
 
+static std::string read_file(const std::string& path) {
+    std::ifstream in(path);
+    if (!in) return "";
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+// Примеры из examples/: CSV и JSON с одинаковым содержимым дают одинаковую модель.
+static void test_examples() {
+    const std::string dir = BENDCORE_EXAMPLES_DIR;
+    const std::string csv = read_file(dir + "/tube_path.csv");
+    const std::string json = read_file(dir + "/tube_path.json");
+    check(!csv.empty() && !json.empty(), "примеры: файлы читаются");
+    if (csv.empty() || json.empty()) return;
+    const ImportData c = import_csv(csv);
+    const ImportData j = import_json(json);
+    check_same_path(c, j);
+    check(c.ports.size() == 1 && c.ports[0].name == "P1" && c.ports[0].od == 16.0, "примеры: порт P1");
+    check(j.ports.size() == 1 && j.ports[0].name == "P1" && j.ports[0].od == 16.0, "примеры JSON: порт P1");
+    const TubeModel m = make_model("пример", "csv", c, 20.0, 2.0);
+    check(m.path.has_value() && m.path->size() == 6, "примеры: модель из CSV содержит путь из шести участков");
+}
+
+static void test_json_format_fields() {
+    check(throws_invalid([] { import_json(R"({"format":"other","path":[{"kind":"straight","length":5}]})"); }),
+          "json: чужой format — ошибка");
+    check(throws_invalid([] { import_json(R"({"version":2,"path":[{"kind":"straight","length":5}]})"); }),
+          "json: version 2 — ошибка");
+    check(!import_json(R"({"format":"bendcore-tube","version":1,"path":[{"kind":"straight","length":5}]})").path.empty(),
+          "json: format и version 1 — принимаются");
+}
+
 int main() {
+    test_examples();
+    test_json_format_fields();
     test_csv();
     test_json_matches_csv();
     test_csv_errors();

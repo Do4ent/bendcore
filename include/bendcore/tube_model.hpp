@@ -44,7 +44,8 @@ struct ImportData {
 // Исключение std::invalid_argument с номером строки при ошибке.
 ImportData import_csv(const std::string& text);
 
-// JSON-объект: {"path": [...], "ports": [...]}. В "path" элементы с теми же полями, что у CSV:
+// JSON-объект: {"format": "bendcore-tube", "version": 1, "path": [...], "ports": [...]}.
+// format и version необязательны, но если заданы, должны быть такими, как указано. В "path" элементы с теми же полями, что у CSV:
 //   {"kind":"straight","length":50}
 //   {"kind":"bend","radius":50,"angle":90,"rotation":0}
 //   {"kind":"spiral","radius":30,"pitch":10,"turns":2,"direction":1}

@@ -1,0 +1,9 @@
+# Пример: труба с двумя гибами, спиралью и ручным портом. Единицы: мм и градусы.
+kind,length,radius,angle,rotation,pitch,turns,direction,x,y,z,dx,dy,dz,od,name
+straight,50,,,,,,,,,,,,,,
+bend,,50,90,0,,,,,,,,,,
+straight,30,,,,,,,,,,,,,,
+bend,,50,-60,90,,,,,,,,,,
+spiral,,30,,,10,2,-1,,,,,,,,
+straight,20,,,,,,,,,,,,,,
+port,,,,,,,,10,20,30,0,0,1,16,P1

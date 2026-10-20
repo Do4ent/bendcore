@@ -330,6 +330,16 @@ ImportData import_json(const std::string& text) {
     JsonParser parser(text);
     const JValue root = parser.parse_document();
     if (root.kind != JValue::Kind::Object) throw std::invalid_argument("JSON: корень должен быть объектом");
+    if (const JValue* f = find_key(root, "format")) {
+        if (f->kind != JValue::Kind::String || f->str != "bendcore-tube") {
+            throw std::invalid_argument("JSON: «format» должен быть \"bendcore-tube\"");
+        }
+    }
+    if (const JValue* v = find_key(root, "version")) {
+        if (v->kind != JValue::Kind::Number || v->number != 1.0) {
+            throw std::invalid_argument("JSON: поддерживается только «version» 1");
+        }
+    }
 
     ImportData data;
     if (const JValue* path = find_key(root, "path")) {
