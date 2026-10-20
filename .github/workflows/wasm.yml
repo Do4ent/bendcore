@@ -96,17 +96,28 @@ jobs:
 
       - name: Сборка OCCT V8.0.1 (статически, минимальный набор модулей)
         if: steps.occt-cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
-          git clone --depth 1 --branch V8.0.1 https://github.com/Open-Cascade-SAS/OCCT.git "$RUNNER_TEMP/occt-src"
-          cmake -S "$RUNNER_TEMP/occt-src" -B "$RUNNER_TEMP/occt-build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
-            -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF -DBUILD_MODULE_Draw=OFF \
-            -DBUILD_SAMPLES=OFF -DUSE_TBB=OFF -DUSE_FREETYPE=OFF -DUSE_FREEIMAGE=OFF -DUSE_RAPIDJSON=OFF \
-            -DUSE_VTK=OFF -DUSE_OPENGL=OFF -DBUILD_Inspector=OFF
-          cmake --build "$RUNNER_TEMP/occt-build" --parallel
-          cmake --install "$RUNNER_TEMP/occt-build" --prefix "$HOME/occt-install"
-          # Установка копирует не все заголовки: добираем недостающие из дерева сборки (как в README).
-          cp -rn "$RUNNER_TEMP/occt-build/include/opencascade/." "$HOME/occt-install/include/opencascade/"
+          set -o pipefail
+          { 
+            git clone --depth 1 --branch V8.0.1 https://github.com/Open-Cascade-SAS/OCCT.git "$RUNNER_TEMP/occt-src"
+            cmake -S "$RUNNER_TEMP/occt-src" -B "$RUNNER_TEMP/occt-build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
+              -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF -DBUILD_MODULE_Draw=OFF \
+              -DBUILD_SAMPLES=OFF -DUSE_TBB=OFF -DUSE_FREETYPE=OFF -DUSE_FREEIMAGE=OFF -DUSE_RAPIDJSON=OFF \
+              -DUSE_VTK=OFF -DUSE_OPENGL=OFF -DBUILD_Inspector=OFF
+            cmake --build "$RUNNER_TEMP/occt-build" --parallel
+            cmake --install "$RUNNER_TEMP/occt-build" --prefix "$HOME/occt-install"
+            # Установка копирует не все заголовки: добираем недостающие из дерева сборки (как в README).
+            cp -rn "$RUNNER_TEMP/occt-build/include/opencascade/." "$HOME/occt-install/include/opencascade/"
+          } 2>&1 | tee "$GITHUB_WORKSPACE/occt-build.log"
+
+      - name: Ошибки сборки OCCT в аннотации (только при падении)
+        if: failure() && steps.occt-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          grep -i -E "error|failed|fatal" occt-build.log 2>/dev/null | head -n 15 | while IFS= read -r line; do echo "::error title=occt::${line:0:900}"; done
+          tail -n 20 occt-build.log 2>/dev/null | while IFS= read -r line; do echo "::error title=occt-tail::${line:0:900}"; done || true
 
       - name: Сборка и тесты с Open CASCADE
         env:
