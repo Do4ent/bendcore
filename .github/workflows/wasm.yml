@@ -152,3 +152,34 @@ jobs:
             -DBENDCORE_OCCT_DIR="$HOME/occt-install" -DBENDCORE_EIGEN_DIR="$BENDCORE_EIGEN_DIR"
           cmake --build build-occt --parallel
           ctest --test-dir build-occt --output-on-failure
+
+      # Образ сервиса тела трубы и проверка запросов к контейнеру (тот же OCCT, что и выше).
+      - name: Сборка образа сервиса
+        shell: bash
+        run: |
+          set -o pipefail
+          docker build --build-context occt="$HOME/occt-install" -f docker/Dockerfile -t bendcore-server:ci . \
+            2>&1 | tee "$GITHUB_WORKSPACE/docker-build.log"
+
+      - name: Проверка сервиса в контейнере
+        shell: bash
+        run: |
+          set -o pipefail
+          docker run -d --name bendcore-server -p 8080:8080 bendcore-server:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/v1/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:8080/v1/health | grep -q '"ok":true'
+          curl -sf -X POST --data-binary @examples/tube_path.json \
+            "http://127.0.0.1:8080/v1/tube?format=json&od=16&wall=0&deflection=0.05" -o tube.json
+          grep -q '"ok":true' tube.json
+          grep -q '"valid":true' tube.json
+          code=$(curl -s -o err.json -w "%{http_code}" -X POST --data-binary $'kind,length\nstraight,abc' \
+            "http://127.0.0.1:8080/v1/tube?format=csv&od=16")
+          [ "$code" = "400" ]
+          grep -q '"ok":false' err.json
+
+      - name: Логи контейнера сервиса
+        if: always()
+        shell: bash
+        run: |
+          docker logs bendcore-server 2>&1 | tail -n 50 || true
+          docker rm -f bendcore-server >/dev/null 2>&1 || true

@@ -9,6 +9,11 @@
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
+#include <BRep_Tool.hxx>
+#include <Poly_Triangulation.hxx>
+#include <TopLoc_Location.hxx>
+#include <gp_Trsf.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
@@ -125,16 +130,33 @@ TopoDS_Solid build_solid(const Path& path, double radius) {
     return makeSolid.Solid();
 }
 
-// Тело трубы: сплошное (wall = 0) или наружное минус внутреннее (0 < wall < r).
+// Геометрия, которой у тела быть не может: гиб или виток тоньше трубы (R < r), шаг спирали меньше ∅
+// (витки пересекают друг друга). Такой путь отклоняется до построения, иначе тело невалидно или объём завышен.
+void check_self_contact(const Path& path, double r) {
+    for (const auto& item : path) {
+        if (const auto* b = std::get_if<Bend>(&item)) {
+            if (b->R < r) throw std::invalid_argument("радиус гиба меньше радиуса трубы: тело самопересекается");
+        } else if (const auto* s = std::get_if<Spiral>(&item)) {
+            if (s->R < r) throw std::invalid_argument("радиус витка меньше радиуса трубы: тело самопересекается");
+            if (std::abs(s->p) < 2.0 * r) {
+                throw std::invalid_argument("шаг спирали меньше наружного ∅: витки пересекаются");
+            }
+        }
+    }
+}
+
+// Тело трубы: сплошное (wall = 0) или с осевым отверстием (0 < wall < r).
 TopoDS_Shape build_body(const Path& path, double od_mm, double wall_mm) {
     if (!(od_mm > 0.0)) throw std::invalid_argument("∅ трубы должен быть больше нуля");
     if (wall_mm < 0.0) throw std::invalid_argument("толщина стенки не может быть отрицательной");
     const double r = od_mm / 2.0;
-    const TopoDS_Solid outer = build_solid(path, r);
-    if (wall_mm == 0.0) return outer;
+    check_self_contact(path, r);
+    if (wall_mm == 0.0) return build_solid(path, r);
     if (wall_mm >= r) throw std::invalid_argument("стенка не меньше радиуса трубы");
 
+    const TopoDS_Solid outer = build_solid(path, r);
     const TopoDS_Solid inner = build_solid(path, r - wall_mm);
+    // Известное ограничение: на спиральных участках результат невалиден (BRepCheck), см. README.
     BRepAlgoAPI_Cut cut(outer, inner);
     if (!cut.IsDone()) throw std::invalid_argument("вычитание внутреннего тела не выполнено");
     TopExp_Explorer solidEx(cut.Shape(), TopAbs_SOLID);
@@ -158,6 +180,40 @@ TubeSolidResult make_tube(const Path& path, double od_mm, double wall_mm) {
 
 TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
     return make_tube(path, od_mm, 0.0);
+}
+
+TubeMesh make_mesh(const Path& path, double od_mm, double wall_mm, double deflection_mm) {
+    if (!(deflection_mm > 0.0)) throw std::invalid_argument("отклонение сетки должно быть больше нуля");
+    const TopoDS_Shape body = build_body(path, od_mm, wall_mm);
+    // Угловой допуск 0.5 рад, относительный режим выключен: линейное отклонение задано в мм.
+    BRepMesh_IncrementalMesh mesher(body, deflection_mm, false, 0.5, true);
+    TubeMesh mesh;
+    int offset = 0;
+    for (TopExp_Explorer ex(body, TopAbs_FACE); ex.More(); ex.Next()) {
+        const TopoDS_Face face = TopoDS::Face(ex.Current());
+        TopLoc_Location loc;
+        const Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
+        if (tri.IsNull()) throw std::invalid_argument("сетка грани не построена");
+        const gp_Trsf trsf = loc.Transformation();
+        for (int i = 1; i <= tri->NbNodes(); ++i) {
+            const gp_Pnt p = tri->Node(i).Transformed(trsf);
+            mesh.vertices.push_back(p.X());
+            mesh.vertices.push_back(p.Y());
+            mesh.vertices.push_back(p.Z());
+        }
+        // Грань, направленная внутрь (REVERSED), даёт треугольники с обратным обходом: разворачиваем.
+        const bool reversed = face.Orientation() == TopAbs_REVERSED;
+        for (int i = 1; i <= tri->NbTriangles(); ++i) {
+            int a = 0, b = 0, c = 0;
+            tri->Triangle(i).Get(a, b, c);
+            if (reversed) std::swap(b, c);
+            mesh.indices.push_back(offset + a - 1);
+            mesh.indices.push_back(offset + b - 1);
+            mesh.indices.push_back(offset + c - 1);
+        }
+        offset += tri->NbNodes();
+    }
+    return mesh;
 }
 
 // Порты по кромкам торцов готового тела. taken — имена, которые уже заняты (авто-имена их обходят).

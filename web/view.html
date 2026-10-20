@@ -13,12 +13,14 @@
     label { display: inline-flex; gap: 6px; align-items: center; }
     input[type=number] { width: 6em; }
     input[type=range] { width: 180px; }
+    input[type=url] { width: 20em; }
     button { padding: 6px 14px; }
     #status { font-size: 14px; margin: 8px 0; min-height: 1.2em; }
     .err { color: #b3261e; }
     svg { width: 100%; max-width: 720px; height: auto; background: #f7f7f9; border-radius: 6px; display: block; }
     @media (prefers-color-scheme: dark) { svg { background: #1d1f24; } }
     .axis { stroke: #888; stroke-width: 1; }
+    .tri { fill: #2b6cb0; fill-opacity: 0.22; stroke: none; }
     .pipe { fill: none; stroke: #2b6cb0; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
     .port { stroke: #c05621; stroke-width: 3; }
     .portDot { fill: #c05621; }
@@ -28,6 +30,7 @@
 <body>
   <h1>bendcore: просмотр трубы</h1>
   <p>Вставьте CSV или JSON (формат — README, раздел «Импорт»), затем нажмите «Показать». Ось трубы строится ядром (ломаная из точек оси); порты — стрелки по направлению наружу.</p>
+  <p>Если указан адрес сервиса тела трубы (README, раздел «Сервис тела трубы»), страница дополнительно показывает тело (сетку) и концевые порты. Без сервиса показывается только ось.</p>
 
   <div class="row">
     <label>формат
@@ -39,6 +42,10 @@
     <label>∅, мм <input id="od" type="number" value="20" min="0.1" step="0.1"></label>
     <label>стенка, мм <input id="wall" type="number" value="0" min="0" step="0.1"></label>
     <button id="show" type="button">Показать</button>
+  </div>
+
+  <div class="row">
+    <label>сервис <input id="server" type="url" placeholder="http://127.0.0.1:8080" size="24"></label>
   </div>
 
   <div class="row">
@@ -73,7 +80,7 @@ straight,50,,,,,,,,,,,,,,
 bend,,50,90,0,,,,,,,,,,
 straight,30,,,,,,,,,,,,,,
 bend,,50,-60,90,,,,,,,,,,
-spiral,,30,,,10,2,-1,,,,,,,,
+spiral,,30,,,20,2,-1,,,,,,,,
 straight,20,,,,,,,,,,,,,,
 port,,,,,,,,10,20,30,0,0,1,16,P1`,
       json: `{
@@ -84,7 +91,7 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
     {"kind": "bend", "radius": 50, "angle": 90, "rotation": 0},
     {"kind": "straight", "length": 30},
     {"kind": "bend", "radius": 50, "angle": -60, "rotation": 90},
-    {"kind": "spiral", "radius": 30, "pitch": 10, "turns": 2, "direction": -1},
+    {"kind": "spiral", "radius": 30, "pitch": 20, "turns": 2, "direction": -1},
     {"kind": "straight", "length": 20}
   ],
   "ports": [
@@ -97,7 +104,8 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const W = 600, H = 400;
     let core = null;
-    let last = null;   // { model, points, length }
+    // { model (WASM: путь, порты из файла), points, length, manual: [порты вручную], server: ответ сервиса | null }
+    let last = null;
 
     function setStatus(text, isError = false) {
       const el = $('status');
@@ -125,17 +133,46 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
       };
     }
 
+    // Порты для отрисовки: от сервиса (файл + концевые), иначе из файла; плюс добавленные вручную.
+    function allPorts() {
+      const base = last.server ? last.server.ports : last.model.ports;
+      return [...base, ...last.manual];
+    }
+
     // Имя для нового порта: P<n>, пока такое имя занято — следующее.
     function nextName() {
-      const used = new Set(last.model.ports.map((p) => p.name));
-      let n = last.model.ports.length + 1;
+      const used = new Set(allPorts().map((p) => p.name));
+      let n = allPorts().length + 1;
       while (used.has(`P${n}`)) n += 1;
       return `P${n}`;
     }
 
-    function statusFor(model, points, length) {
-      return `Участков: ${model.path ? model.path.length : 0}, точек оси: ${points.length}, `
-        + `длина оси: ${length.toFixed(1)} мм, портов: ${model.ports.length}`;
+    function statusFor() {
+      const base = `Участков: ${last.model.path ? last.model.path.length : 0}, точек оси: ${last.points.length}, `
+        + `длина оси: ${last.length.toFixed(1)} мм, портов: ${allPorts().length}`;
+      if (!last.server) return base;
+      const s = last.server;
+      return base + `. Тело: объём ${s.volume.toFixed(0)} мм³, ${s.valid ? 'валидно' : 'НЕ валидно'}, `
+        + `треугольников ${s.mesh.indices.length / 3}`;
+    }
+
+    function serverBase() {
+      const v = $('server').value.trim();
+      return v ? v.replace(/\/+$/, '') : null;
+    }
+
+    // Тело от сервиса. null — сервис не отвечает; исключение — сервис ответил ошибкой.
+    async function fetchBody(base, text, format, od, wall) {
+      const healthy = await fetch(`${base}/v1/health`, { signal: AbortSignal.timeout(2000) })
+        .then((r) => r.ok).catch(() => false);
+      if (!healthy) return null;
+      const q = new URLSearchParams({ format, od: String(od), wall: String(wall), deflection: '0.05' });
+      const res = await fetch(`${base}/v1/tube?${q}`, {
+        method: 'POST', body: text, signal: AbortSignal.timeout(60000),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      return data;
     }
 
     function addPort() {
@@ -148,9 +185,9 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
           od: num('mod'),
           name: $('mname').value.trim() || nextName(),
         });
-        last.model.ports.push(port);
+        last.manual.push(port);
         draw();
-        setStatus(statusFor(last.model, last.points, last.length));
+        setStatus(statusFor());
       } catch (err) {
         setStatus(String(err.message ?? err), true);
       }
@@ -163,15 +200,37 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
       const yaw = Number($('yaw').value), pitch = Number($('pitch').value);
 
       const pts = last.points.map((p) => rotate(p, yaw, pitch));
-      const ports = last.model.ports.map((p) => ({
+      const ports = allPorts().map((p) => ({
         name: p.name,
         pos: rotate(p.pos, yaw, pitch),
         dir: rotate(p.direction, yaw, pitch),
       }));
-      const all = [...pts, ...ports.map((p) => p.pos)];
-      if (all.length === 0) return;
-      const minX = Math.min(...all.map((p) => p.x)), maxX = Math.max(...all.map((p) => p.x));
-      const minY = Math.min(...all.map((p) => p.y)), maxY = Math.max(...all.map((p) => p.y));
+      // Сетка: вершины поворачиваются один раз; треугольники рисуются от дальних к ближним.
+      let verts = [], tris = [];
+      if (last.server) {
+        const flat = last.server.mesh.vertices;
+        for (let i = 0; i < flat.length; i += 3) {
+          verts.push(rotate({ x: flat[i], y: flat[i + 1], z: flat[i + 2] }, yaw, pitch));
+        }
+        const idx = last.server.mesh.indices;
+        for (let t = 0; t < idx.length; t += 3) {
+          const a = verts[idx[t]], b = verts[idx[t + 1]], c = verts[idx[t + 2]];
+          tris.push({ a, b, c, depth: (a.z + b.z + c.z) / 3 });
+        }
+        tris.sort((p, q) => p.depth - q.depth);
+      }
+
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      const extend = (p) => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      };
+      pts.forEach(extend);
+      ports.forEach((p) => extend(p.pos));
+      verts.forEach(extend);
+      if (!Number.isFinite(minX)) return;
       const span = Math.max(maxX - minX, maxY - minY, 1);
       const scale = (Math.min(W, H) - 80) / span;
       const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
@@ -181,6 +240,12 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
       svg.append(el('line', { x1: 0, y1: H / 2, x2: W, y2: H / 2, class: 'axis' }));
       svg.append(el('line', { x1: W / 2, y1: 0, x2: W / 2, y2: H, class: 'axis' }));
 
+      for (const t of tris) {
+        svg.append(el('polygon', {
+          class: 'tri',
+          points: [t.a, t.b, t.c].map((p) => `${sx(p)},${sy(p)}`).join(' '),
+        }));
+      }
       if (pts.length >= 2) {
         svg.append(el('polyline', { class: 'pipe', points: pts.map((p) => `${sx(p)},${sy(p)}`).join(' ') }));
       }
@@ -198,11 +263,24 @@ port,,,,,,,,10,20,30,0,0,1,16,P1`,
         const format = $('format').value;
         const od = Number($('od').value);
         const wall = Number($('wall').value);
-        const tube = importTube(core, format, $('text').value, { id: 'труба', od, wall });
+        const text = $('text').value;
+        const tube = importTube(core, format, text, { id: 'труба', od, wall });
         const points = tracePath(core, tube.path ?? [], 32);
         const length = tube.path ? axisLength(core, tube.path) : 0;
-        last = { model: tube, points, length };
-        setStatus(statusFor(tube, points, length));
+        last = { model: tube, points, length, manual: [], server: null };
+
+        const base = serverBase();
+        if (base && tube.path) {
+          const body = await fetchBody(base, text, format, od, wall);
+          if (body) {
+            last.server = body;
+          } else {
+            setStatus(statusFor() + '. Сервис не отвечает, показана только ось.');
+            draw();
+            return;
+          }
+        }
+        setStatus(statusFor());
         draw();
       } catch (err) {
         last = null;

@@ -25,6 +25,15 @@ TubeSolidResult make_tube(const Path& path, double od_mm, double wall_mm = 0.0);
 // Сплошная труба (совместимость): make_tube(path, od_mm, 0).
 TubeSolidResult make_solid_tube(const Path& path, double od_mm);
 
+// Треугольная сетка поверхности тела (наружной, и внутренней при стенке). Вершины не объединяются между гранями.
+struct TubeMesh {
+    std::vector<double> vertices;  // x, y, z по вершинам, мм
+    std::vector<int> indices;      // тройки индексов вершин, обход против часовой стрелки снаружи тела
+};
+
+// Сетка тела с линейным отклонением deflection_mm от поверхности. Исключение std::invalid_argument при неверных данных.
+TubeMesh make_mesh(const Path& path, double od_mm, double wall_mm, double deflection_mm);
+
 // Порты по кромкам концов тела: окружности на плоских торцах. Направление — наружу из трубы.
 // Для трубы со стенкой на торце две окружности (наружная и внутренняя) — порт берётся по наружной (∅ = od).
 // Стыки участков и швы не дают портов.
