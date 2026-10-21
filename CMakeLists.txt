@@ -123,11 +123,14 @@ bendcore_add_test(sketch2d test_sketch2d)
 option(BENDCORE_WITH_DWFX "Собрать чтение контейнера DWFx (ZIP, нужен zlib)" OFF)
 if(BENDCORE_WITH_DWFX)
   find_package(ZLIB REQUIRED)
+  # pugixml 1.15 (MIT, вендорная копия, см. third_party/pugixml/NOTICE.md) — разбор XML DWFx.
+  add_library(bendcore_pugixml STATIC third_party/pugixml/pugixml.cpp)
+  target_include_directories(bendcore_pugixml PUBLIC third_party/pugixml)
   add_library(bendcore_dwfx STATIC src/dwfx/zip_reader.cpp src/dwfx/hsf_envelope.cpp src/dwfx/import_settings.cpp
     src/dwfx/hsf_edgebreaker.cpp src/dwfx/hsf_opcodes.cpp src/dwfx/import_settings_io.cpp
-    src/dwfx/import_filter.cpp)
+    src/dwfx/import_filter.cpp src/dwfx/dwfx_structure.cpp)
   target_include_directories(bendcore_dwfx PUBLIC include)
-  target_link_libraries(bendcore_dwfx PUBLIC ZLIB::ZLIB)
+  target_link_libraries(bendcore_dwfx PUBLIC ZLIB::ZLIB bendcore_pugixml)
 
   add_executable(test_dwfx_zip tests/test_dwfx_zip.cpp)
   target_link_libraries(test_dwfx_zip PRIVATE bendcore_dwfx)
@@ -148,6 +151,10 @@ if(BENDCORE_WITH_DWFX)
   add_executable(test_dwfx_filter tests/test_dwfx_filter.cpp)
   target_link_libraries(test_dwfx_filter PRIVATE bendcore_dwfx)
   bendcore_add_test(dwfx_filter test_dwfx_filter)
+
+  add_executable(test_dwfx_structure tests/test_dwfx_structure.cpp)
+  target_link_libraries(test_dwfx_structure PRIVATE bendcore_dwfx)
+  bendcore_add_test(dwfx_structure test_dwfx_structure)
 endif()
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
