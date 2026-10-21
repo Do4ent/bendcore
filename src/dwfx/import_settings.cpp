@@ -206,7 +206,7 @@ const std::vector<Binding>& bindings() {
                                10.0, "D = max(кратность × ∅, зазор + запас) (заметки: 1×∅)."),
                         &ImportSettings::neighborhood_min_od_factor));
         t.push_back(num(number("neighborhood_margin_mm", "Окрестность: запас", "Окрестность", "мм", 0.0, 100.0,
-                               "ЗНАЧЕНИЕ НЕ ЗАДАНО В ЗАМЕТКАХ: по умолчанию 0, уточнить."),
+                               "Запас сверх зазора (подтверждено пользователем: 5 мм; в заметках не указан)."),
                         &ImportSettings::neighborhood_margin_mm));
         t.push_back(num(number("contact_levels", "Уровни контактирующих тел", "Окрестность", "уровень", 0.0, 10.0,
                                "Заметки: 0."),

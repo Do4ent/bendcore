@@ -42,6 +42,7 @@ static void check_defaults_match_notes() {
     check(d.autoport_linear_mm == 0.1 && d.autoport_angle_deg == 1.0, "заметки: автопорты 0,1 мм и 1°");
     check(d.new_port_reach_mm == 0.0, "заметки: вылет нового порта 0");
     check(d.clearance_mm == 5.0, "заметки: зазор 5 мм");
+    check(d.neighborhood_margin_mm == 5.0, "подтверждено пользователем: запас окрестности 5 мм");
     check(d.neighborhood_min_od_factor == 1.0, "заметки: окрестность max(1×∅, ...)");
     check(d.contact_levels == 0, "заметки: контактирующие тела 0 уровней");
     check(d.filter_preset == FilterPreset::TubesAndNeighborhood, "заметки: пресет «Трубы и окрестность»");
@@ -68,7 +69,7 @@ static void check_schema() {
     check(json.find("\"id\":\"auto_fix_radius\",\"label\"") != std::string::npos, "JSON: порядок полей");
     check(json.find("\"default\":\"false\"") != std::string::npos, "JSON: логическое значение по умолчанию");
     check(json.find("\"options\":[\"off\",\"standard\"]") != std::string::npos, "JSON: варианты округления");
-    check(json.find("ЗНАЧЕНИЕ НЕ ЗАДАНО В ЗАМЕТКАХ") != std::string::npos,
+    check(json.find("в заметках не указан") != std::string::npos,
           "JSON: отмечено значение, не заданное в заметках");
 }
 

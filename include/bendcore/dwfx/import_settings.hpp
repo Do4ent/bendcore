@@ -41,7 +41,7 @@ struct ImportSettings {
     // Зазор и окрестность.
     double clearance_mm = 5.0;               // зазор до окружения, не менее мм
     double neighborhood_min_od_factor = 1.0; // окрестность D = max(factor × ∅, зазор + запас)
-    double neighborhood_margin_mm = 0.0;     // запас окрестности, мм — ЗНАЧЕНИЕ НЕ ЗАДАНО В ЗАМЕТКАХ
+    double neighborhood_margin_mm = 5.0;     // запас окрестности, мм (подтверждено пользователем: 5 мм)
     int contact_levels = 0;                  // уровни контактирующих тел
 
     // Фильтр импорта.
