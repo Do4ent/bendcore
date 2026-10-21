@@ -124,7 +124,7 @@ option(BENDCORE_WITH_DWFX "Собрать чтение контейнера DWFx
 if(BENDCORE_WITH_DWFX)
   find_package(ZLIB REQUIRED)
   add_library(bendcore_dwfx STATIC src/dwfx/zip_reader.cpp src/dwfx/hsf_envelope.cpp src/dwfx/import_settings.cpp
-    src/dwfx/hsf_edgebreaker.cpp src/dwfx/hsf_opcodes.cpp)
+    src/dwfx/hsf_edgebreaker.cpp src/dwfx/hsf_opcodes.cpp src/dwfx/import_settings_io.cpp)
   target_include_directories(bendcore_dwfx PUBLIC include)
   target_link_libraries(bendcore_dwfx PUBLIC ZLIB::ZLIB)
 

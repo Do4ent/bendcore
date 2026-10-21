@@ -1,6 +1,7 @@
 // Параметры импорта DWFx: значения по умолчанию из заметок, чтение и запись по идентификатору,
 // проверка диапазонов и описание для интерфейса (JSON).
 #include "bendcore/dwfx/import_settings.hpp"
+#include "bendcore/dwfx/import_settings_io.hpp"
 
 #include <cstdio>
 #include <set>
@@ -117,12 +118,67 @@ static void check_validation() {
     check(!validate_import_settings(s).empty(), "нулевой шаг округления отклоняется");
 }
 
+// Раздел «Импорт → DWFx»: сохранение и загрузка пользовательских значений.
+static void expect_bad_json(const std::string& json, const char* what) {
+    try {
+        import_settings_from_json(json);
+        check(false, what);
+    } catch (const std::invalid_argument&) {
+    }
+}
+
+static void check_settings_io() {
+    const std::string defaults_json = import_settings_to_json(import_defaults());
+    check(defaults_json.find("\"import_kind\":\"dwfx\"") != std::string::npos, "JSON настроек: вид dwfx");
+    check(defaults_json.find("\"neighborhood_margin_mm\":\"5\"") != std::string::npos,
+          "JSON настроек: запас окрестности 5 мм");
+
+    const ImportSettings round = import_settings_from_json(defaults_json);
+    for (const auto& p : import_properties()) {
+        check(get_import_property(round, p.id) == get_import_property(import_defaults(), p.id),
+              ("JSON настроек: круговой проход по умолчанию " + p.id).c_str());
+    }
+
+    ImportSettings custom = import_defaults();
+    set_import_property(custom, "compare_linear_mm", "0.25");
+    set_import_property(custom, "rounding_mesh", "off");
+    set_import_property(custom, "neighborhood_margin_mm", "7.5");
+    const std::string path = "dwfx_settings_test.json";
+    save_import_settings(path, custom);
+    const ImportSettings loaded = load_import_settings(path);
+    check(loaded.compare_linear_mm == 0.25, "файл: значение 0,25 сохранено и загружено");
+    check(loaded.rounding_mesh == RoundingMode::Off, "файл: округление off сохранено");
+    check(loaded.neighborhood_margin_mm == 7.5, "файл: запас 7,5 мм сохранён");
+    std::remove(path.c_str());
+
+    const ImportSettings absent = load_import_settings("no_such_dwfx_settings_file.json");
+    check(get_import_property(absent, "neighborhood_margin_mm") == "5", "нет файла: значения по умолчанию");
+
+    // Отсутствующие ключи — значения по умолчанию; неизвестные поля и значения — отказ.
+    const ImportSettings partial = import_settings_from_json(
+        "{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{\"clearance_mm\":\"6\"}}");
+    check(partial.clearance_mm == 6.0 && partial.compare_linear_mm == 0.1, "частичный файл: остальное по умолчанию");
+
+    expect_bad_json("{\"import_kind\":\"step\",\"version\":1,\"values\":{}}", "неверный вид импорта отвергается");
+    expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":2,\"values\":{}}", "неверная версия отвергается");
+    expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{\"no_such\":\"1\"}}",
+                    "неизвестный идентификатор отвергается");
+    expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{\"clearance_mm\":\"abc\"}}",
+                    "нечисловое значение отвергается");
+    expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{\"clearance_mm\":\"4\"}}",
+                    "зазор меньше 5 мм отвергается");
+    expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{},\"extra\":1}",
+                    "неизвестное поле верхнего уровня отвергается");
+    expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{", "обрезанный JSON отвергается");
+}
+
 int main() {
     check_defaults_match_notes();
     check_schema();
     check_round_trip();
     check_errors();
     check_validation();
+    check_settings_io();
     if (failures == 0) std::printf("OK dwfx_settings\n");
     return failures == 0 ? 0 : 1;
 }
