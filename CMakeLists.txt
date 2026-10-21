@@ -124,7 +124,8 @@ option(BENDCORE_WITH_DWFX "Собрать чтение контейнера DWFx
 if(BENDCORE_WITH_DWFX)
   find_package(ZLIB REQUIRED)
   add_library(bendcore_dwfx STATIC src/dwfx/zip_reader.cpp src/dwfx/hsf_envelope.cpp src/dwfx/import_settings.cpp
-    src/dwfx/hsf_edgebreaker.cpp src/dwfx/hsf_opcodes.cpp src/dwfx/import_settings_io.cpp)
+    src/dwfx/hsf_edgebreaker.cpp src/dwfx/hsf_opcodes.cpp src/dwfx/import_settings_io.cpp
+    src/dwfx/import_filter.cpp)
   target_include_directories(bendcore_dwfx PUBLIC include)
   target_link_libraries(bendcore_dwfx PUBLIC ZLIB::ZLIB)
 
@@ -143,6 +144,10 @@ if(BENDCORE_WITH_DWFX)
   add_executable(test_dwfx_opcodes tests/test_dwfx_opcodes.cpp)
   target_link_libraries(test_dwfx_opcodes PRIVATE bendcore_dwfx)
   bendcore_add_test(dwfx_opcodes test_dwfx_opcodes)
+
+  add_executable(test_dwfx_filter tests/test_dwfx_filter.cpp)
+  target_link_libraries(test_dwfx_filter PRIVATE bendcore_dwfx)
+  bendcore_add_test(dwfx_filter test_dwfx_filter)
 endif()
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
