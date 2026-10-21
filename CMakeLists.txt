@@ -128,7 +128,8 @@ if(BENDCORE_WITH_DWFX)
   target_include_directories(bendcore_pugixml PUBLIC third_party/pugixml)
   add_library(bendcore_dwfx STATIC src/dwfx/zip_reader.cpp src/dwfx/hsf_envelope.cpp src/dwfx/import_settings.cpp
     src/dwfx/hsf_edgebreaker.cpp src/dwfx/hsf_opcodes.cpp src/dwfx/import_settings_io.cpp
-    src/dwfx/import_filter.cpp src/dwfx/dwfx_structure.cpp src/dwfx/geometry_rounding.cpp)
+    src/dwfx/import_filter.cpp src/dwfx/dwfx_structure.cpp src/dwfx/geometry_rounding.cpp
+    src/dwfx/autoport_detection.cpp)
   target_include_directories(bendcore_dwfx PUBLIC include)
   target_link_libraries(bendcore_dwfx PUBLIC ZLIB::ZLIB bendcore_pugixml)
 
@@ -163,6 +164,10 @@ if(BENDCORE_WITH_DWFX)
   add_executable(test_dwfx_geometry_rounding tests/test_dwfx_geometry_rounding.cpp)
   target_link_libraries(test_dwfx_geometry_rounding PRIVATE bendcore_dwfx)
   bendcore_add_test(dwfx_geometry_rounding test_dwfx_geometry_rounding)
+
+  add_executable(test_dwfx_autoport_detection tests/test_dwfx_autoport_detection.cpp)
+  target_link_libraries(test_dwfx_autoport_detection PRIVATE bendcore_dwfx)
+  bendcore_add_test(dwfx_autoport_detection test_dwfx_autoport_detection)
 endif()
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
