@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bendcore — Импорт DWFx</title>
+  <style>
+    :root { color-scheme: light dark; --tab-height: 32px; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: Canvas; color: CanvasText; }
+    h1 { font-size: 1.5rem; margin: 0; padding: 16px 20px; border-bottom: 1px solid #e0e0e0; }
+    @media (prefers-color-scheme: dark) { h1 { border-color: #404040; } }
+
+    .container { display: flex; height: calc(100vh - 60px); }
+    .tabs { display: flex; flex-direction: column; width: 200px; border-right: 1px solid #e0e0e0; overflow-y: auto; padding: 8px; gap: 4px; }
+    @media (prefers-color-scheme: dark) { .tabs { border-color: #404040; } }
+
+    .tab-button { padding: 8px 12px; border: none; background: transparent; cursor: pointer; text-align: left; border-radius: 6px; font-size: 13px; }
+    .tab-button:hover { background: #f0f0f0; }
+    @media (prefers-color-scheme: dark) { .tab-button:hover { background: #2a2a2a; } }
+    .tab-button.active { background: #2b6cb0; color: white; font-weight: 600; }
+
+    .content { flex: 1; display: flex; flex-direction: column; }
+    .panel { display: none; flex: 1; overflow-y: auto; padding: 20px; }
+    .panel.active { display: block; }
+
+    .panel h2 { font-size: 1.1rem; margin: 0 0 16px; }
+    .properties { display: grid; grid-template-columns: auto 1fr; gap: 12px 20px; align-items: center; }
+
+    label { font-size: 13px; font-weight: 500; }
+    input[type="text"], input[type="number"], select { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; background: Canvas; color: CanvasText; }
+    input[type="checkbox"] { cursor: pointer; }
+    input[type="text"], input[type="number"] { width: 100%; max-width: 300px; }
+
+    .description { grid-column: 2; font-size: 12px; color: #666; margin-top: -8px; }
+    @media (prefers-color-scheme: dark) { .description { color: #aaa; } }
+
+    .footer { display: flex; gap: 8px; padding: 16px 20px; border-top: 1px solid #e0e0e0; justify-content: space-between; }
+    @media (prefers-color-scheme: dark) { .footer { border-color: #404040; } }
+
+    button { padding: 8px 16px; border: 1px solid #ccc; border-radius: 4px; background: Canvas; color: CanvasText; cursor: pointer; font-size: 13px; }
+    button:hover { background: #f0f0f0; }
+    @media (prefers-color-scheme: dark) { button:hover { background: #2a2a2a; } }
+
+    .preset-buttons { display: flex; gap: 8px; }
+    .preset-buttons button { flex: 1; }
+
+    #jsonPreview { width: 100%; height: 200px; padding: 12px; font-family: monospace; font-size: 11px; border: 1px solid #ccc; border-radius: 4px; resize: none; }
+  </style>
+</head>
+<body>
+  <h1>Импорт DWFx: параметры</h1>
+  <div class="container">
+    <div class="tabs" id="tabs"></div>
+    <div class="content">
+      <div id="panels"></div>
+      <div class="footer">
+        <div class="preset-buttons">
+          <button id="resetBtn">Сбросить на умолчание</button>
+          <button id="importBtn">Загрузить из файла</button>
+          <button id="exportBtn">Сохранить в файл</button>
+        </div>
+        <div>
+          <button id="closeBtn">Готово</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Структура: группы параметров и их описания
+    // Это совпадает с import_properties_json из C++
+    const groups = {};
+    const properties = {};
+
+    // Инициализация из предыдущих сохранённых значений
+    let settings = loadSettings();
+
+    async function init() {
+      // Здесь придёт вызов C++ для получения import_properties_json()
+      // На данный момент используем конфигурацию из notes
+      const tabs = [
+        { id: 'recognition', label: 'Распознавание' },
+        { id: 'radius', label: 'Радиус' },
+        { id: 'ports', label: 'Порты' },
+        { id: 'neighborhood', label: 'Окрестность' },
+        { id: 'filter', label: 'Фильтр' },
+        { id: 'rounding', label: 'Округление' }
+      ];
+
+      // Структура параметров (упрощённо для демо)
+      const props = [
+        { id: 'degenerate_bend_deg', label: 'Порог вырожденного гиба', group: 'recognition', kind: 'number', unit: '°', min: 0.01, max: 5.0, default: '0.5', description: 'Гиб меньше порога считается прямым участком' },
+        { id: 'compare_linear_mm', label: 'Допуск сравнения длин', group: 'recognition', kind: 'number', unit: 'мм', min: 0.0, max: 1.0, default: '0.1', description: 'При проверках распознавания' },
+        { id: 'compare_angle_deg', label: 'Допуск сравнения углов', group: 'recognition', kind: 'number', unit: '°', min: 0.0, max: 5.0, default: '0.1', description: 'При проверках распознавания' },
+        { id: 'max_geometry_deviation_mm', label: 'Макс. отклонение геометрии', group: 'recognition', kind: 'number', unit: 'мм', min: 0.0, max: 5.0, default: '0.5', description: 'Предел отклонения от исходной' },
+        { id: 'exact_tolerance_mm', label: 'Допуск распознавания точных тел', group: 'recognition', kind: 'number', unit: 'мм', min: 0.0, max: 1.0, default: '0.01', description: 'Для точных тел' },
+        { id: 'mesh_tolerance_mm', label: 'Допуск распознавания сетки', group: 'recognition', kind: 'number', unit: 'мм', min: 0.0, max: 2.0, default: '0.1', description: 'Абсолютный допуск для сетки DWF' },
+        { id: 'mesh_tolerance_rel_od', label: 'Доля ∅ при распознавании сетки', group: 'recognition', kind: 'number', unit: 'доля', min: 0.0, max: 0.05, default: '0.005', description: 'Относительно наружного диаметра' },
+
+        { id: 'radius_match_rel', label: 'Допуск совпадения радиуса', group: 'radius', kind: 'number', unit: 'доля R', min: 0.0, max: 0.2, default: '0.01', description: 'При импорте радиуса' },
+        { id: 'radius_match_min_mm', label: 'Допуск совпадения радиуса, не менее', group: 'radius', kind: 'number', unit: 'мм', min: 0.0, max: 5.0, default: '0.5', description: 'Нижняя граница допуска' },
+        { id: 'auto_fix_radius', label: 'Автоисправление радиуса гиба', group: 'radius', kind: 'bool', default: 'false', description: 'По умолчанию выключено' },
+        { id: 'auto_fix_max_radius_rel', label: 'Макс. разница для автоисправления', group: 'radius', kind: 'number', unit: 'доля R', min: 0.0, max: 1.0, default: '0.1', description: 'Максимальное отклонение профиля' },
+
+        { id: 'autoports', label: 'Автопорты при импорте', group: 'ports', kind: 'bool', default: 'true', description: 'Поиск соосного признака окружения' },
+        { id: 'autoport_linear_mm', label: 'Допуск автопортов, линейный', group: 'ports', kind: 'number', unit: 'мм', min: 0.0, max: 1.0, default: '0.1', description: '' },
+        { id: 'autoport_angle_deg', label: 'Допуск автопортов, угловой', group: 'ports', kind: 'number', unit: '°', min: 0.0, max: 5.0, default: '1.0', description: '' },
+        { id: 'new_port_reach_mm', label: 'Вылет нового порта', group: 'ports', kind: 'number', unit: 'мм', min: 0.0, max: 100.0, default: '0.0', description: 'По умолчанию 0' },
+        { id: 'import_frozen', label: 'Создавать трубу «Заморожена»', group: 'ports', kind: 'bool', default: 'true', description: 'Распознанные трубы в сборке создаются замороженными' },
+
+        { id: 'clearance_mm', label: 'Зазор до окружения, не менее', group: 'neighborhood', kind: 'number', unit: 'мм', min: 5.0, max: 100.0, default: '5.0', description: 'Тот же зазор между трубами сборки' },
+        { id: 'neighborhood_min_od_factor', label: 'Окрестность: кратность ∅', group: 'neighborhood', kind: 'number', unit: '×∅', min: 0.1, max: 10.0, default: '1.0', description: 'D = max(кратность × ∅, зазор + запас)' },
+        { id: 'neighborhood_margin_mm', label: 'Окрестность: запас', group: 'neighborhood', kind: 'number', unit: 'мм', min: 0.0, max: 100.0, default: '5.0', description: 'Запас сверх зазора' },
+        { id: 'contact_levels', label: 'Уровни контактирующих тел', group: 'neighborhood', kind: 'number', unit: 'уровень', min: 0.0, max: 10.0, default: '0', description: 'Для построения окрестности' },
+        { id: 'neighborhood_unit', label: 'Единица отбора окрестности', group: 'neighborhood', kind: 'enum', options: ['body', 'component'], default: 'body', description: 'Тело или компонент целиком' },
+
+        { id: 'filter_preset', label: 'Пресет назначения', group: 'filter', kind: 'enum', options: ['tubes_only', 'tubes_and_neighborhood', 'all_simplified'], default: 'tubes_and_neighborhood', description: 'Трубы только / Трубы и окрестность / Всё упрощено' },
+        { id: 'filter_two_phase', label: 'Двухфазный импорт', group: 'filter', kind: 'bool', default: 'true', description: 'Основной режим для крупных сборок' },
+        { id: 'auto_load_neighborhood', label: 'Автодогрузка окрестности', group: 'filter', kind: 'bool', default: 'true', description: 'При выходе за загруженную область' },
+        { id: 'filter_only_visible', label: 'Только видимые компоненты', group: 'filter', kind: 'bool', default: 'false', description: 'Галочки на компонентах' },
+        { id: 'filter_name_mask', label: 'Маска имён', group: 'filter', kind: 'text', default: '', description: 'Например «Труба*»' },
+        { id: 'filter_layers', label: 'Слои', group: 'filter', kind: 'text', default: '', description: 'Через запятую' },
+        { id: 'filter_type_bodies', label: 'Включать тела', group: 'filter', kind: 'bool', default: 'true', description: '' },
+        { id: 'filter_type_surfaces', label: 'Включать поверхности', group: 'filter', kind: 'bool', default: 'false', description: '' },
+        { id: 'filter_min_bbox_mm', label: 'Минимальный габарит', group: 'filter', kind: 'number', unit: 'мм', min: 0.0, max: 1000.0, default: '0.0', description: '0 = без ограничения' },
+
+        { id: 'rounding_exact', label: 'Округление точных тел', group: 'rounding', kind: 'enum', options: ['off', 'standard'], default: 'off', description: '' },
+        { id: 'rounding_mesh', label: 'Округление сетки DWF', group: 'rounding', kind: 'enum', options: ['off', 'standard'], default: 'standard', description: '' },
+        { id: 'round_length_mm', label: 'Шаг длин', group: 'rounding', kind: 'number', unit: 'мм', min: 0.01, max: 10.0, default: '1.0', description: '' },
+        { id: 'round_angle_deg', label: 'Шаг углов', group: 'rounding', kind: 'number', unit: '°', min: 0.01, max: 10.0, default: '0.5', description: '' }
+      ];
+
+      // Организуем по группам
+      props.forEach(p => {
+        if (!groups[p.group]) groups[p.group] = [];
+        groups[p.group].push(p);
+        properties[p.id] = p;
+      });
+
+      // Создаём вкладки
+      const tabsDiv = document.getElementById('tabs');
+      tabs.forEach((tab, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'tab-button' + (idx === 0 ? ' active' : '');
+        btn.textContent = tab.label;
+        btn.onclick = () => selectTab(tab.id);
+        tabsDiv.appendChild(btn);
+      });
+
+      // Создаём панели
+      const panelsDiv = document.getElementById('panels');
+      tabs.forEach((tab, idx) => {
+        const panel = document.createElement('div');
+        panel.className = 'panel' + (idx === 0 ? ' active' : '');
+        panel.id = 'panel-' + tab.id;
+        panel.innerHTML = '<h2>' + tab.label + '</h2><div class="properties"></div>';
+        panelsDiv.appendChild(panel);
+
+        const propsDiv = panel.querySelector('.properties');
+        (groups[tab.id] || []).forEach(prop => {
+          createPropertyControl(propsDiv, prop);
+        });
+      });
+
+      // Обработчики кнопок
+      document.getElementById('resetBtn').onclick = resetSettings;
+      document.getElementById('importBtn').onclick = importSettings;
+      document.getElementById('exportBtn').onclick = exportSettings;
+      document.getElementById('closeBtn').onclick = () => window.close();
+    }
+
+    function createPropertyControl(container, prop) {
+      const label = document.createElement('label');
+      label.textContent = prop.label + (prop.unit ? ' (' + prop.unit + ')' : '');
+
+      let input;
+      if (prop.kind === 'number') {
+        input = document.createElement('input');
+        input.type = 'number';
+        input.min = prop.min;
+        input.max = prop.max;
+        input.step = 'any';
+        input.value = settings[prop.id] || prop.default;
+        input.onchange = () => { settings[prop.id] = input.value; updatePreview(); };
+      } else if (prop.kind === 'bool') {
+        input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = (settings[prop.id] || prop.default) === 'true';
+        input.onchange = () => { settings[prop.id] = input.checked ? 'true' : 'false'; updatePreview(); };
+      } else if (prop.kind === 'enum') {
+        input = document.createElement('select');
+        prop.options.forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt;
+          o.textContent = opt;
+          input.appendChild(o);
+        });
+        input.value = settings[prop.id] || prop.default;
+        input.onchange = () => { settings[prop.id] = input.value; updatePreview(); };
+      } else {
+        input = document.createElement('input');
+        input.type = 'text';
+        input.value = settings[prop.id] || prop.default;
+        input.onchange = () => { settings[prop.id] = input.value; updatePreview(); };
+      }
+
+      container.appendChild(label);
+      container.appendChild(input);
+
+      if (prop.description) {
+        const desc = document.createElement('div');
+        desc.className = 'description';
+        desc.textContent = prop.description;
+        container.appendChild(desc);
+        container.appendChild(document.createElement('div'));
+      }
+    }
+
+    function selectTab(id) {
+      document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById('panel-' + id).classList.add('active');
+    }
+
+    function loadSettings() {
+      try {
+        const saved = localStorage.getItem('bendcore_dwfx_settings');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return {};
+    }
+
+    function saveSettings() {
+      localStorage.setItem('bendcore_dwfx_settings', JSON.stringify(settings));
+    }
+
+    function updatePreview() {
+      saveSettings();
+      // JSON для передачи в C++: {"import_kind":"dwfx","version":1,"values":{...}}
+      const json = {
+        import_kind: 'dwfx',
+        version: 1,
+        values: settings
+      };
+      // Показ в консоль для отладки
+      console.log('Settings:', JSON.stringify(json, null, 2));
+    }
+
+    function resetSettings() {
+      if (confirm('Сбросить все параметры на умолчание?')) {
+        settings = {};
+        Object.values(properties).forEach(p => {
+          const elem = document.querySelector('[data-id="' + p.id + '"]');
+          if (elem) {
+            if (p.kind === 'bool') elem.checked = p.default === 'true';
+            else elem.value = p.default;
+          }
+        });
+        updatePreview();
+      }
+    }
+
+    function importSettings() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            const data = JSON.parse(evt.target.result);
+            if (data.import_kind === 'dwfx' && data.values) {
+              settings = data.values;
+              location.reload(); // Перезагрузим для актуальной визуализации
+            } else {
+              alert('Неверный формат файла');
+            }
+          } catch (err) {
+            alert('Ошибка чтения файла: ' + err);
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }
+
+    function exportSettings() {
+      const json = {
+        import_kind: 'dwfx',
+        version: 1,
+        values: settings
+      };
+      const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'dwfx_import_settings.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    init();
+  </script>
+</body>
+</html>
