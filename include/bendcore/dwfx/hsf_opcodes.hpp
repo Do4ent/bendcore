@@ -71,7 +71,8 @@ struct Entity {
     std::vector<Vec3> points;
     std::array<float, 16> matrix{};           // transform: 4×4 по строкам, как в JS
     float value = 0.0f;                       // line_weight: вес; bounds (сфера): радиус
-    std::array<float, 2> angles{};            // elliptical_arc: start, end (единицы не подтверждены)
+    std::array<float, 2> angles{};            // elliptical_arc: start, end — доля полного оборота, t = 2π·значение
+                                              // (проверено: концы дуг совпадают с вершинами кривых при допуске 0.005 мм)
 
     // triangle_mesh:
     std::size_t point_count = 0;              // заявленное число вершин

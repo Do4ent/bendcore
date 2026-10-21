@@ -326,6 +326,7 @@ OpcodeResult Decoder::run() {
 
             case 0x65: {  // TKE_Elliptical_Arc: 11 float32 (44 байта) — центр, концы осей, start, end.
                 // Формат принят по данным (188 и 376 дуг в двух документах, см. тесты), не по спецификации.
+                // start/end — доля полного оборота: точка дуги P(t) = c + cos(2πt)·A + sin(2πt)·B.
                 bytes::need(view_, off, 45, "TKE_Elliptical_Arc");
                 float v[11];
                 for (std::size_t i = 0; i < 11; ++i) {
