@@ -95,7 +95,7 @@ static void check_presets_and_rules() {
     all.contact_levels = 2;
     const FilterResult a = apply_import_filter(all, comps, {axis_x()}, {});
     check(a.decisions[1].include && a.decisions[1].reason == "rules", "«Всё с упрощением»: тело включено");
-    check(a.not_applied.size() == 2, "неприменённые правила: упрощение и контактные тела");
+    check(a.not_applied.size() == 1, "неприменённые правила: только упрощение (контакт применяется)");
 
     ImportSettings hidden = import_defaults();
     hidden.filter_only_visible = true;
@@ -177,6 +177,42 @@ static void check_support_sources() {
     check(decision(f, "B1").include, "опора из файла включена по умолчанию");
 }
 
+static void check_contact_levels() {
+    // Коридор: R + D = 9,525 + max(0,1×19,05; 5 + 0) = 9,525 + 10 = 19,525 мм от оси (кратность 0,1, допуск касания 0,5 мм).
+    // B1 — в коридоре (точка на 19,4 мм). C1 — за границей коридора (19,8 мм), касается B1 (0,4 мм).
+    // C2 — за границей, касается C1 (0,4 мм), но не B1 (0,8 мм).
+    FilterComponent b1 = box("B1", "Опора", {40, 10, -1, 60, 19.4, 1});
+    b1.samples = {{40, 19.4, 0}};
+    FilterComponent c1 = box("C1", "Кронштейн", {40, 19.8, -1, 60, 22, 1});
+    c1.samples = {{40, 19.8, 0}};
+    FilterComponent c2 = box("C2", "Крепёж", {40, 20.2, -1, 60, 22, 1});
+    c2.samples = {{40, 20.2, 0}};
+    const std::vector<FilterComponent> comps = {tube(), b1, c1, c2};
+
+    auto base = [] {
+        ImportSettings s = import_defaults();
+        s.neighborhood_min_od_factor = 0.1;
+        s.compare_linear_mm = 0.5;
+        return s;
+    };
+
+    const FilterResult r0 = apply_import_filter(base(), comps, {axis_x()}, {});
+    check(decision(r0, "B1").include && !decision(r0, "C1").include && !decision(r0, "C2").include,
+          "контакт 0 уровней: только тело в коридоре");
+
+    ImportSettings one = base();
+    one.contact_levels = 1;
+    const FilterResult r1 = apply_import_filter(one, comps, {axis_x()}, {});
+    check(decision(r1, "C1").include && decision(r1, "C1").reason == "contact_1", "контакт, уровень 1: касающееся тело");
+    check(!decision(r1, "C2").include, "контакт, уровень 1: тело через соседа не добавляется");
+
+    ImportSettings two = base();
+    two.contact_levels = 2;
+    const FilterResult r2 = apply_import_filter(two, comps, {axis_x()}, {});
+    check(decision(r2, "C2").include && decision(r2, "C2").reason == "contact_2", "контакт, уровень 2: тело через соседа");
+    check(r2.not_applied.empty(), "контакт применяется и не числится неприменённым");
+}
+
 int main() {
     check_geometry();
     check_default_preset();
@@ -184,6 +220,7 @@ int main() {
     check_mask_layer_size();
     check_manual_and_group();
     check_support_sources();
+    check_contact_levels();
     if (failures == 0) std::printf("OK dwfx_filter\n");
     return failures == 0 ? 0 : 1;
 }

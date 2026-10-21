@@ -113,7 +113,6 @@ FilterResult apply_import_filter(const ImportSettings& settings, const std::vect
     if (settings.filter_simplify_remove_small_mm > 0.0) result.not_applied.push_back("упрощение: мелкие элементы");
     if (settings.filter_simplify_decimate) result.not_applied.push_back("упрощение: децимация сетки DWF");
     if (settings.filter_simplify_replace_bbox) result.not_applied.push_back("упрощение: габаритное тело");
-    if (settings.contact_levels > 0) result.not_applied.push_back("контактирующие тела");
 
     const std::vector<std::string> layers = split_layers(settings.filter_layers);
     const bool neighborhood_active = settings.filter_preset == FilterPreset::TubesAndNeighborhood;
@@ -136,15 +135,20 @@ FilterResult apply_import_filter(const ImportSettings& settings, const std::vect
         }
     }
 
-    auto near_corridor = [&](const FilterComponent& c) {
-        std::vector<Point3> points = c.samples;
-        if (points.empty()) {
-            const auto& b = c.bbox;
-            for (int corner = 0; corner < 8; ++corner) {
-                points.push_back({corner & 1 ? b[3] : b[0], corner & 2 ? b[4] : b[1], corner & 4 ? b[5] : b[2]});
-            }
-            points.push_back({(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2});
+    // Точки компонента для проверок: вершины сетки, иначе углы и центр габарита.
+    auto sample_points = [](const FilterComponent& c) {
+        if (!c.samples.empty()) return c.samples;
+        std::vector<Point3> points;
+        const auto& b = c.bbox;
+        for (int corner = 0; corner < 8; ++corner) {
+            points.push_back({corner & 1 ? b[3] : b[0], corner & 2 ? b[4] : b[1], corner & 4 ? b[5] : b[2]});
         }
+        points.push_back({(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2});
+        return points;
+    };
+
+    auto near_corridor = [&](const FilterComponent& c) {
+        const std::vector<Point3> points = sample_points(c);
         for (const auto& corridor : corridors) {
             // Грубый отбор по габаритам: коробка оси, расширенная на R + D, должна пересекать габарит компонента.
             double lo[3] = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(),
@@ -270,6 +274,44 @@ FilterResult apply_import_filter(const ImportSettings& settings, const std::vect
             if (state[i].stage == Stage::Pending && !state[i].near && hit_groups.count(group_key(i)) != 0) {
                 result.decisions[i].include = true;
                 result.decisions[i].reason = "group";
+            }
+        }
+    }
+
+    // Расширение по контакту (9.8): тела, касающиеся уже включённых, добавляются по уровням.
+    // Касание — расстояние между точками поверхности не больше допуска сравнения длин.
+    auto touches = [&](const FilterComponent& a, const FilterComponent& b, double tol) {
+        for (int k = 0; k < 3; ++k) {
+            if (a.bbox[k] > b.bbox[k + 3] + tol || b.bbox[k] > a.bbox[k + 3] + tol) return false;
+        }
+        const std::vector<Point3> pa = sample_points(a);
+        const std::vector<Point3> pb = sample_points(b);
+        for (const auto& p : pa) {
+            for (const auto& q : pb) {
+                double sum = 0.0;
+                for (int k = 0; k < 3; ++k) sum += (p[k] - q[k]) * (p[k] - q[k]);
+                if (std::sqrt(sum) <= tol) return true;
+            }
+        }
+        return false;
+    };
+    if (neighborhood_active && settings.contact_levels > 0) {
+        const double tolerance = settings.compare_linear_mm;
+        for (int level = 1; level <= settings.contact_levels; ++level) {
+            std::vector<std::size_t> added;
+            for (std::size_t i = 0; i < components.size(); ++i) {
+                if (result.decisions[i].include || result.decisions[i].reason != "outside_neighborhood") continue;
+                for (std::size_t j = 0; j < components.size(); ++j) {
+                    if (result.decisions[j].include && touches(components[i], components[j], tolerance)) {
+                        added.push_back(i);
+                        break;
+                    }
+                }
+            }
+            if (added.empty()) break;
+            for (std::size_t i : added) {
+                result.decisions[i].include = true;
+                result.decisions[i].reason = "contact_" + std::to_string(level);
             }
         }
     }
