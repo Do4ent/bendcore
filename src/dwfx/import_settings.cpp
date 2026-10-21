@@ -62,7 +62,11 @@ const std::vector<std::pair<std::string, RoundingMode>> kRounding = {{"off", Rou
 const std::vector<std::pair<std::string, ConflictPolicy>> kConflict = {{"keep_body", ConflictPolicy::KeepBody}};
 const std::vector<std::pair<std::string, ProfilePick>> kProfile = {{"nearest_r", ProfilePick::NearestR}};
 const std::vector<std::pair<std::string, FilterPreset>> kPreset = {
-    {"tubes_and_neighborhood", FilterPreset::TubesAndNeighborhood}};
+    {"tubes_only", FilterPreset::TubesOnly},
+    {"tubes_and_neighborhood", FilterPreset::TubesAndNeighborhood},
+    {"all_simplified", FilterPreset::AllSimplified}};
+const std::vector<std::pair<std::string, NeighborhoodUnit>> kUnit = {{"body", NeighborhoodUnit::Body},
+                                                                      {"component", NeighborhoodUnit::Component}};
 
 struct Binding {
     PropertyInfo info;
@@ -104,6 +108,30 @@ PropertyInfo choice(std::string id, std::string label, std::string group, std::v
     p.options = std::move(options);
     p.description = std::move(description);
     return p;
+}
+
+PropertyInfo text(std::string id, std::string label, std::string group, std::string description) {
+    PropertyInfo p;
+    p.id = std::move(id);
+    p.label = std::move(label);
+    p.group = std::move(group);
+    p.kind = "text";
+    p.description = std::move(description);
+    return p;
+}
+
+// Текстовое свойство (маска, список слоёв).
+Binding str(PropertyInfo info, std::string ImportSettings::*field) {
+    Binding b;
+    b.info = std::move(info);
+    b.get = [field](const ImportSettings& s) { return s.*field; };
+    b.set = [field](ImportSettings& s, const std::string& v) {
+        if (v.find('\n') != std::string::npos || v.find('\r') != std::string::npos) {
+            throw std::invalid_argument("текст не должен содержать переводов строк");
+        }
+        s.*field = v;
+    };
+    return b;
 }
 
 // Числовое свойство: доступ к полю структуры по указателю на член.
@@ -212,8 +240,9 @@ const std::vector<Binding>& bindings() {
                                "Заметки: 0."),
                         &ImportSettings::contact_levels));
 
-        t.push_back(pick(choice("filter_preset", "Пресет фильтра импорта", "Фильтр", {"tubes_and_neighborhood"},
-                                "Пресет по умолчанию «Трубы и окрестность» (заметки)."),
+        t.push_back(pick(choice("filter_preset", "Пресет назначения", "Фильтр",
+                                {"tubes_only", "tubes_and_neighborhood", "all_simplified"},
+                                "Пресеты 9.8: «Только трубы», «Трубы и окрестность» (по умолчанию, заметки), «Всё с упрощением»."),
                          &ImportSettings::filter_preset, kPreset));
         t.push_back(flag(boolean("filter_two_phase", "Двухфазный импорт", "Фильтр",
                                  "Основной режим для крупных сборок (заметки). Значение по умолчанию уточнить."),
@@ -221,6 +250,51 @@ const std::vector<Binding>& bindings() {
         t.push_back(flag(boolean("auto_load_neighborhood", "Автодогрузка окрестности", "Фильтр",
                                  "Включена по умолчанию (заметки)."),
                          &ImportSettings::auto_load_neighborhood));
+        t.push_back(flag(boolean("filter_only_visible", "Структура: только видимые", "Фильтр: структура",
+                                 "Галочки на компонентах и ветвях, учитываются только видимые. По умолчанию выключено (в заметках не указано)."),
+                         &ImportSettings::filter_only_visible));
+        t.push_back(str(text("filter_name_mask", "Свойства: маска имён", "Фильтр: свойства и размер",
+                             "Маска имён компонентов (например, «Труба*»). Пусто — все компоненты (в заметках не указано)."),
+                        &ImportSettings::filter_name_mask));
+        t.push_back(str(text("filter_layers", "Свойства: слои", "Фильтр: свойства и размер",
+                             "Слои через запятую. Пусто — все слои (в заметках не указано)."),
+                        &ImportSettings::filter_layers));
+        t.push_back(flag(boolean("filter_type_bodies", "Тип: тела", "Фильтр: свойства и размер",
+                                 "Включать тела. По умолчанию включено (в заметках не указано)."),
+                         &ImportSettings::filter_type_bodies));
+        t.push_back(flag(boolean("filter_type_surfaces", "Тип: поверхности", "Фильтр: свойства и размер",
+                                 "Включать поверхности. По умолчанию выключено (в заметках не указано)."),
+                         &ImportSettings::filter_type_surfaces));
+        t.push_back(flag(boolean("filter_type_curves", "Тип: кривые", "Фильтр: свойства и размер",
+                                 "Включать кривые. По умолчанию выключено (в заметках не указано)."),
+                         &ImportSettings::filter_type_curves));
+        t.push_back(flag(boolean("filter_type_annotations", "Тип: аннотации", "Фильтр: свойства и размер",
+                                 "Включать аннотации. По умолчанию выключено (в заметках не указано)."),
+                         &ImportSettings::filter_type_annotations));
+        t.push_back(num(number("filter_min_bbox_mm", "Минимальный габарит компонента", "Фильтр: свойства и размер",
+                               "мм", 0.0, 1000.0, "0 — без ограничения (в заметках не указано)."),
+                        &ImportSettings::filter_min_bbox_mm));
+        t.push_back(flag(boolean("filter_simplify_outer_shell", "Упрощение: внешняя оболочка", "Фильтр: упрощение",
+                                 "Внешняя оболочка вместо внутренностей. По умолчанию выключено (в заметках не указано)."),
+                         &ImportSettings::filter_simplify_outer_shell));
+        t.push_back(num(number("filter_simplify_remove_small_mm", "Упрощение: удалять мелкие элементы", "Фильтр: упрощение",
+                               "мм", 0.0, 100.0, "Размер, меньше которого элемент удаляется; 0 — выключено (в заметках не указано)."),
+                        &ImportSettings::filter_simplify_remove_small_mm));
+        t.push_back(flag(boolean("filter_simplify_decimate", "Упрощение: децимация сетки DWF", "Фильтр: упрощение",
+                                 "Допуск децимации меньше допуска распознавания. По умолчанию выключено (в заметках не указано)."),
+                         &ImportSettings::filter_simplify_decimate));
+        t.push_back(flag(boolean("filter_simplify_replace_bbox", "Упрощение: габаритное тело", "Фильтр: упрощение",
+                                 "Замена детали габаритным телом. По умолчанию выключено (в заметках не указано)."),
+                         &ImportSettings::filter_simplify_replace_bbox));
+        t.push_back(pick(choice("neighborhood_unit", "Окрестность: единица отбора", "Окрестность", {"body", "component"},
+                                "Тело (по умолчанию) или компонент целиком (9.8)."),
+                         &ImportSettings::neighborhood_unit, kUnit));
+        t.push_back(flag(boolean("neighborhood_support_file_tubes", "Опора: трубы файла", "Окрестность",
+                                 "Трубы файла, отмеченные по имени, слою или вручную. По умолчанию включено (в заметках не указано)."),
+                         &ImportSettings::neighborhood_support_file_tubes));
+        t.push_back(flag(boolean("neighborhood_support_target_tubes", "Опора: трубы сборки", "Окрестность",
+                                 "Существующие трубы, пути и порты целевой сборки. По умолчанию включено (в заметках не указано)."),
+                         &ImportSettings::neighborhood_support_target_tubes));
 
         t.push_back(pick(choice("rounding_exact", "Округление: точные тела", "Округление", {"off", "standard"},
                                 "По умолчанию «Выкл» (заметки)."),
@@ -304,6 +378,8 @@ std::vector<std::string> validate_import_settings(const ImportSettings& s) {
     need(s.neighborhood_min_od_factor > 0.0, "neighborhood_min_od_factor", "больше 0");
     need(s.neighborhood_margin_mm >= 0.0, "neighborhood_margin_mm", "не меньше 0");
     need(s.contact_levels >= 0, "contact_levels", "не меньше 0");
+    need(s.filter_min_bbox_mm >= 0.0, "filter_min_bbox_mm", "не меньше 0");
+    need(s.filter_simplify_remove_small_mm >= 0.0, "filter_simplify_remove_small_mm", "не меньше 0");
     need(s.round_length_mm > 0.0, "round_length_mm", "больше 0");
     need(s.round_angle_deg > 0.0, "round_angle_deg", "больше 0");
     need(s.round_align_deg > 0.0, "round_align_deg", "больше 0");

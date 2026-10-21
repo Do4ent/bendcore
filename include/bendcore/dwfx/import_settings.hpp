@@ -11,7 +11,8 @@ namespace bendcore::dwfx {
 enum class RoundingMode { Off, Standard };          // «Выкл» / «Стандартный»
 enum class ConflictPolicy { KeepBody };             // «оставить тело» (по умолчанию); остальные — позже
 enum class ProfilePick { NearestR };                // «Ближайший по R» (по умолчанию)
-enum class FilterPreset { TubesAndNeighborhood };   // «Трубы и окрестность» (по умолчанию)
+enum class FilterPreset { TubesOnly, TubesAndNeighborhood, AllSimplified };  // пресеты назначения (9.8), по умолчанию — «Трубы и окрестность»
+enum class NeighborhoodUnit { Body, Component };    // единица отбора окрестности (9.8): тело (по умолчанию) или компонент целиком
 
 struct ImportSettings {
     // Распознавание: сравнение, вырожденные гибы, допуски.
@@ -44,10 +45,31 @@ struct ImportSettings {
     double neighborhood_margin_mm = 5.0;     // запас окрестности, мм (подтверждено пользователем: 5 мм)
     int contact_levels = 0;                  // уровни контактирующих тел
 
-    // Фильтр импорта.
+    // Фильтр импорта (9.8): пресет и пять групп правил. Ручные включения и исключения — состояние документа,
+    // в настройки не входят.
     FilterPreset filter_preset = FilterPreset::TubesAndNeighborhood;
     bool filter_two_phase = true;            // двухфазный импорт (основной режим для крупных сборок)
     bool auto_load_neighborhood = true;      // автодогрузка окрестности при выходе за область
+
+    // 1. Структура.
+    bool filter_only_visible = false;        // только видимые компоненты
+    // 2. Свойства и размер.
+    std::string filter_name_mask;            // маска имён компонентов; пусто — все
+    std::string filter_layers;               // слои через запятую; пусто — все
+    bool filter_type_bodies = true;          // тела
+    bool filter_type_surfaces = false;       // поверхности
+    bool filter_type_curves = false;         // кривые
+    bool filter_type_annotations = false;    // аннотации
+    double filter_min_bbox_mm = 0.0;         // минимальный габарит компонента, мм (0 — без ограничения)
+    // 3. Упрощение.
+    bool filter_simplify_outer_shell = false;    // внешняя оболочка вместо внутренностей
+    double filter_simplify_remove_small_mm = 0.0; // удалять мелкие элементы меньше, мм (0 — выкл.)
+    bool filter_simplify_decimate = false;       // децимация сетки DWF (допуск меньше допуска распознавания)
+    bool filter_simplify_replace_bbox = false;   // замена детали габаритным телом
+    // Окрестность (отдельный раздел 9.8; глубина D задаётся полями окрестности выше).
+    NeighborhoodUnit neighborhood_unit = NeighborhoodUnit::Body;
+    bool neighborhood_support_file_tubes = true;     // опорные трубы файла (по имени, слою или вручную)
+    bool neighborhood_support_target_tubes = true;   // существующие трубы и порты целевой сборки
 
     // Округление распознанной геометрии.
     RoundingMode rounding_exact = RoundingMode::Off;     // для точных тел

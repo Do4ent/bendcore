@@ -44,6 +44,9 @@ static void check_defaults_match_notes() {
     check(d.new_port_reach_mm == 0.0, "заметки: вылет нового порта 0");
     check(d.clearance_mm == 5.0, "заметки: зазор 5 мм");
     check(d.neighborhood_margin_mm == 5.0, "подтверждено пользователем: запас окрестности 5 мм");
+    check(d.filter_preset == FilterPreset::TubesAndNeighborhood && d.filter_type_bodies && !d.filter_type_surfaces,
+          "фильтр 9.8: пресет «Трубы и окрестность», тела включены, поверхности выключены");
+    check(d.neighborhood_unit == NeighborhoodUnit::Body, "фильтр 9.8: отбор по телам");
     check(d.neighborhood_min_od_factor == 1.0, "заметки: окрестность max(1×∅, ...)");
     check(d.contact_levels == 0, "заметки: контактирующие тела 0 уровней");
     check(d.filter_preset == FilterPreset::TubesAndNeighborhood, "заметки: пресет «Трубы и окрестность»");
@@ -58,7 +61,7 @@ static void check_defaults_match_notes() {
 
 static void check_schema() {
     const auto& props = import_properties();
-    check(props.size() == 31, "описание: 31 свойство импорта (по заметкам)");
+    check(props.size() == 46, "описание: 46 свойств импорта (31 по заметкам и параметрам + 15 фильтра 9.8)");
     std::set<std::string> ids;
     for (const auto& p : props) ids.insert(p.id);
     check(ids.size() == props.size(), "описание: идентификаторы уникальны");
@@ -169,6 +172,22 @@ static void check_settings_io() {
                     "зазор меньше 5 мм отвергается");
     expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{},\"extra\":1}",
                     "неизвестное поле верхнего уровня отвергается");
+    // Текстовые фильтры с кавычками и обратной косой черте проходят круговой проход.
+    ImportSettings masked = import_defaults();
+    set_import_property(masked, "filter_name_mask", "Труба \"A\"\\*");
+    set_import_property(masked, "filter_layers", "1,2");
+    set_import_property(masked, "filter_preset", "all_simplified");
+    set_import_property(masked, "neighborhood_unit", "component");
+    const ImportSettings masked_back = import_settings_from_json(import_settings_to_json(masked));
+    check(masked_back.filter_name_mask == "Труба \"A\"\\*", "фильтр: маска с кавычками и \\ сохраняется");
+    check(masked_back.filter_preset == FilterPreset::AllSimplified && masked_back.filter_layers == "1,2" &&
+              masked_back.neighborhood_unit == NeighborhoodUnit::Component,
+          "фильтр: пресет, слои и единица окрестности сохраняются");
+    expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{\"filter_min_bbox_mm\":\"-1\"}}",
+                    "отрицательный минимальный габарит отвергается");
+    expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{\"filter_preset\":\"all\"}}",
+                    "неизвестный пресет фильтра отвергается");
+
     expect_bad_json("{\"import_kind\":\"dwfx\",\"version\":1,\"values\":{", "обрезанный JSON отвергается");
 }
 
