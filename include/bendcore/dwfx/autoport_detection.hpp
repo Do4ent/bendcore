@@ -5,10 +5,11 @@
 #include <vector>
 #include <string>
 
+#include "bendcore/dwfx/vec3d.hpp"
+
 namespace bendcore::dwfx {
 
 struct Vec3 { float x = 0, y = 0, z = 0; };
-struct Vec3d { double x = 0, y = 0, z = 0; };
 
 // Параметры поиска портов
 struct AutoportSettings {

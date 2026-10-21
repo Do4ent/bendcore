@@ -8,9 +8,9 @@
 #include <string>
 #include <cstdint>
 
-namespace bendcore::dwfx {
+#include "bendcore/dwfx/vec3d.hpp"
 
-struct Vec3d { double x = 0, y = 0, z = 0; };
+namespace bendcore::dwfx {
 
 // Параметры анализа сетки
 struct MeshSamplingSettings {

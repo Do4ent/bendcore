@@ -129,7 +129,7 @@ if(BENDCORE_WITH_DWFX)
   add_library(bendcore_dwfx STATIC src/dwfx/zip_reader.cpp src/dwfx/hsf_envelope.cpp src/dwfx/import_settings.cpp
     src/dwfx/hsf_edgebreaker.cpp src/dwfx/hsf_opcodes.cpp src/dwfx/import_settings_io.cpp
     src/dwfx/import_filter.cpp src/dwfx/dwfx_structure.cpp src/dwfx/geometry_rounding.cpp
-    src/dwfx/autoport_detection.cpp src/dwfx/mesh_sampling.cpp)
+    src/dwfx/autoport_detection.cpp src/dwfx/mesh_sampling.cpp src/dwfx/import_coordinator.cpp)
   target_include_directories(bendcore_dwfx PUBLIC include)
   target_link_libraries(bendcore_dwfx PUBLIC ZLIB::ZLIB bendcore_pugixml)
 
@@ -172,6 +172,10 @@ if(BENDCORE_WITH_DWFX)
   add_executable(test_dwfx_mesh_sampling tests/test_dwfx_mesh_sampling.cpp)
   target_link_libraries(test_dwfx_mesh_sampling PRIVATE bendcore_dwfx)
   bendcore_add_test(dwfx_mesh_sampling test_dwfx_mesh_sampling)
+
+  add_executable(test_dwfx_import_coordinator tests/test_dwfx_import_coordinator.cpp)
+  target_link_libraries(test_dwfx_import_coordinator PRIVATE bendcore_dwfx bendcore_core)
+  bendcore_add_test(dwfx_import_coordinator test_dwfx_import_coordinator)
 endif()
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
