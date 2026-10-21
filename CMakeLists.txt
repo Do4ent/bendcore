@@ -155,6 +155,10 @@ if(BENDCORE_WITH_DWFX)
   add_executable(test_dwfx_structure tests/test_dwfx_structure.cpp)
   target_link_libraries(test_dwfx_structure PRIVATE bendcore_dwfx)
   bendcore_add_test(dwfx_structure test_dwfx_structure)
+
+  add_executable(test_dwfx_w3d_linkage tests/test_dwfx_w3d_linkage.cpp)
+  target_link_libraries(test_dwfx_w3d_linkage PRIVATE bendcore_dwfx)
+  bendcore_add_test(dwfx_w3d_linkage test_dwfx_w3d_linkage)
 endif()
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
