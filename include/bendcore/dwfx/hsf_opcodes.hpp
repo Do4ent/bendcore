@@ -39,6 +39,7 @@ enum class EntityKind {
     TriangleMesh,
     Bounds,
     View,
+    EllipticalArc,  // TKE_Elliptical_Arc, опкод 0x65
 };
 
 // Имя вида как в JS-версии (поле kind): используется для сверки счётчиков.
@@ -64,10 +65,13 @@ struct Entity {
     //  polygon, polyline — точки;
     //  triangle_mesh — вершины (пусто, если точки сжаты и не декодированы);
     //  bounds — {min, max} для ящика или {center} для сферы (radius в value);
-    //  view — {position, target, up}.
+    //  view — {position, target, up};
+    //  elliptical_arc — {center, axis_a_end, axis_b_end}: концы осей заданы абсолютными точками,
+    //  оси — разности «точка − центр» (проверено на данных: перпендикулярны).
     std::vector<Vec3> points;
     std::array<float, 16> matrix{};           // transform: 4×4 по строкам, как в JS
     float value = 0.0f;                       // line_weight: вес; bounds (сфера): радиус
+    std::array<float, 2> angles{};            // elliptical_arc: start, end (единицы не подтверждены)
 
     // triangle_mesh:
     std::size_t point_count = 0;              // заявленное число вершин

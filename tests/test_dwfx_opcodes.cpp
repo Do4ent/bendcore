@@ -6,6 +6,7 @@
 #include "bendcore/dwfx/hsf_opcodes.hpp"
 #include "bendcore/dwfx/zip_reader.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -229,13 +230,60 @@ static void check_sample(const char* file) {
     check(s.polygon_points == 7815, "образец: точки полигонов 7815");
 }
 
+// Дуги TKE_Elliptical_Arc (0x65) в образцах, где они есть: 80005311 — 188 дуг, 80005313 — 376.
+// Поток разбирается до конца, оси (точка − центр) перпендикулярны, end > start. Формат выведен по данным.
+static void check_elliptical_arcs(const char* path, std::size_t expected) {
+    std::ifstream in(path, std::ios::binary);
+    check(in.good(), "дуги: файл открыт");
+    if (!in.good()) return;
+    std::vector<std::uint8_t> zipped((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    ZipArchive archive(zipped);
+    const ZipEntry* w3d = nullptr;
+    for (const auto& e : archive.entries()) {
+        const std::string& p = e.path;
+        if (p.size() >= 4 && p.compare(p.size() - 4, 4, ".w3d") == 0) {
+            w3d = &e;
+            break;
+        }
+    }
+    if (!w3d) {
+        check(false, "дуги: есть ресурс .w3d");
+        return;
+    }
+    const std::vector<std::uint8_t> resource = archive.extract(*w3d);
+    const hsf::Envelope env = hsf::decode_envelope(resource);
+
+    std::size_t arcs = 0, perpendicular = 0, ordered = 0;
+    const hsf::OpcodeResult r = hsf::decode_opcodes(env.opcode_stream, env.hsf_version, [&](const hsf::Entity& e) {
+        if (e.kind != hsf::EntityKind::EllipticalArc) return;
+        ++arcs;
+        const hsf::Vec3 c = e.points[0];
+        const float a[3] = {e.points[1].x - c.x, e.points[1].y - c.y, e.points[1].z - c.z};
+        const float b[3] = {e.points[2].x - c.x, e.points[2].y - c.y, e.points[2].z - c.z};
+        const double la = std::sqrt(double(a[0]) * a[0] + double(a[1]) * a[1] + double(a[2]) * a[2]);
+        const double lb = std::sqrt(double(b[0]) * b[0] + double(b[1]) * b[1] + double(b[2]) * b[2]);
+        const double dot = double(a[0]) * b[0] + double(a[1]) * b[1] + double(a[2]) * b[2];
+        if (la > 1e-6 && lb > 1e-6 && std::fabs(dot) / (la * lb) < 1e-3) ++perpendicular;
+        if (e.angles[1] > e.angles[0]) ++ordered;
+    });
+    std::printf("дуги %s: %zu, поток до %zu из %zu, перпендикулярны %zu, end>start %zu\n", path, arcs,
+                r.next_offset, env.opcode_stream.size(), perpendicular, ordered);
+    check(r.complete_prefix && r.next_offset == env.opcode_stream.size(), "дуги: поток разобран до конца");
+    check(arcs == expected, "дуги: число дуг совпадает с проверкой на данных");
+    check(perpendicular == expected, "дуги: оси перпендикулярны у всех дуг");
+    check(ordered == expected, "дуги: end > start у всех дуг");
+}
+
 int main() {
     check_segments_tags_and_scope();
     check_unsupported_termination();
     check_polygon_and_transform();
     check_shell_edgebreaker();
     if (const char* sample = std::getenv("BENDCORE_DWFX_SAMPLE")) {
-        check_sample(sample);
+        const std::string path = sample;
+        if (path.find("80005311") != std::string::npos) check_elliptical_arcs(sample, 188);
+        if (path.find("80005313") != std::string::npos) check_elliptical_arcs(sample, 376);
+        if (path.find("80004806") != std::string::npos) check_sample(sample);
     } else {
         std::printf("пропуск образца: задайте BENDCORE_DWFX_SAMPLE\n");
     }

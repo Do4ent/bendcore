@@ -324,6 +324,22 @@ OpcodeResult Decoder::run() {
                 if (!decode_circular_arc(off, stopped)) return stopped;
                 break;
 
+            case 0x65: {  // TKE_Elliptical_Arc: 11 float32 (44 байта) — центр, концы осей, start, end.
+                // Формат принят по данным (188 и 376 дуг в двух документах, см. тесты), не по спецификации.
+                bytes::need(view_, off, 45, "TKE_Elliptical_Arc");
+                float v[11];
+                for (std::size_t i = 0; i < 11; ++i) {
+                    v[i] = bytes::f32(view_, off + 1 + 4 * i, "TKE_Elliptical_Arc");
+                    if (!finite(v[i])) fail("non-finite TKE_Elliptical_Arc value");
+                }
+                Entity arc = make(EntityKind::EllipticalArc, off);
+                arc.points = {Vec3{v[0], v[1], v[2]}, Vec3{v[3], v[4], v[5]}, Vec3{v[6], v[7], v[8]}};
+                arc.angles = {v[9], v[10]};
+                emit(arc);
+                off += 45;
+                break;
+            }
+
             case 0x53:  // TKE_Shell
                 if (!decode_shell(off, stopped)) return stopped;
                 break;
@@ -995,6 +1011,7 @@ const char* kind_name(EntityKind kind) {
         case EntityKind::TriangleMesh: return "triangle_mesh";
         case EntityKind::Bounds: return "bounds";
         case EntityKind::View: return "view";
+        case EntityKind::EllipticalArc: return "elliptical_arc";
     }
     return "unknown";
 }
