@@ -1,0 +1,505 @@
+#include "bendcore/analysis.hpp"
+
+#include "bendcore/blank.hpp"
+#include "bendcore/compensation.hpp"
+#include "bendcore/spiral.hpp"
+#include "bendcore/tubegeom.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <numeric>
+#include <sstream>
+
+namespace bendcore::analysis {
+
+Analyzer::Analyzer() = default;
+Analyzer::~Analyzer() = default;
+
+Issue Analyzer::createIssue(
+    IssueLevel level,
+    IssueType type,
+    const std::string& message,
+    std::optional<int> bendIdx,
+    std::optional<double> actual,
+    std::optional<double> minVal,
+    std::optional<double> maxVal
+) const {
+    return {level, type, message, bendIdx, {}, actual, minVal, maxVal};
+}
+
+AnalysisResult Analyzer::analyze(
+    const TubeModel& model,
+    double od, double wall,
+    const MaterialSpec& material,
+    const std::vector<MachineSpec>& machines
+) const {
+    AnalysisResult result;
+    result.valid = true;
+
+    if (!model.path.has_value()) {
+        result.issues.push_back(createIssue(
+            IssueLevel::Error,
+            IssueType::SelfIntersection,
+            "Тело трубы не построено: отсутствует путь"
+        ));
+        result.valid = false;
+        return result;
+    }
+
+    const auto& path = *model.path;
+
+    // Проверка геометрии
+    auto geomIssues = checkGeometry(model, od);
+    result.issues.insert(result.issues.end(), geomIssues.begin(), geomIssues.end());
+
+    // Выбор лучшей машины
+    if (!machines.empty()) {
+        // Фильтруем подходящие машины
+        std::vector<const MachineSpec*> suitable;
+        for (const auto& m : machines) {
+            auto machineIssues = checkMachineCapability(model, m);
+            bool isSuitable = true;
+            for (const auto& iss : machineIssues) {
+                if (iss.level == IssueLevel::Error) {
+                    isSuitable = false;
+                    break;
+                }
+            }
+            if (isSuitable) {
+                suitable.push_back(&m);
+            }
+        }
+
+        if (!suitable.empty()) {
+            const MachineSpec& bestMachine = *suitable[0];
+            result.suggestedMachine = bestMachine.name;
+
+            // Проверяем параметры гибов для лучшей машины
+            auto bendIssues = checkBendParameters(model, material, bestMachine);
+            result.issues.insert(result.issues.end(), bendIssues.begin(), bendIssues.end());
+        } else {
+            result.issues.push_back(createIssue(
+                IssueLevel::Error,
+                IssueType::NoSuitableMachine,
+                "Нет подходящего станка для данной трубы"
+            ));
+            result.valid = false;
+        }
+    }
+
+    // Проверка портов
+    auto portIssues = checkPorts(model, od, wall);
+    result.issues.insert(result.issues.end(), portIssues.begin(), portIssues.end());
+
+    // Проверка совместимости материала
+    auto materialIssues = checkMaterialCompatibility(model, material);
+    result.issues.insert(result.issues.end(), materialIssues.begin(), materialIssues.end());
+
+    // Вычисление параметров трубы
+    result.totalLength = axis_length(path);
+    result.bendCount = std::count_if(path.begin(), path.end(), [](const PathSegment& s) {
+        return s.kind == SegmentKind::Bend;
+    });
+
+    // Подсчёт суммарного угла
+    result.totalBendAngle = 0.0;
+    for (const auto& seg : path) {
+        if (seg.kind == SegmentKind::Bend) {
+            result.totalBendAngle += std::abs(seg.angle);
+        }
+    }
+
+    // Минимальная и максимальная длина заготовки
+    const BlankSpec blank = calculate_blank(path, od, wall);
+    result.blankLength = blank.length;
+
+    // Поиск радиусов гибов
+    std::vector<double> bendRadii;
+    for (const auto& seg : path) {
+        if (seg.kind == SegmentKind::Bend) {
+            bendRadii.push_back(seg.radius);
+        }
+    }
+
+    if (!bendRadii.empty()) {
+        result.minBendRadius = *std::min_element(bendRadii.begin(), bendRadii.end());
+        result.maxBendRadius = *std::max_element(bendRadii.begin(), bendRadii.end());
+    }
+
+    // Проверка на ошибки (ошибки блокируют производство)
+    result.valid = true;
+    for (const auto& issue : result.issues) {
+        if (issue.level == IssueLevel::Error) {
+            result.valid = false;
+            break;
+        }
+    }
+
+    // Вычисление сложности и риска
+    if (!machines.empty() && !result.suggestedMachine.empty()) {
+        const MachineSpec* bestMachine = nullptr;
+        for (const auto& m : machines) {
+            if (m.name == result.suggestedMachine) {
+                bestMachine = &m;
+                break;
+            }
+        }
+        if (bestMachine) {
+            result.complexityScore = calculateComplexity(model, material, *bestMachine);
+            result.manufacturingRisk = calculateManufacturingRisk(model, material, *bestMachine);
+        }
+    }
+
+    return result;
+}
+
+std::vector<Issue> Analyzer::checkGeometry(const TubeModel& model, double od) const {
+    std::vector<Issue> issues;
+
+    if (!model.path.has_value()) {
+        return issues;
+    }
+
+    const auto& path = *model.path;
+
+    // Проверка на самопересечения
+    const auto selfInt = self_intersections(path);
+    if (!selfInt.empty()) {
+        issues.push_back(createIssue(
+            IssueLevel::Error,
+            IssueType::SelfIntersection,
+            "Труба самопересекается в " + std::to_string(selfInt.size()) + " местах"
+        ));
+    }
+
+    // Проверка радиусов гибов
+    for (size_t i = 0; i < path.size(); ++i) {
+        const auto& seg = path[i];
+        if (seg.kind == SegmentKind::Bend) {
+            if (seg.radius < od / 2.0) {
+                issues.push_back(createIssue(
+                    IssueLevel::Error,
+                    IssueType::InvalidBendRadius,
+                    "Радиус гиба меньше радиуса трубы",
+                    static_cast<int>(i),
+                    seg.radius,
+                    od / 2.0
+                ));
+            }
+        }
+    }
+
+    // Проверка углов (не более 180°)
+    for (size_t i = 0; i < path.size(); ++i) {
+        const auto& seg = path[i];
+        if (seg.kind == SegmentKind::Bend) {
+            if (std::abs(seg.angle) > 180.0) {
+                issues.push_back(createIssue(
+                    IssueLevel::Error,
+                    IssueType::ExcessiveBending,
+                    "Угол гиба больше 180°",
+                    static_cast<int>(i),
+                    seg.angle,
+                    {}, -180.0, 180.0
+                ));
+            }
+        }
+    }
+
+    return issues;
+}
+
+std::vector<Issue> Analyzer::checkBendParameters(
+    const TubeModel& model,
+    const MaterialSpec& material,
+    const MachineSpec& machine
+) const {
+    std::vector<Issue> issues;
+
+    if (!model.path.has_value()) {
+        return issues;
+    }
+
+    const auto& path = *model.path;
+
+    // Проверка количества гибов
+    int bendCount = std::count_if(path.begin(), path.end(), [](const PathSegment& s) {
+        return s.kind == SegmentKind::Bend;
+    });
+
+    if (machine.maxBendCount > 0 && bendCount > machine.maxBendCount) {
+        issues.push_back(createIssue(
+            IssueLevel::Warning,
+            IssueType::SuggestedToolChange,
+            "Количество гибов превышает рекомендуемое для станка",
+            {}, static_cast<double>(bendCount),
+            {}, static_cast<double>(machine.maxBendCount)
+        ));
+    }
+
+    // Проверка минимальных прямых участков
+    for (size_t i = 0; i < path.size(); ++i) {
+        const auto& seg = path[i];
+        if (seg.kind == SegmentKind::Straight) {
+            double minStraight = 10.0; // 10 мм по умолчанию
+            if (seg.length < minStraight) {
+                if (i > 0 && i < path.size() - 1) {
+                    // Внутренний прямой участок между гибами
+                    if (path[i-1].kind == SegmentKind::Bend && path[i+1].kind == SegmentKind::Bend) {
+                        issues.push_back(createIssue(
+                            IssueLevel::Warning,
+                            IssueType::InsufficientStraight,
+                            "Недостаточный прямой участок между гибами",
+                            static_cast<int>(i),
+                            seg.length,
+                            minStraight
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    return issues;
+}
+
+std::vector<Issue> Analyzer::checkPorts(const TubeModel& model, double od, double wall) const {
+    std::vector<Issue> issues;
+
+    if (!model.path.has_value()) {
+        return issues;
+    }
+
+    // Проверка портов
+    for (size_t i = 0; i < model.ports.size(); ++i) {
+        const auto& port = model.ports[i];
+
+        // Проверка диаметра порта
+        if (port.od > od) {
+            issues.push_back(createIssue(
+                IssueLevel::Warning,
+                IssueType::InvalidPortPosition,
+                "Диаметр порта больше диаметра трубы",
+                {}, port.od,
+                {}, od
+            ));
+        }
+
+        // Проверка позиции портов на концах трубы (зазор ≥ 5 мм)
+        const double minProtrusion = 5.0;  // 5 мм зазор
+
+        // Это упрощённая проверка; полная проверка требует геометрии
+    }
+
+    return issues;
+}
+
+std::vector<Issue> Analyzer::checkMaterialCompatibility(
+    const TubeModel& model,
+    const MaterialSpec& material
+) const {
+    std::vector<Issue> issues;
+
+    if (!model.path.has_value()) {
+        return issues;
+    }
+
+    const auto& path = *model.path;
+
+    // Проверка материала
+    if (material.ultimateBendRadius > 0.0) {
+        for (size_t i = 0; i < path.size(); ++i) {
+            const auto& seg = path[i];
+            if (seg.kind == SegmentKind::Bend) {
+                if (seg.radius < material.ultimateBendRadius) {
+                    issues.push_back(createIssue(
+                        IssueLevel::Warning,
+                        IssueType::SpringbackVariation,
+                        "Радиус гиба близок к пределу для данного материала",
+                        static_cast<int>(i),
+                        seg.radius,
+                        material.ultimateBendRadius
+                    ));
+                }
+            }
+        }
+    }
+
+    return issues;
+}
+
+std::vector<Issue> Analyzer::checkMachineCapability(
+    const TubeModel& model,
+    const MachineSpec& machine
+) const {
+    std::vector<Issue> issues;
+
+    if (!model.path.has_value()) {
+        return issues;
+    }
+
+    const auto& path = *model.path;
+    const double tubeLength = axis_length(path);
+
+    // Проверка длины трубы
+    if (machine.maxTubeLength > 0.0 && tubeLength > machine.maxTubeLength) {
+        issues.push_back(createIssue(
+            IssueLevel::Error,
+            IssueType::NoSuitableMachine,
+            "Длина трубы превышает максимум для станка",
+            {}, tubeLength,
+            {}, machine.maxTubeLength
+        ));
+    }
+
+    // Проверка диаметра трубы
+    double od = 0.0;
+    if (!model.ports.empty()) {
+        od = model.ports[0].od;
+    }
+
+    if (od > 0.0) {
+        if (od < machine.minTubeOD) {
+            issues.push_back(createIssue(
+                IssueLevel::Error,
+                IssueType::NoSuitableMachine,
+                "Диаметр трубы меньше минимума для станка",
+                {}, od,
+                machine.minTubeOD
+            ));
+        }
+        if (machine.maxTubeOD > 0.0 && od > machine.maxTubeOD) {
+            issues.push_back(createIssue(
+                IssueLevel::Error,
+                IssueType::NoSuitableMachine,
+                "Диаметр трубы больше максимума для станка",
+                {}, od,
+                {}, machine.maxTubeOD
+            ));
+        }
+    }
+
+    // Проверка радиусов гибов
+    for (size_t i = 0; i < path.size(); ++i) {
+        const auto& seg = path[i];
+        if (seg.kind == SegmentKind::Bend) {
+            if (seg.radius < machine.minBendRadius) {
+                issues.push_back(createIssue(
+                    IssueLevel::Error,
+                    IssueType::BendRadiusOutOfRange,
+                    "Радиус гиба меньше минимума для станка",
+                    static_cast<int>(i),
+                    seg.radius,
+                    machine.minBendRadius
+                ));
+            }
+            if (machine.maxBendRadius > 0.0 && seg.radius > machine.maxBendRadius) {
+                issues.push_back(createIssue(
+                    IssueLevel::Error,
+                    IssueType::BendRadiusOutOfRange,
+                    "Радиус гиба больше максимума для станка",
+                    static_cast<int>(i),
+                    seg.radius,
+                    {}, machine.maxBendRadius
+                ));
+            }
+        }
+    }
+
+    return issues;
+}
+
+std::string Analyzer::suggestOptimalMachine(
+    const TubeModel& model,
+    const std::vector<MachineSpec>& machines
+) const {
+    if (machines.empty()) return "";
+
+    for (const auto& m : machines) {
+        auto issues = checkMachineCapability(model, m);
+        bool isSuitable = true;
+        for (const auto& iss : issues) {
+            if (iss.level == IssueLevel::Error) {
+                isSuitable = false;
+                break;
+            }
+        }
+        if (isSuitable) {
+            return m.name;
+        }
+    }
+
+    return "";
+}
+
+double Analyzer::calculateComplexity(
+    const TubeModel& model,
+    const MaterialSpec& material,
+    const MachineSpec& machine
+) const {
+    if (!model.path.has_value()) return 0.0;
+
+    const auto& path = *model.path;
+    double score = 0.0;
+
+    // Количество гибов (макс. 50 баллов)
+    int bendCount = std::count_if(path.begin(), path.end(), [](const PathSegment& s) {
+        return s.kind == SegmentKind::Bend;
+    });
+    score += std::min(50.0, bendCount * 5.0);
+
+    // Суммарный угол (макс. 30 баллов)
+    double totalAngle = 0.0;
+    for (const auto& seg : path) {
+        if (seg.kind == SegmentKind::Bend) {
+            totalAngle += std::abs(seg.angle);
+        }
+    }
+    score += std::min(30.0, (totalAngle / 360.0) * 30.0);
+
+    // Плотность гибов (макс. 20 баллов)
+    double tubeLength = axis_length(path);
+    if (tubeLength > 0.0) {
+        double bendDensity = bendCount / (tubeLength / 100.0);
+        score += std::min(20.0, bendDensity * 2.0);
+    }
+
+    return std::min(100.0, score);
+}
+
+double Analyzer::calculateManufacturingRisk(
+    const TubeModel& model,
+    const MaterialSpec& material,
+    const MachineSpec& machine
+) const {
+    if (!model.path.has_value()) return 0.0;
+
+    const auto& path = *model.path;
+    double risk = 0.0;
+
+    // Сложность влияет на риск
+    risk += calculateComplexity(model, material, machine) / 2.0;
+
+    // Близость к пределам станка
+    for (const auto& seg : path) {
+        if (seg.kind == SegmentKind::Bend) {
+            double minRatio = (seg.radius - machine.minBendRadius) /
+                            (machine.maxBendRadius - machine.minBendRadius);
+            if (minRatio < 0.2) {
+                risk += 10.0; // Близко к минимуму
+            }
+            if (minRatio > 0.8) {
+                risk += 5.0; // Близко к максимуму
+            }
+        }
+    }
+
+    // Материальный фактор
+    if (material.springbackFactor > 0.5) {
+        risk += 15.0; // Высокое пружинение
+    }
+
+    return std::min(100.0, risk);
+}
+
+}  // namespace bendcore::analysis
