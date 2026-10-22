@@ -31,7 +31,7 @@ else()
   target_link_libraries(bendcore_eigen INTERFACE Eigen3::Eigen)
 endif()
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/positioning.cpp src/scene.cpp)
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/positioning.cpp src/scene.cpp src/bom.cpp)
 target_include_directories(bendcore_core PUBLIC include)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen)
 
@@ -87,6 +87,10 @@ bendcore_add_test(positioning test_positioning)
 add_executable(test_scene tests/test_scene.cpp)
 target_link_libraries(test_scene PRIVATE bendcore_core)
 bendcore_add_test(scene test_scene)
+
+add_executable(test_bom tests/test_bom.cpp)
+target_link_libraries(test_bom PRIVATE bendcore_core)
+bendcore_add_test(bom test_bom)
 
 # PlaneGCS (LGPL-2.1-or-later, извлечён из FreeCAD Sketcher, см. third_party/planegcs/NOTICE.md) — 2D-эскизы.
 # Нативно собирается динамической библиотекой (условие LGPL). В WebAssembly динамических библиотек нет:
