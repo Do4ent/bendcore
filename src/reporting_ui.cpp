@@ -16,7 +16,7 @@ bool ReportingUIManager::releaseForProduction(
     std::string& outReportId
 ) {
     // Create report from release request
-    ProductionReport report;
+    reporting::ProductionReport report;
     report.reportId = "RPT-" + std::to_string(std::time(nullptr));
     report.projectName = request.tubeId;
     report.generatedTimestamp = std::time(nullptr);
@@ -97,7 +97,7 @@ bool ReportingUIManager::deleteReport(const std::string& reportId) {
     return true;
 }
 
-std::optional<ProductionReport> ReportingUIManager::getReportDetails(
+std::optional<reporting::ProductionReport> ReportingUIManager::getReportDetails(
     const std::string& reportId
 ) const {
     auto it = reportCache.find(reportId);
@@ -158,11 +158,11 @@ std::vector<StandardsUIManager::StandardResult> StandardsUIManager::getStandards
         // Build summary
         std::ostringstream summary;
         if (result.status == standards::ComplianceStatus::Compliant) {
-            summary << "✓ Compliant (" << (int)result.complianceScore << "%)";
+            summary << "[OK] Compliant (" << (int)result.complianceScore << "%)";
         } else if (result.status == standards::ComplianceStatus::PartiallyCompliant) {
-            summary << "⚠ Partially Compliant (" << (int)result.complianceScore << "%)";
+            summary << "[!] Partially Compliant (" << (int)result.complianceScore << "%)";
         } else {
-            summary << "✗ Non-Compliant (" << (int)result.complianceScore << "%)";
+            summary << "[FAIL] Non-Compliant (" << (int)result.complianceScore << "%)";
         }
 
         result.summary = summary.str();
@@ -205,16 +205,16 @@ StandardsUIManager::StandardDetails StandardsUIManager::getStandardDetails(
 
     // Add detail items from results
     for (const auto& result : compliance.results) {
-        DetailItem item;
+        StandardDetails::DetailItem item;
         item.name = result.ruleName;
         item.value = std::to_string(result.actualValue);
 
         if (result.status == standards::ComplianceStatus::Compliant) {
-            item.status = '✓';
+            item.status = 'Y';  // OK
         } else if (result.status == standards::ComplianceStatus::PartiallyCompliant) {
-            item.status = '⚠';
+            item.status = 'W';  // Warning
         } else {
-            item.status = '✗';
+            item.status = 'N';  // Not OK
         }
 
         item.message = result.message;

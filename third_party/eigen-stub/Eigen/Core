@@ -1,0 +1,5 @@
+// Stub Eigen header for testing
+#pragma once
+namespace Eigen {
+    template<typename T> class Matrix {};
+}

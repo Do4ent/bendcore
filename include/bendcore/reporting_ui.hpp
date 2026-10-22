@@ -62,10 +62,10 @@ public:
     // Report management
     bool deleteReport(const std::string& reportId);
 
-    std::optional<ProductionReport> getReportDetails(const std::string& reportId) const;
+    std::optional<reporting::ProductionReport> getReportDetails(const std::string& reportId) const;
 
 private:
-    std::map<std::string, ProductionReport> reportCache;
+    std::map<std::string, reporting::ProductionReport> reportCache;
     std::map<std::string, ReportSummary> summaryCache;
 
     std::string generateExportFolder(
