@@ -215,3 +215,57 @@ EMSCRIPTEN_BINDINGS(bendcore_module) {
     function("manualPort", &manualPortJs);
     function("tracePath", &tracePathJs);
 }
+
+// Phase 23-24 modules: BOM, CAM, Scene (minimal WASM bindings)
+
+#include "bendcore/bom.hpp"
+#include "bendcore/cam.hpp"
+#include "bendcore/scene.hpp"
+
+namespace {
+
+// BOM: convert to JS
+val tubeSpecJs(const bendcore::TubeSpec& spec) {
+    val o = val::object();
+    o.set("id", spec.id);
+    o.set("od", spec.od);
+    o.set("wall", spec.wall);
+    o.set("blankLength", spec.blank_length);
+    o.set("quantity", spec.quantity);
+    return o;
+}
+
+val bomJs(const bendcore::BOM& bom) {
+    val groups = val::array();
+    for (const auto& g : bom.groups) {
+        val group = val::object();
+        group.set("spec", tubeSpecJs(g.spec));
+        val ids = val::array();
+        for (const auto& id : g.tube_ids) ids.call<void>("push", id);
+        group.set("tubeIds", ids);
+        groups.call<void>("push", group);
+    }
+    return groups;
+}
+
+// CAM: convert to JS
+val bendOpJs(const bendcore::BendOperation& op) {
+    val o = val::object();
+    o.set("sequence", op.sequence);
+    o.set("radius", op.radius_mm);
+    o.set("angle", op.angle_deg);
+    return o;
+}
+
+val jobJs(const bendcore::ProductionJob& job) {
+    val o = val::object();
+    o.set("tubeId", job.tube_id);
+    o.set("blankLength", job.blank_length_mm);
+    o.set("time", job.estimated_time_sec);
+    val bends = val::array();
+    for (const auto& b : job.bends) bends.call<void>("push", bendOpJs(b));
+    o.set("bends", bends);
+    return o;
+}
+
+}  // namespace
