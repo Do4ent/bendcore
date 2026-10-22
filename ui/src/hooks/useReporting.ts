@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useIpc } from './useIpc';
 
 interface ReleaseRequest {
   tubeId: string;
@@ -23,84 +24,72 @@ interface ExportRequest {
 /**
  * Hook for Production Reporting operations
  * Communicates with C++ ReportingUIManager via IPC
+ *
+ * Uses useIpc for backend communication:
+ * - ReleaseForProduction: Release tube for manufacturing
+ * - GetProductionReports: Fetch report history with filtering
+ * - ExportReport: Export report in specified formats
+ * - DeleteReport: Remove report from history
  */
 export const useReporting = () => {
-  // Mock implementation - replace with actual IPC when integrated
-  const callBendcoreAPI = useCallback(
-    async (method: string, params: any): Promise<any> => {
-      // In a real implementation, this would call:
-      // window.ipc?.invoke('bendcore-api', { method, params })
-      // For now, we mock the responses
-
-      console.log(`Calling bendcore API: ${method}`, params);
-
-      // Mock delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      switch (method) {
-        case 'releaseForProduction':
-          return `RPT-${Date.now()}`;
-        case 'getProductionReports':
-          return [
-            {
-              reportId: 'RPT-1729608000',
-              status: 'released' as const,
-              timestamp: 1729608000,
-              approvedBy: 'Engineer-1',
-              bendCardCount: 3,
-            },
-            {
-              reportId: 'RPT-1729604400',
-              status: 'approved' as const,
-              timestamp: 1729604400,
-              approvedBy: 'Engineer-2',
-              bendCardCount: 2,
-            },
-            {
-              reportId: 'RPT-1729600800',
-              status: 'draft' as const,
-              timestamp: 1729600800,
-              approvedBy: '',
-              bendCardCount: 1,
-            },
-          ];
-        case 'exportReport':
-          return `/exported/${params.reportId}/`;
-        case 'deleteReport':
-          return true;
-        default:
-          throw new Error(`Unknown method: ${method}`);
-      }
-    },
-    []
-  );
+  const ipc = useIpc();
 
   const releaseForProduction = useCallback(
     async (request: ReleaseRequest): Promise<string> => {
-      return await callBendcoreAPI('releaseForProduction', request);
+      try {
+        return await ipc.releaseForProduction(
+          request.tubeId,
+          request.approvedBy,
+          request.comments
+        );
+      } catch (error) {
+        console.error('Release failed:', error);
+        throw error;
+      }
     },
-    [callBendcoreAPI]
+    [ipc]
   );
 
   const getProductionReports = useCallback(
     async (filter?: string): Promise<ReportSummary[]> => {
-      return await callBendcoreAPI('getProductionReports', { filter });
+      try {
+        const reports = await ipc.getProductionReports(filter || '');
+        return Array.isArray(reports) ? reports : [];
+      } catch (error) {
+        console.error('Failed to fetch reports:', error);
+        // Return empty array on error
+        return [];
+      }
     },
-    [callBendcoreAPI]
+    [ipc]
   );
 
   const exportReport = useCallback(
     async (request: ExportRequest): Promise<string> => {
-      return await callBendcoreAPI('exportReport', request);
+      try {
+        return await ipc.exportReport(
+          request.reportId,
+          request.formats,
+          request.outputPath
+        );
+      } catch (error) {
+        console.error('Export failed:', error);
+        throw error;
+      }
     },
-    [callBendcoreAPI]
+    [ipc]
   );
 
   const deleteReport = useCallback(
     async (reportId: string): Promise<boolean> => {
-      return await callBendcoreAPI('deleteReport', { reportId });
+      try {
+        return await ipc.deleteReport(reportId);
+      } catch (error) {
+        console.error('Delete failed:', error);
+        throw error;
+      }
     },
-    [callBendcoreAPI]
+    [ipc]
   );
 
   return {
@@ -108,5 +97,6 @@ export const useReporting = () => {
     getProductionReports,
     exportReport,
     deleteReport,
+    ipcConnected: ipc.connected,
   };
 };
