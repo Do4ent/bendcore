@@ -182,7 +182,7 @@ RollSolution solve_roll(const Path& path, const Port& start_port, const Port& en
     return sol;
 }
 
-double segment_distance(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Vec3& q2) {
+ClosestPoints segment_closest(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Vec3& q2) {
     // Ближайшие точки двух отрезков (зажатые параметры s, t в [0, 1]).
     const Vec3 d1 = sub(q1, p1);
     const Vec3 d2 = sub(q2, p2);
@@ -193,7 +193,7 @@ double segment_distance(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Ve
     constexpr double eps = 1e-12;
     double s = 0.0;
     double t = 0.0;
-    if (a <= eps && e <= eps) return norm(r);
+    if (a <= eps && e <= eps) return {norm(r), p1, p2};
     if (a <= eps) {
         t = clamp01(f / e);
     } else {
@@ -214,14 +214,21 @@ double segment_distance(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Ve
             }
         }
     }
-    return norm(sub(add(p1, mul(d1, s)), add(p2, mul(d2, t))));
+    const Vec3 ca = add(p1, mul(d1, s));
+    const Vec3 cb = add(p2, mul(d2, t));
+    return {norm(sub(ca, cb)), ca, cb};
 }
 
-double polyline_distance(const std::vector<Vec3>& a, const std::vector<Vec3>& b) {
-    if (a.empty() || b.empty()) return std::numeric_limits<double>::infinity();
+double segment_distance(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Vec3& q2) {
+    return segment_closest(p1, q1, p2, q2).distance;
+}
+
+ClosestPoints polyline_closest(const std::vector<Vec3>& a, const std::vector<Vec3>& b) {
+    ClosestPoints best;
+    best.distance = std::numeric_limits<double>::infinity();
+    if (a.empty() || b.empty()) return best;
     const std::size_t na = std::max<std::size_t>(a.size() - 1, 1);   // одна точка — вырожденный отрезок
     const std::size_t nb = std::max<std::size_t>(b.size() - 1, 1);
-    double best = std::numeric_limits<double>::infinity();
     for (std::size_t i = 0; i < na; ++i) {
         const Vec3& p1 = a[i];
         const Vec3& q1 = a[std::min(i + 1, a.size() - 1)];
@@ -230,19 +237,24 @@ double polyline_distance(const std::vector<Vec3>& a, const std::vector<Vec3>& b)
             const Vec3& q2 = b[std::min(j + 1, b.size() - 1)];
             bool far = false;
             for (int k = 0; k < 3 && !far; ++k) {
-                far = std::min(p2[k], q2[k]) > std::max(p1[k], q1[k]) + best ||
-                      std::min(p1[k], q1[k]) > std::max(p2[k], q2[k]) + best;
+                far = std::min(p2[k], q2[k]) > std::max(p1[k], q1[k]) + best.distance ||
+                      std::min(p1[k], q1[k]) > std::max(p2[k], q2[k]) + best.distance;
             }
             if (far) continue;
-            best = std::min(best, segment_distance(p1, q1, p2, q2));
+            const ClosestPoints c = segment_closest(p1, q1, p2, q2);
+            if (c.distance < best.distance) best = c;
         }
     }
     return best;
 }
 
-std::vector<Issue> check_clearance(const std::vector<PlacedTube>& tubes, double gap,
-                                   const std::vector<std::pair<std::string, std::string>>& skip_pairs) {
-    std::vector<Issue> issues;
+double polyline_distance(const std::vector<Vec3>& a, const std::vector<Vec3>& b) {
+    return polyline_closest(a, b).distance;
+}
+
+std::vector<ClearanceMark> clearance_marks(const std::vector<PlacedTube>& tubes, double gap,
+                                           const std::vector<std::pair<std::string, std::string>>& skip_pairs) {
+    std::vector<ClearanceMark> marks;
     std::vector<Box> boxes;
     boxes.reserve(tubes.size());
     for (const auto& t : tubes) boxes.push_back(t.centerline.empty() ? Box{} : box_of(t.centerline));
@@ -254,16 +266,32 @@ std::vector<Issue> check_clearance(const std::vector<PlacedTube>& tubes, double 
             if (pair_skipped(skip_pairs, tubes[i].id, tubes[j].id)) continue;
             const double radii = 0.5 * (tubes[i].od + tubes[j].od);
             if (box_distance(boxes[i], boxes[j]) > radii + gap) continue;   // заведомо далеко
-            const double surface = polyline_distance(tubes[i].centerline, tubes[j].centerline) - radii;
-            const std::string names = "«" + tubes[i].id + "» и «" + tubes[j].id + "»";
+            const ClosestPoints c = polyline_closest(tubes[i].centerline, tubes[j].centerline);
+            const double surface = c.distance - radii;
+            std::string kind;
             if (surface < -1e-9) {
-                issues.push_back({"mark_cross", -1, "Пересечение труб " + names + ": перекрытие " + fmt(-surface) + " мм"});
+                kind = "mark_cross";
             } else if (surface < gap - 1e-9) {
-                issues.push_back({"mark_gap", -1, "Зазор между трубами " + names + " " + fmt(surface) +
-                                                      " мм, меньше нормы " + fmt(gap) + " мм"});
+                kind = "mark_gap";
+            } else {
+                continue;
             }
+            marks.push_back({kind, tubes[i].id, tubes[j].id, c.a, c.b, surface, gap});
         }
     }
+    return marks;
+}
+
+std::string clearance_text(const ClearanceMark& mark) {
+    const std::string names = "«" + mark.tube_a + "» и «" + mark.tube_b + "»";
+    if (mark.kind == "mark_cross") return "Пересечение труб " + names + ": перекрытие " + fmt(-mark.surface_gap) + " мм";
+    return "Зазор между трубами " + names + " " + fmt(mark.surface_gap) + " мм, меньше нормы " + fmt(mark.norm) + " мм";
+}
+
+std::vector<Issue> check_clearance(const std::vector<PlacedTube>& tubes, double gap,
+                                   const std::vector<std::pair<std::string, std::string>>& skip_pairs) {
+    std::vector<Issue> issues;
+    for (const auto& m : clearance_marks(tubes, gap, skip_pairs)) issues.push_back({m.kind, -1, clearance_text(m)});
     return issues;
 }
 

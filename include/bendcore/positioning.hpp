@@ -71,16 +71,44 @@ struct PlacedTube {
     double od = 0.0;
 };
 
+// Ближайшие точки двух фигур и расстояние между ними, мм. Для пустой ломаной distance = +inf, точки нулевые.
+struct ClosestPoints {
+    double distance = 0.0;
+    Vec3 a{};   // на первой фигуре
+    Vec3 b{};   // на второй фигуре
+};
+
+ClosestPoints segment_closest(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Vec3& q2);
+ClosestPoints polyline_closest(const std::vector<Vec3>& a, const std::vector<Vec3>& b);
+
 // Расстояние между отрезками, мм.
 double segment_distance(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Vec3& q2);
 
 // Кратчайшее расстояние между двумя ломаными, мм.
 double polyline_distance(const std::vector<Vec3>& a, const std::vector<Vec3>& b);
 
+// Пометка зазора или пересечения для показа в окне: где стоит метка и между какими трубами.
+struct ClearanceMark {
+    std::string kind;          // "mark_cross" | "mark_gap"
+    std::string tube_a;
+    std::string tube_b;
+    Vec3 point_a{};            // ближайшая точка оси первой трубы
+    Vec3 point_b{};            // ближайшая точка оси второй трубы
+    double surface_gap = 0.0;  // мм между поверхностями; отрицательный — перекрытие
+    double norm = kDefaultGapMm;
+};
+
 // Зазор между поверхностями труб: пересечение — «mark_cross», зазор меньше нормы — «mark_gap».
 // Пары из skip_pairs (в любом порядке id) пропускаются — например, трубы, состыкованные в одном узле.
 // Сложность: пары труб с отсечением по габаритным коробкам; для тысяч труб нужен пространственный индекс.
+std::vector<ClearanceMark> clearance_marks(const std::vector<PlacedTube>& tubes, double gap = kDefaultGapMm,
+                                           const std::vector<std::pair<std::string, std::string>>& skip_pairs = {});
+
+// Те же пометки в виде замечаний (текст на русском; index = -1).
 std::vector<Issue> check_clearance(const std::vector<PlacedTube>& tubes, double gap = kDefaultGapMm,
                                    const std::vector<std::pair<std::string, std::string>>& skip_pairs = {});
+
+// Текст замечания по пометке.
+std::string clearance_text(const ClearanceMark& mark);
 
 }  // namespace bendcore

@@ -163,6 +163,11 @@ static void test_segment_distance() {
     check(near(segment_distance({1, 1, 1}, {1, 1, 1}, {4, 5, 1}, {4, 5, 1}), 5.0), "две точки: 5");
     check(near(segment_distance({0, 0, 0}, {10, 0, 0}, {4, 0, 0}, {6, 0, 0}), 0.0), "вложенные коллинеарные: 0");
 
+    const ClosestPoints sk = segment_closest({0, 0, 0}, {10, 0, 0}, {5, -5, 3}, {5, 5, 3});
+    check(near(sk.distance, 3.0) && near3(sk.a, {5, 0, 0}) && near3(sk.b, {5, 0, 3}), "скрещивающиеся: ближайшие точки (5,0,0) и (5,0,3)");
+    const ClosestPoints ee = segment_closest({0, 0, 0}, {1, 0, 0}, {2, 1, 0}, {2, 5, 0});
+    check(near3(ee.a, {1, 0, 0}) && near3(ee.b, {2, 1, 0}), "конец к концу: точки (1,0,0) и (2,1,0)");
+
     const std::vector<Vec3> a{{0, 0, 0}, {10, 0, 0}, {10, 10, 0}};
     const std::vector<Vec3> b{{20, 10, 0}, {30, 10, 0}};
     check(near(polyline_distance(a, b), 10.0), "ломаные: 10");
@@ -199,6 +204,18 @@ static void test_clearance() {
     const auto skew_gap = check_clearance({along_x("А", 0, 0), along_y("Б", 50, 22)});
     check(skew_gap.size() == 1 && skew_gap[0].kind == "mark_gap", "скрещивающиеся на 22: зазор 2");
     check(check_clearance({along_x("А", 0, 0), along_y("Б", 50, 40)}).empty(), "скрещивающиеся на 40: зазор 20");
+
+    // Пометка знает, где стоять: ближайшие точки осей, зазор между поверхностями, норму и порядок труб.
+    const auto marks = clearance_marks({along_x("А", 0, 0), along_y("Б", 50, 22)});
+    check(marks.size() == 1 && marks[0].kind == "mark_gap" && marks[0].tube_a == "А" && marks[0].tube_b == "Б" &&
+              near3(marks[0].point_a, {50, 0, 0}) && near3(marks[0].point_b, {50, 0, 22}) &&
+              near(marks[0].surface_gap, 2.0) && near(marks[0].norm, kDefaultGapMm),
+          "пометка зазора: точки (50,0,0) и (50,0,22), зазор 2, норма 5");
+    const auto over = clearance_marks({along_x("А", 0, 0), along_x("Б", 15, 0)});
+    check(over.size() == 1 && over[0].kind == "mark_cross" && near(over[0].surface_gap, -5.0) &&
+              near(std::abs(over[0].point_b[1] - over[0].point_a[1]), 15.0),
+          "пометка пересечения: зазор -5, оси на 15 мм друг от друга");
+    check(clearance_text(over[0]).find("Пересечение") == 0 && clearance_text(marks[0]).find("Зазор") == 0, "тексты пометок");
 
     // Разные ∅: сумма радиусов 15.
     const auto mixed_cross = check_clearance({along_x("А", 0, 0, 20.0), along_x("Б", 14, 0, 10.0)});
