@@ -1,0 +1,14 @@
+# Simple tube path - copper tube with basic bends
+# Tube Parameters
+tube_id,outer_diameter,wall_thickness,material
+T001,20.0,1.5,Copper
+
+# Path Segments
+# Format: segment_number,segment_type,parameter,value,unit
+1,straight,length,50.0,mm
+2,bend,radius,20.0,mm
+2,bend,angle,90.0,deg
+3,straight,length,30.0,mm
+4,bend,radius,20.0,mm
+4,bend,angle,45.0,deg
+5,straight,length,25.0,mm

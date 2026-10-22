@@ -1,0 +1,80 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created": "2026-10-22",
+    "author": "BendCore CAD",
+    "description": "Complete tube model with path, ports, and specifications"
+  },
+  "tube": {
+    "id": "T001",
+    "name": "Copper Tube Assembly",
+    "outerDiameter": 20.0,
+    "wallThickness": 1.5,
+    "material": "Copper",
+    "materialGrade": "DHP (Phosphorous Deoxidized)",
+    "bendingMachine": "Manual Bender",
+    "state": "Soft"
+  },
+  "path": [
+    {
+      "segment": 1,
+      "type": "straight",
+      "length": 50.0
+    },
+    {
+      "segment": 2,
+      "type": "bend",
+      "radius": 20.0,
+      "angle": 90.0,
+      "direction": "clockwise"
+    },
+    {
+      "segment": 3,
+      "type": "straight",
+      "length": 30.0
+    },
+    {
+      "segment": 4,
+      "type": "bend",
+      "radius": 20.0,
+      "angle": 45.0,
+      "direction": "counterclockwise"
+    },
+    {
+      "segment": 5,
+      "type": "straight",
+      "length": 25.0
+    }
+  ],
+  "ports": [
+    {
+      "id": "P1",
+      "segmentIndex": 0,
+      "position": [0.0, 0.0, 0.0],
+      "direction": [0.0, 0.0, 1.0],
+      "diameter": 20.0,
+      "type": "connection",
+      "offset": 0.0
+    },
+    {
+      "id": "P2",
+      "segmentIndex": 4,
+      "position": [30.0, 0.0, 105.0],
+      "direction": [-0.707, 0.0, 0.707],
+      "diameter": 20.0,
+      "type": "connection",
+      "offset": 0.0
+    }
+  ],
+  "specifications": {
+    "blankLength": 162.5,
+    "blankAllowance": 12.5,
+    "bendingAllowance": 150.0,
+    "minStraightSegment": 15.0,
+    "maxBendRadius": 60.0,
+    "minBendRadius": 20.0,
+    "toleranceClass": "Class1",
+    "surfaceFinish": "None"
+  },
+  "notes": "Standard copper tube for cooling system"
+}
