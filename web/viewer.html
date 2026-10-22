@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BendCore Assembly Viewer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #eee;
+            overflow: hidden;
+        }
+        #canvas { display: block; width: 100vw; height: 100vh; }
+        #panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 12px;
+            max-width: 320px;
+            max-height: 90vh;
+            overflow-y: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 12px;
+        }
+        .control-group { margin-bottom: 10px; }
+        .control-group label { display: block; margin-bottom: 4px; font-weight: 500; }
+        input[type="file"], input[type="text"] {
+            width: 100%;
+            padding: 4px;
+            background: #222;
+            border: 1px solid #444;
+            color: #eee;
+            border-radius: 2px;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        button:hover { background: #0052a3; }
+        .state-norm { color: #4caf50; }
+        .state-warn { color: #ff9800; }
+        .state-err_geom { color: #f44336; }
+        .state-err_tech { color: #f44336; }
+        .state-mark_cross { color: #ffeb3b; }
+        .state-mark_gap { color: #00bcd4; }
+        .state-info { color: #2196f3; }
+        .tube-item {
+            margin: 6px 0;
+            padding: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 2px;
+            border-left: 3px solid #666;
+        }
+        .tube-item.selected {
+            background: rgba(0,102,204,0.2);
+            border-left-color: #0066cc;
+        }
+        .state-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-size: 11px;
+            margin-left: 6px;
+        }
+        #info { font-size: 11px; color: #999; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div id="canvas"></div>
+    <div id="panel">
+        <h3 style="margin-bottom: 10px;">BendCore Viewer</h3>
+        <div id="scene-info"></div>
+        <div id="tubes-list" style="max-height: 400px; overflow-y: auto; margin-top: 10px;"></div>
+    </div>
+    <div id="controls">
+        <div class="control-group">
+            <label>Загрузить сцену (JSON):</label>
+            <input type="file" id="file-input" accept=".json">
+        </div>
+        <div class="control-group">
+            <label>или вставить JSON:</label>
+            <textarea id="json-input" style="width: 100%; height: 80px; background: #222; border: 1px solid #444; color: #eee; padding: 4px; border-radius: 2px; font-size: 11px;"></textarea>
+        </div>
+        <button onclick="loadSceneFromJSON()">Загрузить</button>
+        <button onclick="fitAll()">Вся сцена</button>
+        <button onclick="fitSelected()">Выбранные</button>
+        <div id="info"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Scene, camera, renderer
+        let scene, camera, renderer;
+        let tubes = [];
+        let ports = [];
+        let marks = [];
+        let selectedTubes = new Set();
+
+        function initThree() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+            camera.position.set(100, 100, 100);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('canvas').appendChild(renderer.domElement);
+
+            // Lighting
+            const light1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            light1.position.set(100, 100, 100);
+            scene.add(light1);
+
+            const light2 = new THREE.DirectionalLight(0xffffff, 0.4);
+            light2.position.set(-100, -100, 100);
+            scene.add(light2);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            // Grid helper
+            const gridHelper = new THREE.GridHelper(500, 50, 0x444, 0x333);
+            scene.add(gridHelper);
+
+            // Axes helper
+            const axesHelper = new THREE.AxesHelper(100);
+            scene.add(axesHelper);
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Animation loop
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        // Color by state
+        const stateColors = {
+            'norm': 0x4caf50,
+            'warn': 0xff9800,
+            'err_geom': 0xf44336,
+            'err_tech': 0xf44336,
+            'mark_cross': 0xffeb3b,
+            'mark_gap': 0x00bcd4,
+            'info': 0x2196f3
+        };
+
+        function renderTube(tube) {
+            const points = tube.points;
+            if (points.length < 2) return;
+
+            // Create tube geometry
+            const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(p[0], p[1], p[2])));
+            const tubeGeom = new THREE.TubeGeometry(curve, 20, tube.od / 2, 8);
+
+            const color = stateColors[tube.state] || 0x888888;
+            const material = new THREE.MeshPhongMaterial({ color });
+            const mesh = new THREE.Mesh(tubeGeom, material);
+            mesh.userData = { tubeId: tube.id, tube };
+
+            // Click selection
+            mesh.addEventListener('click', () => toggleTubeSelection(tube.id));
+
+            scene.add(mesh);
+            tubes.push(mesh);
+        }
+
+        function renderPort(port) {
+            // Ring (circle in plane perpendicular to direction)
+            const ringPoints = port.ring.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+            const ringGeom = new THREE.BufferGeometry();
+            ringGeom.setFromPoints(ringPoints);
+            const ringMat = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 });
+            const ringMesh = new THREE.LineLoop(ringGeom, ringMat);
+            scene.add(ringMesh);
+
+            // Arrow (line from pos to tip)
+            const arrowGeom = new THREE.BufferGeometry();
+            arrowGeom.setFromPoints([
+                new THREE.Vector3(port.pos[0], port.pos[1], port.pos[2]),
+                new THREE.Vector3(port.arrowTip[0], port.arrowTip[1], port.arrowTip[2])
+            ]);
+            const arrowMat = new THREE.LineBasicMaterial({ color: 0xff0000 });
+            const arrowMesh = new THREE.Line(arrowGeom, arrowMat);
+            scene.add(arrowMesh);
+
+            ports.push(ringMesh);
+        }
+
+        function renderMark(mark) {
+            // Sphere at mark point
+            const midpoint = [
+                (mark.pointA[0] + mark.pointB[0]) / 2,
+                (mark.pointA[1] + mark.pointB[1]) / 2,
+                (mark.pointA[2] + mark.pointB[2]) / 2
+            ];
+            const geom = new THREE.SphereGeometry(2, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: mark.kind === 'mark_cross' ? 0xffff00 : 0x00ffff });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(midpoint[0], midpoint[1], midpoint[2]);
+            scene.add(mesh);
+            marks.push(mesh);
+        }
+
+        function loadScene(sceneData) {
+            // Clear
+            scene.traverse(obj => {
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) obj.material.dispose();
+            });
+            [tubes, ports, marks].forEach(arr => arr.length = 0);
+
+            // Render
+            sceneData.tubes.forEach(tube => renderTube(tube));
+            sceneData.ports.forEach(port => renderPort(port));
+            sceneData.marks.forEach(mark => renderMark(mark));
+
+            // Update UI
+            updateSceneInfo(sceneData);
+            updateTubesList(sceneData.tubes);
+
+            // Fit all
+            fitAll();
+        }
+
+        function updateSceneInfo(sceneData) {
+            const info = `
+                <div><strong>Трубы:</strong> ${sceneData.tubes.length}</div>
+                <div><strong>Портов:</strong> ${sceneData.ports.length}</div>
+                <div><strong>Зазоры:</strong> ${sceneData.marks.length}</div>
+            `;
+            document.getElementById('scene-info').innerHTML = info;
+        }
+
+        function updateTubesList(tubeArray) {
+            const html = tubeArray.map(tube => `
+                <div class="tube-item" onclick="toggleTubeSelection('${tube.id}')">
+                    <div><strong>${tube.id}</strong>
+                    <span class="state-badge state-${tube.state}">${tube.state}</span></div>
+                    <div style="font-size: 11px; color: #999;">∅${tube.od} мм, ${tube.points.length} точек</div>
+                </div>
+            `).join('');
+            document.getElementById('tubes-list').innerHTML = html;
+        }
+
+        function toggleTubeSelection(tubeId) {
+            if (selectedTubes.has(tubeId)) {
+                selectedTubes.delete(tubeId);
+            } else {
+                selectedTubes.add(tubeId);
+            }
+            updateTubesList(window.currentScene.tubes);
+        }
+
+        function fitAll() {
+            if (!window.currentScene || !window.currentScene.fitAll) return;
+            const fit = window.currentScene.fitAll;
+            fitView(fit);
+        }
+
+        function fitSelected() {
+            if (!window.currentScene || !window.currentScene.fitSelected) return;
+            const fit = window.currentScene.fitSelected;
+            fitView(fit);
+        }
+
+        function fitView(fit) {
+            const center = new THREE.Vector3(fit.center[0], fit.center[1], fit.center[2]);
+            const radius = fit.radius;
+            camera.position.copy(center).add(new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(radius * 1.5));
+            camera.lookAt(center);
+        }
+
+        function loadSceneFromJSON() {
+            const input = document.getElementById('json-input').value;
+            if (!input.trim()) {
+                alert('Вставьте JSON');
+                return;
+            }
+            try {
+                const data = JSON.parse(input);
+                window.currentScene = data;
+                loadScene(data);
+                document.getElementById('info').textContent = '✓ Сцена загружена';
+            } catch (e) {
+                alert('JSON ошибка: ' + e.message);
+            }
+        }
+
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    window.currentScene = data;
+                    loadScene(data);
+                    document.getElementById('info').textContent = '✓ Файл загружен';
+                } catch (err) {
+                    alert('Ошибка чтения JSON: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // Init
+        initThree();
+        document.getElementById('info').textContent = 'Загрузите JSON сцену для начала';
+    </script>
+</body>
+</html>
