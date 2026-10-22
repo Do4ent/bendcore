@@ -3,7 +3,7 @@
 **Document:** Command Registry and Mapping  
 **Status:** Locked for Implementation  
 **Date:** 2026-10-22  
-**Total Commands:** 45+
+**Total Commands:** 34
 
 ---
 
@@ -654,7 +654,7 @@ For each command:
 
 **Created:** 2026-10-22  
 **Status:** Locked for Implementation  
-**Total Commands:** 45+  
+**Total Commands:** 34  
 **Color Categories:** 11  
 **Tabs:** 5
 

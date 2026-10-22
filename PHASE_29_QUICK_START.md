@@ -371,7 +371,7 @@ Use this checklist to track implementation progress:
 
 ### Stage 3: Content
 - [ ] All 5 tabs populated
-- [ ] All 45+ commands in registry
+- [ ] All 34 commands in registry
 - [ ] Visual verification complete
 - [ ] No visual glitches
 

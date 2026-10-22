@@ -82,6 +82,9 @@ namespace commands {
 CommandResult new_document(const json& args);
 CommandResult open_document(const json& args);
 CommandResult save_document(const json& args);
+CommandResult save_as_document(const json& args);
+CommandResult print_document(const json& args);
+CommandResult show_options(const json& args);
 
 // Part design
 CommandResult new_sketch(const json& args);

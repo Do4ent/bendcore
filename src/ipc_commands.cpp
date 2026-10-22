@@ -12,6 +12,9 @@ void CommandRouter::register_default_handlers() {
   register_command("new-document", commands::new_document);
   register_command("open", commands::open_document);
   register_command("save", commands::save_document);
+  register_command("save-as", commands::save_as_document);
+  register_command("print", commands::print_document);
+  register_command("options", commands::show_options);
 
   // SKETCH
   register_command("new-sketch", commands::new_sketch);
@@ -75,6 +78,19 @@ CommandResult open_document(const json& args) {
 
 CommandResult save_document(const json& args) {
   return CommandResult{true, "Document saved"};
+}
+
+CommandResult save_as_document(const json& args) {
+  std::string filename = args.value("filename", "document.bcd");
+  return CommandResult{true, "Document saved as", json{{"filename", filename}}};
+}
+
+CommandResult print_document(const json& args) {
+  return CommandResult{true, "Document sent to printer"};
+}
+
+CommandResult show_options(const json& args) {
+  return CommandResult{true, "Options dialog opened"};
 }
 
 // SKETCH

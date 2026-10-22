@@ -62,7 +62,7 @@ Copy the complete type definitions from **PHASE_29_ARCHITECTURE.md Section 5.2**
 **Key Components:**
 - RibbonState interface
 - CommandRequest/CommandResponse interfaces
-- COMMAND_REGISTRY with 45+ commands
+- COMMAND_REGISTRY with 34 commands
 - Command enums
 
 **Verification:**
@@ -74,7 +74,7 @@ npm run build  # Should compile
 **Checklist:**
 - [ ] ribbon.ts created with all interfaces
 - [ ] commands.ts created with COMMAND_REGISTRY
-- [ ] All 45+ commands defined
+- [ ] All 34 commands defined
 - [ ] Type checking passes
 - [ ] No linting warnings
 
@@ -148,7 +148,7 @@ npm run lint src/hooks/useCommandDispatcher.ts
 ### Success Criteria
 - [ ] ColorScheme module complete (11 colors)
 - [ ] Type definitions complete (ribbon.ts, commands.ts)
-- [ ] COMMAND_REGISTRY with all 45+ commands
+- [ ] COMMAND_REGISTRY with all 34 commands
 - [ ] RibbonBar renders with 5 tabs
 - [ ] Tab switching works
 - [ ] useCommandDispatcher hook functional
@@ -181,7 +181,7 @@ Create 11 icon sets for all color categories with proper styling and states.
 
 ### Deliverables
 - 11 icon category components
-- 45+ command icons
+- 34 command icons
 - Hover/active/disabled states
 - Icon-to-command mapping
 
@@ -234,7 +234,7 @@ Implement C++ command handlers and integrate with IPC bridge.
 5. Handle command serialization
 
 ### Deliverables
-- All 45+ commands routed to handlers
+- All 34 commands routed to handlers
 - IPC message handling functional
 - Commands execute in C++
 - Error handling in place

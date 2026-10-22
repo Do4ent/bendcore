@@ -13,7 +13,7 @@ This document outlines the complete architecture for implementing the CommandMan
 
 ### Key Metrics
 - **Tabs:** 5 (Home, Part, Assembly, Analysis, Drawing)
-- **Commands:** ~45+ across all tabs
+- **Commands:** 34 (6 Home + 9 Part + 7 Assembly + 6 Analysis + 6 Drawing)
 - **Color Categories:** 11 (with hex codes)
 - **Integration Points:** IPC bridge, C++ message dispatcher, WASM bindings
 - **Tech Stack:** React + TypeScript, C++ (ipc_bridge), Electron/Node IPC
