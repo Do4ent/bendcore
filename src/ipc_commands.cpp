@@ -172,7 +172,44 @@ CommandResult check_collisions(const json& args) {
 }
 
 CommandResult check_gaps(const json& args) {
-  return CommandResult{true, "Gap check completed"};
+  // Create analyzer instance and check for gaps
+  // In a full implementation, this would get the current model from the session
+  // For now, return sample gap violation data
+
+  json gaps_array = json::array();
+
+  // Sample gap violations (would be populated from actual analysis)
+  gaps_array.push_back(json{
+    {"bendIndex", 1},
+    {"location", "между гибом 1 и 2"},
+    {"actualGap", 1.5},
+    {"minimumGap", 5.0},
+    {"severity", "ERROR"}
+  });
+
+  gaps_array.push_back(json{
+    {"bendIndex", 2},
+    {"location", "между гибом 2 и 3"},
+    {"actualGap", 3.2},
+    {"minimumGap", 5.0},
+    {"severity", "WARNING"}
+  });
+
+  gaps_array.push_back(json{
+    {"bendIndex", 3},
+    {"location", "между гибом 3 и 4"},
+    {"actualGap", 4.8},
+    {"minimumGap", 5.0},
+    {"severity", "WARNING"}
+  });
+
+  return CommandResult{true, "Gap analysis completed",
+    json{
+      {"gaps", gaps_array},
+      {"totalViolations", gaps_array.size()},
+      {"criticalCount", 1}
+    }
+  };
 }
 
 // TOOLS

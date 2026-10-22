@@ -152,6 +152,12 @@ public:
         const MachineSpec& machine
     ) const;
 
+    // Gap checking for clearance analysis
+    std::vector<Issue> checkGaps(
+        const TubeModel& model,
+        double minimumGap = 5.0
+    ) const;
+
 private:
     // Вспомогательные функции для анализа
     Issue createIssue(

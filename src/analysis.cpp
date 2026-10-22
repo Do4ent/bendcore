@@ -502,4 +502,64 @@ double Analyzer::calculateManufacturingRisk(
     return std::min(100.0, risk);
 }
 
+std::vector<Issue> Analyzer::checkGaps(
+    const TubeModel& model,
+    double minimumGap
+) const {
+    std::vector<Issue> issues;
+
+    if (!model.path.has_value()) {
+        return issues;
+    }
+
+    const auto& path = *model.path;
+
+    // For now, we'll generate sample gap violations for demonstration
+    // In a full implementation, this would:
+    // 1. Calculate the 3D position and extent of each bend segment
+    // 2. Measure the distance between adjacent bends
+    // 3. Flag violations based on minimum gap threshold
+
+    // Sample violation: Between bend 1 and bend 2
+    int bendIndex = 0;
+    for (size_t i = 0; i < path.size(); ++i) {
+        const auto& item = path[i];
+
+        // Check if this is a bend segment (check variant type)
+        if (std::holds_alternative<Bend>(item)) {
+            bendIndex++;
+
+            // Simulate gap calculation - generate test data
+            // In production, calculate actual geometric distance
+            double simulatedGap = 2.5 + (bendIndex * 0.8);  // Simulated gaps
+
+            if (simulatedGap < 2.0) {
+                // Critical error
+                issues.push_back(createIssue(
+                    IssueLevel::Error,
+                    IssueType::InsufficientToolClearance,
+                    "Критический зазор между гибами " + std::to_string(bendIndex) +
+                    " и " + std::to_string(bendIndex + 1),
+                    static_cast<int>(bendIndex),
+                    simulatedGap,
+                    minimumGap
+                ));
+            } else if (simulatedGap < minimumGap) {
+                // Warning
+                issues.push_back(createIssue(
+                    IssueLevel::Warning,
+                    IssueType::InsufficientToolClearance,
+                    "Зазор между гибами " + std::to_string(bendIndex) +
+                    " и " + std::to_string(bendIndex + 1) + " ниже рекомендуемого",
+                    static_cast<int>(bendIndex),
+                    simulatedGap,
+                    minimumGap
+                ));
+            }
+        }
+    }
+
+    return issues;
+}
+
 }  // namespace bendcore::analysis

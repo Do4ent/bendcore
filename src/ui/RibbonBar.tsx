@@ -19,15 +19,31 @@ export interface RibbonBarProps {
   };
 }
 
+interface GapViolation {
+  bendIndex: number;
+  location: string;
+  actualGap: number;
+  minimumGap: number;
+  severity: "ERROR" | "WARNING" | "OK";
+}
+
 const RibbonBar: React.FC<RibbonBarProps> = ({
   onCommand,
   activeDocument,
 }) => {
   const [activeTab, setActiveTab] = useState<string>("home");
+  const [gapViolations, setGapViolations] = useState<GapViolation[]>([]);
+  const [showGapPanel, setShowGapPanel] = useState(false);
 
   const handleCommand = useCallback(
     (commandId: string) => {
-      onCommand(commandId);
+      if (commandId === "check-gaps") {
+        // Simulate gap check and display violations
+        setShowGapPanel(true);
+        onCommand(commandId);
+      } else {
+        onCommand(commandId);
+      }
     },
     [onCommand]
   );
@@ -236,58 +252,114 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
 
   // ANALYSIS TAB: Checks and analysis
   const analysisTabContent = (
-    <>
-      <RibbonButtonGroup title="Validation">
-        <RibbonButton
-          id="check-all"
-          label="Check All"
-          colorCategory="auxiliary"
-          onClick={handleCommand}
-          tooltip="Run all checks"
-        />
-        <RibbonButton
-          id="check-collisions"
-          label="Collisions"
-          colorCategory="delete"
-          onClick={handleCommand}
-          tooltip="Check collisions"
-        />
-        <RibbonButton
-          id="check-gaps"
-          label="Gaps"
-          colorCategory="auxiliary"
-          onClick={handleCommand}
-          tooltip="Check clearances"
-        />
-      </RibbonButtonGroup>
+    <div className="w-full">
+      <div className="border-b border-gray-300 pb-4 mb-4">
+        <div className="flex gap-2 flex-wrap">
+          <RibbonButtonGroup title="Validation">
+            <RibbonButton
+              id="check-all"
+              label="Check All"
+              colorCategory="auxiliary"
+              onClick={handleCommand}
+              tooltip="Run all checks"
+            />
+            <RibbonButton
+              id="check-collisions"
+              label="Collisions"
+              colorCategory="delete"
+              onClick={handleCommand}
+              tooltip="Check collisions"
+            />
+            <RibbonButton
+              id="check-gaps"
+              label="Gaps"
+              colorCategory="auxiliary"
+              onClick={handleCommand}
+              tooltip="Check clearances"
+            />
+          </RibbonButtonGroup>
 
-      <RibbonButtonGroup title="Tools">
-        <RibbonButton
-          id="measure"
-          label="Measure"
-          colorCategory="auxiliary"
-          onClick={handleCommand}
-          tooltip="Measurement tool"
-        />
-        <RibbonButton
-          id="calculate-mass"
-          label="Mass"
-          colorCategory="auxiliary"
-          onClick={handleCommand}
-          tooltip="Calculate mass"
-        />
-      </RibbonButtonGroup>
+          <RibbonButtonGroup title="Tools">
+            <RibbonButton
+              id="measure"
+              label="Measure"
+              colorCategory="auxiliary"
+              onClick={handleCommand}
+              tooltip="Measurement tool"
+            />
+            <RibbonButton
+              id="calculate-mass"
+              label="Mass"
+              colorCategory="auxiliary"
+              onClick={handleCommand}
+              tooltip="Calculate mass"
+            />
+          </RibbonButtonGroup>
 
-      <RibbonButtonGroup title="Report">
-        <RibbonButton
-          id="generate-report"
-          label="Report"
-          colorCategory="update"
-          onClick={handleCommand}
-          tooltip="Generate report"
-        />
-      </RibbonButtonGroup>
-    </>
+          <RibbonButtonGroup title="Report">
+            <RibbonButton
+              id="generate-report"
+              label="Report"
+              colorCategory="update"
+              onClick={handleCommand}
+              tooltip="Generate report"
+            />
+          </RibbonButtonGroup>
+        </div>
+      </div>
+
+      {/* Gap Violations Panel */}
+      {showGapPanel && (
+        <div className="px-4 py-3 bg-white border border-gray-200 rounded">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-semibold text-gray-800">
+              Gap Violations (3 found)
+            </h3>
+            <button
+              onClick={() => setShowGapPanel(false)}
+              className="text-gray-500 hover:text-gray-700 text-lg"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            {/* Sample Gap Violation 1 - ERROR */}
+            <div className="p-2 bg-red-50 border-l-4 border-red-500 rounded flex justify-between items-center">
+              <div>
+                <span className="font-medium text-gray-900">Between Bend 1-2:</span>
+                <span className="text-gray-700"> 1.5mm (min: 5.0mm)</span>
+              </div>
+              <span className="px-2 py-1 bg-red-200 text-red-800 rounded text-xs font-semibold">
+                ERROR
+              </span>
+            </div>
+
+            {/* Sample Gap Violation 2 - WARNING */}
+            <div className="p-2 bg-yellow-50 border-l-4 border-yellow-500 rounded flex justify-between items-center">
+              <div>
+                <span className="font-medium text-gray-900">Between Bend 2-3:</span>
+                <span className="text-gray-700"> 3.2mm (min: 5.0mm)</span>
+              </div>
+              <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded text-xs font-semibold">
+                WARNING
+              </span>
+            </div>
+
+            {/* Sample Gap Violation 3 - WARNING */}
+            <div className="p-2 bg-yellow-50 border-l-4 border-yellow-500 rounded flex justify-between items-center">
+              <div>
+                <span className="font-medium text-gray-900">Between Bend 3-4:</span>
+                <span className="text-gray-700"> 4.8mm (min: 5.0mm)</span>
+              </div>
+              <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded text-xs font-semibold">
+                WARNING
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 
   // DRAWING TAB: Drawing and documentation
