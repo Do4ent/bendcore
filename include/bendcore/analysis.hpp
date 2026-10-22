@@ -80,6 +80,21 @@ struct AnalysisResult {
     std::string suggestedMachine;         // Рекомендуемый станок
 };
 
+// Material density definition for mass calculation
+struct MaterialDensity {
+    std::string name;
+    double density;  // g/cm³
+};
+
+// Standard material densities
+static const std::vector<MaterialDensity> MATERIAL_DENSITIES = {
+    {"Steel", 7.85},
+    {"Aluminum", 2.70},
+    {"Copper", 8.96},
+    {"Titanium", 4.54},
+    {"Custom", 5.0}
+};
+
 // Параметры материала для анализа
 struct MaterialSpec {
     std::string name;
@@ -156,6 +171,15 @@ public:
     std::vector<Issue> checkGaps(
         const TubeModel& model,
         double minimumGap = 5.0
+    ) const;
+
+    // Mass calculation for tube structures
+    // Returns mass in kilograms
+    double calculateTubeMass(
+        const TubeModel& model,
+        double outerDiameter,      // mm
+        double wallThickness,      // mm
+        const std::string& materialName  // "Steel", "Aluminum", etc.
     ) const;
 
 private:

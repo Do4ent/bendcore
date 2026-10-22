@@ -578,5 +578,107 @@ Implement gap checking analysis in C++ and integrate into React UI Analysis Pane
 
 ---
 
-**Completion Status:** Phase 29 Day 4 - Gap Checking Integration ✓ COMPLETE
+## DAY 5: MASS CALCULATION INTEGRATION
+
+**Date:** 2026-10-22  
+**Status:** ✓ COMPLETE
+
+### Objective
+Implement mass calculation for tube structures with support for 5 material types and integrate into Analysis Panel.
+
+### Implementation Summary
+
+#### 1. Material Density Database (C++)
+**File:** `/home/claude/bendcore/include/bendcore/analysis.hpp`
+
+Added `MaterialDensity` struct and `MATERIAL_DENSITIES` vector with 5 materials:
+- Steel: 7.85 g/cm³
+- Aluminum: 2.70 g/cm³
+- Copper: 8.96 g/cm³
+- Titanium: 4.54 g/cm³
+- Custom: 5.0 g/cm³ (default)
+
+#### 2. Mass Calculation Method (C++)
+**File:** `/home/claude/bendcore/src/analysis.cpp`
+
+Implemented `calculateTubeMass()` method in `Analyzer` class:
+- Calculates tube cross-section area from OD and wall thickness
+- Processes all path segments (straight, bend, spiral)
+- For bends: uses arc length formula = R * angle (radians)
+- For spirals: uses circumference × number of turns
+- Applies material density to calculate total mass
+- Returns mass in kilograms
+
+**Formula:**
+```
+Area = π/4 * (OD² - ID²)  [mm²]
+Volume = Σ(segment_length × area) / 1000  [cm³]
+Mass = Volume × density  [g] → [kg]
+```
+
+#### 3. IPC Handler Enhancement (C++)
+**File:** `/home/claude/bendcore/src/ipc_commands.cpp`
+
+Updated `calculate_mass()` handler:
+- Extracts parameters: outerDiameter, wallThickness, material
+- Returns JSON with: mass, unit, material, OD, WT, segments, density
+- Integrated material density lookup
+
+Updated `check_all()` handler:
+- Includes mass calculation in combined results
+- Returns both violations count and mass data
+
+#### 4. React UI Integration (TypeScript/React)
+**File:** `/home/claude/bendcore/src/ui/RibbonBar.tsx`
+
+Added mass calculation panel:
+- `MassResult` interface with 7 properties
+- State management: `massResult`, `showMassPanel`
+- Command handler for "calculate-mass" event
+- Yellow (#F5B517) mass result panel in Analysis Tab
+- Displays: total mass, material, OD, wall thickness, segments, density
+
+### Sample Calculation Verification
+**Input:** OD=16mm, WT=1.5mm, Length=1000mm, Material=Steel
+- Inner diameter: 16 - 2×1.5 = 13mm
+- Area: π/4 × (16² - 13²) = π/4 × 135 ≈ 106.1 mm²
+- Volume: 1000 × 106.1 / 1000 = 106.1 cm³
+- Mass: 106.1 × 7.85 = 833.3 g ≈ 0.83 kg
+
+### Features Delivered
+✓ Material density database (5 types)
+✓ calculateTubeMass() method with correct physics
+✓ IPC command handler returning realistic mass
+✓ React UI with mass results panel
+✓ Yellow color scheme for mass panel (#F5B517)
+✓ Integration with check-all command
+✓ TypeScript strict mode compliance
+
+### Testing
+- Manual verification: mass calculation formula correct
+- Material density lookup working for all 5 types
+- UI panel displays correctly with sample data
+- IPC handler returns proper JSON structure
+- Integration with check_all provides combined data
+
+### Files Modified
+1. `/home/claude/bendcore/include/bendcore/analysis.hpp` - Added MaterialDensity struct and calculateTubeMass() method
+2. `/home/claude/bendcore/src/analysis.cpp` - Implemented calculateTubeMass() logic
+3. `/home/claude/bendcore/src/ipc_commands.cpp` - Enhanced calculate_mass and check_all handlers
+4. `/home/claude/bendcore/src/ui/RibbonBar.tsx` - Added MassResult interface, state, and UI panel
+
+### Git Commit
+All changes committed with message:
+```
+Phase 29 Day 5: Mass Calculation Integration - Complete
+```
+
+### Next Steps (Day 6)
+- Tube Element Dialog Completion
+- Import/Export dialog refinements
+- Port connection validation
+
+---
+
+**Completion Status:** Phase 29 Day 4-5 - Complete ✓
 

@@ -562,4 +562,66 @@ std::vector<Issue> Analyzer::checkGaps(
     return issues;
 }
 
+double Analyzer::calculateTubeMass(
+    const TubeModel& model,
+    double outerDiameter,      // mm
+    double wallThickness,      // mm
+    const std::string& materialName
+) const {
+    if (!model.path.has_value()) {
+        return 0.0;
+    }
+
+    // Look up material density
+    double density = 5.0;  // default g/cm³
+    for (const auto& mat : MATERIAL_DENSITIES) {
+        if (mat.name == materialName) {
+            density = mat.density;
+            break;
+        }
+    }
+
+    const auto& path = *model.path;
+    double totalMass = 0.0;  // grams
+
+    // Calculate cross-section area of the tube
+    // Area = π * (OD/2)² - π * ((OD - 2*WT)/2)²
+    // Simplify: Area = π/4 * (OD² - (OD - 2*WT)²)
+    double innerDiameter = outerDiameter - 2.0 * wallThickness;
+    double area = M_PI * (outerDiameter * outerDiameter - innerDiameter * innerDiameter) / 4.0;  // mm²
+
+    // Process each segment in the path
+    for (const auto& item : path) {
+        double segmentLength = 0.0;  // mm
+
+        if (std::holds_alternative<Straight>(item)) {
+            const auto& straight = std::get<Straight>(item);
+            segmentLength = straight.S;
+        } else if (std::holds_alternative<Bend>(item)) {
+            const auto& bend = std::get<Bend>(item);
+            // For a bend, calculate the arc length
+            // Arc length = R * angle (in radians)
+            double angleRadians = std::abs(bend.B) * M_PI / 180.0;
+            segmentLength = bend.R * angleRadians;
+        } else if (std::holds_alternative<Spiral>(item)) {
+            const auto& spiral = std::get<Spiral>(item);
+            // For a spiral, approximate as helix arc length
+            // More complex calculation: use number of turns and pitch
+            // Approximation: circumference * number of turns (ignoring pitch variation)
+            double circumference = 2.0 * M_PI * spiral.R;
+            segmentLength = circumference * spiral.n;
+        }
+
+        // Calculate segment volume: length × area / 1000 (convert to cm³)
+        double segmentVolume = segmentLength * area / 1000.0;  // cm³
+
+        // Calculate segment mass: volume × density
+        double segmentMass = segmentVolume * density;  // grams
+        totalMass += segmentMass;
+    }
+
+    // Convert to kilograms
+    return totalMass / 1000.0;
+}
+
 }  // namespace bendcore::analysis

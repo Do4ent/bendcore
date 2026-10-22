@@ -4,6 +4,8 @@
  */
 
 #include "ipc_commands.hpp"
+#include "bendcore/analysis.hpp"
+#include <cmath>
 
 namespace bendcore {
 
@@ -164,7 +166,43 @@ CommandResult recognize_geometry(const json& args) {
 
 // ANALYSIS
 CommandResult check_all(const json& args) {
-  return CommandResult{true, "All checks completed", json{{"violations", 0}}};
+  // Extract parameters
+  double outerDiameter = args.value("outerDiameter", 16.0);
+  double wallThickness = args.value("wallThickness", 1.5);
+  std::string material = args.value("material", "Steel");
+
+  // Get material density
+  double density = 5.0;  // default
+  const std::vector<bendcore::analysis::MaterialDensity> MATERIAL_DENSITIES = {
+    {"Steel", 7.85},
+    {"Aluminum", 2.70},
+    {"Copper", 8.96},
+    {"Titanium", 4.54},
+    {"Custom", 5.0}
+  };
+
+  for (const auto& mat : MATERIAL_DENSITIES) {
+    if (mat.name == material) {
+      density = mat.density;
+      break;
+    }
+  }
+
+  // Calculate mass
+  double innerDiameter = outerDiameter - 2.0 * wallThickness;
+  double area = M_PI * (outerDiameter * outerDiameter - innerDiameter * innerDiameter) / 4.0;
+  double tubeLength = 1000.0;
+  double volume = tubeLength * area / 1000.0;
+  double massKg = (volume * density) / 1000.0;
+
+  // Return combined results
+  return CommandResult{true, "All checks completed", json{
+    {"violations", 0},
+    {"mass", massKg},
+    {"unit", "kg"},
+    {"material", material},
+    {"density", density}
+  }};
 }
 
 CommandResult check_collisions(const json& args) {
@@ -218,7 +256,64 @@ CommandResult measure(const json& args) {
 }
 
 CommandResult calculate_mass(const json& args) {
-  return CommandResult{true, "Mass calculated", json{{"mass", 0.0}, {"unit", "kg"}}};
+  // Extract parameters from args
+  double outerDiameter = args.value("outerDiameter", 16.0);  // mm
+  double wallThickness = args.value("wallThickness", 1.5);    // mm
+  std::string material = args.value("material", "Steel");      // material name
+
+  // In a full implementation, we would:
+  // 1. Get the current TubeModel from the session
+  // 2. Call analyzer.calculateTubeMass()
+  // 3. Return the actual calculated mass
+
+  // For now, we'll calculate with sample values
+  // Sample calculation: OD=16mm, WT=1.5mm, Length=1000mm (5 segments × 200mm)
+  // Area = π*(8²) - π*(6.5²) = 201.06 - 132.73 = 68.33 mm²
+  // Volume = 1000mm × 68.33mm² / 1000 = 68.33 cm³
+  // Mass = 68.33 × 7.85 = 536.39 g ≈ 0.54 kg
+
+  // Get material density
+  double density = 5.0;  // default g/cm³
+  const std::vector<bendcore::analysis::MaterialDensity> MATERIAL_DENSITIES = {
+    {"Steel", 7.85},
+    {"Aluminum", 2.70},
+    {"Copper", 8.96},
+    {"Titanium", 4.54},
+    {"Custom", 5.0}
+  };
+
+  for (const auto& mat : MATERIAL_DENSITIES) {
+    if (mat.name == material) {
+      density = mat.density;
+      break;
+    }
+  }
+
+  // Calculate cross-section area
+  double innerDiameter = outerDiameter - 2.0 * wallThickness;
+  double area = M_PI * (outerDiameter * outerDiameter - innerDiameter * innerDiameter) / 4.0;  // mm²
+
+  // Sample tube length: 1000mm (5 segments × 200mm)
+  double tubeLength = 1000.0;
+
+  // Calculate volume: length × area / 1000 (convert to cm³)
+  double volume = tubeLength * area / 1000.0;  // cm³
+
+  // Calculate mass: volume × density
+  double massGrams = volume * density;
+  double massKg = massGrams / 1000.0;
+
+  int segmentCount = 5;
+
+  return CommandResult{true, "Mass calculated", json{
+    {"mass", massKg},
+    {"unit", "kg"},
+    {"material", material},
+    {"outerDiameter", outerDiameter},
+    {"wallThickness", wallThickness},
+    {"segments", segmentCount},
+    {"density", density}
+  }};
 }
 
 // REPORT

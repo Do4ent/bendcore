@@ -27,6 +27,16 @@ interface GapViolation {
   severity: "ERROR" | "WARNING" | "OK";
 }
 
+interface MassResult {
+  mass: number;           // kg
+  unit: string;
+  material: string;
+  outerDiameter: number;  // mm
+  wallThickness: number;  // mm
+  segments: number;
+  density: number;        // g/cm³
+}
+
 const RibbonBar: React.FC<RibbonBarProps> = ({
   onCommand,
   activeDocument,
@@ -34,12 +44,18 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   const [activeTab, setActiveTab] = useState<string>("home");
   const [gapViolations, setGapViolations] = useState<GapViolation[]>([]);
   const [showGapPanel, setShowGapPanel] = useState(false);
+  const [massResult, setMassResult] = useState<MassResult | null>(null);
+  const [showMassPanel, setShowMassPanel] = useState(false);
 
   const handleCommand = useCallback(
     (commandId: string) => {
       if (commandId === "check-gaps") {
         // Simulate gap check and display violations
         setShowGapPanel(true);
+        onCommand(commandId);
+      } else if (commandId === "calculate-mass") {
+        // Calculate mass and display results
+        setShowMassPanel(true);
         onCommand(commandId);
       } else {
         onCommand(commandId);
@@ -310,7 +326,7 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
 
       {/* Gap Violations Panel */}
       {showGapPanel && (
-        <div className="px-4 py-3 bg-white border border-gray-200 rounded">
+        <div className="px-4 py-3 bg-white border border-gray-200 rounded mb-4">
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-sm font-semibold text-gray-800">
               Gap Violations (3 found)
@@ -355,6 +371,51 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
               <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded text-xs font-semibold">
                 WARNING
               </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mass Calculation Panel */}
+      {showMassPanel && (
+        <div className="px-4 py-3 bg-white border border-gray-200 rounded">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-semibold text-gray-800">
+              Mass Calculation Results
+            </h3>
+            <button
+              onClick={() => setShowMassPanel(false)}
+              className="text-gray-500 hover:text-gray-700 text-lg"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="space-y-2 text-xs bg-yellow-50 border-l-4 border-yellow-500 p-3 rounded">
+            {/* Sample mass result: OD=16mm, WT=1.5mm, Material=Steel */}
+            <div className="flex justify-between py-1">
+              <span className="font-medium text-gray-700">Total Mass:</span>
+              <span className="text-gray-900 font-semibold">0.54 kg</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="font-medium text-gray-700">Material:</span>
+              <span className="text-gray-900">Steel</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="font-medium text-gray-700">Tube OD:</span>
+              <span className="text-gray-900">16.0 mm</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="font-medium text-gray-700">Wall Thickness:</span>
+              <span className="text-gray-900">1.5 mm</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="font-medium text-gray-700">Segments:</span>
+              <span className="text-gray-900">5</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="font-medium text-gray-700">Density:</span>
+              <span className="text-gray-900">7.85 g/cm³</span>
             </div>
           </div>
         </div>
