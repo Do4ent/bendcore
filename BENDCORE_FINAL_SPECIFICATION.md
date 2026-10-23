@@ -246,7 +246,7 @@ Phase 34: Advanced Analysis (Planned)
 
 | ID | Name | Category | Color | Description | Status |
 |----|------|----------|-------|-------------|--------|
-| 13.1 | Select Machine Format | Edit | Orange | Choose output format (CNC, manual, mechanized) | Implemented |
+| 13.1 | Select Machine Format | Edit | Orange | Choose output format (manual, mechanized; CNC out of v1) | Implemented |
 | 13.2 | Configure Export Options | Edit | Orange | Set precision, units, marks, numbering | Implemented |
 | 13.3 | Preview Machine Code | Update | Yellow | Show exported format before save | Implemented |
 | 13.4 | Export to File | Update | Yellow | Save machine code/operator sheet | Implemented |

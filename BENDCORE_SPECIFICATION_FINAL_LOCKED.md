@@ -204,7 +204,7 @@ From session 98d0d30b turn 6:
 
 1. **Bend Radius R** depends on:
    - Diameter (∅)
-   - Instrument type: manual / CNC / mechanized
+   - Instrument type: manual / mechanized (CNC — out of scope for v1, decision 2026-10-23)
    - One value per (diameter, type) pair
 
 2. **Minimum Straight Segments:**

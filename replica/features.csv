@@ -1,7 +1,7 @@
 feature,area,priority,original,clone,notes
 Путь из острых вершин с радиусом из профиля,path,must,Inventor;SW;NX;Creo;SE;CATIA,yes,PathSketch3D + sketch_solver
-Ортогональная триада направления с ручками поворота,path,should,Inventor,no,3D Orthogonal Route Tool
-Edit-in-place среда пути с кнопкой Завершить,path,should,Inventor,partial,PathSketch3D есть; режима среды нет
+Ортогональная триада направления с ручками поворота,path,should,Inventor,partial,блокировка оси X/Y/Z клавишами и триадой (SketchControls); ручек поворота нет
+Edit-in-place среда пути с кнопкой Завершить,path,should,Inventor,yes,угол подтверждения в PathSketch3D
 Путь из существующего 3D-эскиза или рёбер,path,could,Inventor;NX;CATIA,no,derived route / existing curves
 Авто-путь между двумя портами,path,could,Inventor;SW,no,проверить патенты Dassault перед реализацией
 Переопределение радиуса на отдельный гиб,path,skip,Inventor,no,противоречит решению BendCore: R только через смену трубогиба
@@ -11,27 +11,27 @@ Edit-in-place среда пути с кнопкой Завершить,path,shou
 Мин. прямой участок между гибами,rules,must,SE;NX;Inventor,yes,PathValidator
 Мин. прямой у концов,rules,must,CATIA;NX,yes,по спецификации BendCore
 Правила предприятия без права ослабления,rules,should,CATIA,partial,профиль предприятия есть; блокировки ослабления нет
-Таблица развёрнутой длины R x OD с интерполяцией,spec,should,Creo,no,для компенсации и длины заготовки
-Пакетная проверка всех труб сборки,rules,must,NX;CATIA,no,tube_analyzer проверяет одну трубу
-Браузер нарушений с переходом к вершине,rules,must,NX;CATIA,partial,StatusBar показывает число нарушений
+Таблица развёрнутой длины R x OD с интерполяцией,spec,skip,Creo,skip,"решение 2026-10-23: не нужна, есть калибровка оснастки"
+Пакетная проверка всех труб сборки,rules,must,NX;CATIA,yes,batch_check + CheckPanel
+Браузер нарушений с переходом к вершине,rules,must,NX;CATIA,yes,"CheckPanel: клик → onNavigate(труба, элемент)"
 Минимальный угол гиба (порог вырожденного),rules,must,Creo,yes,0.5 град в BendCore; Creo 1.5 град
-Коллизия трубы с окружением и между трубами,rules,must,NX;CATIA,partial,geometry_ops AABB; зазор 5 мм проверить
+Коллизия трубы с окружением и между трубами,rules,must,NX;CATIA,partial,между трубами — да (зазор 5 мм); с окружением нужен OCCT
 Таблица гибов L-S-B-A,output,must,Inventor;Creo;SE;NX,yes,BendCard / TubePropertiesPanel
-Экспорт LRA (YBC),output,must,Inventor;NX;Creo,no,поиск LRA/YBC в коде: 0 совпадений
-Экспорт XYZ,output,must,Inventor;NX;Creo,no,поиск XYZ в коде: 0 файлов
-Выбор конца А/Б для вывода,output,must,Creo,no,
-Выбор системы координат для XYZ,output,should,Creo,no,
-Угол поворота плоскости гиба (twist),output,must,Creo,no,в BendCard нет поля поворота
-Вывод для одной или всех труб сборки,output,should,SE,no,
+Экспорт LRA (YBC),output,must,Inventor;NX;Creo,yes,bend_output + BendDataDialog
+Экспорт XYZ,output,must,Inventor;NX;Creo,yes,bend_output + BendDataDialog
+Выбор конца А/Б для вывода,output,must,Creo,yes,
+Выбор системы координат для XYZ,output,should,Creo,yes,ядро: любая правая СК; интерфейс: смещение начала
+Угол поворота плоскости гиба (twist),output,must,Creo,yes,LRA R и таблица гибов
+Вывод для одной или всех труб сборки,output,should,SE,partial,ядро — по одной трубе; пакетного вывода в интерфейсе нет
 Компенсация пружинения в карте гибки,output,must,(нет у шести),partial,compensation.hpp
 Длина заготовки и длины реза в спецификации,output,must,SW;NX,partial,blank.cpp
-Мастер чертежа трубы с видами,drawing,must,SW,no,нет среды чертежа
-Развёртка трубы на чертеже,drawing,must,(нет у шести),partial,UnfoldingSpec + unfold_drawing; UI нет
+Мастер чертежа трубы с видами,drawing,must,SW,yes,drawing + DrawingWorkspace: наборы «минимальный/полный»
+Развёртка трубы на чертеже,drawing,must,(нет у шести),yes,"зоны припуска, линии реза, E, размеры от базы/цепочкой"
 Лист развёрток всех труб,drawing,should,(нет у шести),no,
-Авторазмеры по оси (S),drawing,must,SW,no,
-BOM и позиции на чертеже,drawing,must,SW;NX,no,
-Выпуск чертежа с блокировками,drawing,must,(нет у шести),no,
-Главный экземпляр одинаковых труб,assembly,should,Inventor,no,сигнатура одинаковых труб есть в спецификации
+Авторазмеры по оси (S),drawing,must,SW,yes,режимы S / L / только таблица
+BOM и позиции на чертеже,drawing,must,SW;NX,partial,позиции и количество есть (instances); таблица спецификации на листе — нет
+Выпуск чертежа с блокировками,drawing,must,(нет у шести),yes,"строгий/мягкий; выпуск хранится в панели, не в документе"
+Главный экземпляр одинаковых труб,assembly,should,Inventor,yes,instances + InstancesPanel
 Порты на окружении,assembly,must,CATIA;Inventor,partial,ports.cpp
 Адаптивная / замороженная труба,assembly,must,Inventor,partial,
 Разбить путь / перенести трубу,assembly,could,CATIA,no,Break Run / Transfer

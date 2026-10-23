@@ -33,7 +33,7 @@ This document consolidates the **complete specification of BendCore CAD** verifi
 | 1.11 | Auto-Constraints | 5 | Horizontal, vertical, ∥, ⊥ enabled by default, toggleable |
 | 1.12 | Cursor Fields | 5 | Tab switches: Length, Angle B, Rotation A (L-R-A logic) |
 | 1.13 | Exit Checks | 5-6 | No zero segments, chain connected, colinear merge |
-| 1.14 | **TECHNOLOGY CONSTRAINTS** | **6** | **R = f(diameter, instrument type): manual / CNC / mechanized; Minimum straight between bends; N_start, N_end for clamping** |
+| 1.14 | **TECHNOLOGY CONSTRAINTS** | **6** | **R = f(diameter, instrument type): manual / mechanized (CNC — out of v1); Minimum straight between bends; N_start, N_end for clamping** |
 | 1.15 | Editor States | 5-6 | Idle → Tool active → Value input → Drag → Conflict |
 | 1.16 | Keyboard Shortcuts | 5 | L (line), D (dimension), Tab, Enter, Esc, Ctrl+Z |
 | 1.17 | Self-Intersection Check | 5-6 | Before exit; error on intersection |
@@ -79,7 +79,7 @@ This document consolidates the **complete specification of BendCore CAD** verifi
 | 3.6 | Source of Truth | 13 | **"Sketch"** → table read-only; **"Table"** → editable |
 | 3.7 | Mode Switch | 13 | Preserves geometry; constraints not ported (warning) |
 | 3.8 | Output Profile | 13 | Column set, mark base, turn sign, units, file template |
-| 3.9 | Instrument Presets | 13 | Manual (marks), Mechanized (feed), CNC (machine format) |
+| 3.9 | Instrument Presets | 13 | Manual (marks), Mechanized (feed); CNC — out of v1 (decision 2026-10-23); XYZ/LRA CSV for measuring systems (3.6) |
 | 3.10 | Unfolding Drawing | 11 | **Blank map:** real blank extended to straight, length L_blank |
 | 3.11 | Drawing Dimensions | 11 | Sections with allowances, between bends, arc lengths, totals |
 | 3.12 | Allowance Display | 11 | Hatching, cut line, "trim" label with size Δ |
@@ -201,7 +201,7 @@ This document consolidates the **complete specification of BendCore CAD** verifi
 
 From **Turn 6:**
 
-1. **Bend Radius R** depends on instrument (manual/CNC/mechanized) and diameter — one value for each pair
+1. **Bend Radius R** depends on instrument (manual/mechanized; CNC out of v1) and diameter — one value for each pair
 2. **Minimum straight between bends** — profile-specified limit
 3. **Minimum initial/final blank sections** (N_start, N_end) for clamping and feed
 4. **Trim allowance optional** — calculated if section shorter than minimum
@@ -260,7 +260,7 @@ From **Turn 6:**
 
 ### 7.2 CAM Module (bendcore::cam)
 **From Phase 24 Stage 5**
-- Production job generation: bend operation lists for CNC/mechanized machines
+- Production job generation: bend operation lists for manual and mechanized benders
 - G-code generation: abstract macro format with parameters and comments
 - Operation timing: linear model (~20°/sec + feed time)
 - Batch planning: group operations by time and resources

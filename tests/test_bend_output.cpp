@@ -42,6 +42,12 @@ static bool congruent(const SharpPolyline& a, const SharpPolyline& b) {
     for (std::size_t i = 0; i < a.points.size(); ++i)
         for (std::size_t j = i + 1; j < a.points.size(); ++j)
             if (!near(norm(sub(a.points[i], a.points[j])), norm(sub(b.points[i], b.points[j])), 1e-6)) return false;
+    // Попарные расстояния не отличают зеркальное отражение: сверяем знак объёмов соседних четвёрок точек.
+    auto vol = [](const std::vector<Vec3>& P, std::size_t i) {
+        return dot(cross(sub(P[i + 1], P[i]), sub(P[i + 2], P[i])), sub(P[i + 3], P[i]));
+    };
+    for (std::size_t i = 0; i + 3 < a.points.size(); ++i)
+        if (!near(vol(a.points, i), vol(b.points, i), 1e-3)) return false;
     return true;
 }
 
@@ -153,7 +159,35 @@ static void test_csv() {
     check(x == "Точка,X,Y,Z,R\nА,0.00,0.00,0.00,\n1,150.00,0.00,0.00,50.00\nБ,150.00,150.00,0.00,\n", "XYZ CSV");
 }
 
+// Свойство: для случайных пространственных труб (гибы в обе стороны, любые повороты)
+// LRA с конца А и с конца Б восстанавливают трубу, конгруэнтную исходной.
+static void test_random_roundtrip() {
+    unsigned seed = 12345;
+    auto rnd = [&](double lo, double hi) {
+        seed = seed * 1103515245u + 12345u;
+        return lo + (hi - lo) * ((seed >> 8) & 0xFFFF) / 65535.0;
+    };
+    int bad = 0;
+    for (int k = 0; k < 200; ++k) {
+        Path p{Straight{rnd(20, 200)}};
+        const int n = 1 + static_cast<int>(rnd(0, 6));
+        for (int i = 0; i < n; ++i) {
+            const double B = rnd(5, 170) * (rnd(0, 1) < 0.3 ? -1.0 : 1.0);
+            p.push_back(Bend{rnd(20, 60), B, rnd(-180, 180)});
+            p.push_back(Straight{rnd(10, 150)});
+        }
+        const auto fa = sharp_polyline(p);
+        if (!congruent(sharp_polyline(path_from_lra(lra(p))), fa)) ++bad;
+        SharpPolyline rev = fa;
+        std::reverse(rev.points.begin(), rev.points.end());
+        if (!congruent(sharp_polyline(path_from_lra(lra(p, Feed::B))), rev)) ++bad;
+        if (std::abs(bend_table(p).finished_length - axis_length(p)) > 1e-6) ++bad;
+    }
+    check(bad == 0, "200 случайных труб: LRA с обоих концов восстанавливает форму");
+}
+
 int main() {
+    test_random_roundtrip();
     test_simple_l();
     test_roundtrip();
     test_feed_b();
