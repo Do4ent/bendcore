@@ -4,10 +4,13 @@
  * с функцией dispatch). Ошибка ядра приходит как CoreClientError с текстом для пользователя.
  */
 import type {
+  AssociativeDrawing,
   BendDataResult,
   CheckResult,
   CheckTubeInput,
+  DrawingChanges,
   DrawingResult,
+  DrawingVersion,
   Feed,
   Frame,
   InstancesState,
@@ -109,5 +112,28 @@ export class CoreClient {
   }
   releaseCheck(args: Record<string, unknown>) {
     return this.call<ReleaseCheckResult>('drawing.release_check', args);
+  }
+
+  // Ассоциативные виды (версионирование)
+  makeAssociativeDrawing(args: Record<string, unknown>) {
+    return this.call<AssociativeDrawing>('drawing.make_associative', args);
+  }
+  updateAssociativeDrawing(args: Record<string, unknown>) {
+    return this.call<{ ok: boolean; changes: DrawingChanges }>(
+      'drawing.update',
+      args
+    );
+  }
+  getDrawingVersions(tubeId: string) {
+    return this.call<DrawingVersion[]>('drawing.get_versions', { tube_id: tubeId });
+  }
+  compareVersions(tubeId: string, rev1: number, rev2: number) {
+    return this.call<{ changed_sheets: string[]; changed_views: string[]; changed_tables: string[] }>(
+      'drawing.compare_versions',
+      { tube_id: tubeId, rev1, rev2 }
+    );
+  }
+  restoreVersion(tubeId: string, revision: number) {
+    return this.call<DrawingResult>('drawing.restore', { tube_id: tubeId, revision });
   }
 }

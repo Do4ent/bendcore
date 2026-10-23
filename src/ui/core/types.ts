@@ -159,3 +159,35 @@ export interface ReleaseCheckResult {
   offer_update_and_release: boolean;
   can_unrelease: boolean;
 }
+
+// ----- ассоциативность (версионирование) -----
+export type AssociativityStatus = 'fresh' | 'stale' | 'broken' | 'not_applicable';
+
+export interface DrawingVersion {
+  revision: number;
+  fingerprint: string;
+  timestamp: string;
+  author: string;
+  comment: string;
+}
+
+export interface AssociativeDrawingState {
+  status: AssociativityStatus;
+  fingerprint: string;
+  last_update_time: string;
+  last_updated_by: string;
+  change_log: string[];
+}
+
+export interface AssociativeDrawing {
+  versions: DrawingVersion[];
+  state: AssociativeDrawingState;
+}
+
+export interface DrawingChanges {
+  path_changed: boolean;
+  od_changed: boolean;
+  wall_changed: boolean;
+  preset_changed: boolean;
+  format_changed: boolean;
+}

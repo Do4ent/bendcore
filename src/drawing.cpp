@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <iomanip>
 #include <limits>
 #include <numbers>
@@ -9,6 +10,10 @@
 #include <stdexcept>
 
 #include "bendcore/compensation.hpp"
+
+// OpenSSL для SHA256 (OpenSSL 3.0)
+#include <openssl/sha.h>
+#include <openssl/evp.h>
 
 namespace bendcore::drawing {
 namespace {
@@ -836,6 +841,259 @@ std::vector<DrawingSheet> make_part_drawing(const DrawingInput& in) {
     if (!is_standard_scale(main_scale, in.standard)) out.front().warnings.push_back("нестандартный масштаб");
     for (auto& w : unfold_warnings) out.back().warnings.push_back(w);
     return out;
+}
+
+// ---------- Ассоциативность (версионирование) ----------
+
+const char* associativity_name(DrawingAssociativity a) {
+    switch (a) {
+        case DrawingAssociativity::Fresh:
+            return "fresh";
+        case DrawingAssociativity::Stale:
+            return "stale";
+        case DrawingAssociativity::Broken:
+            return "broken";
+        case DrawingAssociativity::NotApplicable:
+            return "not_applicable";
+    }
+    return "unknown";
+}
+
+// SHA256 хэш строки (OpenSSL 3.0 EVP API)
+static std::string sha256_string(const std::string& input) {
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int hash_len = 0;
+
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+    if (!mdctx) throw std::runtime_error("EVP_MD_CTX_new failed");
+
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        throw std::runtime_error("EVP_DigestInit_ex failed");
+    }
+
+    if (EVP_DigestUpdate(mdctx, input.c_str(), input.length()) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        throw std::runtime_error("EVP_DigestUpdate failed");
+    }
+
+    if (EVP_DigestFinal_ex(mdctx, hash, &hash_len) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        throw std::runtime_error("EVP_DigestFinal_ex failed");
+    }
+
+    EVP_MD_CTX_free(mdctx);
+
+    std::ostringstream ss;
+    for (unsigned int i = 0; i < hash_len; i++) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+    }
+    return ss.str();
+}
+
+PathFingerprint compute_fingerprint(
+    const Path& path, double od, double wall,
+    Standard standard, const std::string& format) {
+
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(6);
+
+    // Хэшируем путь
+    ss << "path:";
+    for (const auto& item : path) {
+        if (const auto* straight = std::get_if<Straight>(&item)) {
+            ss << "S" << straight->S << "|";
+        } else if (const auto* bend = std::get_if<Bend>(&item)) {
+            ss << "B" << bend->R << "," << bend->B << "," << bend->A << "|";
+        } else if (const auto* spiral = std::get_if<Spiral>(&item)) {
+            ss << "Sp" << spiral->p << "," << spiral->n << "|";
+        }
+    }
+
+    ss << "od:" << od << "|";
+    ss << "wall:" << wall << "|";
+    ss << "std:" << static_cast<int>(standard) << "|";
+    ss << "fmt:" << format;
+
+    return PathFingerprint{sha256_string(ss.str())};
+}
+
+std::string iso_8601_now() {
+    std::time_t now = std::time(nullptr);
+    std::tm* gmt = std::gmtime(&now);
+    std::ostringstream ss;
+    ss << std::put_time(gmt, "%Y-%m-%dT%H:%M:%SZ");
+    return ss.str();
+}
+
+AssociativeDrawing make_associative_drawing(const DrawingInput& in) {
+    // Создать обычный чертёж
+    auto sheets = make_part_drawing(in);
+
+    // Вычислить отпечаток
+    PathFingerprint fp = compute_fingerprint(in.path, in.od, in.wall, in.standard, in.format);
+
+    // Создать первую версию
+    DrawingVersion v1;
+    v1.revision = 1;
+    v1.fingerprint = fp;
+    v1.sheets = sheets;
+    v1.timestamp = iso_8601_now();
+    v1.author = "system";
+    v1.comment = "создан";
+
+    // Создать состояние
+    AssociativeDrawingState state;
+    state.status = DrawingAssociativity::Fresh;
+    state.fingerprint = fp;
+    state.last_update_time = v1.timestamp;
+    state.last_updated_by = v1.author;
+    state.change_log.push_back(v1.comment);
+
+    // Вернуть ассоциативный чертёж
+    AssociativeDrawing result;
+    result.versions.push_back(v1);
+    result.state = state;
+    return result;
+}
+
+DrawingChanges detect_changes(
+    const DrawingInput& old_input,
+    const DrawingInput& new_input) {
+
+    DrawingChanges changes;
+
+    // Сравнить пути (количество элементов и их параметры)
+    if (old_input.path.size() != new_input.path.size()) {
+        changes.path_changed = true;
+    } else {
+        for (std::size_t i = 0; i < old_input.path.size(); ++i) {
+            if (old_input.path[i].index() != new_input.path[i].index()) {
+                changes.path_changed = true;
+                break;
+            }
+            // Примерное сравнение параметров гибов
+            if (const auto* old_bend = std::get_if<Bend>(&old_input.path[i])) {
+                if (const auto* new_bend = std::get_if<Bend>(&new_input.path[i])) {
+                    if (std::abs(old_bend->R - new_bend->R) > 0.01 ||
+                        std::abs(old_bend->B - new_bend->B) > 0.01) {
+                        changes.path_changed = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if (std::abs(old_input.od - new_input.od) > 0.01) changes.od_changed = true;
+    if (std::abs(old_input.wall - new_input.wall) > 0.01) changes.wall_changed = true;
+    if (old_input.preset != new_input.preset) changes.preset_changed = true;
+    if (old_input.format != new_input.format) changes.format_changed = true;
+
+    return changes;
+}
+
+AssociativeDrawing update_associative_drawing(
+    const AssociativeDrawing& previous,
+    const DrawingInput& updated_input,
+    const std::string& author,
+    const std::string& comment) {
+
+    // Вычислить новый отпечаток
+    PathFingerprint new_fp = compute_fingerprint(
+        updated_input.path, updated_input.od, updated_input.wall,
+        updated_input.standard, updated_input.format);
+
+    // Если отпечаток тот же, вернуть предыдущий чертёж
+    if (new_fp == previous.state.fingerprint) {
+        return previous;
+    }
+
+    // Создать новый чертёж
+    AssociativeDrawing result = previous;
+
+    try {
+        // Создать новую версию
+        auto sheets = make_part_drawing(updated_input);
+
+        // Найти следующий номер ревизии
+        int next_revision = 1;
+        if (!result.versions.empty()) {
+            next_revision = result.versions.front().revision + 1;
+        }
+
+        DrawingVersion new_version;
+        new_version.revision = next_revision;
+        new_version.fingerprint = new_fp;
+        new_version.sheets = sheets;
+        new_version.timestamp = iso_8601_now();
+        new_version.author = author;
+        new_version.comment = comment;
+
+        // Добавить новую версию в начало
+        result.versions.insert(result.versions.begin(), new_version);
+
+        // Обновить состояние
+        result.state.status = DrawingAssociativity::Fresh;
+        result.state.fingerprint = new_fp;
+        result.state.last_update_time = new_version.timestamp;
+        result.state.last_updated_by = new_version.author;
+        result.state.change_log.push_back(new_version.comment);
+
+    } catch (const std::exception& e) {
+        // Если произошла ошибка, пометить как сломанный
+        result.state.status = DrawingAssociativity::Broken;
+        result.state.change_log.push_back(std::string("error: ") + e.what());
+    }
+
+    return result;
+}
+
+AssociativeDrawing::Diff AssociativeDrawing::compare(
+    const DrawingVersion& v1, const DrawingVersion& v2) const {
+
+    Diff diff;
+
+    if (v1.sheets.size() != v2.sheets.size()) {
+        for (std::size_t i = 0; i < std::max(v1.sheets.size(), v2.sheets.size()); ++i) {
+            diff.changed_sheets.push_back(std::to_string(i + 1));
+        }
+    } else {
+        for (std::size_t i = 0; i < v1.sheets.size(); ++i) {
+            if (v1.sheets[i].views.size() != v2.sheets[i].views.size()) {
+                diff.changed_sheets.push_back(std::to_string(i + 1));
+            }
+            for (std::size_t j = 0; j < std::min(v1.sheets[i].views.size(), v2.sheets[i].views.size()); ++j) {
+                if (v1.sheets[i].views[j].id != v2.sheets[i].views[j].id) {
+                    diff.changed_views.push_back(v1.sheets[i].views[j].id);
+                }
+            }
+        }
+    }
+
+    return diff;
+}
+
+void AssociativeDrawing::revert_to(int revision_number) {
+    // Найти версию с заданным номером
+    auto it = std::find_if(versions.begin(), versions.end(),
+                          [revision_number](const DrawingVersion& v) { return v.revision == revision_number; });
+
+    if (it != versions.end()) {
+        // Переместить эту версию в начало
+        DrawingVersion reverted = *it;
+        versions.erase(it);
+        versions.insert(versions.begin(), reverted);
+
+        // Обновить состояние
+        state.status = DrawingAssociativity::Fresh;
+        state.fingerprint = reverted.fingerprint;
+        state.last_update_time = iso_8601_now();
+        state.last_updated_by = "system";
+        state.change_log.push_back("reverted to revision " + std::to_string(revision_number));
+    } else {
+        throw std::invalid_argument("revision " + std::to_string(revision_number) + " not found");
+    }
 }
 
 }  // namespace bendcore::drawing

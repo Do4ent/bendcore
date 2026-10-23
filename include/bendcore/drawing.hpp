@@ -257,6 +257,92 @@ struct DrawingSheet {
     std::vector<std::string> warnings;         // нестандартный масштаб, нужен разрыв, больший формат
 };
 
+// ---------- Ассоциативность (версионирование и история) ----------
+// Отпечаток пути для детектирования изменений (SHA256)
+struct PathFingerprint {
+    std::string sha256;
+
+    bool operator==(const PathFingerprint& other) const { return sha256 == other.sha256; }
+    bool operator!=(const PathFingerprint& other) const { return !(*this == other); }
+};
+
+// Статус ассоциативного чертежа
+enum class DrawingAssociativity { Fresh, Stale, Broken, NotApplicable };
+const char* associativity_name(DrawingAssociativity a);
+
+// Состояние ассоциативного чертежа
+struct AssociativeDrawingState {
+    DrawingAssociativity status = DrawingAssociativity::Fresh;
+    PathFingerprint fingerprint;
+    std::string last_update_time;    // ISO 8601
+    std::string last_updated_by;     // username
+    std::vector<std::string> change_log;
+
+    bool needs_recalc(const PathFingerprint& current) const { return fingerprint != current; }
+};
+
+// Версия чертежа (историческая запись)
+struct DrawingVersion {
+    int revision = 1;
+    PathFingerprint fingerprint;
+    std::vector<DrawingSheet> sheets;
+    std::string timestamp;           // ISO 8601
+    std::string author;
+    std::string comment;             // "исправлена развёртка", "добавлены виды"
+};
+
+// Ассоциативный чертёж с историей версий
+struct AssociativeDrawing {
+    std::vector<DrawingVersion> versions;  // version[0] = самая свежая
+    AssociativeDrawingState state;
+
+    DrawingVersion& current() { return versions.front(); }
+    const DrawingVersion& current() const { return versions.front(); }
+
+    // Различия между двумя версиями
+    struct Diff {
+        std::vector<std::string> changed_sheets;
+        std::vector<std::string> changed_views;
+        std::vector<std::string> changed_tables;
+    };
+
+    // Сравнить две версии
+    Diff compare(const DrawingVersion& v1, const DrawingVersion& v2) const;
+
+    // Откатиться на версию N
+    void revert_to(int revision_number);
+};
+
+// Типы изменений
+struct DrawingChanges {
+    bool path_changed = false;
+    bool od_changed = false;
+    bool wall_changed = false;
+    bool preset_changed = false;
+    bool format_changed = false;
+};
+
+// Вычислить отпечаток пути (SHA256)
+PathFingerprint compute_fingerprint(
+    const Path& path, double od, double wall,
+    Standard standard, const std::string& format);
+
+// Создать ассоциативный чертёж (с первой версией)
+AssociativeDrawing make_associative_drawing(
+    const DrawingInput& in);
+
+// Обновить ассоциативный чертёж при изменении входных параметров
+AssociativeDrawing update_associative_drawing(
+    const AssociativeDrawing& previous,
+    const DrawingInput& updated_input,
+    const std::string& author,
+    const std::string& comment);
+
+// Детектировать, что изменилось
+DrawingChanges detect_changes(
+    const DrawingInput& old_input,
+    const DrawingInput& new_input);
+
 // Чертёж детали: лист 1 — виды и таблица гибов; развёртка с картой заготовки и метками — на листе 1,
 // если помещается без уменьшения масштаба видов, иначе на листе 2 («Виды раскладываются по листам», 7.1).
 std::vector<DrawingSheet> make_part_drawing(const DrawingInput& in);

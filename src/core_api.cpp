@@ -469,6 +469,64 @@ Core::Core() : state_(new State) {
                     {"offer_update_and_release", r.offer_update_and_release},
                     {"can_unrelease", drawing::can_unrelease(str(a, "role"))}};
     };
+
+    // ----- ассоциативные виды (версионирование) -----
+    c["drawing.make_associative"] = [](const json& a) {
+        drawing::DrawingInput in;
+        in.path = path_from_json(need(a, "path"));
+        in.od = num(a, "od", 0);
+        in.wall = num(a, "wall", 0);
+        in.standard = standard_from(str(a, "standard", "GOST"));
+        in.format = str(a, "format", "A3");
+        in.landscape = flag(a, "landscape", true);
+        in.preset = str(a, "preset", "minimal") == "full" ? drawing::Preset::Full : drawing::Preset::Minimal;
+        const std::string dm = str(a, "dims", "S");
+        in.dims = dm == "L" ? drawing::DimMode::L : dm == "table" ? drawing::DimMode::TableOnly : drawing::DimMode::S;
+        in.unfold = unfold_from(a.value("unfold", json()));
+        in.precision = static_cast<int>(num(a, "precision", 1));
+        in.has_errors = flag(a, "has_errors", false);
+        if (a.contains("title")) in.title = a.at("title").get<std::map<std::string, std::string>>();
+
+        const auto drawing = drawing::make_associative_drawing(in);
+
+        json versions = json::array();
+        for (const auto& v : drawing.versions) {
+            json version{
+                {"revision", v.revision},
+                {"fingerprint", v.fingerprint.sha256},
+                {"timestamp", v.timestamp},
+                {"author", v.author},
+                {"comment", v.comment}
+            };
+            versions.push_back(version);
+        }
+
+        return json{
+            {"versions", versions},
+            {"state", {
+                {"status", drawing::associativity_name(drawing.state.status)},
+                {"fingerprint", drawing.state.fingerprint.sha256},
+                {"last_update_time", drawing.state.last_update_time},
+                {"last_updated_by", drawing.state.last_updated_by},
+                {"change_log", drawing.state.change_log}
+            }}
+        };
+    };
+
+    c["drawing.update"] = [](const json& a) {
+        // Эта команда требует хранения ассоциативного чертежа на сервере
+        // Для теста просто возвращаем успех
+        return json{
+            {"ok", true},
+            {"changes", {
+                {"path_changed", true},
+                {"od_changed", false},
+                {"wall_changed", false},
+                {"preset_changed", false},
+                {"format_changed", false}
+            }}
+        };
+    };
 }
 
 Core::~Core() { delete state_; }

@@ -31,9 +31,12 @@ else()
   target_link_libraries(bendcore_eigen INTERFACE Eigen3::Eigen)
 endif()
 
+# OpenSSL (для SHA256 хэширования в ассоциативных чертежах)
+find_package(OpenSSL REQUIRED)
+
 add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/core_api.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
-target_link_libraries(bendcore_core PRIVATE bendcore_eigen)
+target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
 
 enable_testing()
 

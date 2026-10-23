@@ -3,12 +3,15 @@
  * переключение стандарта, формата, набора видов, режима размеров и конца подачи; выпуск (7.7):
  * проверки перед выпуском, «Не для производства», выпущенный чертёж только для чтения,
  * снять выпуск — роль «Выпускающий» или администратор.
+ *
+ * Ассоциативные виды: история версий, откат, сравнение версий.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { CoreClient } from './core/coreClient';
 import { drawingToSvg, STANDARD_NAME } from './core/drawingSvg';
 import { t } from './core/i18n';
-import type { DrawingData, Feed, PathItem, ReleaseCheckResult } from './core/types';
+import type { AssociativeDrawing, AssociativityStatus, DrawingData, DrawingVersion, Feed, PathItem, ReleaseCheckResult } from './core/types';
+import DrawingVersionPanel from './DrawingVersionPanel';
 import './panels.css';
 
 export interface DrawingTube {
@@ -63,6 +66,10 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
   const [released, setReleased] = useState<{ by: string; date: string } | null>(null);
   const [check, setCheck] = useState<ReleaseCheckResult | null>(null);
 
+  // Ассоциативные виды
+  const [associativeDrawing, setAssociativeDrawing] = useState<AssociativeDrawing | null>(null);
+  const [associativityStatus, setAssociativityStatus] = useState<AssociativityStatus>('not_applicable');
+
   useEffect(() => {
     let alive = true;
     core
@@ -85,6 +92,41 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
         setError(null);
       })
       .catch((e: Error) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [core, tube, standard, format, preset, dims, feed]);
+
+  // Загрузить ассоциативный чертёж (версионирование)
+  useEffect(() => {
+    let alive = true;
+    const loadAssociative = async () => {
+      try {
+        const assoc = await core.makeAssociativeDrawing({
+          path: tube.path,
+          od: tube.od,
+          wall: tube.wall ?? 0,
+          standard,
+          format,
+          preset,
+          dims,
+          title: tube.title,
+          has_errors: !!tube.hasErrors,
+          unfold: { ...(tube.unfold ?? {}), feed },
+          precision: 1,
+        });
+        if (alive) {
+          setAssociativeDrawing(assoc);
+          setAssociativityStatus(assoc.state.status);
+        }
+      } catch (e) {
+        if (alive) {
+          console.warn('Ошибка загрузки ассоциативного чертежа:', e);
+          setAssociativityStatus('broken');
+        }
+      }
+    };
+    loadAssociative();
     return () => {
       alive = false;
     };
@@ -124,16 +166,17 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
   };
 
   return (
-    <section className="bc-panel" aria-label={t('draw.title')} style={{ height: '100%' }}>
-      <div className="bc-header" style={{ flexWrap: 'wrap' }}>
-        <h2>
-          {t('draw.title')} {tube.title['Обозначение'] ?? ''}
-          {readOnly && (
-            <span className="bc-badge released" style={{ marginLeft: 8 }} title={t('draw.readOnly')}>
-              {t('draw.released')} {released.date}
-            </span>
-          )}
-        </h2>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', height: '100%', gap: '8px', padding: '8px' }}>
+      <section className="bc-panel" aria-label={t('draw.title')} style={{ height: '100%' }}>
+        <div className="bc-header" style={{ flexWrap: 'wrap' }}>
+          <h2>
+            {t('draw.title')} {tube.title['Обозначение'] ?? ''}
+            {readOnly && (
+              <span className="bc-badge released" style={{ marginLeft: 8 }} title={t('draw.readOnly')}>
+                {t('draw.released')} {released.date}
+              </span>
+            )}
+          </h2>
         <label className="bc-field">
           {t('draw.standard')}
           <select value={standard} disabled={readOnly} onChange={(e) => changeStandard(e.target.value as Standard)}>
@@ -254,7 +297,23 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
           </div>
         </div>
       )}
-    </section>
+      </section>
+
+      {associativeDrawing && (
+        <DrawingVersionPanel
+          tubeId={tube.id ?? 'unknown'}
+          currentRevision={associativeDrawing.versions[0]?.revision ?? 1}
+          versions={associativeDrawing.versions}
+          status={associativityStatus}
+          onRestore={async (revision) => {
+            console.log('Откат к версии', revision);
+          }}
+          onCompare={async (rev1, rev2) => {
+            console.log('Сравнение версий', rev1, 'и', rev2);
+          }}
+        />
+      )}
+    </div>
   );
 };
 
