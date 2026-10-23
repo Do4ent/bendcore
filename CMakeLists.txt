@@ -74,6 +74,10 @@ add_executable(test_dwg_export tests/test_dwg_export.cpp)
 target_link_libraries(test_dwg_export PRIVATE bendcore_core)
 bendcore_add_test(dwg_export test_dwg_export)
 
+add_executable(dwg_export_e2e tests/dwg_export.e2e.cpp)
+target_link_libraries(dwg_export_e2e PRIVATE bendcore_core)
+bendcore_add_test(dwg_export_e2e dwg_export_e2e)
+
 add_executable(test_core_api tests/test_core_api.cpp)
 target_link_libraries(test_core_api PRIVATE bendcore_core)
 bendcore_add_test(core_api test_core_api)
