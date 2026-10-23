@@ -41,12 +41,16 @@ enum class Material {
 };
 
 enum class SearchField {
-    Designation,    // string, fuzzy match
-    Material,       // enum
-    OD,             // number (outer diameter)
-    WallThickness,  // number
-    CreatedDate,    // date range
-    Author          // string, exact match
+    Designation,        // string, fuzzy match
+    Material,           // enum
+    OD,                 // number (outer diameter)
+    WallThickness,      // number
+    Length,             // number (total length)
+    ManufacturingMethod,// string
+    Cost,               // number (cost in USD)
+    CreatedDate,        // date range
+    Author,             // string, exact match
+    FullText            // full-text search across all fields
 };
 
 // =========== STRUCTURES ===========
@@ -84,9 +88,12 @@ struct TubeSearchRecord {
     std::string id;
     std::string designation;
     Material material;
-    double od;              // outer diameter in mm
-    double wall_thickness;  // in mm
-    std::string created_date;  // ISO 8601
+    double od;                      // outer diameter in mm
+    double wall_thickness;          // in mm
+    double length;                  // total length in mm
+    std::string manufacturing_method; // e.g., "Cold Drawn", "Hot Rolled"
+    double cost_usd;                // cost in USD
+    std::string created_date;       // ISO 8601
     std::string author;
 };
 
@@ -110,7 +117,7 @@ struct SavedSearch {
 
 // =========== SEARCH INDEX ===========
 
-// Full-text search index for fast lookups
+// Full-text search index with BM25 ranking
 class SearchIndex {
 public:
     SearchIndex() = default;
@@ -131,26 +138,51 @@ public:
     // Search by token (inverted index)
     std::vector<std::string> search_token(const std::string& token) const;
 
-    // Fuzzy search for designation (Levenshtein distance)
+    // Fuzzy search with Levenshtein distance and minimum similarity threshold
     std::vector<std::pair<std::string, double>> fuzzy_search(
-        const std::string& designation,
-        int max_distance = 3) const;
+        const std::string& search_term,
+        const std::vector<std::string>& candidates,
+        double min_similarity = 0.8) const;
+
+    // Full-text search with BM25 ranking
+    std::vector<std::pair<std::string, double>> full_text_search(
+        const std::string& query,
+        size_t top_k = 100) const;
 
     // Check if index is built
     bool is_built() const { return !inverted_index_.empty(); }
+
+    // Get index statistics
+    size_t get_index_size() const { return tube_records_.size(); }
+    size_t get_vocabulary_size() const { return inverted_index_.size(); }
 
 private:
     // Tokenize string for indexing
     std::vector<std::string> tokenize(const std::string& text) const;
 
+    // Normalize token (lowercase, remove accents)
+    std::string normalize_token(const std::string& token) const;
+
     // Calculate Levenshtein distance
     int levenshtein_distance(const std::string& s1, const std::string& s2) const;
+
+    // Calculate BM25 score
+    double calculate_bm25_score(
+        const std::string& doc_id,
+        const std::vector<std::string>& query_tokens,
+        double k1 = 1.5, double b = 0.75) const;
 
     // Inverted index: token -> set of tube IDs
     std::unordered_map<std::string, std::unordered_set<std::string>> inverted_index_;
 
     // Reverse index: tube ID -> tube record
     std::unordered_map<std::string, TubeSearchRecord> tube_records_;
+
+    // Document frequency for BM25
+    std::unordered_map<std::string, size_t> document_frequency_;
+
+    // Average document length
+    double avg_doc_length_ = 0.0;
 };
 
 // =========== SEARCH ENGINE ===========
@@ -199,6 +231,15 @@ private:
     // String comparison for designation (fuzzy match)
     bool fuzzy_match(const std::string& pattern, const std::string& text,
                     int max_distance = 3) const;
+
+    // Parse range value (min-max format like "25-50")
+    std::pair<std::optional<double>, std::optional<double>> parse_range(
+        const std::string& value) const;
+
+    // Parse date range value
+    std::pair<std::optional<std::chrono::system_clock::time_point>,
+              std::optional<std::chrono::system_clock::time_point>>
+    parse_date_range(const std::string& value) const;
 
     SearchIndex index_;
     std::vector<TubeSearchRecord> tubes_;  // cached tubes

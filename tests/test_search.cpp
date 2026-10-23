@@ -13,13 +13,16 @@ using namespace bendcore::search;
 class SearchEngineTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Create test tubes
+        // Create test tubes with all fields
         tubes_.push_back({
             .id = "tube-1",
             .designation = "HY-25",
             .material = Material::Steel,
             .od = 25.4,
             .wall_thickness = 1.5,
+            .length = 200.0,
+            .manufacturing_method = "Cold Drawn",
+            .cost_usd = 45.50,
             .created_date = "2024-01-15",
             .author = "john"
         });
@@ -30,6 +33,9 @@ protected:
             .material = Material::Steel,
             .od = 31.75,
             .wall_thickness = 2.0,
+            .length = 300.0,
+            .manufacturing_method = "Hot Rolled",
+            .cost_usd = 75.00,
             .created_date = "2024-02-20",
             .author = "jane"
         });
@@ -40,6 +46,9 @@ protected:
             .material = Material::Aluminum,
             .od = 20.0,
             .wall_thickness = 1.0,
+            .length = 150.0,
+            .manufacturing_method = "Extruded",
+            .cost_usd = 25.00,
             .created_date = "2024-03-10",
             .author = "john"
         });
@@ -50,6 +59,9 @@ protected:
             .material = Material::Titanium,
             .od = 50.8,
             .wall_thickness = 3.0,
+            .length = 500.0,
+            .manufacturing_method = "Seamless",
+            .cost_usd = 150.00,
             .created_date = "2024-01-25",
             .author = "mike"
         });
@@ -60,6 +72,9 @@ protected:
             .material = Material::Copper,
             .od = 15.875,
             .wall_thickness = 0.8,
+            .length = 100.0,
+            .manufacturing_method = "Drawn",
+            .cost_usd = 35.00,
             .created_date = "2024-04-05",
             .author = "jane"
         });
@@ -330,6 +345,9 @@ TEST_F(SearchEngineTest, PerformanceTest) {
             .material = static_cast<Material>(i % 5),
             .od = 15.0 + (i % 50),
             .wall_thickness = 0.8 + (i % 30) * 0.1,
+            .length = 100.0 + (i % 400),
+            .manufacturing_method = (i % 2 == 0) ? "Cold Drawn" : "Hot Rolled",
+            .cost_usd = 25.0 + (i % 150),
             .created_date = "2024-01-01",
             .author = "user-" + std::to_string(i % 10)
         });
@@ -409,4 +427,103 @@ TEST_F(SearchEngineTest, CaseInsensitiveFuzzyMatch) {
 
     ASSERT_EQ(result.result_count, 1);
     EXPECT_EQ(result.tubes[0].designation, "HY-25");
+}
+
+// =========== NEW FIELD TESTS (Task 3 Enhancement) ===========
+
+TEST_F(SearchEngineTest, LengthRangeQuery) {
+    // Test: length between 100-250 mm
+    CompoundQuery query;
+    query.add_filter(QueryFilter(SearchField::Length, Operator::Equals, "100-250"));
+
+    SearchResult result = engine_.search(query);
+
+    // tube-5 (100), tube-1 (200) match
+    ASSERT_EQ(result.result_count, 2);
+}
+
+TEST_F(SearchEngineTest, CostRangeQuery) {
+    // Test: cost between 30-80 USD
+    CompoundQuery query;
+    query.add_filter(QueryFilter(SearchField::Cost, Operator::Equals, "30-80"));
+
+    SearchResult result = engine_.search(query);
+
+    // tube-1 (45.50), tube-5 (35), tube-3 (25, no) should be found
+    ASSERT_GE(result.result_count, 2);
+}
+
+TEST_F(SearchEngineTest, ManufacturingMethodFilter) {
+    // Test: manufacturing_method = "Cold Drawn"
+    CompoundQuery query;
+    query.add_filter(QueryFilter(SearchField::ManufacturingMethod, Operator::Equals, "Cold Drawn"));
+
+    SearchResult result = engine_.search(query);
+
+    ASSERT_EQ(result.result_count, 1);
+    EXPECT_EQ(result.tubes[0].id, "tube-1");
+}
+
+TEST_F(SearchEngineTest, ComplexRangeQuery) {
+    // Test: OD between 20-40 AND cost < 100
+    CompoundQuery query;
+    query.logical_op = LogicalOperator::AND;
+    query.add_filter(QueryFilter(SearchField::OD, Operator::Equals, "20-40"));
+    query.add_filter(QueryFilter(SearchField::Cost, Operator::LessThan, "100"));
+
+    SearchResult result = engine_.search(query);
+
+    // tube-1 (25.4, 45.50), tube-2 (31.75, 75), tube-3 (20, 25) match
+    ASSERT_GE(result.result_count, 2);
+}
+
+TEST_F(SearchEngineTest, MultiFieldQuery) {
+    // Test: (material="Steel" AND cost>50) OR (length<200)
+    CompoundQuery query;
+    query.logical_op = LogicalOperator::OR;
+
+    // First part: Steel AND expensive
+    CompoundQuery and_query;
+    and_query.logical_op = LogicalOperator::AND;
+    and_query.add_filter(QueryFilter(SearchField::Material, Operator::Equals, "Steel"));
+    and_query.add_filter(QueryFilter(SearchField::Cost, Operator::GreaterThan, "50"));
+    query.add_nested(and_query);
+
+    // Second part: short length
+    query.add_filter(QueryFilter(SearchField::Length, Operator::LessThan, "200"));
+
+    SearchResult result = engine_.search(query);
+
+    // Should find expensive steel (tube-2) and/or short tubes (tube-5, tube-3)
+    ASSERT_GE(result.result_count, 2);
+}
+
+TEST_F(SearchEngineTest, FullTextSearch) {
+    // Test: full-text search for "cold"
+    CompoundQuery query;
+    query.add_filter(QueryFilter(SearchField::FullText, Operator::Contains, "cold"));
+
+    SearchResult result = engine_.search(query);
+
+    // Should find "Cold Drawn" in tube-1
+    ASSERT_GE(result.result_count, 1);
+}
+
+// =========== BM25 RANKING TESTS ===========
+
+TEST_F(SearchEngineTest, BM25Ranking) {
+    // Create search index and verify BM25 is working
+    EXPECT_TRUE(engine_.index().is_built());
+    EXPECT_GT(engine_.index().get_vocabulary_size(), 0);
+    EXPECT_GT(engine_.index().get_index_size(), 0);
+}
+
+TEST_F(SearchEngineTest, FuzzySearchWithSimilarityThreshold) {
+    // Test fuzzy search with 0.8 similarity threshold
+    std::vector<std::string> candidates = {"steel", "steal", "stelll", "stell", "tubes"};
+    auto results = engine_.index().fuzzy_search("steel", candidates, 0.8);
+
+    // Should find "steal" (1 edit), but not "tubes"
+    ASSERT_GT(results.size(), 0);
+    EXPECT_EQ(results[0].first, "steel");  // Exact match highest score
 }

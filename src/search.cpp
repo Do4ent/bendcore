@@ -40,8 +40,12 @@ std::string field_to_string(SearchField field) {
         case SearchField::Material: return "material";
         case SearchField::OD: return "od";
         case SearchField::WallThickness: return "wall_thickness";
+        case SearchField::Length: return "length";
+        case SearchField::ManufacturingMethod: return "manufacturing_method";
+        case SearchField::Cost: return "cost_usd";
         case SearchField::CreatedDate: return "created_date";
         case SearchField::Author: return "author";
+        case SearchField::FullText: return "full_text";
         default: return "unknown";
     }
 }
@@ -78,8 +82,15 @@ SearchField string_to_field(const std::string& s) {
     if (s == "material") return SearchField::Material;
     if (s == "od") return SearchField::OD;
     if (s == "wall_thickness") return SearchField::WallThickness;
+    if (s == "wall") return SearchField::WallThickness;
+    if (s == "length") return SearchField::Length;
+    if (s == "manufacturing_method") return SearchField::ManufacturingMethod;
+    if (s == "method") return SearchField::ManufacturingMethod;
+    if (s == "cost_usd") return SearchField::Cost;
+    if (s == "cost") return SearchField::Cost;
     if (s == "created_date") return SearchField::CreatedDate;
     if (s == "author") return SearchField::Author;
+    if (s == "full_text") return SearchField::FullText;
     throw std::invalid_argument("Unknown field: " + s);
 }
 
@@ -119,27 +130,36 @@ std::string generate_uuid() {
 void SearchIndex::build_index(const std::vector<TubeSearchRecord>& tubes) {
     clear();
 
+    double total_doc_length = 0.0;
+
     for (const auto& tube : tubes) {
         tube_records_[tube.id] = tube;
 
-        // Tokenize designation
-        auto tokens = tokenize(tube.designation);
+        // Build full text from all fields
+        std::string full_text = tube.designation + " " + tube.author + " " +
+                               material_to_string(tube.material) + " " +
+                               tube.manufacturing_method;
+
+        // Tokenize and index
+        auto tokens = tokenize(full_text);
+        total_doc_length += tokens.size();
+
+        // Build inverted index and track document frequency
+        std::unordered_set<std::string> unique_tokens;
         for (const auto& token : tokens) {
             inverted_index_[token].insert(tube.id);
+            unique_tokens.insert(token);
         }
 
-        // Tokenize material
-        auto material_str = material_to_string(tube.material);
-        auto mat_tokens = tokenize(material_str);
-        for (const auto& token : mat_tokens) {
-            inverted_index_[token].insert(tube.id);
+        // Update document frequency
+        for (const auto& token : unique_tokens) {
+            document_frequency_[token]++;
         }
+    }
 
-        // Tokenize author
-        auto author_tokens = tokenize(tube.author);
-        for (const auto& token : author_tokens) {
-            inverted_index_[token].insert(tube.id);
-        }
+    // Calculate average document length for BM25
+    if (!tubes.empty()) {
+        avg_doc_length_ = total_doc_length / static_cast<double>(tubes.size());
     }
 }
 
@@ -167,6 +187,8 @@ void SearchIndex::remove_tube(const std::string& tube_id) {
 void SearchIndex::clear() {
     inverted_index_.clear();
     tube_records_.clear();
+    document_frequency_.clear();
+    avg_doc_length_ = 0.0;
 }
 
 std::vector<std::string> SearchIndex::search_token(const std::string& token) const {
@@ -232,30 +254,33 @@ std::vector<std::string> SearchIndex::tokenize(const std::string& text) const {
 }
 
 std::vector<std::pair<std::string, double>> SearchIndex::fuzzy_search(
-    const std::string& designation,
-    int max_distance) const {
+    const std::string& search_term,
+    const std::vector<std::string>& candidates,
+    double min_similarity) const {
 
     std::vector<std::pair<std::string, double>> results;
-    std::string lower_desig = designation;
-    std::transform(lower_desig.begin(), lower_desig.end(),
-                  lower_desig.begin(), ::tolower);
+    std::string lower_term = search_term;
+    std::transform(lower_term.begin(), lower_term.end(),
+                  lower_term.begin(), ::tolower);
 
-    for (const auto& [id, record] : tube_records_) {
-        std::string lower_record = record.designation;
-        std::transform(lower_record.begin(), lower_record.end(),
-                      lower_record.begin(), ::tolower);
+    for (const auto& candidate : candidates) {
+        std::string lower_candidate = candidate;
+        std::transform(lower_candidate.begin(), lower_candidate.end(),
+                      lower_candidate.begin(), ::tolower);
 
-        int dist = levenshtein_distance(lower_desig, lower_record);
+        int dist = levenshtein_distance(lower_term, lower_candidate);
+        double max_len = std::max(lower_term.length(), lower_candidate.length());
 
-        if (dist <= max_distance) {
-            // Normalize score: lower distance = higher score
-            double score = 1.0 - (static_cast<double>(dist) /
-                                 std::max(lower_desig.length(), lower_record.length()));
-            results.emplace_back(id, score);
+        if (max_len > 0) {
+            double similarity = 1.0 - (static_cast<double>(dist) / max_len);
+
+            if (similarity >= min_similarity) {
+                results.emplace_back(candidate, similarity);
+            }
         }
     }
 
-    // Sort by score descending
+    // Sort by similarity descending
     std::sort(results.begin(), results.end(),
              [](const auto& a, const auto& b) { return a.second > b.second; });
 
@@ -319,6 +344,13 @@ bool SearchEngine::evaluate_filter(const QueryFilter& filter,
         }
 
         case SearchField::OD: {
+            // Support both single value and range queries
+            auto range_opt = parse_range(filter.value);
+            if (range_opt.first && range_opt.second) {
+                // Range query (e.g., "25-50")
+                return tube.od >= *range_opt.first && tube.od <= *range_opt.second;
+            }
+
             auto value_opt = parse_number(filter.value);
             if (!value_opt) return false;
 
@@ -336,6 +368,14 @@ bool SearchEngine::evaluate_filter(const QueryFilter& filter,
         }
 
         case SearchField::WallThickness: {
+            // Support both single value and range queries
+            auto range_opt = parse_range(filter.value);
+            if (range_opt.first && range_opt.second) {
+                // Range query (e.g., "1-2.5")
+                return tube.wall_thickness >= *range_opt.first &&
+                       tube.wall_thickness <= *range_opt.second;
+            }
+
             auto value_opt = parse_number(filter.value);
             if (!value_opt) return false;
 
@@ -352,7 +392,78 @@ bool SearchEngine::evaluate_filter(const QueryFilter& filter,
             break;
         }
 
+        case SearchField::Length: {
+            // Support both single value and range queries
+            auto range_opt = parse_range(filter.value);
+            if (range_opt.first && range_opt.second) {
+                // Range query (e.g., "100-500")
+                return tube.length >= *range_opt.first && tube.length <= *range_opt.second;
+            }
+
+            auto value_opt = parse_number(filter.value);
+            if (!value_opt) return false;
+
+            double value = *value_opt;
+            switch (filter.op) {
+                case Operator::Equals: return tube.length == value;
+                case Operator::NotEquals: return tube.length != value;
+                case Operator::LessThan: return tube.length < value;
+                case Operator::GreaterThan: return tube.length > value;
+                case Operator::LessThanOrEqual: return tube.length <= value;
+                case Operator::GreaterThanOrEqual: return tube.length >= value;
+                default: break;
+            }
+            break;
+        }
+
+        case SearchField::Cost: {
+            // Support both single value and range queries
+            auto range_opt = parse_range(filter.value);
+            if (range_opt.first && range_opt.second) {
+                // Range query (e.g., "50-200")
+                return tube.cost_usd >= *range_opt.first &&
+                       tube.cost_usd <= *range_opt.second;
+            }
+
+            auto value_opt = parse_number(filter.value);
+            if (!value_opt) return false;
+
+            double value = *value_opt;
+            switch (filter.op) {
+                case Operator::Equals: return tube.cost_usd == value;
+                case Operator::NotEquals: return tube.cost_usd != value;
+                case Operator::LessThan: return tube.cost_usd < value;
+                case Operator::GreaterThan: return tube.cost_usd > value;
+                case Operator::LessThanOrEqual: return tube.cost_usd <= value;
+                case Operator::GreaterThanOrEqual: return tube.cost_usd >= value;
+                default: break;
+            }
+            break;
+        }
+
+        case SearchField::ManufacturingMethod: {
+            if (filter.op == Operator::Equals) {
+                return tube.manufacturing_method == filter.value;
+            } else if (filter.op == Operator::NotEquals) {
+                return tube.manufacturing_method != filter.value;
+            } else if (filter.op == Operator::Contains) {
+                return tube.manufacturing_method.find(filter.value) != std::string::npos;
+            }
+            break;
+        }
+
         case SearchField::CreatedDate: {
+            // Support both single date and date range queries
+            auto date_range_opt = parse_date_range(filter.value);
+            if (date_range_opt.first && date_range_opt.second) {
+                // Date range query (e.g., "2024-01-01/2024-12-31")
+                auto tube_date_opt = parse_date(tube.created_date);
+                if (!tube_date_opt) return false;
+                auto tube_date = *tube_date_opt;
+                return tube_date >= *date_range_opt.first &&
+                       tube_date <= *date_range_opt.second;
+            }
+
             auto date_opt = parse_date(filter.value);
             if (!date_opt) return false;
 
@@ -381,6 +492,25 @@ bool SearchEngine::evaluate_filter(const QueryFilter& filter,
                 return tube.author != filter.value;
             } else if (filter.op == Operator::Contains) {
                 return tube.author.find(filter.value) != std::string::npos;
+            }
+            break;
+        }
+
+        case SearchField::FullText: {
+            // Full-text search across all fields using fuzzy matching
+            std::string lower_value = filter.value;
+            std::transform(lower_value.begin(), lower_value.end(),
+                          lower_value.begin(), ::tolower);
+
+            std::string full_text = tube.designation + " " + tube.author + " " +
+                                   material_to_string(tube.material) + " " +
+                                   tube.manufacturing_method;
+            std::string lower_full_text = full_text;
+            std::transform(lower_full_text.begin(), lower_full_text.end(),
+                          lower_full_text.begin(), ::tolower);
+
+            if (filter.op == Operator::Contains) {
+                return lower_full_text.find(lower_value) != std::string::npos;
             }
             break;
         }
@@ -656,6 +786,132 @@ CompoundQuery json_to_query(const std::string& json_str) {
     }
 
     return query;
+}
+
+// =========== BM25 AND FULL-TEXT SEARCH ===========
+
+std::string SearchIndex::normalize_token(const std::string& token) const {
+    std::string normalized = token;
+    std::transform(normalized.begin(), normalized.end(),
+                  normalized.begin(), ::tolower);
+    return normalized;
+}
+
+double SearchIndex::calculate_bm25_score(
+    const std::string& doc_id,
+    const std::vector<std::string>& query_tokens,
+    double k1, double b) const {
+
+    auto it = tube_records_.find(doc_id);
+    if (it == tube_records_.end()) return 0.0;
+
+    double score = 0.0;
+    size_t n_docs = tube_records_.size();
+
+    // Build full text from tube record
+    const auto& tube = it->second;
+    std::string full_text = tube.designation + " " + tube.author + " " +
+                           material_to_string(tube.material) + " " +
+                           tube.manufacturing_method;
+
+    auto doc_tokens = tokenize(full_text);
+    double doc_length = static_cast<double>(doc_tokens.size());
+
+    for (const auto& token : query_tokens) {
+        std::string norm_token = normalize_token(token);
+
+        // Count occurrences of token in document
+        int term_freq = 0;
+        for (const auto& doc_token : doc_tokens) {
+            if (normalize_token(doc_token) == norm_token) {
+                term_freq++;
+            }
+        }
+
+        if (term_freq > 0) {
+            // BM25 formula
+            size_t df = document_frequency_.count(norm_token) ?
+                       document_frequency_.at(norm_token) : 1;
+
+            double idf = std::log(1.0 + (static_cast<double>(n_docs) - df + 0.5) /
+                                      (df + 0.5));
+
+            double norm_tf = (term_freq * (k1 + 1.0)) /
+                           (term_freq + k1 * (1.0 - b + b * (doc_length / avg_doc_length_)));
+
+            score += idf * norm_tf;
+        }
+    }
+
+    return score;
+}
+
+std::vector<std::pair<std::string, double>> SearchIndex::full_text_search(
+    const std::string& query,
+    size_t top_k) const {
+
+    auto query_tokens = tokenize(query);
+    if (query_tokens.empty()) return {};
+
+    std::vector<std::pair<std::string, double>> results;
+
+    // Calculate BM25 score for each document
+    for (const auto& [doc_id, _] : tube_records_) {
+        double score = calculate_bm25_score(doc_id, query_tokens);
+        if (score > 0.0) {
+            results.emplace_back(doc_id, score);
+        }
+    }
+
+    // Sort by score descending
+    std::sort(results.begin(), results.end(),
+             [](const auto& a, const auto& b) { return a.second > b.second; });
+
+    // Return top k results
+    if (results.size() > top_k) {
+        results.resize(top_k);
+    }
+
+    return results;
+}
+
+// =========== HELPER METHODS ===========
+
+std::pair<std::optional<double>, std::optional<double>>
+SearchEngine::parse_range(const std::string& value) const {
+    size_t dash_pos = value.find('-');
+    if (dash_pos == std::string::npos) {
+        return {std::nullopt, std::nullopt};
+    }
+
+    try {
+        std::string min_str = value.substr(0, dash_pos);
+        std::string max_str = value.substr(dash_pos + 1);
+
+        double min_val = std::stod(min_str);
+        double max_val = std::stod(max_str);
+
+        return {min_val, max_val};
+    } catch (...) {
+        return {std::nullopt, std::nullopt};
+    }
+}
+
+std::pair<std::optional<std::chrono::system_clock::time_point>,
+          std::optional<std::chrono::system_clock::time_point>>
+SearchEngine::parse_date_range(const std::string& value) const {
+    size_t slash_pos = value.find('/');
+    if (slash_pos == std::string::npos) {
+        return {std::nullopt, std::nullopt};
+    }
+
+    std::string start_str = value.substr(0, slash_pos);
+    std::string end_str = value.substr(slash_pos + 1);
+
+    auto start_opt = parse_date(start_str);
+    auto end_opt = parse_date(end_str);
+
+    return {start_opt, end_opt};
 }
 
 }  // namespace bendcore::search

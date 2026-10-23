@@ -22,6 +22,9 @@ export interface TubeRecord {
   material: "Steel" | "Aluminum" | "Copper" | "Titanium" | "Custom";
   od: number;
   wall_thickness: number;
+  length?: number;
+  manufacturing_method?: string;
+  cost_usd?: number;
   created_date: string;
   author: string;
 }
@@ -33,6 +36,11 @@ export interface SearchFilters {
   od_max?: number;
   wall_min?: number;
   wall_max?: number;
+  length_min?: number;
+  length_max?: number;
+  cost_min?: number;
+  cost_max?: number;
+  manufacturing_method?: string;
   date_from?: string;
   date_to?: string;
   author?: string;
@@ -128,6 +136,33 @@ function filterTubes(tubes: TubeRecord[], filters: SearchFilters): TubeRecord[] 
       return false;
     }
 
+    // Length range filter
+    if (tube.length !== undefined) {
+      if (filters.length_min !== undefined && tube.length < filters.length_min) {
+        return false;
+      }
+      if (filters.length_max !== undefined && tube.length > filters.length_max) {
+        return false;
+      }
+    }
+
+    // Cost range filter
+    if (tube.cost_usd !== undefined) {
+      if (filters.cost_min !== undefined && tube.cost_usd < filters.cost_min) {
+        return false;
+      }
+      if (filters.cost_max !== undefined && tube.cost_usd > filters.cost_max) {
+        return false;
+      }
+    }
+
+    // Manufacturing method filter
+    if (filters.manufacturing_method && tube.manufacturing_method) {
+      if (!tube.manufacturing_method.toLowerCase().includes(filters.manufacturing_method.toLowerCase())) {
+        return false;
+      }
+    }
+
     // Date range filter
     if (filters.date_from) {
       if (tube.created_date < filters.date_from) {
@@ -167,6 +202,51 @@ function saveSavedSearches(searches: SavedSearch[]) {
   } catch (e) {
     console.error("Failed to save searches:", e);
   }
+}
+
+function exportToCSV(tubes: TubeRecord[], filename: string = "tubes.csv") {
+  const headers = [
+    "ID",
+    "Designation",
+    "Material",
+    "OD (mm)",
+    "Wall Thickness (mm)",
+    "Length (mm)",
+    "Manufacturing Method",
+    "Cost (USD)",
+    "Created Date",
+    "Author",
+  ];
+
+  const rows = tubes.map((tube) => [
+    tube.id,
+    tube.designation,
+    tube.material,
+    tube.od.toFixed(2),
+    tube.wall_thickness.toFixed(2),
+    tube.length?.toFixed(2) || "-",
+    tube.manufacturing_method || "-",
+    tube.cost_usd?.toFixed(2) || "-",
+    tube.created_date,
+    tube.author,
+  ]);
+
+  const csvContent = [
+    headers.join(","),
+    ...rows.map((row) =>
+      row
+        .map((cell) => (typeof cell === "string" && cell.includes(",") ? `"${cell}"` : cell))
+        .join(",")
+    ),
+  ].join("\n");
+
+  const element = document.createElement("a");
+  element.setAttribute("href", "data:text/csv;charset=utf-8," + encodeURIComponent(csvContent));
+  element.setAttribute("download", filename);
+  element.style.display = "none";
+  document.body.appendChild(element);
+  element.click();
+  document.body.removeChild(element);
 }
 
 // =========== VIRTUALIZED RESULTS TABLE ===========
@@ -225,14 +305,18 @@ const VirtualizedTable: React.FC<VirtualizedTableProps> = ({ tubes, onSelectTube
                 checked={selectedIds.size === tubes.length && tubes.length > 0}
                 onChange={handleSelectAll}
                 title="Select all visible tubes"
+                aria-label="Select all tubes"
               />
             </th>
-            <th style={{ width: "150px" }}>Designation</th>
-            <th style={{ width: "100px" }}>Material</th>
-            <th style={{ width: "80px" }}>OD (mm)</th>
-            <th style={{ width: "120px" }}>Wall (mm)</th>
-            <th style={{ width: "150px" }}>Created</th>
-            <th style={{ width: "100px" }}>Author</th>
+            <th style={{ width: "120px" }}>Designation</th>
+            <th style={{ width: "90px" }}>Material</th>
+            <th style={{ width: "70px" }}>OD (mm)</th>
+            <th style={{ width: "80px" }}>Wall (mm)</th>
+            <th style={{ width: "80px" }}>Length (mm)</th>
+            <th style={{ width: "120px" }}>Method</th>
+            <th style={{ width: "70px" }}>Cost ($)</th>
+            <th style={{ width: "120px" }}>Created</th>
+            <th style={{ width: "80px" }}>Author</th>
           </tr>
         </thead>
       </table>
@@ -254,18 +338,28 @@ const VirtualizedTable: React.FC<VirtualizedTableProps> = ({ tubes, onSelectTube
                     type="checkbox"
                     checked={selectedIds.has(tube.id)}
                     onChange={(e) => handleSelectTube(tube.id, e.target.checked)}
+                    aria-label={`Select ${tube.designation}`}
                   />
                 </td>
-                <td style={{ width: "150px" }}>{tube.designation}</td>
-                <td style={{ width: "100px" }}>{tube.material}</td>
-                <td style={{ width: "80px" }} className="number">
+                <td style={{ width: "120px" }}>{tube.designation}</td>
+                <td style={{ width: "90px" }}>{tube.material}</td>
+                <td style={{ width: "70px" }} className="number">
                   {tube.od.toFixed(2)}
                 </td>
-                <td style={{ width: "120px" }} className="number">
+                <td style={{ width: "80px" }} className="number">
                   {tube.wall_thickness.toFixed(2)}
                 </td>
-                <td style={{ width: "150px" }}>{tube.created_date}</td>
-                <td style={{ width: "100px" }}>{tube.author}</td>
+                <td style={{ width: "80px" }} className="number">
+                  {tube.length ? tube.length.toFixed(2) : "-"}
+                </td>
+                <td style={{ width: "120px" }}>
+                  {tube.manufacturing_method || "-"}
+                </td>
+                <td style={{ width: "70px" }} className="number">
+                  {tube.cost_usd ? tube.cost_usd.toFixed(2) : "-"}
+                </td>
+                <td style={{ width: "120px" }}>{tube.created_date}</td>
+                <td style={{ width: "80px" }}>{tube.author}</td>
               </tr>
             ))}
           </tbody>
@@ -449,6 +543,75 @@ const SearchPanel: React.FC<SearchPanelProps> = ({ tubes, onSelectTubes }) => {
         </div>
 
         <div className="filter-group">
+          <label>Length Range (mm): {filters.length_min || 0} - {filters.length_max || 1000}</label>
+          <div className="range-inputs">
+            <input
+              type="number"
+              min={0}
+              step={10}
+              placeholder="Min (mm)"
+              value={filters.length_min || ""}
+              onChange={(e) =>
+                handleFilterChange("length_min", e.target.value ? parseFloat(e.target.value) : undefined)
+              }
+              className="filter-input"
+            />
+            <span>-</span>
+            <input
+              type="number"
+              min={0}
+              step={10}
+              placeholder="Max (mm)"
+              value={filters.length_max || ""}
+              onChange={(e) =>
+                handleFilterChange("length_max", e.target.value ? parseFloat(e.target.value) : undefined)
+              }
+              className="filter-input"
+            />
+          </div>
+        </div>
+
+        <div className="filter-group">
+          <label>Cost Range ($): {filters.cost_min || 0} - {filters.cost_max || 500}</label>
+          <div className="range-inputs">
+            <input
+              type="number"
+              min={0}
+              step={5}
+              placeholder="Min ($)"
+              value={filters.cost_min || ""}
+              onChange={(e) =>
+                handleFilterChange("cost_min", e.target.value ? parseFloat(e.target.value) : undefined)
+              }
+              className="filter-input"
+            />
+            <span>-</span>
+            <input
+              type="number"
+              min={0}
+              step={5}
+              placeholder="Max ($)"
+              value={filters.cost_max || ""}
+              onChange={(e) =>
+                handleFilterChange("cost_max", e.target.value ? parseFloat(e.target.value) : undefined)
+              }
+              className="filter-input"
+            />
+          </div>
+        </div>
+
+        <div className="filter-group">
+          <label>Manufacturing Method</label>
+          <input
+            type="text"
+            placeholder="e.g., Cold Drawn, Hot Rolled"
+            value={filters.manufacturing_method || ""}
+            onChange={(e) => handleFilterChange("manufacturing_method", e.target.value)}
+            className="filter-input"
+          />
+        </div>
+
+        <div className="filter-group">
           <label>Created Date Range</label>
           <div className="date-inputs">
             <input
@@ -534,7 +697,19 @@ const SearchPanel: React.FC<SearchPanelProps> = ({ tubes, onSelectTubes }) => {
 
       {/* Results */}
       <div className="search-panel-results">
-        <h3>Results: {filteredTubes.length} tubes matched</h3>
+        <div className="results-header">
+          <h3>Results: {filteredTubes.length} tubes matched</h3>
+          <div className="results-actions">
+            <button
+              onClick={() => exportToCSV(filteredTubes, `tubes_export_${new Date().toISOString().split('T')[0]}.csv`)}
+              className="btn btn-primary"
+              disabled={filteredTubes.length === 0}
+              title="Export search results to CSV"
+            >
+              📥 Export to CSV
+            </button>
+          </div>
+        </div>
         <VirtualizedTable tubes={filteredTubes} onSelectTubes={onSelectTubes} />
       </div>
 
