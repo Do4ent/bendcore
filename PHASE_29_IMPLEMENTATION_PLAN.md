@@ -680,5 +680,138 @@ Phase 29 Day 5: Mass Calculation Integration - Complete
 
 ---
 
-**Completion Status:** Phase 29 Day 4-5 - Complete ✓
+## STAGE 6: TUBE ELEMENT DIALOG (Day 6)
+
+### Objective
+Complete the comprehensive Tube Element Dialog with all 5 tabs, real-time validation, mass calculation, and integration with Ribbon UI.
+
+### Tasks Completed
+
+#### Task 1: TubeDialog Component (src/ui/TubeDialog.tsx)
+**Status:** Complete ✓
+
+**Features Implemented:**
+- 5 functional tabs: Geometry, Bends, Ports, Advanced, Preview
+- Real-time validation with error display
+- Real-time mass calculation
+- Complete state management
+
+**Geometry Tab:**
+- Outer Diameter input (1-100 mm, default 16.0)
+- Wall Thickness input (0.1-10 mm, default 1.5)
+- Length input (10-5000 mm, default 1000)
+- Material dropdown (Steel, Aluminum, Copper, Titanium, Custom)
+- Real-time cross-section area calculation
+- Real-time mass calculation
+- Material density display
+
+**Validation Rules:**
+- OD > 0 and < 100
+- WT < OD/2
+- OD/WT ratio between 2 and 100
+- Length > 0 and < 5000
+
+**Bends Tab:**
+- Add/Edit/Delete bends
+- Bend position validation (0 < position < length)
+- Bend radius validation (>= OD/2)
+- Bend angle validation (1-180°)
+- Summary with total bend angle
+
+**Ports Tab:**
+- Add/Edit/Delete ports
+- Port types: Connection, Drain, Vent
+- Port position validation (0 < position < length)
+- Port diameter validation (< OD)
+- Inline editing interface
+
+**Advanced Tab:**
+- Springback Factor slider (0-1, default 0.3)
+- Bend Compensation toggle
+- Length Tolerance input (±mm)
+- Angle Tolerance input (±°)
+- Surface Finish dropdown (Raw, Polished, Powder-coated)
+- Reset to Defaults button
+
+**Preview Tab:**
+- Tube configuration summary
+- Geometry summary with bend/port counts
+- Validation status indicator
+- Error message display
+- High springback warning
+
+#### Task 2: Ribbon Integration (src/ui/RibbonBar.tsx)
+**Status:** Complete ✓
+
+**Changes:**
+- Added TubeDialog state management
+- Integrated new-tube button handler
+- Integrated edit-tube button handler
+- Added handleTubeSave callback for IPC integration
+- Dialog now appears as modal overlay
+
+#### Task 3: Styling & Colors (src/ui/styles.css, tailwind.config.js)
+**Status:** Complete ✓
+
+**Updates:**
+- Added custom color definitions to CSS root
+- Extended Tailwind config with ochre color palette
+- Applied ochre-600 (#C9920A) for panel borders
+- Applied blue-500 (#1F6FC5) for focus states
+- Applied red-600 (#D93A3A) for error states
+- Applied green-600 (#2E9E5B) for success states
+
+#### Task 4: Type Definitions & Exports
+**Status:** Complete ✓
+
+**Exports:**
+- TubeConfig interface exported from TubeDialog
+- Full TypeScript support with strict mode
+- All sub-component interfaces properly typed
+
+### Code Quality
+- Full TypeScript with strict null checks
+- React 18 compatible with hooks (useState, useCallback, useMemo)
+- Proper error handling and validation
+- Real-time calculation and UI updates
+- Accessible form controls
+
+### Integration Points
+- IPC integration via window.electron.ipc
+- Ribbon button handlers (new-tube, edit-tube)
+- Modal dialog pattern
+- State management through RibbonBar
+
+### Git Commit
+All changes committed with message:
+```
+Phase 29 Day 6: Tube Element Dialog Completion - Complete
+
+Implementation:
+- Complete TubeDialog component with 5 functional tabs
+- Geometry Tab: OD, WT, length, material with real-time mass calc
+- Bends Tab: Create/edit/delete bends with validation
+- Ports Tab: Port management (connection, drain, vent)
+- Advanced Tab: Springback, compensation, tolerances
+- Preview Tab: Configuration summary and status
+- Real-time validation with error display
+- Integration with Ribbon UI (new-tube, edit-tube)
+- Tailwind CSS styling with ochre borders
+- All 5 tabs fully functional with data persistence
+
+Features:
+- Input validation (OD/WT ratio, length, positions)
+- Real-time mass calculation
+- Error messages on invalid fields
+- Cross-field validation (bends, ports positions)
+- Dialog open/close from Ribbon buttons
+- Save/Cancel handlers with IPC integration
+- Ready for Day 7 testing
+
+Status: Ready for comprehensive testing and polish
+```
+
+---
+
+**Completion Status:** Phase 29 Day 6 - Complete ✓
 

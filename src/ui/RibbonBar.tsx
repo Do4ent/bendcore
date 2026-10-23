@@ -7,6 +7,7 @@
 import React, { useState, useCallback } from "react";
 import RibbonButton, { RibbonButtonGroup } from "./RibbonButton";
 import { RibbonTabBar } from "./RibbonTab";
+import TubeDialog, { TubeConfig } from "./TubeDialog";
 
 export interface CommandHandler {
   (commandId: string, args?: Record<string, any>): Promise<void> | void;
@@ -46,6 +47,8 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   const [showGapPanel, setShowGapPanel] = useState(false);
   const [massResult, setMassResult] = useState<MassResult | null>(null);
   const [showMassPanel, setShowMassPanel] = useState(false);
+  const [tubeDialogOpen, setTubeDialogOpen] = useState(false);
+  const [selectedTubeConfig, setSelectedTubeConfig] = useState<TubeConfig | undefined>();
 
   const handleCommand = useCallback(
     (commandId: string) => {
@@ -57,12 +60,42 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
         // Calculate mass and display results
         setShowMassPanel(true);
         onCommand(commandId);
+      } else if (commandId === "new-tube") {
+        // Open new tube dialog
+        setSelectedTubeConfig(undefined);
+        setTubeDialogOpen(true);
+        onCommand(commandId);
+      } else if (commandId === "edit-tube") {
+        // Open edit tube dialog with existing config
+        setTubeDialogOpen(true);
+        onCommand(commandId);
       } else {
         onCommand(commandId);
       }
     },
     [onCommand]
   );
+
+  const handleTubeSave = useCallback(
+    (config: TubeConfig) => {
+      console.log("Saving tube config:", config);
+      // Send to backend via IPC
+      if (window.electron?.ipc) {
+        const command = selectedTubeConfig ? "edit-tube" : "new-tube";
+        window.electron.ipc.invoke("bendcore:command", {
+          command: command,
+          args: config,
+        });
+      }
+      setTubeDialogOpen(false);
+    },
+    [selectedTubeConfig]
+  );
+
+  const handleTubeDialogClose = useCallback(() => {
+    setTubeDialogOpen(false);
+    setSelectedTubeConfig(undefined);
+  }, []);
 
   // HOME TAB: File operations
   const homeTabContent = (
@@ -494,13 +527,23 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   ];
 
   return (
-    <div className="bg-gray-50 border-b border-gray-400">
-      <RibbonTabBar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        tabs={tabs}
+    <>
+      <div className="bg-gray-50 border-b border-gray-400">
+        <RibbonTabBar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabs={tabs}
+        />
+      </div>
+
+      {/* Tube Dialog */}
+      <TubeDialog
+        isOpen={tubeDialogOpen}
+        onClose={handleTubeDialogClose}
+        onSave={handleTubeSave}
+        initialConfig={selectedTubeConfig}
       />
-    </div>
+    </>
   );
 };
 

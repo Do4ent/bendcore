@@ -18,6 +18,10 @@ module.exports = {
         'ribbon-freeze': '#2D9CDB',
         'ribbon-auxiliary': '#C9920A',
         'ribbon-neutral': '#757575',
+        // Semantic color names
+        'ochre': {
+          600: '#C9920A',
+        },
       },
     },
   },

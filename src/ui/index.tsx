@@ -7,6 +7,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import RibbonBar from './RibbonBar';
 import './styles.css';
+export { default as TubeDialog } from './TubeDialog';
+export type { TubeConfig } from './TubeDialog';
 
 interface AppProps {
   onCommand?: (commandId: string, args?: Record<string, any>) => void;

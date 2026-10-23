@@ -2,6 +2,19 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
+/* Custom Color Palette */
+:root {
+  --color-tube: #1F6FC5;
+  --color-create: #2E9E5B;
+  --color-delete: #D93A3A;
+  --color-import: #0E97A3;
+  --color-links: #8A4FD8;
+  --color-edit: #E8820C;
+  --color-update: #F5B517;
+  --color-freeze: #2D9CDB;
+  --color-auxiliary: #C9920A;
+}
+
 /* BendCore Custom Styles */
 
 body {
