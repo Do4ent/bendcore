@@ -1,0 +1,268 @@
+/**
+ * BendCore Search Bar Styles
+ */
+
+.search-bar-container {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+}
+
+.search-bar-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  padding: 0 12px;
+  transition: all 0.2s ease;
+}
+
+.search-bar-input-wrapper:focus-within {
+  border-color: #0066ff;
+  box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.1);
+}
+
+.search-bar-input {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #212529;
+}
+
+.search-bar-input::placeholder {
+  color: #9ca3af;
+}
+
+.search-bar-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin: 0 0 0 4px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 14px;
+  transition: color 0.2s ease;
+}
+
+.search-bar-clear:hover {
+  color: #495057;
+}
+
+.search-bar-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 0 8px;
+  margin: 0 0 0 4px;
+  border-left: 1px solid #e0e0e0;
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* Results Dropdown */
+.search-results-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 8px;
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  max-height: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+}
+
+.search-results-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.search-results-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Search Result Item */
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover {
+  background-color: #f8f9fa;
+}
+
+.search-result-item.selected {
+  background-color: #f0f4ff;
+}
+
+.result-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  font-size: 14px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.result-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-name {
+  font-weight: 500;
+  color: #212529;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.result-tab {
+  padding: 2px 6px;
+  background: #f0f0f0;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.result-category {
+  font-style: italic;
+}
+
+.result-shortcut {
+  padding: 4px 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  font-family: "SF Mono", Monaco, "Cascadia Code", Roboto Mono, Consolas,
+    "Courier New", monospace;
+  font-size: 11px;
+  color: #495057;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.search-result-item.selected .result-shortcut {
+  background: #e8f0ff;
+  color: #0066ff;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .search-bar-input-wrapper {
+    background: #252526;
+    border-color: #3e3e42;
+  }
+
+  .search-bar-input-wrapper:focus-within {
+    border-color: #0066ff;
+    box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.2);
+  }
+
+  .search-bar-input {
+    color: #e0e0e0;
+  }
+
+  .search-bar-input::placeholder {
+    color: #858585;
+  }
+
+  .search-bar-clear {
+    color: #858585;
+  }
+
+  .search-bar-clear:hover {
+    color: #e0e0e0;
+  }
+
+  .search-bar-hint {
+    border-left-color: #3e3e42;
+    color: #858585;
+  }
+
+  .search-results-dropdown {
+    background: #2d2d30;
+    border-color: #3e3e42;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+
+  .search-results-empty {
+    color: #858585;
+  }
+
+  .search-result-item {
+    border-bottom-color: #3e3e42;
+  }
+
+  .search-result-item:hover {
+    background-color: #3e3e42;
+  }
+
+  .search-result-item.selected {
+    background-color: #1e3a5f;
+  }
+
+  .result-name {
+    color: #e0e0e0;
+  }
+
+  .result-meta {
+    color: #858585;
+  }
+
+  .result-tab {
+    background: #3e3e42;
+    color: #e0e0e0;
+  }
+
+  .result-shortcut {
+    background: #3e3e42;
+    color: #b4b4b4;
+  }
+
+  .search-result-item.selected .result-shortcut {
+    background: #0066ff;
+    color: white;
+  }
+}

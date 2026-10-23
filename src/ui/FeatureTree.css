@@ -1,0 +1,258 @@
+/**
+ * BendCore Feature Tree Styles
+ */
+
+.feature-tree {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #f8f9fa;
+  border-right: 1px solid #dee2e6;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  user-select: none;
+}
+
+.feature-tree.loading {
+  align-items: center;
+  justify-content: center;
+  color: #6c757d;
+}
+
+.feature-tree-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #dee2e6;
+  background: white;
+}
+
+.feature-tree-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #212529;
+}
+
+.feature-tree-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.feature-tree-item {
+  margin-bottom: 2px;
+}
+
+.feature-tree-item-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  margin: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.feature-tree-item-content:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.feature-tree-item-content.selected {
+  background-color: #0066ff;
+  color: white;
+}
+
+.feature-tree-item-content.selected .feature-icon {
+  filter: brightness(1.2);
+}
+
+/* Expand/Collapse Toggle */
+.expand-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #495057;
+  cursor: pointer;
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+
+.expand-toggle:hover {
+  color: #212529;
+}
+
+.expand-toggle.expanded {
+  transform: rotate(90deg);
+}
+
+.expand-toggle-placeholder {
+  width: 20px;
+}
+
+/* Visibility Toggle */
+.visibility-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #6c757d;
+  cursor: pointer;
+  font-size: 12px;
+  transition: color 0.2s ease;
+}
+
+.visibility-toggle:hover {
+  color: #212529;
+}
+
+.visibility-toggle.hidden {
+  opacity: 0.5;
+}
+
+.feature-tree-item-content.selected .visibility-toggle {
+  color: white;
+}
+
+/* Icon */
+.feature-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* Name */
+.feature-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  font-weight: 500;
+}
+
+.feature-tree-item-content.selected .feature-name {
+  color: white;
+}
+
+/* Name Input (Rename) */
+.feature-name-input {
+  flex: 1;
+  padding: 2px 4px;
+  border: 1px solid #0066ff;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+}
+
+.feature-tree-item-content.selected .feature-name-input {
+  border-color: white;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+/* Children */
+.feature-tree-children {
+  margin-left: 12px;
+  border-left: 1px solid #dee2e6;
+}
+
+/* Context Menu */
+.context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 140px;
+  overflow: hidden;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  color: #212529;
+  font-size: 13px;
+}
+
+.context-menu-item:hover {
+  background-color: #f8f9fa;
+}
+
+.context-menu-item .icon {
+  font-size: 14px;
+  width: 16px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .feature-tree {
+    background: #1e1e1e;
+    border-right-color: #3e3e42;
+  }
+
+  .feature-tree-header {
+    background: #252526;
+    border-bottom-color: #3e3e42;
+  }
+
+  .feature-tree-header h3 {
+    color: #e0e0e0;
+  }
+
+  .feature-tree-item-content:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .feature-tree-item-content.selected {
+    background-color: #0066ff;
+    color: white;
+  }
+
+  .expand-toggle,
+  .visibility-toggle {
+    color: #858585;
+  }
+
+  .expand-toggle:hover,
+  .visibility-toggle:hover {
+    color: #e0e0e0;
+  }
+
+  .context-menu {
+    background: #2d2d30;
+    border-color: #3e3e42;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .context-menu-item {
+    color: #e0e0e0;
+  }
+
+  .context-menu-item:hover {
+    background-color: #3e3e42;
+  }
+
+  .feature-tree-children {
+    border-left-color: #3e3e42;
+  }
+}

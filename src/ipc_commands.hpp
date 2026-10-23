@@ -124,6 +124,11 @@ CommandResult get_material(const json& args);
 CommandResult get_materials_by_category(const json& args);
 CommandResult add_custom_material(const json& args);
 
+// Feature Tree & Search (Phase 31)
+CommandResult get_feature_tree(const json& args);
+CommandResult search_commands(const json& args);
+CommandResult get_shortcuts(const json& args);
+
 // Drawing
 CommandResult new_sheet(const json& args);
 CommandResult create_view(const json& args);

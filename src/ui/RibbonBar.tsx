@@ -4,10 +4,13 @@
  * Reference: BENDCORE_SPECIFICATION_FINAL_LOCKED.md Section 6
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import RibbonButton, { RibbonButtonGroup } from "./RibbonButton";
 import { RibbonTabBar } from "./RibbonTab";
 import TubeDialog, { TubeConfig } from "./TubeDialog";
+import SearchBar from "./SearchBar";
+import FeatureTree from "./FeatureTree";
+import { initializeShortcutListeners, formatShortcutForDisplay } from "./KeyboardShortcuts";
 
 export interface CommandHandler {
   (commandId: string, args?: Record<string, any>): Promise<void> | void;
@@ -61,6 +64,16 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   const [tubeDialogOpen, setTubeDialogOpen] = useState(false);
   const [selectedTubeConfig, setSelectedTubeConfig] = useState<TubeConfig | undefined>();
   const [showTechSpecs, setShowTechSpecs] = useState(false);
+  const [showFeatureTree, setShowFeatureTree] = useState(true);
+
+  // Initialize keyboard shortcuts on mount
+  useEffect(() => {
+    const commandHandler = (commandId: string) => {
+      // This will be called when keyboard shortcuts are triggered
+      // We'll pass it to the handleCommand logic below
+    };
+    initializeShortcutListeners(commandHandler);
+  }, []);
 
   const handleCommand = useCallback(
     (commandId: string) => {
@@ -673,12 +686,38 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
 
   return (
     <>
+      {/* Header with Search Bar */}
       <div className="bg-gray-50 border-b border-gray-400">
+        <div className="flex items-center gap-4 px-4 py-2 border-b border-gray-300">
+          <div className="flex-1 max-w-md">
+            <SearchBar onCommand={handleCommand} />
+          </div>
+          <div className="text-xs text-gray-500">Ctrl+K to search</div>
+        </div>
+
+        {/* Ribbon Tabs */}
         <RibbonTabBar
           activeTab={activeTab}
           onTabChange={setActiveTab}
           tabs={tabs}
         />
+      </div>
+
+      {/* Main Layout: Feature Tree + Content */}
+      <div className="flex flex-1">
+        {/* Left Sidebar: Feature Tree */}
+        {showFeatureTree && (
+          <div className="w-64 border-r border-gray-400 bg-gray-50">
+            <FeatureTree onCommand={handleCommand} onSelectFeature={(id) => {}} />
+          </div>
+        )}
+
+        {/* Right Content Area (placeholder for 3D viewport) */}
+        <div className="flex-1 overflow-auto">
+          <div className="p-4 text-gray-500">
+            3D Viewport and Properties (to be integrated)
+          </div>
+        </div>
       </div>
 
       {/* Tube Dialog */}

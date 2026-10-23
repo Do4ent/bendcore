@@ -5,7 +5,11 @@
 
 #include "ipc_commands.hpp"
 #include "bendcore/analysis.hpp"
+#include "bendcore/feature_tree.hpp"
+#include "bendcore/command_search.hpp"
+#include "bendcore/shortcuts.hpp"
 #include <cmath>
+#include <ctime>
 
 namespace bendcore {
 
@@ -69,6 +73,11 @@ void CommandRouter::register_default_handlers() {
   register_command("get-material", commands::get_material);
   register_command("get-materials-by-category", commands::get_materials_by_category);
   register_command("add-custom-material", commands::add_custom_material);
+
+  // FEATURE TREE & SEARCH (Phase 31)
+  register_command("get-feature-tree", commands::get_feature_tree);
+  register_command("search-commands", commands::search_commands);
+  register_command("get-shortcuts", commands::get_shortcuts);
 }
 
 // ============ COMMAND IMPLEMENTATIONS ============
@@ -511,6 +520,57 @@ CommandResult add_custom_material(const json& args) {
   return CommandResult{true, "Custom material added", json{
     {"id", mat.id},
     {"name", mat.name}
+  }};
+}
+
+// FEATURE TREE COMMANDS (Phase 31)
+
+CommandResult get_feature_tree(const json& args) {
+  using namespace bendcore;
+
+  auto& history = DesignHistory::instance();
+  json tree_json = history.to_json();
+
+  return CommandResult{true, "Feature tree retrieved", json{
+    {"root", tree_json.value("root", json::object())},
+    {"version", tree_json.value("version", 1)}
+  }};
+}
+
+// COMMAND SEARCH (Phase 31)
+
+CommandResult search_commands(const json& args) {
+  using namespace bendcore;
+
+  std::string query = args.value("query", "");
+  int max_results = args.value("maxResults", 10);
+
+  auto& index = CommandIndex::instance();
+  auto results = index.search(query, max_results);
+
+  json results_array = json::array();
+  for (const auto& entry : results) {
+    results_array.push_back(entry.to_json());
+  }
+
+  return CommandResult{true, "Commands searched", json{
+    {"results", results_array},
+    {"count", results_array.size()},
+    {"query", query}
+  }};
+}
+
+// SHORTCUTS COMMAND (Phase 31)
+
+CommandResult get_shortcuts(const json& args) {
+  using namespace bendcore;
+
+  auto& manager = ShortcutManager::instance();
+  json shortcuts_json = manager.to_json();
+
+  return CommandResult{true, "Shortcuts retrieved", json{
+    {"shortcuts", shortcuts_json},
+    {"count", shortcuts_json.size()}
   }};
 }
 

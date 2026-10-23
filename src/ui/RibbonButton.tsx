@@ -5,6 +5,7 @@
 
 import React, { ReactNode } from "react";
 import { getColorHex } from "./ColorScheme";
+import { getShortcutForCommand, formatShortcutForDisplay } from "./KeyboardShortcuts";
 
 export interface RibbonButtonProps {
   id: string;
@@ -30,6 +31,8 @@ const RibbonButton: React.FC<RibbonButtonProps> = ({
   size = "medium",
 }) => {
   const bgColor = getColorHex(colorCategory);
+  const shortcut = formatShortcutForDisplay(id);
+  const fullTooltip = shortcut ? `${tooltip || label} (${shortcut})` : (tooltip || label);
 
   const sizeStyles = {
     small: "w-12 h-12",
@@ -42,7 +45,7 @@ const RibbonButton: React.FC<RibbonButtonProps> = ({
       id={`ribbon-btn-${id}`}
       onClick={() => !disabled && onClick(id)}
       disabled={disabled}
-      title={tooltip || label}
+      title={fullTooltip}
       className={`
         ${sizeStyles[size]}
         flex flex-col items-center justify-center
