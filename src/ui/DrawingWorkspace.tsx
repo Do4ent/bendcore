@@ -5,13 +5,15 @@
  * снять выпуск — роль «Выпускающий» или администратор.
  *
  * Ассоциативные виды: история версий, откат, сравнение версий.
+ * 2D Sketches (v7.9): SketchEditor интеграция для добавления аннотаций на чертежи.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { CoreClient } from './core/coreClient';
 import { drawingToSvg, STANDARD_NAME } from './core/drawingSvg';
 import { t } from './core/i18n';
-import type { AssociativeDrawing, AssociativityStatus, DrawingData, DrawingVersion, Feed, PathItem, ReleaseCheckResult } from './core/types';
+import type { AssociativeDrawing, AssociativityStatus, DrawingData, DrawingVersion, Feed, PathItem, ReleaseCheckResult, Sketch2D, SketchElement, SketchDimension } from './core/types';
 import DrawingVersionPanel from './DrawingVersionPanel';
+import SketchEditor from './SketchEditor';
 import './panels.css';
 
 export interface DrawingTube {
@@ -69,6 +71,12 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
   // Ассоциативные виды
   const [associativeDrawing, setAssociativeDrawing] = useState<AssociativeDrawing | null>(null);
   const [associativityStatus, setAssociativityStatus] = useState<AssociativityStatus>('not_applicable');
+
+  // 2D Sketches (v7.9)
+  const [sketches, setSketches] = useState<Sketch2D[]>([]);
+  const [showSketchEditor, setShowSketchEditor] = useState(false);
+  const [editingSketch, setEditingSketch] = useState<Sketch2D | null>(null);
+  const [sketchError, setSketchError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -165,6 +173,54 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
     if (!FORMATS[s].includes(format)) setFormat(s === 'ANSI' ? 'ANSI B' : 'A3');
   };
 
+  // Handlers for sketches
+  const handleAddSketch = () => {
+    setEditingSketch(null);
+    setShowSketchEditor(true);
+    setSketchError(null);
+  };
+
+  const handleSketchSave = async (elements: SketchElement[], dimensions: SketchDimension[]) => {
+    try {
+      const sketchName = `Sketch_${active + 1}_${Date.now()}`;
+      const result = await core.addSketch({
+        sheet_number: active + 1,
+        name: sketchName,
+        elements,
+        dimensions,
+        author: user,
+      });
+
+      if (result.valid) {
+        const newSketch: Sketch2D = {
+          id: `sketch_${Date.now()}`,
+          sheet_number: active + 1,
+          name: sketchName,
+          elements,
+          dimensions,
+          visible: true,
+          locked: false,
+          created_by: user,
+          created_at: new Date().toISOString(),
+          modified_at: new Date().toISOString(),
+        };
+        setSketches((prev) => [...prev, newSketch]);
+        setShowSketchEditor(false);
+        setError(null);
+      } else {
+        setSketchError(result.errors?.join('; ') ?? 'Sketch validation failed');
+      }
+    } catch (e) {
+      setSketchError((e as Error).message);
+    }
+  };
+
+  const handleSketchCancel = () => {
+    setShowSketchEditor(false);
+    setEditingSketch(null);
+    setSketchError(null);
+  };
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', height: '100%', gap: '8px', padding: '8px' }}>
       <section className="bc-panel" aria-label={t('draw.title')} style={{ height: '100%' }}>
@@ -220,6 +276,11 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
             ))}
           </div>
         </div>
+        {!readOnly && (
+          <button className="bc-btn" onClick={handleAddSketch} disabled={!sheet}>
+            + {t('sketch.add') ?? 'Add Sketch'}
+          </button>
+        )}
         {readOnly ? (
           <button
             className="bc-btn"
@@ -312,6 +373,82 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
             console.log('Сравнение версий', rev1, 'и', rev2);
           }}
         />
+      )}
+
+      {/* Sketch Editor Modal */}
+      {showSketchEditor && (
+        <div
+          className="bc-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Sketch Editor"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000 }}
+        >
+          <div
+            className="bc-panel bc-modal"
+            style={{
+              width: 'min(1000px, calc(100vw - 32px))',
+              height: 'min(700px, calc(100vh - 32px))',
+              margin: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {sketchError && <div className="bc-banner error" style={{ margin: 12 }}>{sketchError}</div>}
+            <SketchEditor
+              sheetNumber={active + 1}
+              sketchName={editingSketch?.name ?? `Sketch_${active + 1}`}
+              initialElements={editingSketch?.elements}
+              initialDimensions={editingSketch?.dimensions}
+              onSave={handleSketchSave}
+              onCancel={handleSketchCancel}
+              isDarkMode={false}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Sketch List Panel */}
+      {sketches.length > 0 && (
+        <div
+          className="bc-panel"
+          style={{
+            position: 'absolute',
+            right: 300,
+            top: 100,
+            width: 200,
+            maxHeight: 300,
+            overflowY: 'auto',
+            zIndex: 1000,
+          }}
+        >
+          <div className="bc-header">
+            <h4 style={{ margin: 0 }}>Sketches ({sketches.length})</h4>
+          </div>
+          <div style={{ padding: '8px' }}>
+            {sketches
+              .filter((s) => s.sheet_number === active + 1)
+              .map((sketch) => (
+                <div
+                  key={sketch.id}
+                  style={{
+                    padding: '6px',
+                    marginBottom: '4px',
+                    backgroundColor: '#f5f5f5',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => {
+                    setEditingSketch(sketch);
+                    setShowSketchEditor(true);
+                  }}
+                >
+                  {sketch.name} ({sketch.elements.length + sketch.dimensions.length} items)
+                </div>
+              ))}
+          </div>
+        </div>
       )}
     </div>
   );
