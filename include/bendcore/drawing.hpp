@@ -255,6 +255,48 @@ struct DrawingSheet {
     std::map<std::string, std::string> title;  // поля штампа, включая «Масштаб»
     bool not_for_production = false;
     std::vector<std::string> warnings;         // нестандартный масштаб, нужен разрыв, больший формат
+
+    // Слои и видимость (Q2 2027, Task 3)
+    std::vector<Layer> layers;         // все слои на листе
+    LayerVisibility layer_visibility;  // текущее состояние видимости
+};
+
+// ---------- Слои и управление видимостью (Q2 2027) ----------
+// Слои группируют элементы чертежа по типам: контур, размеры, оси, разметка, вспомогательная геометрия
+// Каждый слой имеет независимую видимость, блокировку, цвет и имя
+
+enum class LayerType {
+    Contour = 0,               // контур трубы (Polyline2, Circle2)
+    Dimensions = 1,            // размеры (Dim2)
+    Axis = 2,                  // оси и оси вращения
+    Markup = 3,                // разметка (метки гибов, номера)
+    ConstructionGeometry = 4   // вспомогательная геометрия (штриховка, базовые линии)
+};
+
+const char* layer_name(LayerType type);  // "Контур", "Размеры", "Оси", "Разметка", "Вспомогательное"
+const char* layer_color(LayerType type); // "#000000", "#0000FF", "#FF0000", etc
+
+struct Layer {
+    LayerType type;
+    std::string name;
+    bool visible = true;
+    bool locked = false;
+    std::string color = "#000000";  // hex color
+    int element_count = 0;          // сколько элементов в слое
+};
+
+// Статус видимости слоёв для чертежа
+struct LayerVisibility {
+    std::map<int, bool> layer_visibility;  // LayerType -> visible
+
+    bool is_visible(LayerType type) const {
+        auto it = layer_visibility.find(static_cast<int>(type));
+        return it == layer_visibility.end() ? true : it->second;
+    }
+
+    void set_visible(LayerType type, bool visible) {
+        layer_visibility[static_cast<int>(type)] = visible;
+    }
 };
 
 // ---------- 2D-эскизы на чертежах (v7.9) ----------
@@ -316,7 +358,54 @@ struct SketchValidationResult {
     std::vector<std::string> warnings;
 };
 
-// ---------- Ассоциативность (версионирование и история) ----------
+// ---------- Комментарии на чертежах (v7.10) ----------
+// Система замечаний и аннотаций, привязанные к позициям на листах
+// Комментарии хранятся в DrawingVersion и восстанавливаются при откате версии
+
+enum class CommentStatus { Open, Resolved, NeedsRework, Archived };
+
+const char* comment_status_name(CommentStatus s);
+CommentStatus comment_status_from(const std::string& s);
+
+// Ответ на комментарий в цепочке обсуждения
+struct CommentReply {
+    std::string id;           // уникальный идентификатор ответа (UUID)
+    std::string text;         // текст ответа
+    std::string author;       // автор ответа (username)
+    std::string timestamp;    // ISO 8601 timestamp создания
+};
+
+// Комментарий на чертеже, привязан к позиции на листе
+// Может содержать несколько ответов (цепочка обсуждения)
+struct Comment {
+    std::string id;                      // уникальный идентификатор (UUID)
+    int sheet_number = 1;                // номер листа, на котором находится комментарий
+    Vec2 position{0, 0};                 // позиция на листе (мм, от начала координат листа)
+    std::string text;                    // текст комментария
+    std::string author;                  // автор комментария (username)
+    std::string created_at;              // ISO 8601 timestamp создания
+    std::string modified_at;             // ISO 8601 timestamp последнего изменения
+    CommentStatus status = CommentStatus::Open;   // статус: открыт/разрешён/требует правки
+    std::vector<CommentReply> replies;   // история ответов и обсуждений
+};
+
+// Вспомогательные функции для работы с комментариями
+Comment make_comment(int sheet_number, const Vec2& position, const std::string& text,
+                     const std::string& author, const std::string& id = "");
+CommentReply make_reply(const std::string& text, const std::string& author,
+                       const std::string& id = "");
+void add_reply_to_comment(Comment& comment, const CommentReply& reply);
+void change_comment_status(Comment& comment, CommentStatus new_status);
+
+// Фильтрование комментариев по статусу
+std::vector<Comment> filter_comments_by_status(
+    const std::vector<Comment>& comments,
+    CommentStatus status);
+std::vector<Comment> filter_comments_by_sheet(
+    const std::vector<Comment>& comments,
+    int sheet_number);
+
+// Ассоциативность (версионирование и история) ----------
 // Отпечаток пути для детектирования изменений (SHA256)
 struct PathFingerprint {
     std::string sha256;
@@ -328,6 +417,48 @@ struct PathFingerprint {
 // Статус ассоциативного чертежа
 enum class DrawingAssociativity { Fresh, Stale, Broken, NotApplicable };
 const char* associativity_name(DrawingAssociativity a);
+
+// ---------- Ручные размеры (2.1-2.7) ----------
+// Запись о ручном размере (не пересчитывается при изменении пути)
+struct ManualDimension {
+    std::string id;                  // уникальный идентификатор
+    Vec2 position{};                 // позиция на листе (мм)
+    std::string text;                // текст размера
+    bool reference = false;          // справочный размер (со «*»)
+    std::string author;              // кто создал
+    std::string created_at;          // ISO 8601 timestamp
+};
+
+// Таблица ручных размеров на листе чертежа
+struct ManualDimensionTable {
+    std::vector<ManualDimension> dimensions;
+
+    // Найти размер по id
+    ManualDimension* find(const std::string& id) {
+        for (auto& d : dimensions) {
+            if (d.id == id) return &d;
+        }
+        return nullptr;
+    }
+
+    // Удалить размер
+    bool remove(const std::string& id) {
+        auto it = std::find_if(dimensions.begin(), dimensions.end(),
+                              [&](const ManualDimension& d) { return d.id == id; });
+        if (it != dimensions.end()) {
+            dimensions.erase(it);
+            return true;
+        }
+        return false;
+    }
+};
+
+// Результат валидации новых размеров
+struct ManualDimensionValidation {
+    bool valid = true;
+    std::vector<std::string> conflicts;     // список конфликтов с авто-размерами
+    std::vector<std::string> out_of_bounds;  // размеры за пределами листа
+};
 
 // Состояние ассоциативного чертежа
 struct AssociativeDrawingState {
@@ -346,6 +477,8 @@ struct DrawingVersion {
     PathFingerprint fingerprint;
     std::vector<DrawingSheet> sheets;
     std::vector<Sketch2D> sketches;  // 2D эскизы на чертежах
+    std::map<int, ManualDimensionTable> manual_dimensions;  // ручные размеры по номерам листов
+    std::vector<Comment> comments;   // комментарии и замечания на чертежах (v7.10)
     std::string timestamp;           // ISO 8601
     std::string author;
     std::string comment;             // "исправлена развёртка", "добавлены виды"
@@ -522,5 +655,41 @@ Sketch2D make_sketch(int sheet_number = 1, const std::string& name = "Sketch",
 
 // Получить границы (bbox) эскиза в миллиметрах листа
 Box2 sketch_bbox(const Sketch2D& sketch);
+
+// ---------- Функции для работы с ручными размерами (2.1-2.7) ----------
+
+// Валидировать новый ручной размер (проверить конфликты и границы)
+ManualDimensionValidation validate_manual_dimension(
+    const ManualDimension& dim,
+    const DrawingSheet& sheet,
+    const ManualDimensionTable& existing);
+
+// Добавить ручной размер на лист (с валидацией)
+// Возвращает id нового размера или пустую строку при ошибке
+std::string add_manual_dimension(
+    DrawingSheet& sheet,
+    ManualDimensionTable& table,
+    const Vec2& position,
+    const std::string& text,
+    bool reference,
+    const std::string& author);
+
+// Обновить текст ручного размера
+bool update_manual_dimension_text(
+    ManualDimensionTable& table,
+    const std::string& id,
+    const std::string& new_text);
+
+// Переместить ручной размер
+bool move_manual_dimension(
+    DrawingSheet& sheet,
+    ManualDimensionTable& table,
+    const std::string& id,
+    const Vec2& new_position);
+
+// Удалить ручной размер
+bool remove_manual_dimension(
+    ManualDimensionTable& table,
+    const std::string& id);
 
 }  // namespace bendcore::drawing

@@ -780,6 +780,8 @@ std::vector<DrawingSheet> make_part_drawing(const DrawingInput& in) {
         ds.frame = make_sheet(in.standard, fmt_, first);
         ds.not_for_production = in.has_errors;
         ds.title = in.title;
+        ds.layers = make_default_layers();
+        ds.layer_visibility = make_layer_visibility();
         return ds;
     };
 
@@ -1425,6 +1427,58 @@ Sketch2D make_sketch(int sheet_number, const std::string& name, const std::strin
     return sketch;
 }
 
+// ---------- Функции для работы со слоями (Q2 2027, Task 3) ----------
+
+const char* layer_name(LayerType type) {
+    switch (type) {
+        case LayerType::Contour: return "Контур";
+        case LayerType::Dimensions: return "Размеры";
+        case LayerType::Axis: return "Оси";
+        case LayerType::Markup: return "Разметка";
+        case LayerType::ConstructionGeometry: return "Вспомогательное";
+    }
+    return "Неизвестно";
+}
+
+const char* layer_color(LayerType type) {
+    switch (type) {
+        case LayerType::Contour: return "#000000";           // чёрный
+        case LayerType::Dimensions: return "#0000FF";         // синий
+        case LayerType::Axis: return "#FF0000";              // красный
+        case LayerType::Markup: return "#008000";            // зелёный
+        case LayerType::ConstructionGeometry: return "#A9A9A9"; // серый
+    }
+    return "#000000";
+}
+
+// Создать слои по умолчанию для чертежного листа
+std::vector<Layer> make_default_layers() {
+    std::vector<Layer> layers;
+
+    for (int i = 0; i <= 4; ++i) {
+        LayerType type = static_cast<LayerType>(i);
+        Layer layer;
+        layer.type = type;
+        layer.name = layer_name(type);
+        layer.color = layer_color(type);
+        layer.visible = true;
+        layer.locked = false;
+        layer.element_count = 0;
+        layers.push_back(layer);
+    }
+
+    return layers;
+}
+
+// Инициализировать видимость слоёв (все видимы по умолчанию)
+LayerVisibility make_layer_visibility() {
+    LayerVisibility vis;
+    for (int i = 0; i <= 4; ++i) {
+        vis.set_visible(static_cast<LayerType>(i), true);
+    }
+    return vis;
+}
+
 Box2 sketch_bbox(const Sketch2D& sketch) {
     Box2 bbox;
 
@@ -1459,6 +1513,263 @@ Box2 sketch_bbox(const Sketch2D& sketch) {
     }
 
     return bbox;
+}
+
+// ---------- Функции для работы с ручными размерами (2.1-2.7) ----------
+
+// Сгенерировать уникальный id для размера
+static std::string generate_dimension_id() {
+    static unsigned int counter = 0;
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "manual_dim_%u_%lld",
+                 ++counter,
+                 std::chrono::system_clock::now().time_since_epoch().count());
+    return std::string(buf);
+}
+
+// Получить текущий ISO 8601 timestamp
+static std::string now_timestamp() {
+    auto now = std::time(nullptr);
+    auto tm = *std::gmtime(&now);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm);
+    return std::string(buf);
+}
+
+// Проверить, находится ли точка внутри прямоугольника с отступом
+static bool is_point_in_sheet(const Vec2& p, const Rect& drawable, double margin = 2.0) {
+    return p[0] >= drawable.x0 + margin &&
+           p[0] <= drawable.x1 - margin &&
+           p[1] >= drawable.y0 + margin &&
+           p[1] <= drawable.y1 - margin;
+}
+
+// Проверить расстояние между двумя точками
+static double distance(const Vec2& a, const Vec2& b) {
+    double dx = a[0] - b[0];
+    double dy = a[1] - b[1];
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+ManualDimensionValidation validate_manual_dimension(
+    const ManualDimension& dim,
+    const DrawingSheet& sheet,
+    const ManualDimensionTable& existing) {
+
+    ManualDimensionValidation result;
+    result.valid = true;
+
+    // Проверка: размер находится в пределах листа (с отступом 2 мм)
+    if (!is_point_in_sheet(dim.position, sheet.frame.drawable, 2.0)) {
+        result.valid = false;
+        result.out_of_bounds.push_back(dim.text);
+    }
+
+    // Проверка: нет конфликтов с существующими ручными размерами (расстояние < 5 мм)
+    const double min_distance = 5.0;
+    for (const auto& existing_dim : existing.dimensions) {
+        if (distance(dim.position, existing_dim.position) < min_distance) {
+            result.valid = false;
+            result.conflicts.push_back(existing_dim.text);
+        }
+    }
+
+    // Проверка: нет конфликтов с авто-размерами (в зоне views)
+    for (const auto& view : sheet.views) {
+        for (const auto& auto_dim : view.geom.dims) {
+            // Центр автоматического размера
+            Vec2 auto_dim_center = {(auto_dim.a[0] + auto_dim.b[0]) / 2.0,
+                                   (auto_dim.a[1] + auto_dim.b[1]) / 2.0};
+            if (distance(dim.position, auto_dim_center) < 8.0) {
+                result.valid = false;
+                result.conflicts.push_back("авто-размер: " + auto_dim.text);
+            }
+        }
+    }
+
+    return result;
+}
+
+std::string add_manual_dimension(
+    DrawingSheet& sheet,
+    ManualDimensionTable& table,
+    const Vec2& position,
+    const std::string& text,
+    bool reference,
+    const std::string& author) {
+
+    // Создать новый размер
+    ManualDimension dim;
+    dim.id = generate_dimension_id();
+    dim.position = position;
+    dim.text = text;
+    dim.reference = reference;
+    dim.author = author;
+    dim.created_at = now_timestamp();
+
+    // Валидировать
+    auto validation = validate_manual_dimension(dim, sheet, table);
+    if (!validation.valid) {
+        return "";  // Ошибка валидации
+    }
+
+    // Добавить в таблицу
+    table.dimensions.push_back(dim);
+    return dim.id;
+}
+
+bool update_manual_dimension_text(
+    ManualDimensionTable& table,
+    const std::string& id,
+    const std::string& new_text) {
+
+    auto* dim = table.find(id);
+    if (!dim) return false;
+
+    dim->text = new_text;
+    return true;
+}
+
+bool move_manual_dimension(
+    DrawingSheet& sheet,
+    ManualDimensionTable& table,
+    const std::string& id,
+    const Vec2& new_position) {
+
+    auto* dim = table.find(id);
+    if (!dim) return false;
+
+    // Проверить новую позицию
+    if (!is_point_in_sheet(new_position, sheet.frame.drawable, 2.0)) {
+        return false;
+    }
+
+    // Проверить конфликты с другими размерами
+    const double min_distance = 5.0;
+    for (auto& other_dim : table.dimensions) {
+        if (other_dim.id != id && distance(new_position, other_dim.position) < min_distance) {
+            return false;
+        }
+    }
+
+    dim->position = new_position;
+    return true;
+}
+
+bool remove_manual_dimension(
+    ManualDimensionTable& table,
+    const std::string& id) {
+
+    return table.remove(id);
+}
+
+// ---------- Комментарии (4.1-4.4) ----------
+
+// Генерировать уникальный ID для комментария
+static std::string generate_comment_id() {
+    static unsigned int counter = 0;
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "comment_%u_%lld",
+                 ++counter,
+                 std::chrono::system_clock::now().time_since_epoch().count());
+    return std::string(buf);
+}
+
+// Генерировать уникальный ID для ответа на комментарий
+static std::string generate_reply_id() {
+    static unsigned int counter = 0;
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "reply_%u_%lld",
+                 ++counter,
+                 std::chrono::system_clock::now().time_since_epoch().count());
+    return std::string(buf);
+}
+
+// Конвертировать статус комментария в строку
+const char* comment_status_name(CommentStatus s) {
+    switch (s) {
+        case CommentStatus::Open:
+            return "open";
+        case CommentStatus::Resolved:
+            return "resolved";
+        case CommentStatus::NeedsRework:
+            return "needs_rework";
+        case CommentStatus::Archived:
+            return "archived";
+    }
+    return "open";
+}
+
+// Конвертировать строку в статус комментария
+CommentStatus comment_status_from(const std::string& s) {
+    if (s == "resolved") return CommentStatus::Resolved;
+    if (s == "needs_rework") return CommentStatus::NeedsRework;
+    if (s == "archived") return CommentStatus::Archived;
+    return CommentStatus::Open;
+}
+
+// Создать новый комментарий
+Comment make_comment(int sheet_number, const Vec2& position, const std::string& text,
+                     const std::string& author, const std::string& id) {
+    Comment c;
+    c.id = id.empty() ? generate_comment_id() : id;
+    c.sheet_number = sheet_number;
+    c.position = position;
+    c.text = text;
+    c.author = author;
+    c.created_at = now_timestamp();
+    c.modified_at = c.created_at;
+    c.status = CommentStatus::Open;
+    return c;
+}
+
+// Создать ответ на комментарий
+CommentReply make_reply(const std::string& text, const std::string& author,
+                       const std::string& id) {
+    CommentReply r;
+    r.id = id.empty() ? generate_reply_id() : id;
+    r.text = text;
+    r.author = author;
+    r.timestamp = now_timestamp();
+    return r;
+}
+
+// Добавить ответ к комментарию
+void add_reply_to_comment(Comment& comment, const CommentReply& reply) {
+    comment.replies.push_back(reply);
+    comment.modified_at = now_timestamp();
+}
+
+// Изменить статус комментария
+void change_comment_status(Comment& comment, CommentStatus new_status) {
+    comment.status = new_status;
+    comment.modified_at = now_timestamp();
+}
+
+// Фильтровать комментарии по статусу
+std::vector<Comment> filter_comments_by_status(
+    const std::vector<Comment>& comments,
+    CommentStatus status) {
+    std::vector<Comment> result;
+    for (const auto& c : comments) {
+        if (c.status == status) {
+            result.push_back(c);
+        }
+    }
+    return result;
+}
+
+// Фильтровать комментарии по номеру листа
+std::vector<Comment> filter_comments_by_sheet(
+    const std::vector<Comment>& comments,
+    int sheet_number) {
+    std::vector<Comment> result;
+    for (const auto& c : comments) {
+        if (c.sheet_number == sheet_number) {
+            result.push_back(c);
+        }
+    }
+    return result;
 }
 
 }  // namespace bendcore::drawing
