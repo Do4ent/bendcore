@@ -191,3 +191,31 @@ export interface DrawingChanges {
   preset_changed: boolean;
   format_changed: boolean;
 }
+
+// ----- пакетный вывод (БОМ, спецификация) -----
+export interface BOMRow {
+  position: number;
+  designation: string;
+  od: number;
+  wall: number;
+  quantity: number;
+  tube_ids: string[];
+}
+
+export interface SpecificationRow {
+  position: number;
+  designation: string;
+  description: string;
+  material: string;
+  quantity: number;
+  remark: string;
+}
+
+export interface AssemblyDrawingInput {
+  tubes: Array<{ id: string; path: PathItem[]; od: number; wall: number; title: Record<string, string> }>;
+  standard?: string;
+  format?: string;
+  tubes_per_unfold_sheet?: number;
+  sort_by_position?: boolean;
+  group_by_material?: boolean;
+}

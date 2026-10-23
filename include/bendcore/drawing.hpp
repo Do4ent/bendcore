@@ -347,4 +347,49 @@ DrawingChanges detect_changes(
 // если помещается без уменьшения масштаба видов, иначе на листе 2 («Виды раскладываются по листам», 7.1).
 std::vector<DrawingSheet> make_part_drawing(const DrawingInput& in);
 
+// ---------- Пакетный вывод (сборочный чертёж) ----------
+// БОМ строка (позиция, обозначение, ОД, стенка, кол-во, трубы)
+struct BOMRow {
+    int position = 0;
+    std::string designation;
+    double od = 0, wall = 0;
+    int quantity = 1;
+    std::vector<std::string> tube_ids;  // какие трубы в этой позиции
+};
+
+// Входные данные для сборочного чертежа (все трубы)
+struct AssemblyDrawingInput {
+    std::vector<std::pair<std::string, DrawingInput>> tubes;  // (id, input)
+    Standard standard = Standard::GOST;
+    std::string format = "A3";
+    int tubes_per_unfold_sheet = 4;  // 2x2 сетка
+    bool sort_by_position = true;
+    bool group_by_material = false;
+};
+
+// Строка спецификации (позиция, обозначение, материал, кол-во, примечание)
+struct SpecificationRow {
+    int position = 0;
+    std::string designation;
+    std::string description;
+    std::string material;
+    double quantity = 1;
+    std::string remark;
+};
+
+// Опции спецификации
+struct SpecificationOptions {
+    bool group_by_material = false;
+    bool sort_by_od = false;
+    std::string title = "Спецификация";
+};
+
+// Сборочный чертёж со всеми трубами: лист 1 = БОМ, листы 2+ = развёртки
+std::vector<DrawingSheet> make_assembly_drawing(const AssemblyDrawingInput& in);
+
+// Таблица спецификации (позиции с обозначениями и кол-вом)
+Table create_specification_table(
+    const std::vector<BOMRow>& bom,
+    const SpecificationOptions& opt = {});
+
 }  // namespace bendcore::drawing

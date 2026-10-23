@@ -136,4 +136,9 @@ export class CoreClient {
   restoreVersion(tubeId: string, revision: number) {
     return this.call<DrawingResult>('drawing.restore', { tube_id: tubeId, revision });
   }
+
+  // Пакетный вывод (сборочный чертёж)
+  assemblyDrawing(args: Record<string, unknown>) {
+    return this.call<DrawingResult>('drawing.assembly', args);
+  }
 }

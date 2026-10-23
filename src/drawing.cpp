@@ -1096,4 +1096,128 @@ void AssociativeDrawing::revert_to(int revision_number) {
     }
 }
 
+// ---------- Пакетный вывод (сборочный чертёж) ----------
+
+std::vector<DrawingSheet> make_assembly_drawing(const AssemblyDrawingInput& in) {
+    if (in.tubes.empty()) {
+        throw std::invalid_argument("assembly drawing requires at least one tube");
+    }
+
+    std::vector<DrawingSheet> out;
+
+    // Генерируем БОМ (одна строка на каждую уникальную трубу)
+    std::vector<BOMRow> bom;
+    int position = 1;
+    for (const auto& [tube_id, input] : in.tubes) {
+        BOMRow row;
+        row.position = position++;
+        row.designation = input.title.count("Обозначение") ? input.title.at("Обозначение") : "TUBE";
+        row.od = input.od;
+        row.wall = input.wall;
+        row.quantity = 1;
+        row.tube_ids.push_back(tube_id);
+        bom.push_back(row);
+    }
+
+    // Лист 1: БОМ
+    {
+        DrawingSheet sheet1;
+        sheet1.number = 1;
+        sheet1.standard = in.standard;
+        sheet1.projection = projection_method(in.standard);
+        sheet1.frame = make_sheet(in.standard, format_by_name(in.format), true);
+        sheet1.title["Масштаб"] = "1:1";
+
+        // Таблица БОМ
+        auto bom_table = create_specification_table(bom, {});
+        PlacedTable pt;
+        pt.table = bom_table;
+        pt.top_left = {20, sheet1.frame.drawable.y1 - 200};
+        pt.width = sheet1.frame.drawable.w() - 40;
+        sheet1.tables.push_back(pt);
+
+        out.push_back(sheet1);
+    }
+
+    // Листы 2+: развёртки по 4 шт на листе (2x2)
+    std::vector<std::vector<DrawingSheet>> unfold_sheets_by_tube;
+    for (const auto& [tube_id, input] : in.tubes) {
+        auto sheets = make_part_drawing(input);
+        unfold_sheets_by_tube.push_back(sheets);
+    }
+
+    // Раскладка развёрток по листам
+    int sheet_num = 2;
+    size_t tube_idx = 0;
+    while (tube_idx < unfold_sheets_by_tube.size()) {
+        DrawingSheet assembly_sheet;
+        assembly_sheet.number = sheet_num;
+        assembly_sheet.standard = in.standard;
+        assembly_sheet.projection = projection_method(in.standard);
+        assembly_sheet.frame = make_sheet(in.standard, format_by_name(in.format), false);
+        assembly_sheet.title["Масштаб"] = "1:1";
+        assembly_sheet.title["Лист"] = std::to_string(sheet_num);
+
+        // Раскладка на 2x2 сетку
+        double x_start = assembly_sheet.frame.drawable.x0 + 10;
+        double y_start = assembly_sheet.frame.drawable.y1 - 10;
+        double cell_w = (assembly_sheet.frame.drawable.w() - 30) / 2;
+        double cell_h = (assembly_sheet.frame.drawable.h() - 30) / 2;
+
+        int pos = 0;  // 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
+        while (pos < in.tubes_per_unfold_sheet && tube_idx < unfold_sheets_by_tube.size()) {
+            int row = pos / 2;
+            int col = pos % 2;
+            double x = x_start + col * cell_w;
+            double y = y_start - row * cell_h;
+
+            // Копируем развёртку (только первый лист из многих)
+            if (!unfold_sheets_by_tube[tube_idx].empty()) {
+                const auto& unfold = unfold_sheets_by_tube[tube_idx][0];
+                for (const auto& view : unfold.views) {
+                    PlacedView pv = view;
+                    pv.origin = {x + view.origin[0], y - view.origin[1]};
+                    assembly_sheet.views.push_back(pv);
+                }
+            }
+
+            tube_idx++;
+            pos++;
+        }
+
+        assembly_sheet.count = sheet_num;  // будет обновлено в конце
+        out.push_back(assembly_sheet);
+        sheet_num++;
+    }
+
+    // Обновить номера листов и счётчик
+    for (auto& sheet : out) {
+        sheet.count = out.size();
+    }
+
+    return out;
+}
+
+Table create_specification_table(
+    const std::vector<BOMRow>& bom,
+    const SpecificationOptions& opt) {
+
+    Table t;
+    t.title = opt.title;
+    t.header = {"Поз.", "Обозначение", "Материал", "Кол-во", "Примечание"};
+
+    // Заполнить строки спецификации
+    for (const auto& row : bom) {
+        t.rows.push_back({
+            std::to_string(row.position),
+            row.designation,
+            std::string(),  // материал (пусто для труб)
+            std::to_string(row.quantity),
+            std::string()   // примечание (пусто)
+        });
+    }
+
+    return t;
+}
+
 }  // namespace bendcore::drawing

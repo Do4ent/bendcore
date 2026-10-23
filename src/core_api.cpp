@@ -527,6 +527,64 @@ Core::Core() : state_(new State) {
             }}
         };
     };
+
+    // ----- сборочный чертёж (пакетный вывод) -----
+    c["drawing.assembly"] = [](const json& a) {
+        drawing::AssemblyDrawingInput in;
+        in.standard = standard_from(str(a, "standard", "GOST"));
+        in.format = str(a, "format", "A3");
+        in.tubes_per_unfold_sheet = static_cast<int>(num(a, "tubes_per_unfold_sheet", 4));
+        in.sort_by_position = flag(a, "sort_by_position", true);
+        in.group_by_material = flag(a, "group_by_material", false);
+
+        // Загрузить массив труб
+        if (!a.contains("tubes") || !a.at("tubes").is_array()) {
+            throw UserError("нет поля tubes или это не массив");
+        }
+        const auto& tubes_arr = a.at("tubes");
+        for (const auto& tube_json : tubes_arr) {
+            std::string tube_id = str(tube_json, "id", "");
+            drawing::DrawingInput input;
+            input.path = path_from_json(need(tube_json, "path"));
+            input.od = num(tube_json, "od", 0);
+            input.wall = num(tube_json, "wall", 0);
+            input.standard = in.standard;
+            input.format = in.format;
+            input.preset = str(tube_json, "preset", "minimal") == "full" ? drawing::Preset::Full : drawing::Preset::Minimal;
+            const std::string dm = str(tube_json, "dims", "S");
+            input.dims = dm == "L" ? drawing::DimMode::L : dm == "table" ? drawing::DimMode::TableOnly : drawing::DimMode::S;
+            input.precision = static_cast<int>(num(tube_json, "precision", 1));
+            input.has_errors = flag(tube_json, "has_errors", false);
+            if (tube_json.contains("title")) input.title = tube_json.at("title").get<std::map<std::string, std::string>>();
+
+            in.tubes.push_back({tube_id, input});
+        }
+
+        const auto sheets = drawing::make_assembly_drawing(in);
+        json out_sheets = json::array();
+        for (const auto& ds : sheets) {
+            json views = json::array();
+            for (const auto& v : ds.views)
+                views.push_back({{"id", v.id}, {"kind", kind_name(v.kind)}, {"label", v.label}, {"scale", v.scale},
+                                 {"origin", vec2_json(v.origin)}, {"geom", geometry_json(v.geom)}});
+            json tables = json::array();
+            for (const auto& t : ds.tables)
+                tables.push_back({{"table", table_json(t.table)}, {"top_left", vec2_json(t.top_left)}, {"width", t.width}});
+            out_sheets.push_back({{"number", ds.number},
+                                  {"count", ds.count},
+                                  {"standard", str(a, "standard", "GOST")},
+                                  {"projection", ds.projection == drawing::Projection::FirstAngle ? "first" : "third"},
+                                  {"format", {{"name", ds.frame.format.name}, {"w", ds.frame.format.w}, {"h", ds.frame.format.h}}},
+                                  {"border", rect_json(ds.frame.border)},
+                                  {"title_block", rect_json(ds.frame.title_block)},
+                                  {"views", views},
+                                  {"tables", tables},
+                                  {"title", ds.title},
+                                  {"not_for_production", ds.not_for_production},
+                                  {"warnings", ds.warnings}});
+        }
+        return json{{"sheets", out_sheets}};
+    };
 }
 
 Core::~Core() { delete state_; }
