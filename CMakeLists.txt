@@ -311,6 +311,11 @@ add_executable(test_ab_testing tests/test_ab_testing.cpp)
 target_link_libraries(test_ab_testing PRIVATE bendcore_core)
 bendcore_add_test(ab_testing test_ab_testing)
 
+# Subtask 4: Event Batching & Delivery
+add_executable(test_event_batch_sender tests/test_event_batch_sender.cpp)
+target_link_libraries(test_event_batch_sender PRIVATE bendcore_core)
+bendcore_add_test(event_batch_sender test_event_batch_sender)
+
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
 # Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
 # содержит нераскрытые переменные, поэтому библиотеки подключаются напрямую из lib/libTK*.a.
