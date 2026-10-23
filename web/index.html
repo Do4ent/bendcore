@@ -58,8 +58,22 @@
       s.constrainDistance(p0, p1, 10);
       s.constrainDistance(p1, p2, 10);
 
+      // Диспетчер команд (тот же, что в bendcore_cli): LRA, проверка и чертёж через JSON.
+      const call = (command, args) => JSON.parse(core.dispatch(JSON.stringify({ id: 1, command, args })));
+      const L = [{ kind: 'straight', length: 100 }, { kind: 'bend', radius: 50, angle: 90 }, { kind: 'straight', length: 100 }];
+      const lra = call('bend.lra', { path: L, precision: 1 });
+      const chk = call('check.run', { tubes: [{ id: 'T1', path: L, od: 12 }, { id: 'T2', path: L, od: 12, placement: { origin: [0, 15, 0] } }] });
+      const drw = call('drawing.part', { path: L, od: 20 });
+      const bad = call('bend.lra', {});
+      const dispatchOk = lra.ok && lra.data.rows.length === 2 && lra.data.rows[0].L === 100
+        && chk.ok && chk.data.violations.length === 2
+        && drw.ok && drw.data.sheets.length === 1 && drw.data.sheets[0].views.length === 3
+        && !bad.ok && bad.error === 'нет поля path';
+      say('dispatch: LRA ' + (lra.ok ? lra.data.rows.length : lra.error) + ' строки, нарушений ' + (chk.ok ? chk.data.violations.length : chk.error)
+        + ', видов ' + (drw.ok ? drw.data.sheets[0].views.length : drw.error) + ' (ожидается 2, 2, 3)');
+
       const r = s.solve();
-      const ok = r.status === 'определено' && r.dof === 0 && Math.abs(core.wrap180(190) + 170) < 1e-9 && importOk;
+      const ok = r.status === 'определено' && r.dof === 0 && Math.abs(core.wrap180(190) + 170) < 1e-9 && importOk && dispatchOk;
       out.innerHTML = ok
         ? '<span class="ok">Тест пройден</span>'
         : '<span class="fail">Тест не пройден</span>';
