@@ -1,6 +1,6 @@
 # BendCore Keyboard Shortcuts Reference
 
-Complete keyboard shortcut mapping for BendCore CAD system. All 13 shortcuts for core commands.
+Complete keyboard shortcut mapping for BendCore CAD system. All 28 shortcuts across all categories (Phase 32).
 
 ## File Operations (5 shortcuts)
 
@@ -40,11 +40,50 @@ Complete keyboard shortcut mapping for BendCore CAD system. All 13 shortcuts for
 |----------|---------|-------------|
 | **Ctrl+D** | New Sheet | Create a new drawing sheet |
 
-## Search & Navigation (1 shortcut)
+## Editing & Selection (6 shortcuts) - Phase 32
 
 | Shortcut | Command | Description |
 |----------|---------|-------------|
-| **Ctrl+K** | Search Commands | Open command search dialog (Phase 31) |
+| **Ctrl+A** | Select All | Select all objects in the document |
+| **Ctrl+Z** | Undo | Undo the last action |
+| **Ctrl+Y** | Redo | Redo the last undone action |
+| **Ctrl+X** | Cut | Cut selected objects to clipboard |
+| **Ctrl+C** | Copy | Copy selected objects to clipboard |
+| **Ctrl+V** | Paste | Paste objects from clipboard |
+
+## Deletion & Renaming (2 shortcuts) - Phase 32
+
+| Shortcut | Command | Description |
+|----------|---------|-------------|
+| **Delete** | Delete | Delete selected objects |
+| **F2** | Rename | Rename selected object |
+
+## Modes & Toggles (1 shortcut) - Phase 32
+
+| Shortcut | Command | Description |
+|----------|---------|-------------|
+| **F3** | Toggle Snap | Toggle snap mode on/off |
+
+## Navigation & Search (2 shortcuts) - Phase 32
+
+| Shortcut | Command | Description |
+|----------|---------|-------------|
+| **Ctrl+F** | Find | Open find/search dialog |
+| **Ctrl+H** | History | Show undo/redo history panel |
+
+## File Operations - Extended (2 shortcuts) - Phase 32
+
+| Shortcut | Command | Description |
+|----------|---------|-------------|
+| **Ctrl+,** | Settings | Open settings/preferences |
+| **Alt+F4** | Exit | Exit application (Windows/Linux) |
+
+## Help (2 shortcuts) - Phase 32
+
+| Shortcut | Command | Description |
+|----------|---------|-------------|
+| **F1** | Help | Open help documentation |
+| **Ctrl+?** | Keyboard Help | Show keyboard shortcuts help dialog |
 
 **Note:** On macOS, `Ctrl` is automatically replaced with `Cmd` for all shortcuts.
 
@@ -69,20 +108,33 @@ If a shortcut conflicts with system shortcuts:
 2. Access the command through the Ribbon UI
 3. Configure custom shortcuts in Settings → Keyboard
 
-## Future Shortcuts (Phase 32+)
+## Summary by Category
+
+### Phase 31 (Original - 13 shortcuts)
+- File Operations: 5
+- Sketches: 2
+- Tubes: 2
+- Analysis: 3
+- Drawing: 1
+
+### Phase 32 (Additions - 15 shortcuts)
+- Editing & Selection: 6
+- Deletion & Renaming: 2
+- Modes & Toggles: 1
+- Navigation & Search: 2
+- File Operations - Extended: 2
+- Help: 2
+
+**Total: 28 shortcuts**
+
+## Future Shortcuts (Phase 33+)
 
 The following shortcuts are reserved for future implementation:
-- **Ctrl+Z** - Undo
-- **Ctrl+Y** - Redo
-- **Ctrl+X** - Cut
-- **Ctrl+C** - Copy
-- **Ctrl+V** - Paste
-- **Ctrl+F** - Find
-- **Ctrl+H** - Find & Replace
 - **Ctrl+Shift+P** - Print Preview
 - **F5** - Start Simulation
-- **F6** - Show Properties
-- **F7** - Show Analysis Results
+- **F6** - Show Analysis Results
+- **F7** - Show Constraints
+- **Ctrl+Shift+M** - Toggle Measurement Mode
 
 ## Customization
 

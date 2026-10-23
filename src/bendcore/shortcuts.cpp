@@ -33,6 +33,8 @@ void ShortcutManager::build_default_shortcuts() {
   shortcuts_.push_back({"Ctrl+S", "save", "Save Document"});
   shortcuts_.push_back({"Ctrl+Shift+S", "save-as", "Save As"});
   shortcuts_.push_back({"Ctrl+P", "print", "Print Document"});
+  shortcuts_.push_back({"Ctrl+,", "settings", "Settings"});
+  shortcuts_.push_back({"Alt+F4", "exit", "Exit Application"});
 
   // PART DESIGN
   shortcuts_.push_back({"Ctrl+Shift+K", "new-sketch", "New Sketch"});
@@ -47,6 +49,27 @@ void ShortcutManager::build_default_shortcuts() {
 
   // DRAWING
   shortcuts_.push_back({"Ctrl+D", "new-sheet", "New Sheet"});
+
+  // EDITING & SELECTION
+  shortcuts_.push_back({"Ctrl+A", "select-all", "Select All"});
+  shortcuts_.push_back({"Ctrl+Z", "undo", "Undo"});
+  shortcuts_.push_back({"Ctrl+Y", "redo", "Redo"});
+  shortcuts_.push_back({"Ctrl+X", "cut", "Cut"});
+  shortcuts_.push_back({"Ctrl+C", "copy", "Copy"});
+  shortcuts_.push_back({"Ctrl+V", "paste", "Paste"});
+  shortcuts_.push_back({"Delete", "delete", "Delete"});
+  shortcuts_.push_back({"F2", "rename", "Rename"});
+
+  // MODES & TOGGLES
+  shortcuts_.push_back({"F3", "toggle-snap", "Toggle Snap"});
+
+  // NAVIGATION & SEARCH
+  shortcuts_.push_back({"Ctrl+F", "find", "Find"});
+  shortcuts_.push_back({"Ctrl+H", "history", "History"});
+
+  // HELP
+  shortcuts_.push_back({"F1", "help", "Help"});
+  shortcuts_.push_back({"Ctrl+?", "keyboard-help", "Keyboard Help"});
 
   // Build reverse map for O(1) lookups
   for (const auto& shortcut : shortcuts_) {

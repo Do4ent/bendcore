@@ -1,0 +1,397 @@
+/**
+ * BendCore Status Bar Styling
+ * Bottom status bar with real-time information
+ */
+
+:root {
+  --status-bg: #f5f5f5;
+  --status-border: #e0e0e0;
+  --status-text: #333333;
+  --status-label: #666666;
+  --status-hover: #efefef;
+  --status-active: #4a90e2;
+  --status-error: #d32f2f;
+  --status-warning: #f57c00;
+  --status-info: #1976d2;
+  --status-snap-off: #999999;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --status-bg: #2a2a2a;
+    --status-border: #404040;
+    --status-text: #e0e0e0;
+    --status-label: #999999;
+    --status-hover: #353535;
+    --status-active: #5a9fd4;
+    --status-error: #ff6b6b;
+    --status-warning: #ffb74d;
+    --status-info: #42a5f5;
+    --status-snap-off: #666666;
+  }
+}
+
+:root[data-theme="dark"] {
+  --status-bg: #2a2a2a;
+  --status-border: #404040;
+  --status-text: #e0e0e0;
+  --status-label: #999999;
+  --status-hover: #353535;
+  --status-active: #5a9fd4;
+  --status-error: #ff6b6b;
+  --status-warning: #ffb74d;
+  --status-info: #42a5f5;
+  --status-snap-off: #666666;
+}
+
+/* Main status bar container */
+.bendcore-status-bar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background-color: var(--status-bg);
+  border-top: 1px solid var(--status-border);
+  padding: 0 4px;
+  font-size: 12px;
+  overflow: hidden;
+  gap: 2px;
+  user-select: none;
+}
+
+/* Status section */
+.status-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  height: 100%;
+  white-space: nowrap;
+  border-right: 1px solid var(--status-border);
+  color: var(--status-text);
+  transition: all 0.2s ease;
+  cursor: default;
+}
+
+.status-section:last-child {
+  border-right: none;
+}
+
+/* Clickable sections */
+.status-section.coordinates-section,
+.status-section.plane-section,
+.status-section.snap-section,
+.status-section.units-section,
+.status-section.violations-section {
+  cursor: pointer;
+}
+
+.status-section.coordinates-section:hover,
+.status-section.plane-section:hover,
+.status-section.snap-section:hover,
+.status-section.units-section:hover,
+.status-section.violations-section:hover {
+  background-color: var(--status-hover);
+}
+
+/* Icons */
+.status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* Text */
+.status-text {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--status-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Step hint section */
+.step-hint-section {
+  flex: 1;
+  min-width: 150px;
+  max-width: 300px;
+  color: var(--status-label);
+}
+
+.step-hint-section .status-text {
+  color: var(--status-label);
+}
+
+/* Coordinates section */
+.coordinates-section {
+  min-width: 180px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* Plane section */
+.plane-section {
+  min-width: 120px;
+  flex-shrink: 0;
+  color: var(--status-label);
+}
+
+/* Snap section */
+.snap-section {
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.snap-section.active {
+  color: var(--status-active);
+}
+
+.snap-section.inactive {
+  color: var(--status-snap-off);
+}
+
+.snap-type {
+  font-size: 10px;
+  color: var(--status-label);
+  margin-left: 2px;
+}
+
+/* Units section */
+.units-section {
+  min-width: 100px;
+  flex-shrink: 0;
+  color: var(--status-label);
+}
+
+/* Violations section */
+.violations-section {
+  min-width: 150px;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.violations-section.has-errors {
+  color: var(--status-error);
+  background-color: rgba(211, 47, 47, 0.08);
+  border-color: var(--status-error);
+}
+
+.violations-section.has-errors:hover {
+  background-color: rgba(211, 47, 47, 0.12);
+}
+
+.violations-section.has-warnings {
+  color: var(--status-warning);
+  background-color: rgba(245, 124, 0, 0.08);
+  border-color: var(--status-warning);
+}
+
+.violations-section.has-warnings:hover {
+  background-color: rgba(245, 124, 0, 0.12);
+}
+
+.violations-section.has-info {
+  color: var(--status-info);
+  background-color: rgba(25, 118, 210, 0.08);
+  border-color: var(--status-info);
+}
+
+.violations-section.has-info:hover {
+  background-color: rgba(25, 118, 210, 0.12);
+}
+
+.violation-error,
+.violation-warning,
+.violation-info {
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Recalc section */
+.recalc-section {
+  min-width: 120px;
+  flex-shrink: 0;
+  color: var(--status-label);
+  font-weight: 500;
+}
+
+.recalc-section.done {
+  color: #4caf50;
+}
+
+.recalc-section.calculating {
+  color: var(--status-active);
+}
+
+/* Spinner animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1400px) {
+  .step-hint-section {
+    max-width: 200px;
+  }
+
+  .coordinates-section {
+    min-width: 160px;
+    font-size: 10px;
+  }
+
+  .plane-section {
+    display: none;
+  }
+
+  .violations-section {
+    min-width: 130px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .bendcore-status-bar {
+    height: 28px;
+    padding: 0 2px;
+    gap: 0;
+    font-size: 11px;
+  }
+
+  .status-section {
+    padding: 3px 8px;
+    gap: 4px;
+  }
+
+  .step-hint-section {
+    flex: 1;
+    min-width: 120px;
+    max-width: none;
+  }
+
+  .status-text {
+    font-size: 11px;
+  }
+
+  .coordinates-section {
+    min-width: 140px;
+    font-size: 10px;
+  }
+
+  .plane-section {
+    display: none;
+  }
+
+  .snap-section {
+    min-width: 100px;
+  }
+
+  .units-section {
+    min-width: 80px;
+  }
+
+  .violations-section {
+    min-width: 110px;
+    padding: 3px 8px;
+  }
+
+  .recalc-section {
+    min-width: 100px;
+  }
+}
+
+@media (max-width: 768px) {
+  .bendcore-status-bar {
+    height: 26px;
+  }
+
+  .status-section {
+    padding: 2px 6px;
+  }
+
+  .status-icon {
+    width: 14px;
+    height: 14px;
+    font-size: 10px;
+  }
+
+  .status-text {
+    font-size: 10px;
+  }
+
+  .step-hint-section {
+    display: none;
+  }
+
+  .coordinates-section {
+    min-width: 120px;
+    font-size: 9px;
+  }
+
+  .snap-section {
+    display: none;
+  }
+
+  .units-section {
+    display: none;
+  }
+
+  .violations-section {
+    min-width: 90px;
+    padding: 2px 6px;
+  }
+
+  .recalc-section {
+    min-width: 80px;
+  }
+}
+
+/* Focus and keyboard navigation */
+.status-section:focus-visible {
+  outline: 2px solid var(--status-active);
+  outline-offset: -2px;
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .status-section {
+    transition: none;
+  }
+}
+
+/* Tooltip on hover (can be extended) */
+.status-section[title] {
+  position: relative;
+}
+
+/* Print styles */
+@media print {
+  .bendcore-status-bar {
+    display: none;
+  }
+}

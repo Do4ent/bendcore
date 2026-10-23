@@ -137,6 +137,26 @@ CommandResult unfold_drawing(const json& args);
 CommandResult add_dimension(const json& args);
 CommandResult add_text(const json& args);
 
+// Context Menu & Properties (Phase 32)
+CommandResult get_context_menu(const json& args);
+CommandResult execute_context_action(const json& args);
+CommandResult get_properties(const json& args);
+CommandResult set_property(const json& args);
+CommandResult get_status(const json& args);
+
+// Editing Commands (Phase 32)
+CommandResult select_all(const json& args);
+CommandResult undo(const json& args);
+CommandResult redo(const json& args);
+CommandResult cut(const json& args);
+CommandResult copy(const json& args);
+CommandResult paste(const json& args);
+CommandResult delete_selected(const json& args);
+CommandResult rename(const json& args);
+CommandResult toggle_snap(const json& args);
+CommandResult find(const json& args);
+CommandResult show_history(const json& args);
+
 }  // namespace commands
 
 }  // namespace bendcore

@@ -119,6 +119,121 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcutDef[] = [
     category: "drawing",
     platform: "all",
   },
+
+  // EDITING & SELECTION (6 shortcuts)
+  {
+    shortcut: "Ctrl+A",
+    commandId: "select-all",
+    description: "Select all objects",
+    category: "editing",
+    platform: "all",
+  },
+  {
+    shortcut: "Ctrl+Z",
+    commandId: "undo",
+    description: "Undo last action",
+    category: "editing",
+    platform: "all",
+  },
+  {
+    shortcut: "Ctrl+Y",
+    commandId: "redo",
+    description: "Redo last undone action",
+    category: "editing",
+    platform: "all",
+  },
+  {
+    shortcut: "Ctrl+X",
+    commandId: "cut",
+    description: "Cut selected objects",
+    category: "editing",
+    platform: "all",
+  },
+  {
+    shortcut: "Ctrl+C",
+    commandId: "copy",
+    description: "Copy selected objects",
+    category: "editing",
+    platform: "all",
+  },
+  {
+    shortcut: "Ctrl+V",
+    commandId: "paste",
+    description: "Paste copied objects",
+    category: "editing",
+    platform: "all",
+  },
+
+  // DELETION & RENAMING (2 shortcuts)
+  {
+    shortcut: "Delete",
+    commandId: "delete",
+    description: "Delete selected objects",
+    category: "editing",
+    platform: "all",
+  },
+  {
+    shortcut: "F2",
+    commandId: "rename",
+    description: "Rename selected object",
+    category: "editing",
+    platform: "all",
+  },
+
+  // MODES & TOGGLES (2 shortcuts)
+  {
+    shortcut: "F3",
+    commandId: "toggle-snap",
+    description: "Toggle snap mode on/off",
+    category: "tools",
+    platform: "all",
+  },
+  {
+    shortcut: "Alt+F4",
+    commandId: "exit",
+    description: "Exit application",
+    category: "file",
+    platform: "win",
+  },
+
+  // NAVIGATION & SEARCH (2 shortcuts)
+  {
+    shortcut: "Ctrl+F",
+    commandId: "find",
+    description: "Open find/search dialog",
+    category: "navigation",
+    platform: "all",
+  },
+  {
+    shortcut: "Ctrl+H",
+    commandId: "history",
+    description: "Show undo/redo history",
+    category: "navigation",
+    platform: "all",
+  },
+
+  // SETTINGS & HELP (3 shortcuts)
+  {
+    shortcut: "Ctrl+,",
+    commandId: "settings",
+    description: "Open settings/preferences",
+    category: "file",
+    platform: "all",
+  },
+  {
+    shortcut: "F1",
+    commandId: "help",
+    description: "Open help documentation",
+    category: "help",
+    platform: "all",
+  },
+  {
+    shortcut: "Ctrl+?",
+    commandId: "keyboard-help",
+    description: "Show keyboard shortcuts help",
+    category: "help",
+    platform: "all",
+  },
 ];
 
 /**
