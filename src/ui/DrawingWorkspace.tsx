@@ -17,6 +17,7 @@ import DrawingVersionPanel from './DrawingVersionPanel';
 import SketchEditor from './SketchEditor';
 import LayersPanel from './LayersPanel';
 import CommentsPanel, { type Comment } from './CommentsPanel';
+import CommentBubble from './CommentBubble';
 import './panels.css';
 
 export interface DrawingTube {
@@ -452,7 +453,38 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
           ))}
         </div>
       )}
-      <div className="bc-sheet-host" dangerouslySetInnerHTML={{ __html: svg }} />
+      <div style={{ position: 'relative', flex: 1, overflow: 'auto' }}>
+        <div className="bc-sheet-host" dangerouslySetInnerHTML={{ __html: svg }} />
+        {/* Comment bubbles overlay */}
+        {showCommentsPanel && sheet && comments.length > 0 && (
+          <svg
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              pointerEvents: 'auto',
+              zIndex: 100,
+            }}
+            width="100%"
+            height="100%"
+          >
+            {comments
+              .filter((c) => c.sheet_number === sheet.number)
+              .map((comment) => (
+                <CommentBubble
+                  key={comment.id}
+                  comment={comment}
+                  scale={1}
+                  origin={[0, 0]}
+                  onClick={() => {
+                    // Focus on the comment in the panel
+                    document.querySelector(`[data-comment-id="${comment.id}"]`)?.scrollIntoView?.({ behavior: 'smooth' });
+                  }}
+                />
+              ))}
+          </svg>
+        )}
+      </div>
 
       {check && (
         <div className="bc-modal-backdrop" role="dialog" aria-modal="true" aria-label={t('draw.release')}>
@@ -502,6 +534,17 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
       </section>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '280px', height: '100%' }}>
+        {showCommentsPanel && (
+          <CommentsPanel
+            comments={comments}
+            sheetNumber={sheet?.number ?? 1}
+            onAddComment={handleAddComment}
+            onReplyToComment={handleReplyToComment}
+            onChangeStatus={handleChangeCommentStatus}
+            onDeleteComment={handleDeleteComment}
+          />
+        )}
+
         {showLayersPanel && sheet && (
           <LayersPanel
             layers={sheet.layers}
