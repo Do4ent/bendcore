@@ -1,6 +1,7 @@
 #include "bendcore/analysis.hpp"
 
 #include "bendcore/blank.hpp"
+#include "bendcore/path_view.hpp"
 #include "bendcore/compensation.hpp"
 #include "bendcore/spiral.hpp"
 #include "bendcore/tubegeom.hpp"
@@ -288,27 +289,27 @@ AnalysisResult Analyzer::analyze(
 
     // Вычисление параметров трубы
     result.totalLength = axis_length(path);
-    result.bendCount = std::count_if(path.begin(), path.end(), [](const PathSegment& s) {
-        return s.kind == SegmentKind::Bend;
+    result.bendCount = std::count_if(path.begin(), path.end(), [](const Item& s) {
+        return is_bend(s);
     });
 
     // Подсчёт суммарного угла
     result.totalBendAngle = 0.0;
     for (const auto& seg : path) {
-        if (seg.kind == SegmentKind::Bend) {
-            result.totalBendAngle += std::abs(seg.angle);
+        if (is_bend(seg)) {
+            result.totalBendAngle += std::abs(item_B(seg));
         }
     }
 
     // Минимальная и максимальная длина заготовки
-    const BlankSpec blank = calculate_blank(path, od, wall);
-    result.blankLength = blank.length;
+    const BlankResult blank = blank_length(path, EndRule{}, EndRule{});
+    result.blankLength = blank.blank_length.value_or(axis_length(path));
 
     // Поиск радиусов гибов
     std::vector<double> bendRadii;
     for (const auto& seg : path) {
-        if (seg.kind == SegmentKind::Bend) {
-            bendRadii.push_back(seg.radius);
+        if (is_bend(seg)) {
+            bendRadii.push_back(item_R(seg));
         }
     }
 
@@ -354,7 +355,7 @@ std::vector<Issue> Analyzer::checkGeometry(const TubeModel& model, double od) co
     const auto& path = *model.path;
 
     // Проверка на самопересечения
-    const auto selfInt = self_intersections(path);
+    const auto selfInt = self_intersections(path, od);
     if (!selfInt.empty()) {
         issues.push_back(createIssue(
             IssueLevel::Error,
@@ -366,14 +367,14 @@ std::vector<Issue> Analyzer::checkGeometry(const TubeModel& model, double od) co
     // Проверка радиусов гибов
     for (size_t i = 0; i < path.size(); ++i) {
         const auto& seg = path[i];
-        if (seg.kind == SegmentKind::Bend) {
-            if (seg.radius < od / 2.0) {
+        if (is_bend(seg)) {
+            if (item_R(seg) < od / 2.0) {
                 issues.push_back(createIssue(
                     IssueLevel::Error,
                     IssueType::InvalidBendRadius,
                     "Радиус гиба меньше радиуса трубы",
                     static_cast<int>(i),
-                    seg.radius,
+                    item_R(seg),
                     od / 2.0
                 ));
             }
@@ -383,15 +384,15 @@ std::vector<Issue> Analyzer::checkGeometry(const TubeModel& model, double od) co
     // Проверка углов (не более 180°)
     for (size_t i = 0; i < path.size(); ++i) {
         const auto& seg = path[i];
-        if (seg.kind == SegmentKind::Bend) {
-            if (std::abs(seg.angle) > 180.0) {
+        if (is_bend(seg)) {
+            if (std::abs(item_B(seg)) > 180.0) {
                 issues.push_back(createIssue(
                     IssueLevel::Error,
                     IssueType::ExcessiveBending,
                     "Угол гиба больше 180°",
                     static_cast<int>(i),
-                    seg.angle,
-                    {}, -180.0, 180.0
+                    item_B(seg),
+                    -180.0, 180.0
                 ));
             }
         }
@@ -414,8 +415,8 @@ std::vector<Issue> Analyzer::checkBendParameters(
     const auto& path = *model.path;
 
     // Проверка количества гибов
-    int bendCount = std::count_if(path.begin(), path.end(), [](const PathSegment& s) {
-        return s.kind == SegmentKind::Bend;
+    int bendCount = std::count_if(path.begin(), path.end(), [](const Item& s) {
+        return is_bend(s);
     });
 
     if (machine.maxBendCount > 0 && bendCount > machine.maxBendCount) {
@@ -431,18 +432,18 @@ std::vector<Issue> Analyzer::checkBendParameters(
     // Проверка минимальных прямых участков
     for (size_t i = 0; i < path.size(); ++i) {
         const auto& seg = path[i];
-        if (seg.kind == SegmentKind::Straight) {
+        if (is_straight(seg)) {
             double minStraight = 10.0; // 10 мм по умолчанию
-            if (seg.length < minStraight) {
+            if (item_S(seg) < minStraight) {
                 if (i > 0 && i < path.size() - 1) {
                     // Внутренний прямой участок между гибами
-                    if (path[i-1].kind == SegmentKind::Bend && path[i+1].kind == SegmentKind::Bend) {
+                    if (is_bend(path[i-1]) && is_bend(path[i+1])) {
                         issues.push_back(createIssue(
                             IssueLevel::Warning,
                             IssueType::InsufficientStraight,
                             "Недостаточный прямой участок между гибами",
                             static_cast<int>(i),
-                            seg.length,
+                            item_S(seg),
                             minStraight
                         ));
                     }
@@ -501,14 +502,14 @@ std::vector<Issue> Analyzer::checkMaterialCompatibility(
     if (material.ultimateBendRadius > 0.0) {
         for (size_t i = 0; i < path.size(); ++i) {
             const auto& seg = path[i];
-            if (seg.kind == SegmentKind::Bend) {
-                if (seg.radius < material.ultimateBendRadius) {
+            if (is_bend(seg)) {
+                if (item_R(seg) < material.ultimateBendRadius) {
                     issues.push_back(createIssue(
                         IssueLevel::Warning,
                         IssueType::SpringbackVariation,
                         "Радиус гиба близок к пределу для данного материала",
                         static_cast<int>(i),
-                        seg.radius,
+                        item_R(seg),
                         material.ultimateBendRadius
                     ));
                 }
@@ -573,24 +574,24 @@ std::vector<Issue> Analyzer::checkMachineCapability(
     // Проверка радиусов гибов
     for (size_t i = 0; i < path.size(); ++i) {
         const auto& seg = path[i];
-        if (seg.kind == SegmentKind::Bend) {
-            if (seg.radius < machine.minBendRadius) {
+        if (is_bend(seg)) {
+            if (item_R(seg) < machine.minBendRadius) {
                 issues.push_back(createIssue(
                     IssueLevel::Error,
                     IssueType::BendRadiusOutOfRange,
                     "Радиус гиба меньше минимума для станка",
                     static_cast<int>(i),
-                    seg.radius,
+                    item_R(seg),
                     machine.minBendRadius
                 ));
             }
-            if (machine.maxBendRadius > 0.0 && seg.radius > machine.maxBendRadius) {
+            if (machine.maxBendRadius > 0.0 && item_R(seg) > machine.maxBendRadius) {
                 issues.push_back(createIssue(
                     IssueLevel::Error,
                     IssueType::BendRadiusOutOfRange,
                     "Радиус гиба больше максимума для станка",
                     static_cast<int>(i),
-                    seg.radius,
+                    item_R(seg),
                     {}, machine.maxBendRadius
                 ));
             }
@@ -634,16 +635,16 @@ double Analyzer::calculateComplexity(
     double score = 0.0;
 
     // Количество гибов (макс. 50 баллов)
-    int bendCount = std::count_if(path.begin(), path.end(), [](const PathSegment& s) {
-        return s.kind == SegmentKind::Bend;
+    int bendCount = std::count_if(path.begin(), path.end(), [](const Item& s) {
+        return is_bend(s);
     });
     score += std::min(50.0, bendCount * 5.0);
 
     // Суммарный угол (макс. 30 баллов)
     double totalAngle = 0.0;
     for (const auto& seg : path) {
-        if (seg.kind == SegmentKind::Bend) {
-            totalAngle += std::abs(seg.angle);
+        if (is_bend(seg)) {
+            totalAngle += std::abs(item_B(seg));
         }
     }
     score += std::min(30.0, (totalAngle / 360.0) * 30.0);
@@ -673,8 +674,8 @@ double Analyzer::calculateManufacturingRisk(
 
     // Близость к пределам станка
     for (const auto& seg : path) {
-        if (seg.kind == SegmentKind::Bend) {
-            double minRatio = (seg.radius - machine.minBendRadius) /
+        if (is_bend(seg)) {
+            double minRatio = (item_R(seg) - machine.minBendRadius) /
                             (machine.maxBendRadius - machine.minBendRadius);
             if (minRatio < 0.2) {
                 risk += 10.0; // Близко к минимуму

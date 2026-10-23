@@ -149,7 +149,7 @@ int main() {
 
         StandardsUIManager standardsUI(db);
         TubeModel model;
-        model.tubeId = "TEST-TUBE";
+        model.id = "TEST-TUBE";
 
         auto standards = standardsUI.getStandardsForTube(model, 25.4, 1.63);
 
@@ -226,7 +226,7 @@ int main() {
         ProductionUIManager productionUI(db);
 
         ProductionUIManager::ReleaseWorkflow workflow;
-        workflow.tube.tubeId = "TUBE-WF-001";
+        workflow.tube.id = "TUBE-WF-001";
         workflow.od = 25.4;
         workflow.wall = 1.63;
         workflow.approvedBy = "Engineer";
@@ -255,7 +255,7 @@ int main() {
         ProductionUIManager productionUI(db);
 
         ProductionUIManager::ReleaseWorkflow workflow;
-        workflow.tube.tubeId = "TUBE-WF-002";
+        workflow.tube.id = "TUBE-WF-002";
         workflow.od = 100.0; // Invalid size
         workflow.wall = 0.1;  // Invalid thickness
         workflow.approvedBy = "Engineer";

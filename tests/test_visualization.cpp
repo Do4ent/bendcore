@@ -1,5 +1,6 @@
 // Тесты для системы визуализации (Phase 25 Stage 2)
 #include "bendcore/visualization.hpp"
+#include "bendcore/path_view.hpp"
 #include "bendcore/tube_model.hpp"
 
 #include <cmath>
@@ -37,14 +38,14 @@ int main() {
         Visualizer viz;
 
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 50.0},
-            {SegmentKind::Bend, 50.0, 90.0, 0.0},
-            {SegmentKind::Straight, 50.0}
+        model.path = Path{
+            Straight{50.0},
+            Bend{50.0, 90.0, 0.0},
+            Straight{50.0}
         };
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MeshParameters params;
@@ -66,12 +67,12 @@ int main() {
         Visualizer viz;
 
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 100.0}
+        model.path = Path{
+            Straight{100.0}
         };
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MeshParameters params;
@@ -92,12 +93,12 @@ int main() {
         Visualizer viz;
 
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 100.0}
+        model.path = Path{
+            Straight{100.0}
         };
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MeshParameters params;
@@ -115,12 +116,12 @@ int main() {
         Visualizer viz;
 
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 50.0}
+        model.path = Path{
+            Straight{50.0}
         };
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{50, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{50, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MeshParameters params;
@@ -154,12 +155,12 @@ int main() {
         Visualizer viz;
 
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 100.0}
+        model.path = Path{
+            Straight{100.0}
         };
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MeshParameters params;
@@ -196,12 +197,12 @@ int main() {
         Visualizer viz;
 
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 100.0}
+        model.path = Path{
+            Straight{100.0}
         };
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         auto progression = viz.createProgressiveMesh(model, 10.0, 1.0);
@@ -222,12 +223,12 @@ int main() {
         Visualizer viz;
 
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 100.0}
+        model.path = Path{
+            Straight{100.0}
         };
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MeshParameters params;

@@ -154,7 +154,7 @@ public:
 
     // Прогрессивная загрузка сетки (для больших моделей)
     struct MeshProgression {
-        std::vector<RenderMesh> levels;  // От низкого к высокому LOD
+        std::vector<RenderMesh> levels;  // от самой детальной (levels[0]) к самой грубой
         int currentLevel = 0;
     };
 

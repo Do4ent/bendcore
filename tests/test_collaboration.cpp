@@ -233,7 +233,7 @@ int main() {
         auto version = cm.versionManager.createVersion("Updated", "user1");
 
         assert(tc, version.patch > 0, "Версия создана");
-        assert(tc, cm.accessManager.getActiveUsers().size() == 2, "Пользователи зарегистрированы");
+        assert(tc, cm.getActiveUsers().size() == 2, "Пользователи зарегистрированы");
     }
 
     // Результаты

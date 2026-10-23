@@ -1,9 +1,11 @@
 // Тесты для системы стандартов (Phase 25 Stage 4)
 #include "bendcore/standards.hpp"
+#include "bendcore/path_view.hpp"
 #include "bendcore/tube_model.hpp"
 
 #include <cstdio>
 
+using namespace bendcore;
 using namespace bendcore::standards;
 
 struct TestCase {
@@ -65,8 +67,11 @@ int main() {
         StandardsDatabase db;
         StandardsChecker checker(db);
         
-        auto result = checker.checkWallThickness(10.0, 1.0, Standard::EN);
+        // В базе правило толщины стенки есть только для DIN; для EN — «не применимо».
+        auto result = checker.checkWallThickness(10.0, 1.0, Standard::DIN);
         assert(tc, result.status == ComplianceStatus::Compliant, "Толщина 1мм соответствует");
+        auto resultEn = checker.checkWallThickness(10.0, 1.0, Standard::EN);
+        assert(tc, resultEn.status == ComplianceStatus::NotApplicable, "Для EN правила толщины нет");
         
         auto resultThin = checker.checkWallThickness(10.0, 0.2, Standard::DIN);
         assert(tc, resultThin.status == ComplianceStatus::NonCompliant, "Слишком тонкая стенка");
@@ -105,12 +110,12 @@ int main() {
     // Тест 9: Проверка соответствия трубы
     {
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 100.0}
+        model.path = Path{
+            Straight{100.0}
         };
         
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
         
         StandardsDatabase db;
@@ -124,11 +129,11 @@ int main() {
     // Тест 10: Проверка всех стандартов
     {
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 100.0}
+        model.path = Path{
+            Straight{100.0}
         };
         
-        Port port{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
+        Port port{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
         model.ports = {port};
         
         StandardsDatabase db;
@@ -141,8 +146,8 @@ int main() {
     // Тест 11: Генерация HTML отчёта
     {
         TubeModel model;
-        model.path = std::vector<PathSegment>{{SegmentKind::Straight, 100.0}};
-        model.ports = {{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"}};
+        model.path = Path{Straight{100.0}};
+        model.ports = {Port{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0}};
         
         StandardsDatabase db;
         StandardsChecker checker(db);
@@ -157,8 +162,8 @@ int main() {
     // Тест 12: Генерация JSON отчёта
     {
         TubeModel model;
-        model.path = std::vector<PathSegment>{{SegmentKind::Straight, 100.0}};
-        model.ports = {{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"}};
+        model.path = Path{Straight{100.0}};
+        model.ports = {Port{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0}};
         
         StandardsDatabase db;
         StandardsChecker checker(db);
@@ -173,8 +178,8 @@ int main() {
     // Тест 13: Генерация CSV отчёта
     {
         TubeModel model;
-        model.path = std::vector<PathSegment>{{SegmentKind::Straight, 100.0}};
-        model.ports = {{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"}};
+        model.path = Path{Straight{100.0}};
+        model.ports = {Port{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0}};
         
         StandardsDatabase db;
         StandardsChecker checker(db);
@@ -189,8 +194,8 @@ int main() {
     // Тест 14: Сравнение отчётов
     {
         TubeModel model;
-        model.path = std::vector<PathSegment>{{SegmentKind::Straight, 100.0}};
-        model.ports = {{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"}};
+        model.path = Path{Straight{100.0}};
+        model.ports = {Port{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0}};
         
         StandardsDatabase db;
         StandardsChecker checker(db);
@@ -208,8 +213,8 @@ int main() {
         StandardsComplianceManager mgr;
         
         TubeModel model;
-        model.path = std::vector<PathSegment>{{SegmentKind::Straight, 100.0}};
-        model.ports = {{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"}};
+        model.path = Path{Straight{100.0}};
+        model.ports = {Port{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0}};
         
         auto report = mgr.checker.checkTubeCompliance(model, 10.0, 1.0, Standard::EN);
         

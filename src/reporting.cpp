@@ -1,5 +1,6 @@
 #include "bendcore/reporting.hpp"
 #include "bendcore/blank.hpp"
+#include "bendcore/path_view.hpp"
 
 #include <algorithm>
 #include <ctime>
@@ -32,16 +33,16 @@ BendCard ReportGenerator::generateBendCard(
 
     if (model.path.has_value()) {
         const auto& path = *model.path;
-        const BlankSpec blank = calculate_blank(path, od, wall);
-        card.blankLength = blank.length;
+        const BlankResult blank = blank_length(path, EndRule{}, EndRule{});
+        card.blankLength = blank.blank_length.value_or(axis_length(path));
 
         // Собираем информацию о гибах
         for (const auto& seg : path) {
-            if (seg.kind == SegmentKind::Bend) {
-                card.bendRadii.push_back(seg.radius);
-                card.bendAngles.push_back(seg.angle);
-            } else if (seg.kind == SegmentKind::Straight) {
-                card.straightLengths.push_back(seg.length);
+            if (is_bend(seg)) {
+                card.bendRadii.push_back(item_R(seg));
+                card.bendAngles.push_back(item_B(seg));
+            } else if (is_straight(seg)) {
+                card.straightLengths.push_back(item_S(seg));
             }
         }
     }
@@ -55,7 +56,7 @@ UnfoldingSpec ReportGenerator::generateUnfolding(
 ) const {
     UnfoldingSpec spec;
     spec.unfoldId = "UNFOLD-" + std::to_string(std::time(nullptr));
-    spec.tubeId = model.tubeId;
+    spec.tubeId = model.id;
 
     if (model.path.has_value()) {
         const auto& path = *model.path;
@@ -63,13 +64,13 @@ UnfoldingSpec ReportGenerator::generateUnfolding(
 
         double accumulatedLength = 0.0;
         for (const auto& seg : path) {
-            if (seg.kind == SegmentKind::Straight) {
-                spec.segmentLengths.push_back(seg.length);
-                accumulatedLength += seg.length;
-            } else if (seg.kind == SegmentKind::Bend) {
+            if (is_straight(seg)) {
+                spec.segmentLengths.push_back(item_S(seg));
+                accumulatedLength += item_S(seg);
+            } else if (is_bend(seg)) {
                 // Длина дуги = радиус * угол (в радианах)
-                double angleRad = seg.angle * 3.141592653589793 / 180.0;
-                double arcLength = seg.radius * angleRad;
+                double angleRad = item_B(seg) * 3.141592653589793 / 180.0;
+                double arcLength = item_R(seg) * angleRad;
                 spec.bendArcs.push_back(arcLength);
                 accumulatedLength += arcLength;
             }
@@ -91,8 +92,8 @@ std::vector<SpecificationEntry> ReportGenerator::generateSpecification(
     for (const auto& tube : tubes) {
         SpecificationEntry entry;
         entry.position = position++;
-        entry.designation = tube.tubeId;
-        entry.description = "Bent tube " + tube.tubeId;
+        entry.designation = tube.id;
+        entry.description = "Bent tube " + tube.id;
         entry.quantity = 1.0;
         entry.unit = "шт";
         entry.standard = "DIN 2391";

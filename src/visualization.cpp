@@ -1,10 +1,12 @@
 #include "bendcore/visualization.hpp"
 #include "bendcore/tube_body.hpp"
 #include "bendcore/blank.hpp"
+#include "bendcore/path_view.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <cstring>
 #include <unordered_map>
 
 namespace bendcore::visualization {
@@ -17,90 +19,81 @@ RenderMesh Visualizer::createMesh(
     double od, double wall,
     const MeshParameters& params
 ) const {
+    (void)wall;  // визуализация — наружная поверхность
     RenderMesh mesh;
-
-    if (!model.path.has_value()) {
+    if (!model.path.has_value() || model.path->empty() || od <= 0.0) {
         return mesh;
     }
+    const double r = od / 2.0;
 
-    // Создаём 3D тело трубы (требует OCCT)
-    // Здесь упрощённо: используем геометрию пути
-    const auto& path = *model.path;
+    // Число точек окружности по допуску прогиба хорды: d = r(1 − cos(π/n)).
+    const double defl = std::clamp(params.deflection, 1e-3, r);
+    int ring = static_cast<int>(std::ceil(3.141592653589793 / std::acos(1.0 - defl / r)));
+    ring = std::clamp(ring, 8, 64);
 
-    // Примерный расчёт вершин на основе параметров
-    mesh.lodLevel = selectLODLevel(params.maxVertices);
-
-    // Генерируем вершины цилиндра вдоль пути
-    const int circleVertices = std::max(8, static_cast<int>(360.0 / std::asin(params.deflection / (od / 2.0))));
-    int estimatedVertices = circleVertices * (path.size() + 10);
-
-    if (estimatedVertices > params.maxVertices) {
-        // Уменьшаем детализацию
-        // Это упрощённая логика
+    // Осевая ломаная; шаг по гибу уменьшается, если сетка не помещается в maxVertices.
+    int steps = 24;
+    std::vector<Vec3> axis = trace(*model.path, steps);
+    while (steps > 4 && static_cast<long long>(axis.size()) * ring > params.maxVertices) {
+        steps /= 2;
+        axis = trace(*model.path, steps);
     }
+    // Удаляем совпадающие соседние точки (нулевые прямые).
+    std::vector<Vec3> pts;
+    for (const auto& p : axis) {
+        if (pts.empty() || norm(sub(p, pts.back())) > 1e-9) pts.push_back(p);
+    }
+    if (pts.size() < 2) return mesh;
+    mesh.lodLevel = selectLODLevel(static_cast<int>(pts.size()) * ring);
 
-    // Заполняем позиции вершин
-    for (int circle = 0; circle < circleVertices; ++circle) {
-        double angle = 2.0 * 3.141592653589793 * circle / circleVertices;
-        double cosA = std::cos(angle);
-        double sinA = std::sin(angle);
-
-        for (const auto& seg : path) {
-            // Упрощённо: только для прямых участков
-            if (seg.kind == SegmentKind::Straight) {
-                double radius = od / 2.0;
-                float x = static_cast<float>(radius * cosA);
-                float y = static_cast<float>(radius * sinA);
-                float z = static_cast<float>(seg.length);
-
-                mesh.positions.push_back(x);
-                mesh.positions.push_back(y);
-                mesh.positions.push_back(z);
-            }
+    // Касательные в узлах и рамка параллельного переноса (без закручивания на гибах).
+    const size_t n = pts.size();
+    std::vector<Vec3> tan(n);
+    for (size_t i = 0; i < n; ++i) {
+        const Vec3 a = sub(pts[std::min(i + 1, n - 1)], pts[i > 0 ? i - 1 : 0]);
+        tan[i] = unit(a);
+    }
+    Vec3 helper = std::abs(tan[0][2]) < 0.9 ? Vec3{0, 0, 1} : Vec3{1, 0, 0};
+    Vec3 u = unit(cross(tan[0], helper));
+    for (size_t i = 0; i < n; ++i) {
+        if (i > 0) {
+            // Перенос u из предыдущей рамки: убрать составляющую вдоль новой касательной.
+            u = sub(u, mul(tan[i], dot(u, tan[i])));
+            const double un = norm(u);
+            u = un > 1e-12 ? mul(u, 1.0 / un) : unit(cross(tan[i], helper));
+        }
+        const Vec3 v = cross(tan[i], u);
+        for (int k = 0; k < ring; ++k) {
+            const double t = 2.0 * 3.141592653589793 * k / ring;
+            const Vec3 dir = add(mul(u, std::cos(t)), mul(v, std::sin(t)));
+            const Vec3 q = add(pts[i], mul(dir, r));
+            mesh.positions.push_back(static_cast<float>(q[0]));
+            mesh.positions.push_back(static_cast<float>(q[1]));
+            mesh.positions.push_back(static_cast<float>(q[2]));
+        }
+    }
+    for (size_t i = 0; i + 1 < n; ++i) {
+        for (int k = 0; k < ring; ++k) {
+            const uint32_t a = static_cast<uint32_t>(i * ring + k);
+            const uint32_t b = static_cast<uint32_t>(i * ring + (k + 1) % ring);
+            const uint32_t c = static_cast<uint32_t>((i + 1) * ring + k);
+            const uint32_t d = static_cast<uint32_t>((i + 1) * ring + (k + 1) % ring);
+            mesh.indices.insert(mesh.indices.end(), {a, c, b, b, c, d});
         }
     }
 
-    // Генерируем индексы для треугольников
-    for (int i = 0; i < static_cast<int>(mesh.positions.size() / 3) - circleVertices; ++i) {
-        int v0 = i;
-        int v1 = i + 1;
-        int v2 = i + circleVertices;
-        int v3 = i + circleVertices + 1;
-
-        // Первый треугольник
-        mesh.indices.push_back(v0);
-        mesh.indices.push_back(v2);
-        mesh.indices.push_back(v1);
-
-        // Второй треугольник
-        mesh.indices.push_back(v1);
-        mesh.indices.push_back(v2);
-        mesh.indices.push_back(v3);
-    }
-
-    mesh.vertexCount = mesh.positions.size() / 3;
-    mesh.triangleCount = mesh.indices.size() / 3;
-
-    // Вычисляем нормали если нужны
+    mesh.vertexCount = static_cast<int>(mesh.positions.size() / 3);
+    mesh.triangleCount = static_cast<int>(mesh.indices.size() / 3);
     if (params.enableNormals) {
         mesh.normals = computeNormals(mesh.positions, mesh.indices);
     }
-
-    // Устанавливаем цвета по умолчанию (серый)
     if (params.enableColors) {
-        for (int i = 0; i < mesh.vertexCount; ++i) {
-            mesh.colors.push_back(0.7f);  // R
-            mesh.colors.push_back(0.7f);  // G
-            mesh.colors.push_back(0.7f);  // B
-            mesh.colors.push_back(1.0f);  // A
-        }
+        mesh.colors.assign(static_cast<size_t>(mesh.vertexCount) * 4, 0.7f);
+        for (int i = 0; i < mesh.vertexCount; ++i) mesh.colors[static_cast<size_t>(i) * 4 + 3] = 1.0f;
     }
-
-    // Вычисляем ограничивающую сферу
-    auto boundingSphere = computeBoundingSphere(mesh);
-    mesh.boundingSphereCentre = boundingSphere.centre;
-    mesh.boundingSphereRadius = boundingSphere.radius;
-
+    const auto sphere = computeBoundingSphere(mesh);
+    mesh.boundingSphereCentre = sphere.centre;
+    mesh.boundingSphereRadius = sphere.radius;
     return mesh;
 }
 
@@ -317,14 +310,14 @@ std::vector<float> Visualizer::computeNormals(
         Vec3 v2{positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2]};
 
         // Вычисляем векторы рёбер
-        Vec3 edge1 = v1 - v0;
-        Vec3 edge2 = v2 - v0;
+        Vec3 edge1 = sub(v1, v0);
+        Vec3 edge2 = sub(v2, v0);
 
         // Нормаль = cross(edge1, edge2)
-        Vec3 normal = edge1.cross(edge2);
-        double len = normal.length();
+        Vec3 normal = cross(edge1, edge2);
+        double len = norm(normal);
         if (len > 1e-6) {
-            normal = normal / len;
+            normal = mul(normal, 1.0 / len);
         }
 
         // Добавляем нормаль к вершинам
@@ -338,9 +331,9 @@ std::vector<float> Visualizer::computeNormals(
     // Нормализуем
     for (size_t i = 0; i < normals.size(); i += 3) {
         Vec3 n{normals[i], normals[i + 1], normals[i + 2]};
-        double len = n.length();
+        double len = norm(n);
         if (len > 1e-6) {
-            n = n / len;
+            n = mul(n, 1.0 / len);
             normals[i] = n[0];
             normals[i + 1] = n[1];
             normals[i + 2] = n[2];
@@ -381,13 +374,13 @@ Visualizer::BoundingSphere Visualizer::computeBoundingSphere(const RenderMesh& m
         centre[1] += mesh.positions[i + 1];
         centre[2] += mesh.positions[i + 2];
     }
-    centre = centre / (mesh.positions.size() / 3);
+    centre = mul(centre, 1.0 / static_cast<double>(mesh.positions.size() / 3));
 
     // Вычисляем максимальное расстояние от центра
     double maxDist = 0.0;
     for (size_t i = 0; i < mesh.positions.size(); i += 3) {
         Vec3 v{mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]};
-        double dist = (v - centre).length();
+        double dist = norm(sub(v, centre));
         maxDist = std::max(maxDist, dist);
     }
 
@@ -411,7 +404,7 @@ Visualizer::MeshProgression Visualizer::createProgressiveMesh(
     MeshProgression progression;
 
     // Создаём сетки разных уровней детализации
-    std::vector<double> deflections = {5.0, 3.0, 1.5, 0.75, 0.25};
+    std::vector<double> deflections = {0.25, 0.75, 1.5, 3.0, 5.0};  // от детального к грубому
 
     for (double def : deflections) {
         MeshParameters params;

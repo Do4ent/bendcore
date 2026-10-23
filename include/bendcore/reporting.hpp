@@ -153,6 +153,7 @@ public:
         DOCX,     // Microsoft Word
         DWG,      // AutoCAD drawing
         SVG,      // Масштабируемая векторная графика
+        CSV,      // Таблица CSV
         JSON      // JSON для обработки
     };
 

@@ -16,7 +16,7 @@ int main() {
     {
         printf("Test 1: BendCard generation... ");
         TubeModel model;
-        model.tubeId = "TEST-001";
+        model.id = "TEST-001";
 
         ReportGenerator gen;
         BendCard card = gen.generateBendCard(model, 25.4, 1.63, "CU", "BENDER-1", "test_user");
@@ -35,7 +35,7 @@ int main() {
     {
         printf("Test 2: UnfoldingSpec generation... ");
         TubeModel model;
-        model.tubeId = "TEST-002";
+        model.id = "TEST-002";
 
         ReportGenerator gen;
         UnfoldingSpec spec = gen.generateUnfolding(model, 25.4);
@@ -52,7 +52,7 @@ int main() {
         printf("Test 3: Specification generation... ");
         std::vector<TubeModel> tubes;
         TubeModel model;
-        model.tubeId = "TUBE-1";
+        model.id = "TUBE-1";
         tubes.push_back(model);
 
         ReportGenerator gen;
@@ -109,7 +109,7 @@ int main() {
         printf("Test 6: Production report generation... ");
         std::vector<TubeModel> tubes;
         TubeModel model;
-        model.tubeId = "TUBE-A";
+        model.id = "TUBE-A";
         tubes.push_back(model);
 
         ReportGenerator gen;

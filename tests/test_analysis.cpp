@@ -1,5 +1,6 @@
 // Тесты для системы анализа труб (Phase 25 Stage 1)
 #include "bendcore/analysis.hpp"
+#include "bendcore/path_view.hpp"
 #include "bendcore/tube_model.hpp"
 
 #include <cmath>
@@ -38,13 +39,13 @@ int main() {
 
         // Простой путь: прямая + один гиб + прямая
         TubeModel model;
-        PathSegment seg1{SegmentKind::Straight, 50.0};
-        PathSegment seg2{SegmentKind::Bend, 50.0, 90.0, 0.0};  // радиус 50, угол 90°
-        PathSegment seg3{SegmentKind::Straight, 50.0};
-        model.path = std::vector<PathSegment>{seg1, seg2, seg3};
+        Item seg1 = Straight{50.0};
+        Item seg2 = Bend{50.0, 90.0, 0.0};  // радиус 50, угол 90°
+        Item seg3 = Straight{50.0};
+        model.path = Path{seg1, seg2, seg3};
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MaterialSpec mat;
@@ -76,13 +77,13 @@ int main() {
 
         // Путь с недопустимым радиусом (меньше радиуса трубы)
         TubeModel model;
-        PathSegment seg1{SegmentKind::Straight, 50.0};
-        PathSegment seg2{SegmentKind::Bend, 3.0, 90.0, 0.0};  // радиус 3.0 < ∅/2 = 5.0
-        PathSegment seg3{SegmentKind::Straight, 50.0};
-        model.path = std::vector<PathSegment>{seg1, seg2, seg3};
+        Item seg1 = Straight{50.0};
+        Item seg2 = Bend{3.0, 90.0, 0.0};  // радиус 3.0 < ∅/2 = 5.0
+        Item seg3 = Straight{50.0};
+        model.path = Path{seg1, seg2, seg3};
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MaterialSpec mat;
@@ -112,13 +113,13 @@ int main() {
         Analyzer analyzer;
 
         TubeModel model;
-        PathSegment seg1{SegmentKind::Straight, 50.0};
-        PathSegment seg2{SegmentKind::Bend, 50.0, 90.0, 0.0};
-        PathSegment seg3{SegmentKind::Straight, 50.0};
-        model.path = std::vector<PathSegment>{seg1, seg2, seg3};
+        Item seg1 = Straight{50.0};
+        Item seg2 = Bend{50.0, 90.0, 0.0};
+        Item seg3 = Straight{50.0};
+        model.path = Path{seg1, seg2, seg3};
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MaterialSpec mat;
@@ -150,10 +151,10 @@ int main() {
 
         // Простой путь
         TubeModel simple;
-        simple.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 50.0},
-            {SegmentKind::Bend, 50.0, 90.0, 0.0},
-            {SegmentKind::Straight, 50.0}
+        simple.path = Path{
+            Straight{50.0},
+            Bend{50.0, 90.0, 0.0},
+            Straight{50.0}
         };
 
         MaterialSpec mat;
@@ -174,12 +175,12 @@ int main() {
         Analyzer analyzer;
 
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 100.0}
+        model.path = Path{
+            Straight{100.0}
         };
 
         // Порт с диаметром больше трубы
-        Port portBad{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 20.0, "Bad"};
+        Port portBad{"Bad", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 20.0};
         model.ports = {portBad};
 
         MaterialSpec mat;
@@ -207,14 +208,14 @@ int main() {
         Analyzer analyzer;
 
         TubeModel model;
-        model.path = std::vector<PathSegment>{
-            {SegmentKind::Straight, 50.0},
-            {SegmentKind::Bend, 50.0, 45.0, 0.0},
-            {SegmentKind::Straight, 50.0}
+        model.path = Path{
+            Straight{50.0},
+            Bend{50.0, 45.0, 0.0},
+            Straight{50.0}
         };
 
-        Port port1{Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0, "A"};
-        Port port2{Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0, "B"};
+        Port port1{"A", Vec3{0, 0, 0}, Vec3{0, 0, -1}, 10.0};
+        Port port2{"B", Vec3{100, 0, 0}, Vec3{0, 0, 1}, 10.0};
         model.ports = {port1, port2};
 
         MaterialSpec mat;
