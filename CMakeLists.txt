@@ -31,7 +31,7 @@ else()
   target_link_libraries(bendcore_eigen INTERFACE Eigen3::Eigen)
 endif()
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp)
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen)
 
@@ -62,6 +62,10 @@ bendcore_add_test(batch_check test_batch_check)
 add_executable(test_instances tests/test_instances.cpp)
 target_link_libraries(test_instances PRIVATE bendcore_core)
 bendcore_add_test(instances test_instances)
+
+add_executable(test_drawing tests/test_drawing.cpp)
+target_link_libraries(test_drawing PRIVATE bendcore_core)
+bendcore_add_test(drawing test_drawing)
 
 add_executable(test_tubegeom tests/test_tubegeom.cpp)
 target_link_libraries(test_tubegeom PRIVATE bendcore_core)
