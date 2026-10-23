@@ -6,6 +6,7 @@
 // Ось Y листа направлена вверх (как в чертеже); переворот для SVG делает интерфейс.
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <map>
 #include <optional>
@@ -244,23 +245,6 @@ struct PlacedTable {
     double width = 0;
 };
 
-struct DrawingSheet {
-    int number = 1;           // номер листа
-    int count = 1;            // листов в чертеже
-    Standard standard;
-    Projection projection;
-    SheetFrame frame;
-    std::vector<PlacedView> views;
-    std::vector<PlacedTable> tables;
-    std::map<std::string, std::string> title;  // поля штампа, включая «Масштаб»
-    bool not_for_production = false;
-    std::vector<std::string> warnings;         // нестандартный масштаб, нужен разрыв, больший формат
-
-    // Слои и видимость (Q2 2027, Task 3)
-    std::vector<Layer> layers;         // все слои на листе
-    LayerVisibility layer_visibility;  // текущее состояние видимости
-};
-
 // ---------- Слои и управление видимостью (Q2 2027) ----------
 // Слои группируют элементы чертежа по типам: контур, размеры, оси, разметка, вспомогательная геометрия
 // Каждый слой имеет независимую видимость, блокировку, цвет и имя
@@ -297,6 +281,23 @@ struct LayerVisibility {
     void set_visible(LayerType type, bool visible) {
         layer_visibility[static_cast<int>(type)] = visible;
     }
+};
+
+struct DrawingSheet {
+    int number = 1;           // номер листа
+    int count = 1;            // листов в чертеже
+    Standard standard;
+    Projection projection;
+    SheetFrame frame;
+    std::vector<PlacedView> views;
+    std::vector<PlacedTable> tables;
+    std::map<std::string, std::string> title;  // поля штампа, включая «Масштаб»
+    bool not_for_production = false;
+    std::vector<std::string> warnings;         // нестандартный масштаб, нужен разрыв, больший формат
+
+    // Слои и видимость (Q2 2027, Task 3)
+    std::vector<Layer> layers;         // все слои на листе
+    LayerVisibility layer_visibility;  // текущее состояние видимости
 };
 
 // ---------- 2D-эскизы на чертежах (v7.9) ----------

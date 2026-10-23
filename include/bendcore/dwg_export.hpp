@@ -93,6 +93,7 @@ GeometryToDWGResult geometry_to_dwg_entities(
 struct DWGWriteResult {
     bool success = false;
     std::string filename;
+    std::string format = "DXF";  // "DWG" или "DXF"
     std::string error;
     std::size_t entity_count = 0;
     std::size_t layer_count = 0;
