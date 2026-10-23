@@ -2,10 +2,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
+#include <cstdio>
 #include <ctime>
 #include <iomanip>
 #include <limits>
 #include <numbers>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -1241,6 +1244,221 @@ PDFExportData prepare_pdf_export(
     }
 
     return result;
+}
+
+// ---------- 2D-эскизы на чертежах (v7.9) ----------
+
+namespace {
+
+// Генерировать уникальный ID для элементов эскиза
+std::string generate_sketch_element_id(SketchElementType type) {
+    static int line_counter = 0;
+    static int arc_counter = 0;
+    static int text_counter = 0;
+    static int dim_counter = 0;
+
+    char buffer[32];
+    switch (type) {
+        case SketchElementType::Line:
+            std::snprintf(buffer, sizeof(buffer), "line_%d", ++line_counter);
+            break;
+        case SketchElementType::Arc:
+            std::snprintf(buffer, sizeof(buffer), "arc_%d", ++arc_counter);
+            break;
+        case SketchElementType::Text:
+            std::snprintf(buffer, sizeof(buffer), "text_%d", ++text_counter);
+            break;
+        case SketchElementType::Dimension:
+            std::snprintf(buffer, sizeof(buffer), "dim_%d", ++dim_counter);
+            break;
+    }
+    return std::string(buffer);
+}
+
+// Генерировать уникальный ID для размера
+std::string generate_sketch_dimension_id() {
+    static int counter = 0;
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "skdim_%d", ++counter);
+    return std::string(buffer);
+}
+
+}  // namespace
+
+SketchElement make_sketch_line(const Vec2& p0, const Vec2& p1, const std::string& id) {
+    SketchElement elem;
+    elem.type = SketchElementType::Line;
+    elem.p0 = p0;
+    elem.p1 = p1;
+    elem.id = id.empty() ? generate_sketch_element_id(SketchElementType::Line) : id;
+    elem.style = LineStyle::Contour;
+    return elem;
+}
+
+SketchElement make_sketch_arc(const Vec2& p0, const Vec2& p1, double radius,
+                              bool large, bool sweep, const std::string& id) {
+    SketchElement elem;
+    elem.type = SketchElementType::Arc;
+    elem.p0 = p0;
+    elem.p1 = p1;
+    elem.radius = radius;
+    elem.arc_large = large;
+    elem.arc_sweep = sweep;
+    elem.id = id.empty() ? generate_sketch_element_id(SketchElementType::Arc) : id;
+    elem.style = LineStyle::Contour;
+    return elem;
+}
+
+SketchElement make_sketch_text(const Vec2& p, const std::string& text, double height, const std::string& id) {
+    SketchElement elem;
+    elem.type = SketchElementType::Text;
+    elem.p0 = p;
+    elem.text = text;
+    elem.text_height = height;
+    elem.id = id.empty() ? generate_sketch_element_id(SketchElementType::Text) : id;
+    return elem;
+}
+
+SketchDimension make_sketch_dimension(const Vec2& p0, const Vec2& p1, const std::string& text,
+                                      const Vec2& offset, const std::string& id) {
+    SketchDimension dim;
+    dim.p0 = p0;
+    dim.p1 = p1;
+    dim.text = text;
+    dim.offset_point = offset;
+    dim.id = id.empty() ? generate_sketch_dimension_id() : id;
+    return dim;
+}
+
+SketchValidationResult validate_sketch(const Sketch2D& sketch, const SketchValidationOptions& opt) {
+    SketchValidationResult result;
+
+    // Проверить ID элементов
+    if (opt.check_element_ids) {
+        std::set<std::string> seen_ids;
+        for (const auto& elem : sketch.elements) {
+            if (elem.id.empty()) {
+                result.errors.push_back("Empty element ID");
+                result.valid = false;
+            } else if (seen_ids.count(elem.id)) {
+                result.errors.push_back("Duplicate element ID: " + elem.id);
+                result.valid = false;
+            } else {
+                seen_ids.insert(elem.id);
+            }
+        }
+
+        // Проверить ID размеров
+        for (const auto& dim : sketch.dimensions) {
+            if (dim.id.empty()) {
+                result.errors.push_back("Empty dimension ID");
+                result.valid = false;
+            } else if (seen_ids.count(dim.id)) {
+                result.errors.push_back("Duplicate dimension ID: " + dim.id);
+                result.valid = false;
+            } else {
+                seen_ids.insert(dim.id);
+            }
+        }
+    }
+
+    return result;
+}
+
+void sketch_add_element(Sketch2D& sketch, const SketchElement& elem) {
+    sketch.elements.push_back(elem);
+}
+
+bool sketch_remove_element(Sketch2D& sketch, const std::string& elem_id) {
+    auto it = std::find_if(sketch.elements.begin(), sketch.elements.end(),
+                           [&elem_id](const SketchElement& e) { return e.id == elem_id; });
+    if (it != sketch.elements.end()) {
+        sketch.elements.erase(it);
+        return true;
+    }
+    return false;
+}
+
+bool sketch_update_element(Sketch2D& sketch, const std::string& elem_id, const SketchElement& elem) {
+    auto it = std::find_if(sketch.elements.begin(), sketch.elements.end(),
+                           [&elem_id](const SketchElement& e) { return e.id == elem_id; });
+    if (it != sketch.elements.end()) {
+        *it = elem;
+        it->id = elem_id;  // сохранить исходный ID
+        return true;
+    }
+    return false;
+}
+
+void sketch_add_dimension(Sketch2D& sketch, const SketchDimension& dim) {
+    sketch.dimensions.push_back(dim);
+}
+
+bool sketch_remove_dimension(Sketch2D& sketch, const std::string& dim_id) {
+    auto it = std::find_if(sketch.dimensions.begin(), sketch.dimensions.end(),
+                           [&dim_id](const SketchDimension& d) { return d.id == dim_id; });
+    if (it != sketch.dimensions.end()) {
+        sketch.dimensions.erase(it);
+        return true;
+    }
+    return false;
+}
+
+Sketch2D make_sketch(int sheet_number, const std::string& name, const std::string& author) {
+    Sketch2D sketch;
+    sketch.id = "sketch_" + std::to_string(static_cast<int>(std::time(nullptr)));
+    sketch.sheet_number = sheet_number;
+    sketch.name = name;
+    sketch.created_by = author;
+    sketch.visible = true;
+    sketch.locked = false;
+
+    // Установить временные метки
+    auto now = std::chrono::system_clock::now();
+    auto time_t_now = std::chrono::system_clock::to_time_t(now);
+    std::ostringstream oss;
+    oss.imbue(std::locale("C"));
+    oss << std::put_time(std::gmtime(&time_t_now), "%Y-%m-%dT%H:%M:%SZ");
+    sketch.created_at = oss.str();
+    sketch.modified_at = sketch.created_at;
+
+    return sketch;
+}
+
+Box2 sketch_bbox(const Sketch2D& sketch) {
+    Box2 bbox;
+
+    for (const auto& elem : sketch.elements) {
+        if (!bbox.empty || elem.type == SketchElementType::Line || elem.type == SketchElementType::Arc) {
+            if (bbox.empty) {
+                bbox.lo = elem.p0;
+                bbox.hi = elem.p0;
+                bbox.empty = false;
+            }
+            bbox.add(elem.p0);
+            bbox.add(elem.p1);
+        } else if (elem.type == SketchElementType::Text) {
+            if (bbox.empty) {
+                bbox.lo = elem.p0;
+                bbox.hi = elem.p0;
+                bbox.empty = false;
+            }
+            bbox.add(elem.p0);
+        }
+    }
+
+    for (const auto& dim : sketch.dimensions) {
+        if (bbox.empty) {
+            bbox.lo = dim.p0;
+            bbox.hi = dim.p0;
+            bbox.empty = false;
+        }
+        bbox.add(dim.p0);
+        bbox.add(dim.p1);
+        bbox.add(dim.offset_point);
+    }
+
+    return bbox;
 }
 
 }  // namespace bendcore::drawing

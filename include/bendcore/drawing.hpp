@@ -257,6 +257,65 @@ struct DrawingSheet {
     std::vector<std::string> warnings;         // нестандартный масштаб, нужен разрыв, больший формат
 };
 
+// ---------- 2D-эскизы на чертежах (v7.9) ----------
+// Эскизы — это пользовательские геометрические элементы, нарисованные на листе чертежа
+// Координаты эскизов — в миллиметрах листа (как текст и размеры)
+
+enum class SketchElementType { Line, Arc, Text, Dimension };
+
+// Базовый элемент эскиза
+struct SketchElement {
+    std::string id;  // уникальный идентификатор
+    SketchElementType type;
+    Vec2 p0{};  // начальная точка (для линии, дуги, размера)
+    Vec2 p1{};  // конечная точка (для линии, размера)
+    std::string text;  // для Text и Dimension
+    double radius = 0.0;  // для Arc
+    bool arc_large = false;  // для Arc: большая дуга?
+    bool arc_sweep = false;  // для Arc: направление развёртки
+    double text_height = 3.5;  // для Text и Dimension (мм листа)
+    bool is_construction = false;  // вспомогательная линия (штриховка на чертеже)
+    LineStyle style = LineStyle::Contour;
+};
+
+// Размер в эскизе (более сложный, чем обычный Dim2)
+struct SketchDimension {
+    std::string id;
+    Vec2 p0{}, p1{};  // точки элемента, к которому относится размер
+    Vec2 offset_point{};  // где разместить текст размера
+    std::string text;  // значение размера (может быть формула)
+    double offset = 10.0;  // мм листа
+    bool reference = false;  // справочный размер
+    bool driven = false;  // ведомый размер (из модели)
+};
+
+// Эскиз на листе
+struct Sketch2D {
+    std::string id;  // уникальный идентификатор эскиза
+    int sheet_number = 1;  // на каком листе расположен эскиз
+    std::string name;  // "Эскиз 1", "Схема монтажа", etc.
+    std::vector<SketchElement> elements;  // все элементы эскиза
+    std::vector<SketchDimension> dimensions;  // размеры в эскизе
+    bool visible = true;
+    bool locked = false;  // заблокирован для редактирования
+    std::string created_by;  // автор
+    std::string created_at;  // ISO 8601 timestamp
+    std::string modified_at;
+};
+
+// Опции валидации эскиза
+struct SketchValidationOptions {
+    bool check_element_ids = true;
+    bool check_intersections = false;  // проверить пересечения элементов
+    double element_tolerance = 0.01;  // мм листа
+};
+
+struct SketchValidationResult {
+    bool valid = true;
+    std::vector<std::string> errors;
+    std::vector<std::string> warnings;
+};
+
 // ---------- Ассоциативность (версионирование и история) ----------
 // Отпечаток пути для детектирования изменений (SHA256)
 struct PathFingerprint {
@@ -286,6 +345,7 @@ struct DrawingVersion {
     int revision = 1;
     PathFingerprint fingerprint;
     std::vector<DrawingSheet> sheets;
+    std::vector<Sketch2D> sketches;  // 2D эскизы на чертежах
     std::string timestamp;           // ISO 8601
     std::string author;
     std::string comment;             // "исправлена развёртка", "добавлены виды"
@@ -419,5 +479,48 @@ struct PDFExportData {
 PDFExportData prepare_pdf_export(
     const std::vector<DrawingSheet>& sheets,
     const PDFExportOptions& opts);
+
+// ---------- Функции для работы с 2D эскизами ----------
+
+// Создать новый элемент эскиза (линия)
+SketchElement make_sketch_line(const Vec2& p0, const Vec2& p1, const std::string& id = "");
+
+// Создать новый элемент эскиза (дуга)
+SketchElement make_sketch_arc(const Vec2& p0, const Vec2& p1, double radius,
+                              bool large = false, bool sweep = false, const std::string& id = "");
+
+// Создать новый элемент эскиза (текст)
+SketchElement make_sketch_text(const Vec2& p, const std::string& text, double height = 3.5,
+                               const std::string& id = "");
+
+// Создать новый размер в эскизе
+SketchDimension make_sketch_dimension(const Vec2& p0, const Vec2& p1, const std::string& text,
+                                      const Vec2& offset = {0, 10.0}, const std::string& id = "");
+
+// Валидировать эскиз
+SketchValidationResult validate_sketch(const Sketch2D& sketch,
+                                       const SketchValidationOptions& opt = {});
+
+// Редактирование эскиза: добавить элемент
+void sketch_add_element(Sketch2D& sketch, const SketchElement& elem);
+
+// Редактирование эскиза: удалить элемент по id
+bool sketch_remove_element(Sketch2D& sketch, const std::string& elem_id);
+
+// Редактирование эскиза: обновить элемент
+bool sketch_update_element(Sketch2D& sketch, const std::string& elem_id, const SketchElement& elem);
+
+// Редактирование эскиза: добавить размер
+void sketch_add_dimension(Sketch2D& sketch, const SketchDimension& dim);
+
+// Редактирование эскиза: удалить размер по id
+bool sketch_remove_dimension(Sketch2D& sketch, const std::string& dim_id);
+
+// Создать новый пустой эскиз
+Sketch2D make_sketch(int sheet_number = 1, const std::string& name = "Sketch",
+                     const std::string& author = "");
+
+// Получить границы (bbox) эскиза в миллиметрах листа
+Box2 sketch_bbox(const Sketch2D& sketch);
 
 }  // namespace bendcore::drawing
