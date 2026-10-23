@@ -139,8 +139,11 @@ add_executable(test_reporting_ui tests/test_reporting_ui.cpp)
 target_link_libraries(test_reporting_ui PRIVATE bendcore_core)
 bendcore_add_test(reporting_ui test_reporting_ui)
 
+add_library(bendcore_formula STATIC src/formula.cpp)
+target_include_directories(bendcore_formula PUBLIC include)
+
 add_executable(test_formulas tests/test_formulas.cpp)
-target_link_libraries(test_formulas PRIVATE bendcore_core)
+target_link_libraries(test_formulas PRIVATE bendcore_formula)
 bendcore_add_test(formulas test_formulas)
 
 # Template tests (GoogleTest)
