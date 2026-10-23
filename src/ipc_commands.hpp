@@ -185,6 +185,30 @@ CommandResult solve_constraints(const json& args);
 CommandResult validate_path(const json& args);
 CommandResult export_path_sketch(const json& args);
 
+// Enterprise Features (Phase 36)
+// Organization Profile Management
+CommandResult list_org_profiles(const json& args);
+CommandResult get_org_profile(const json& args);
+CommandResult create_org_profile(const json& args);
+CommandResult update_org_profile(const json& args);
+CommandResult activate_org_profile(const json& args);
+CommandResult archive_org_profile(const json& args);
+
+// Parametric Pattern Templates
+CommandResult get_pattern_templates(const json& args);
+CommandResult create_from_pattern(const json& args);
+CommandResult get_pattern_params(const json& args);
+CommandResult preview_pattern(const json& args);
+
+// Import & Geometry Recognition
+CommandResult import_step_file(const json& args);
+CommandResult detect_tubes_in_import(const json& args);
+CommandResult apply_grouping_rules(const json& args);
+
+// Geometry Rounding
+CommandResult round_geometry(const json& args);
+CommandResult get_rounding_preview(const json& args);
+
 }  // namespace commands
 
 }  // namespace bendcore
