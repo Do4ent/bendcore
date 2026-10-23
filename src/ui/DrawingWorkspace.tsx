@@ -6,14 +6,16 @@
  *
  * Ассоциативные виды: история версий, откат, сравнение версий.
  * 2D Sketches (v7.9): SketchEditor интеграция для добавления аннотаций на чертежи.
+ * Слои и видимость (Q2 2027, Task 3): LayersPanel для управления видимостью слоёв.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { CoreClient } from './core/coreClient';
 import { drawingToSvg, STANDARD_NAME } from './core/drawingSvg';
 import { t } from './core/i18n';
-import type { AssociativeDrawing, AssociativityStatus, DrawingData, DrawingVersion, Feed, PathItem, ReleaseCheckResult, Sketch2D, SketchElement, SketchDimension } from './core/types';
+import type { AssociativeDrawing, AssociativityStatus, DrawingData, DrawingVersion, Feed, PathItem, ReleaseCheckResult, Sketch2D, SketchElement, SketchDimension, LayerVisibility } from './core/types';
 import DrawingVersionPanel from './DrawingVersionPanel';
 import SketchEditor from './SketchEditor';
+import LayersPanel from './LayersPanel';
 import './panels.css';
 
 export interface DrawingTube {
@@ -77,6 +79,10 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
   const [showSketchEditor, setShowSketchEditor] = useState(false);
   const [editingSketch, setEditingSketch] = useState<Sketch2D | null>(null);
   const [sketchError, setSketchError] = useState<string | null>(null);
+
+  // Слои и видимость (Q2 2027, Task 3)
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ layer_visibility: {} });
+  const [showLayersPanel, setShowLayersPanel] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -221,6 +227,67 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
     setSketchError(null);
   };
 
+  // Слои и видимость (Q2 2027, Task 3)
+  const handleToggleLayer = (layerType: number, visible: boolean) => {
+    setLayerVisibility((prev) => ({
+      layer_visibility: {
+        ...prev.layer_visibility,
+        [layerType]: visible,
+      },
+    }));
+    // localStorage сохранение (Task 3.9)
+    if (sheet) {
+      try {
+        const key = `bendcore:drawing:layers:${sheet.number}`;
+        localStorage.setItem(key, JSON.stringify(layerVisibility));
+      } catch (e) {
+        console.warn('Failed to save layer visibility to localStorage:', e);
+      }
+    }
+  };
+
+  const handleShowAllLayers = () => {
+    const allVisible: Record<number, boolean> = {};
+    for (let i = 0; i <= 4; i++) {
+      allVisible[i] = true;
+    }
+    setLayerVisibility({ layer_visibility: allVisible });
+  };
+
+  const handleHideAllLayers = () => {
+    const allHidden: Record<number, boolean> = {};
+    for (let i = 0; i <= 4; i++) {
+      allHidden[i] = false;
+    }
+    setLayerVisibility({ layer_visibility: allHidden });
+  };
+
+  // Загрузить состояние видимости из localStorage при изменении листа
+  useEffect(() => {
+    if (sheet) {
+      try {
+        const key = `bendcore:drawing:layers:${sheet.number}`;
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          setLayerVisibility(JSON.parse(saved));
+        } else {
+          // По умолчанию все слои видимы
+          setLayerVisibility({
+            layer_visibility: {
+              0: true,
+              1: true,
+              2: true,
+              3: true,
+              4: true,
+            },
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load layer visibility from localStorage:', e);
+      }
+    }
+  }, [sheet?.number]);
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', height: '100%', gap: '8px', padding: '8px' }}>
       <section className="bc-panel" aria-label={t('draw.title')} style={{ height: '100%' }}>
@@ -360,20 +427,34 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
       )}
       </section>
 
-      {associativeDrawing && (
-        <DrawingVersionPanel
-          tubeId={tube.id ?? 'unknown'}
-          currentRevision={associativeDrawing.versions[0]?.revision ?? 1}
-          versions={associativeDrawing.versions}
-          status={associativityStatus}
-          onRestore={async (revision) => {
-            console.log('Откат к версии', revision);
-          }}
-          onCompare={async (rev1, rev2) => {
-            console.log('Сравнение версий', rev1, 'и', rev2);
-          }}
-        />
-      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '280px', height: '100%' }}>
+        {showLayersPanel && sheet && (
+          <LayersPanel
+            layers={sheet.layers}
+            layerVisibility={layerVisibility}
+            onToggleLayer={handleToggleLayer}
+            onShowAll={handleShowAllLayers}
+            onHideAll={handleHideAllLayers}
+            client={core}
+            darkMode={false}
+          />
+        )}
+
+        {associativeDrawing && (
+          <DrawingVersionPanel
+            tubeId={tube.id ?? 'unknown'}
+            currentRevision={associativeDrawing.versions[0]?.revision ?? 1}
+            versions={associativeDrawing.versions}
+            status={associativityStatus}
+            onRestore={async (revision) => {
+              console.log('Откат к версии', revision);
+            }}
+            onCompare={async (rev1, rev2) => {
+              console.log('Сравнение версий', rev1, 'и', rev2);
+            }}
+          />
+        )}
+      </div>
 
       {/* Sketch Editor Modal */}
       {showSketchEditor && (

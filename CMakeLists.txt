@@ -181,6 +181,11 @@ add_executable(test_sketch2d tests/test_sketch2d.cpp)
 target_link_libraries(test_sketch2d PRIVATE bendcore_sketch2d)
 bendcore_add_test(sketch2d test_sketch2d)
 
+# Комментарии и замечания (Q2 2027, Task 4)
+add_executable(test_comments tests/test_comments.cpp)
+target_link_libraries(test_comments PRIVATE bendcore_core)
+bendcore_add_test(comments test_comments)
+
 # Слои и управление видимостью (Q2 2027, Task 3)
 add_executable(test_layers tests/test_layers.cpp)
 target_link_libraries(test_layers PRIVATE bendcore_core)
