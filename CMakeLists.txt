@@ -316,6 +316,11 @@ add_executable(test_event_batch_sender tests/test_event_batch_sender.cpp)
 target_link_libraries(test_event_batch_sender PRIVATE bendcore_core)
 bendcore_add_test(event_batch_sender test_event_batch_sender)
 
+# Subtask 7: Integration Testing & Documentation
+add_executable(e2e_analytics tests/e2e_analytics.cpp)
+target_link_libraries(e2e_analytics PRIVATE bendcore_core)
+bendcore_add_test(e2e_analytics e2e_analytics)
+
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
 # Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
 # содержит нераскрытые переменные, поэтому библиотеки подключаются напрямую из lib/libTK*.a.
