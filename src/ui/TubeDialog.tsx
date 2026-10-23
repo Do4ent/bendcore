@@ -7,6 +7,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { getColorHex } from "./ColorScheme";
 import { useTemplates, TemplateMatch } from "./hooks/useTemplates";
+import { TemplateSuggestionsTab } from "./TemplateSuggestionsTab";
 
 // ============ INTERFACES ============
 
@@ -1350,6 +1351,7 @@ const TubeDialog: React.FC<TubeDialogProps> = ({
             { id: "geometry", label: "Geometry" },
             { id: "bends", label: "Bends" },
             { id: "ports", label: "Ports" },
+            { id: "templates", label: "Templates" },
             { id: "advanced", label: "Advanced" },
             { id: "preview", label: "Preview" },
           ].map((tab) => (
@@ -1399,6 +1401,17 @@ const TubeDialog: React.FC<TubeDialogProps> = ({
               onEdit={handleEditPort}
               onDelete={handleDeletePort}
               errors={errors}
+            />
+          )}
+          {activeTab === "templates" && (
+            <TemplateSuggestionsTab
+              outerDiameter={config.geometry.outerDiameter}
+              wallThickness={config.geometry.wallThickness}
+              length={config.geometry.length}
+              onTemplateSelected={(templateId) => {
+                // Optional: handle template selection
+                console.log("Template selected:", templateId);
+              }}
             />
           )}
           {activeTab === "advanced" && (
