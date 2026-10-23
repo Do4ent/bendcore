@@ -1,0 +1,168 @@
+// Stub Eigen header for testing - includes all Dense functionality
+#pragma once
+
+#include <Eigen/Core>
+#include <vector>
+#include <cmath>
+
+namespace Eigen {
+    // Type definitions
+    typedef int Index;
+
+    // MatrixXd stub
+    class MatrixXd {
+    public:
+        std::vector<std::vector<double>> data_;
+        Index rows_, cols_;
+
+        MatrixXd() : rows_(0), cols_(0) {}
+        MatrixXd(Index m, Index n) : rows_(m), cols_(n), data_(m, std::vector<double>(n, 0)) {}
+
+        Index rows() const { return rows_; }
+        Index cols() const { return cols_; }
+        Index size() const { return rows_ * cols_; }
+
+        double& operator()(Index i, Index j) { return data_[i][j]; }
+        const double& operator()(Index i, Index j) const { return data_[i][j]; }
+
+        MatrixXd transpose() const {
+            MatrixXd result(cols_, rows_);
+            for (Index i = 0; i < rows_; ++i) {
+                for (Index j = 0; j < cols_; ++j) {
+                    result(j, i) = data_[i][j];
+                }
+            }
+            return result;
+        }
+
+        MatrixXd operator*(const MatrixXd& other) const {
+            MatrixXd result(rows_, other.cols_);
+            for (Index i = 0; i < rows_; ++i) {
+                for (Index j = 0; j < other.cols_; ++j) {
+                    for (Index k = 0; k < cols_; ++k) {
+                        result(i, j) += data_[i][k] * other(k, j);
+                    }
+                }
+            }
+            return result;
+        }
+
+        MatrixXd operator+(const MatrixXd& other) const {
+            MatrixXd result(rows_, cols_);
+            for (Index i = 0; i < rows_; ++i) {
+                for (Index j = 0; j < cols_; ++j) {
+                    result(i, j) = data_[i][j] + other(i, j);
+                }
+            }
+            return result;
+        }
+    };
+
+    // VectorXd stub
+    class VectorXd {
+    public:
+        std::vector<double> data_;
+        Index size_;
+
+        VectorXd() : size_(0) {}
+        explicit VectorXd(Index n) : size_(n), data_(n, 0) {}
+        VectorXd(const std::vector<double>& v) : size_(v.size()), data_(v) {}
+
+        Index size() const { return size_; }
+
+        double& operator()(Index i) { return data_[i]; }
+        const double& operator()(Index i) const { return data_[i]; }
+        double& operator[](Index i) { return data_[i]; }
+        const double& operator[](Index i) const { return data_[i]; }
+
+        VectorXd operator+(const VectorXd& other) const {
+            VectorXd result(size_);
+            for (Index i = 0; i < size_; ++i) {
+                result[i] = data_[i] + other[i];
+            }
+            return result;
+        }
+
+        VectorXd operator-(const VectorXd& other) const {
+            VectorXd result(size_);
+            for (Index i = 0; i < size_; ++i) {
+                result[i] = data_[i] - other[i];
+            }
+            return result;
+        }
+
+        VectorXd operator-() const {
+            VectorXd result(size_);
+            for (Index i = 0; i < size_; ++i) {
+                result[i] = -data_[i];
+            }
+            return result;
+        }
+
+        double dot(const VectorXd& other) const {
+            double sum = 0;
+            for (Index i = 0; i < size_; ++i) {
+                sum += data_[i] * other[i];
+            }
+            return sum;
+        }
+
+        double norm() const {
+            return std::sqrt(dot(*this));
+        }
+    };
+
+    // Map stub for VectorXd
+    template<typename T>
+    class Map {
+    public:
+        Map(T* data, Index size) {}
+    };
+
+    // Specializations for VectorXd Map
+    template<>
+    class Map<const VectorXd> {
+    public:
+        Map(const double* data, Index size) {}
+    };
+
+    // LDLT decomposition stub
+    class LDLT {
+    public:
+        LDLT() {}
+        LDLT(const MatrixXd& m) {}
+
+        VectorXd solve(const VectorXd& b) const {
+            return VectorXd(b.size());
+        }
+    };
+
+    // Partial pivot LU stub
+    class PartialPivLU {
+    public:
+        PartialPivLU() {}
+        explicit PartialPivLU(const MatrixXd& m) {}
+
+        VectorXd solve(const VectorXd& b) const {
+            return VectorXd(b.size());
+        }
+    };
+
+    // JacobiSVD stub
+    class JacobiSVD {
+    public:
+        std::vector<double> singular_values_;
+
+        JacobiSVD() {}
+        explicit JacobiSVD(const MatrixXd& m) : singular_values_(std::min(m.rows(), m.cols()), 0) {}
+
+        VectorXd singularValues() const {
+            return VectorXd(singular_values_);
+        }
+    };
+
+    // Extension for LDLT
+    inline LDLT MatrixXd::ldlt() const {
+        return LDLT(*this);
+    }
+}
