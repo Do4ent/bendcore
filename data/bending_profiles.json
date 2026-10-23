@@ -1,0 +1,566 @@
+{
+  "profiles": [
+    {
+      "id": "manual-half-inch",
+      "name": "Manual Hand Bender - ½\"",
+      "category": "Manual Hand Bender",
+      "manufacturer": "BendTech Pro",
+      "type": "manual",
+      "description": "Portable manual hand bender for ½ inch tubing",
+      "diameters": [
+        {
+          "id": "0.5",
+          "OD": 0.5,
+          "R": 1.0,
+          "S_min": 0.25,
+          "N": 2,
+          "B_min": 10.0,
+          "B_max": 179.0,
+          "discrete_type": "step",
+          "discrete_values": [10, 20, 30, 45, 60, 90, 120, 150, 179]
+        }
+      ]
+    },
+    {
+      "id": "manual-three-quarter-inch",
+      "name": "Manual Hand Bender - ¾\"",
+      "category": "Manual Hand Bender",
+      "manufacturer": "BendTech Pro",
+      "type": "manual",
+      "description": "Portable manual hand bender for ¾ inch tubing",
+      "diameters": [
+        {
+          "id": "0.75",
+          "OD": 0.75,
+          "R": 1.5,
+          "S_min": 0.35,
+          "N": 2,
+          "B_min": 10.0,
+          "B_max": 179.0,
+          "discrete_type": "step",
+          "discrete_values": [10, 20, 30, 45, 60, 90, 120, 150, 179]
+        }
+      ]
+    },
+    {
+      "id": "manual-one-inch",
+      "name": "Manual Hand Bender - 1\"",
+      "category": "Manual Hand Bender",
+      "manufacturer": "BendTech Pro",
+      "type": "manual",
+      "description": "Portable manual hand bender for 1 inch tubing",
+      "diameters": [
+        {
+          "id": "1.0",
+          "OD": 1.0,
+          "R": 2.0,
+          "S_min": 0.5,
+          "N": 2,
+          "B_min": 15.0,
+          "B_max": 179.0,
+          "discrete_type": "step",
+          "discrete_values": [15, 30, 45, 60, 90, 120, 150, 179]
+        }
+      ]
+    },
+    {
+      "id": "hydraulic-hb8",
+      "name": "Hydraulic Bender HB-8",
+      "category": "Hydraulic Bender",
+      "manufacturer": "Amob",
+      "type": "hydraulic",
+      "description": "Hydraulic tube bender for 3/16 to ½ inch tubing",
+      "capacity_max_OD": 0.5,
+      "capacity_max_wall": 0.065,
+      "diameters": [
+        {
+          "id": "0.1875",
+          "OD": 0.1875,
+          "R": 0.375,
+          "S_min": 0.125,
+          "N": 1,
+          "B_min": 5.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "0.25",
+          "OD": 0.25,
+          "R": 0.5,
+          "S_min": 0.15,
+          "N": 1,
+          "B_min": 5.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "0.375",
+          "OD": 0.375,
+          "R": 0.75,
+          "S_min": 0.2,
+          "N": 1,
+          "B_min": 5.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "0.5",
+          "OD": 0.5,
+          "R": 1.0,
+          "S_min": 0.25,
+          "N": 1,
+          "B_min": 5.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        }
+      ]
+    },
+    {
+      "id": "hydraulic-hb16",
+      "name": "Hydraulic Bender HB-16",
+      "category": "Hydraulic Bender",
+      "manufacturer": "Amob",
+      "type": "hydraulic",
+      "description": "Hydraulic tube bender for ½ to 1 inch tubing",
+      "capacity_max_OD": 1.0,
+      "capacity_max_wall": 0.083,
+      "diameters": [
+        {
+          "id": "0.5",
+          "OD": 0.5,
+          "R": 1.0,
+          "S_min": 0.25,
+          "N": 1,
+          "B_min": 3.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "0.625",
+          "OD": 0.625,
+          "R": 1.25,
+          "S_min": 0.3,
+          "N": 1,
+          "B_min": 3.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "0.75",
+          "OD": 0.75,
+          "R": 1.5,
+          "S_min": 0.35,
+          "N": 1,
+          "B_min": 3.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "1.0",
+          "OD": 1.0,
+          "R": 2.0,
+          "S_min": 0.5,
+          "N": 1,
+          "B_min": 3.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        }
+      ]
+    },
+    {
+      "id": "hydraulic-hb25",
+      "name": "Hydraulic Bender HB-25",
+      "category": "Hydraulic Bender",
+      "manufacturer": "Amob",
+      "type": "hydraulic",
+      "description": "Hydraulic tube bender for 1 to 2 inch tubing",
+      "capacity_max_OD": 2.0,
+      "capacity_max_wall": 0.12,
+      "diameters": [
+        {
+          "id": "1.0",
+          "OD": 1.0,
+          "R": 2.0,
+          "S_min": 0.5,
+          "N": 1,
+          "B_min": 2.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "1.25",
+          "OD": 1.25,
+          "R": 2.5,
+          "S_min": 0.6,
+          "N": 1,
+          "B_min": 2.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "1.5",
+          "OD": 1.5,
+          "R": 3.0,
+          "S_min": 0.75,
+          "N": 1,
+          "B_min": 2.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "2.0",
+          "OD": 2.0,
+          "R": 4.0,
+          "S_min": 1.0,
+          "N": 1,
+          "B_min": 2.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        }
+      ]
+    },
+    {
+      "id": "cnc-cab320",
+      "name": "CNC Bender CAB-320",
+      "category": "CNC Bender",
+      "manufacturer": "Greenerd/BendTech",
+      "type": "cnc",
+      "description": "CNC hydraulic tube bender for production runs, medium capacity",
+      "capacity_max_OD": 3.0,
+      "capacity_max_wall": 0.15,
+      "diameters": [
+        {
+          "id": "0.5",
+          "OD": 0.5,
+          "R": 1.0,
+          "S_min": 0.2,
+          "N": 1,
+          "B_min": 1.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "0.75",
+          "OD": 0.75,
+          "R": 1.5,
+          "S_min": 0.3,
+          "N": 1,
+          "B_min": 1.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "1.0",
+          "OD": 1.0,
+          "R": 2.0,
+          "S_min": 0.4,
+          "N": 1,
+          "B_min": 1.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "1.5",
+          "OD": 1.5,
+          "R": 3.0,
+          "S_min": 0.6,
+          "N": 1,
+          "B_min": 1.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "2.0",
+          "OD": 2.0,
+          "R": 4.0,
+          "S_min": 0.8,
+          "N": 1,
+          "B_min": 1.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "2.5",
+          "OD": 2.5,
+          "R": 5.0,
+          "S_min": 1.0,
+          "N": 1,
+          "B_min": 1.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "3.0",
+          "OD": 3.0,
+          "R": 6.0,
+          "S_min": 1.2,
+          "N": 1,
+          "B_min": 1.0,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        }
+      ]
+    },
+    {
+      "id": "cnc-cab530",
+      "name": "CNC Bender CAB-530",
+      "category": "CNC Bender",
+      "manufacturer": "Greenerd/BendTech",
+      "type": "cnc",
+      "description": "CNC hydraulic tube bender for large diameter tubing",
+      "capacity_max_OD": 5.0,
+      "capacity_max_wall": 0.2,
+      "diameters": [
+        {
+          "id": "1.0",
+          "OD": 1.0,
+          "R": 2.0,
+          "S_min": 0.4,
+          "N": 1,
+          "B_min": 0.5,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "2.0",
+          "OD": 2.0,
+          "R": 4.0,
+          "S_min": 0.8,
+          "N": 1,
+          "B_min": 0.5,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "3.0",
+          "OD": 3.0,
+          "R": 6.0,
+          "S_min": 1.2,
+          "N": 1,
+          "B_min": 0.5,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "4.0",
+          "OD": 4.0,
+          "R": 8.0,
+          "S_min": 1.6,
+          "N": 1,
+          "B_min": 0.5,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "5.0",
+          "OD": 5.0,
+          "R": 10.0,
+          "S_min": 2.0,
+          "N": 1,
+          "B_min": 0.5,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        }
+      ]
+    },
+    {
+      "id": "cnc-cab800",
+      "name": "CNC Bender CAB-800",
+      "category": "CNC Bender",
+      "manufacturer": "Greenerd/BendTech",
+      "type": "cnc",
+      "description": "CNC hydraulic tube bender for extra large diameter tubing, high precision",
+      "capacity_max_OD": 8.0,
+      "capacity_max_wall": 0.28,
+      "diameters": [
+        {
+          "id": "2.0",
+          "OD": 2.0,
+          "R": 4.0,
+          "S_min": 0.8,
+          "N": 1,
+          "B_min": 0.25,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "4.0",
+          "OD": 4.0,
+          "R": 8.0,
+          "S_min": 1.6,
+          "N": 1,
+          "B_min": 0.25,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "6.0",
+          "OD": 6.0,
+          "R": 12.0,
+          "S_min": 2.4,
+          "N": 1,
+          "B_min": 0.25,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "8.0",
+          "OD": 8.0,
+          "R": 16.0,
+          "S_min": 3.2,
+          "N": 1,
+          "B_min": 0.25,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        }
+      ]
+    },
+    {
+      "id": "pipe-bender-3quarter",
+      "name": "Pipe Bender - ¾\"",
+      "category": "Pipe Bender",
+      "manufacturer": "Ridgid",
+      "type": "manual",
+      "description": "Manual pipe bender for ¾ inch rigid pipes",
+      "diameters": [
+        {
+          "id": "0.75",
+          "OD": 0.75,
+          "R": 1.5,
+          "S_min": 0.35,
+          "N": 2,
+          "B_min": 22.5,
+          "B_max": 179.0,
+          "discrete_type": "step",
+          "discrete_values": [22.5, 45, 67.5, 90, 112.5, 135, 157.5, 179]
+        }
+      ]
+    },
+    {
+      "id": "pipe-bender-1",
+      "name": "Pipe Bender - 1\"",
+      "category": "Pipe Bender",
+      "manufacturer": "Ridgid",
+      "type": "manual",
+      "description": "Manual pipe bender for 1 inch rigid pipes",
+      "diameters": [
+        {
+          "id": "1.0",
+          "OD": 1.0,
+          "R": 2.0,
+          "S_min": 0.5,
+          "N": 2,
+          "B_min": 22.5,
+          "B_max": 179.0,
+          "discrete_type": "step",
+          "discrete_values": [22.5, 45, 67.5, 90, 112.5, 135, 157.5, 179]
+        }
+      ]
+    },
+    {
+      "id": "pipe-bender-1-quarter",
+      "name": "Pipe Bender - 1¼\"",
+      "category": "Pipe Bender",
+      "manufacturer": "Ridgid",
+      "type": "manual",
+      "description": "Manual pipe bender for 1¼ inch rigid pipes",
+      "diameters": [
+        {
+          "id": "1.25",
+          "OD": 1.25,
+          "R": 2.5,
+          "S_min": 0.6,
+          "N": 2,
+          "B_min": 22.5,
+          "B_max": 179.0,
+          "discrete_type": "step",
+          "discrete_values": [22.5, 45, 67.5, 90, 112.5, 135, 157.5, 179]
+        }
+      ]
+    },
+    {
+      "id": "orbital-bender-compact",
+      "name": "Orbital Tube Bender - Compact",
+      "category": "Orbital Bender",
+      "manufacturer": "H&M Manufacturing",
+      "type": "orbital",
+      "description": "Orbital bender for small diameter high-precision work",
+      "capacity_max_OD": 1.5,
+      "capacity_max_wall": 0.095,
+      "diameters": [
+        {
+          "id": "0.5",
+          "OD": 0.5,
+          "R": 1.0,
+          "S_min": 0.2,
+          "N": 1,
+          "B_min": 0.1,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "1.0",
+          "OD": 1.0,
+          "R": 2.0,
+          "S_min": 0.4,
+          "N": 1,
+          "B_min": 0.1,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "1.5",
+          "OD": 1.5,
+          "R": 3.0,
+          "S_min": 0.6,
+          "N": 1,
+          "B_min": 0.1,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        }
+      ]
+    },
+    {
+      "id": "orbital-bender-heavy",
+      "name": "Orbital Tube Bender - Heavy Duty",
+      "category": "Orbital Bender",
+      "manufacturer": "H&M Manufacturing",
+      "type": "orbital",
+      "description": "Heavy-duty orbital bender for production work",
+      "capacity_max_OD": 3.0,
+      "capacity_max_wall": 0.165,
+      "diameters": [
+        {
+          "id": "1.0",
+          "OD": 1.0,
+          "R": 2.0,
+          "S_min": 0.4,
+          "N": 1,
+          "B_min": 0.1,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "2.0",
+          "OD": 2.0,
+          "R": 4.0,
+          "S_min": 0.8,
+          "N": 1,
+          "B_min": 0.1,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "3.0",
+          "OD": 3.0,
+          "R": 6.0,
+          "S_min": 1.2,
+          "N": 1,
+          "B_min": 0.1,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        }
+      ]
+    }
+  ]
+}

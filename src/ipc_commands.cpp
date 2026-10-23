@@ -12,6 +12,7 @@
 #include "bendcore/camera_manager.hpp"
 #include "bendcore/snap_system.hpp"
 #include "bendcore/sketch_solver.hpp"
+#include "bendcore/profile_manager.hpp"
 #include <cmath>
 #include <ctime>
 #include <cstdlib>
@@ -79,6 +80,14 @@ void CommandRouter::register_default_handlers() {
   register_command("get-material", commands::get_material);
   register_command("get-materials-by-category", commands::get_materials_by_category);
   register_command("add-custom-material", commands::add_custom_material);
+
+  // BENDING PROFILES (Phase 35A)
+  register_command("load-profiles", commands::load_profiles);
+  register_command("get-profile", commands::get_profile);
+  register_command("get-profile-diameters", commands::get_profile_diameters);
+  register_command("get-diameter-constraints", commands::get_diameter_constraints);
+  register_command("validate-tube-spec", commands::validate_tube_spec);
+  register_command("create-tube-initial", commands::create_tube_initial);
 
   // FEATURE TREE & SEARCH (Phase 31)
   register_command("get-feature-tree", commands::get_feature_tree);
@@ -1506,6 +1515,158 @@ CommandResult get_rounding_preview(const json& args) {
   };
 
   return CommandResult{true, "Rounding preview generated", preview};
+}
+
+// Bending Profiles (Phase 35A)
+CommandResult load_profiles(const json& args) {
+  auto& profile_mgr = ProfileManager::instance();
+  std::string data_dir = args.value("data_dir", "data");
+
+  if (profile_mgr.load_profiles(data_dir)) {
+    auto ids = profile_mgr.list_profile_ids();
+    return CommandResult{true, "Profiles loaded", {{"count", ids.size()}}};
+  }
+
+  return CommandResult{false, "Failed to load profiles from " + data_dir};
+}
+
+CommandResult get_profile(const json& args) {
+  std::string profile_id = args.value("profile_id", "");
+
+  auto& profile_mgr = ProfileManager::instance();
+  auto profile = profile_mgr.get_profile(profile_id);
+
+  if (!profile) {
+    return CommandResult{false, "Profile not found: " + profile_id};
+  }
+
+  json result;
+  result["id"] = profile->id;
+  result["name"] = profile->name;
+  result["category"] = profile->category;
+  result["manufacturer"] = profile->manufacturer;
+  result["type"] = profile->type;
+  result["description"] = profile->description;
+  result["capacity_max_OD"] = profile->capacity_max_OD;
+  result["capacity_max_wall"] = profile->capacity_max_wall;
+
+  return CommandResult{true, "Profile retrieved", result};
+}
+
+CommandResult get_profile_diameters(const json& args) {
+  std::string profile_id = args.value("profile_id", "");
+
+  auto& profile_mgr = ProfileManager::instance();
+  auto diameters = profile_mgr.get_diameters(profile_id);
+
+  json diameter_list = json::array();
+  for (const auto& diam : diameters) {
+    json d = {
+      {"id", diam.id},
+      {"OD", diam.OD},
+      {"R", diam.R},
+      {"S_min", diam.S_min},
+      {"N", diam.N},
+      {"B_min", diam.B_min},
+      {"B_max", diam.B_max},
+      {"discrete_type", diam.discrete_type}
+    };
+
+    if (!diam.discrete_values.empty()) {
+      json discrete_vals = json::array();
+      for (double val : diam.discrete_values) {
+        discrete_vals.push_back(val);
+      }
+      d["discrete_values"] = discrete_vals;
+    }
+
+    diameter_list.push_back(d);
+  }
+
+  return CommandResult{true, "Diameters retrieved", {{"diameters", diameter_list}}};
+}
+
+CommandResult get_diameter_constraints(const json& args) {
+  std::string profile_id = args.value("profile_id", "");
+  double diameter = args.value("diameter", 0.0);
+
+  auto& profile_mgr = ProfileManager::instance();
+  auto constraints = profile_mgr.get_diameter_constraints(profile_id, diameter);
+
+  if (!constraints) {
+    return CommandResult{false, "Diameter constraints not found"};
+  }
+
+  json result = {
+    {"id", constraints->id},
+    {"OD", constraints->OD},
+    {"R", constraints->R},
+    {"S_min", constraints->S_min},
+    {"N", constraints->N},
+    {"B_min", constraints->B_min},
+    {"B_max", constraints->B_max},
+    {"discrete_type", constraints->discrete_type}
+  };
+
+  if (!constraints->discrete_values.empty()) {
+    json discrete_vals = json::array();
+    for (double val : constraints->discrete_values) {
+      discrete_vals.push_back(val);
+    }
+    result["discrete_values"] = discrete_vals;
+  }
+
+  return CommandResult{true, "Constraints retrieved", result};
+}
+
+CommandResult validate_tube_spec(const json& args) {
+  TubeSpecification spec;
+  spec.standard = args.value("standard", "");
+  spec.material = args.value("material", "");
+  spec.type = args.value("type", "");
+  spec.description = args.value("description", "");
+  spec.profile_id = args.value("profile_id", "");
+  spec.diameter = args.value("diameter", 0.0);
+  spec.wall_thickness = args.value("wall_thickness", 0.0);
+  spec.first_segment_allowance = args.value("first_segment_allowance", 0.0);
+  spec.last_segment_allowance = args.value("last_segment_allowance", 0.0);
+  spec.calculate_allowance = args.value("calculate_allowance", true);
+
+  auto& profile_mgr = ProfileManager::instance();
+  auto errors = profile_mgr.validate_tube_spec(spec);
+
+  json error_list = json::array();
+  for (const auto& error : errors) {
+    error_list.push_back(error);
+  }
+
+  bool is_valid = errors.empty();
+  return CommandResult{is_valid,
+    is_valid ? "Tube specification is valid" : "Validation errors found",
+    {{"errors", error_list}, {"valid", is_valid}}};
+}
+
+CommandResult create_tube_initial(const json& args) {
+  std::string profile_id = args.value("profile_id", "");
+  double diameter = args.value("diameter", 0.0);
+  std::string description = args.value("description", "");
+
+  auto& profile_mgr = ProfileManager::instance();
+  auto profile = profile_mgr.get_profile(profile_id);
+
+  if (!profile) {
+    return CommandResult{false, "Profile not found: " + profile_id};
+  }
+
+  json result = {
+    {"tube_id", "tube-" + std::to_string(std::time(nullptr))},
+    {"profile_id", profile_id},
+    {"diameter", diameter},
+    {"name", profile->name},
+    {"status", "initialized"}
+  };
+
+  return CommandResult{true, "Tube initialized", result};
 }
 
 }  // namespace commands

@@ -124,6 +124,14 @@ CommandResult get_material(const json& args);
 CommandResult get_materials_by_category(const json& args);
 CommandResult add_custom_material(const json& args);
 
+// Bending Profiles (Phase 35A)
+CommandResult load_profiles(const json& args);
+CommandResult get_profile(const json& args);
+CommandResult get_profile_diameters(const json& args);
+CommandResult get_diameter_constraints(const json& args);
+CommandResult validate_tube_spec(const json& args);
+CommandResult create_tube_initial(const json& args);
+
 // Feature Tree & Search (Phase 31)
 CommandResult get_feature_tree(const json& args);
 CommandResult search_commands(const json& args);
