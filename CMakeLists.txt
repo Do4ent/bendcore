@@ -306,6 +306,11 @@ add_executable(test_analytics_event tests/test_analytics_event.cpp)
 target_link_libraries(test_analytics_event PRIVATE bendcore_core)
 bendcore_add_test(analytics_event test_analytics_event)
 
+# Subtask 3: A/B Testing Framework
+add_executable(test_ab_testing tests/test_ab_testing.cpp)
+target_link_libraries(test_ab_testing PRIVATE bendcore_core)
+bendcore_add_test(ab_testing test_ab_testing)
+
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
 # Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
 # содержит нераскрытые переменные, поэтому библиотеки подключаются напрямую из lib/libTK*.a.
