@@ -160,6 +160,24 @@ drawing::ManualDimension manual_dimension_from(const json& j) {
     return d;
 }
 
+json manual_dimension_table_json(const drawing::ManualDimensionTable& table) {
+    json dims = json::array();
+    for (const auto& dim : table.dimensions) {
+        dims.push_back(manual_dimension_json(dim));
+    }
+    return dims;
+}
+
+drawing::ManualDimensionTable manual_dimension_table_from(const json& j) {
+    drawing::ManualDimensionTable table;
+    if (j.is_array()) {
+        for (const auto& dim_json : j) {
+            table.dimensions.push_back(manual_dimension_from(dim_json));
+        }
+    }
+    return table;
+}
+
 assembly::TubeSignatureData sig_from(const json& j) {
     assembly::TubeSignatureData d;
     d.path = path_from_json(need(j, "path"));

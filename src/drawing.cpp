@@ -1228,6 +1228,11 @@ Table create_specification_table(
 // ---------- Экспорт в PDF ----------
 // Функция для подготовки данных к PDF экспорту
 // (сам рендеринг в PDF происходит на клиенте через Puppeteer или другой инструмент)
+// Примечание: Ручные размеры (Subtask 2.7) должны быть включены в SVG-рендеринг следующим образом:
+// 1. Для каждого ручного размера добавляется <text> элемент в SVG с красным цветом
+// 2. Текст отображается рядом с точкой позиции размера
+// 3. Справочные размеры (reference=true) отображаются со звёздочкой (*)
+// 4. Пунктирная линия использует stroke-dasharray для визуального отличия от авто-размеров
 PDFExportData prepare_pdf_export(
     const std::vector<DrawingSheet>& sheets,
     const PDFExportOptions& opts) {
@@ -1242,6 +1247,8 @@ PDFExportData prepare_pdf_export(
     // с добавлением водяной метки, если нужна
     // Для теста просто возвращаем пустой результат
     for (const auto& sheet : sheets) {
+        // TODO (Subtask 2.7): Добавить рендеринг ручных размеров (manual_dimensions)
+        // Они доступны через DrawingVersion.manual_dimensions[sheet.number]
         result.svg_pages.push_back("<svg><!-- Sheet " + std::to_string(sheet.number) + " --></svg>");
     }
 
