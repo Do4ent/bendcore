@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "id": "reinforced-45-deg-v1",
+  "name": "Reinforced 45° Bend v1",
+  "description": "Heavy-duty reinforced template for 45 degree bends with enhanced structural support",
+  "metadata": {
+    "author": "engineering-team",
+    "created_at": "2026-10-15T00:00:00Z",
+    "updated_at": "2026-11-20T00:00:00Z",
+    "category": "reinforced",
+    "popularity": 78,
+    "tags": ["45-degree", "reinforced", "heavy-duty", "structural"]
+  },
+  "constraints": {
+    "outer_diameter": {
+      "min": 20,
+      "max": 150
+    },
+    "wall_thickness": {
+      "min": 2,
+      "max": 8
+    },
+    "bend_radius_ratio": {
+      "min": 2.5,
+      "max": 4.5
+    },
+    "max_bend_angle": 180,
+    "max_consecutive_bends": 3,
+    "min_bend_spacing": 20
+  },
+  "manufacturing": {
+    "materials": [
+      "Steel",
+      "Stainless Steel",
+      "Titanium"
+    ],
+    "method": "Hydraulic press bending",
+    "setup_time_min": 30,
+    "cost_per_unit": 120,
+    "min_batch_size": 5
+  },
+  "compatible_cad_formats": [
+    "STEP",
+    "IGES"
+  ],
+  "warranty_info": "24 months with maintenance",
+  "notes": [
+    "Suitable for structural applications",
+    "Enhanced material thickness support",
+    "Ideal for aerospace and automotive"
+  ]
+}

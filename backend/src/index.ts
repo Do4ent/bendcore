@@ -17,6 +17,7 @@ import sketchRoutes from './api/routes/sketches';
 import importRoutes from './api/routes/import';
 import projectRoutes, { setDatabase } from './api/routes/projects';
 import searchRoutes from './api/routes/search';
+import drawingsRoutes from './api/routes/drawings';
 
 // Load environment variables
 dotenv.config();
@@ -69,6 +70,7 @@ app.use('/api/tubes', tubeRoutes);
 app.use('/api/sketches', sketchRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/drawings', drawingsRoutes);
 app.use('/api', searchRoutes);
 
 // 404 handler

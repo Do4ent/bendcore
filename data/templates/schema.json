@@ -1,0 +1,212 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BendCore JSON Template Schema",
+  "description": "JSON Schema for BendCore tube bending template specification (v1.0)",
+  "type": "object",
+  "required": [
+    "version",
+    "id",
+    "name",
+    "description",
+    "metadata",
+    "constraints",
+    "manufacturing"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version (e.g., '1.0')",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "id": {
+      "type": "string",
+      "description": "Unique template identifier",
+      "pattern": "^[a-z0-9\\-]+$",
+      "minLength": 3,
+      "maxLength": 100
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable template name",
+      "minLength": 3,
+      "maxLength": 255
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the template",
+      "minLength": 10,
+      "maxLength": 1000
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["author", "created_at", "updated_at", "category"],
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "type": "string",
+          "description": "Template author identifier",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "created_at": {
+          "type": "string",
+          "description": "Creation timestamp (ISO 8601)",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "Last update timestamp (ISO 8601)",
+          "format": "date-time"
+        },
+        "category": {
+          "type": "string",
+          "description": "Template category",
+          "enum": ["standard", "reinforced", "custom", "large-assembly"]
+        },
+        "popularity": {
+          "type": "integer",
+          "description": "Popularity score (0-100)",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "tags": {
+          "type": "array",
+          "description": "Search tags",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "maxItems": 20
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "required": [
+        "outer_diameter",
+        "wall_thickness",
+        "bend_radius_ratio",
+        "max_bend_angle"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "outer_diameter": {
+          "$ref": "#/definitions/range",
+          "description": "Outer diameter range in mm"
+        },
+        "wall_thickness": {
+          "$ref": "#/definitions/range",
+          "description": "Wall thickness range in mm"
+        },
+        "bend_radius_ratio": {
+          "$ref": "#/definitions/range",
+          "description": "Bend radius ratio (R/D) range"
+        },
+        "max_bend_angle": {
+          "type": "number",
+          "description": "Maximum bend angle in degrees",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "max_consecutive_bends": {
+          "type": "integer",
+          "description": "Maximum number of consecutive bends",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "min_bend_spacing": {
+          "type": "number",
+          "description": "Minimum spacing between bends in mm",
+          "minimum": 0
+        }
+      }
+    },
+    "manufacturing": {
+      "type": "object",
+      "required": ["method"],
+      "additionalProperties": false,
+      "properties": {
+        "materials": {
+          "type": "array",
+          "description": "Compatible materials",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Steel",
+              "Aluminum",
+              "Copper",
+              "Titanium",
+              "Stainless Steel",
+              "Carbon Steel",
+              "Brass"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 10
+        },
+        "method": {
+          "type": "string",
+          "description": "Manufacturing method",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "setup_time_min": {
+          "type": "number",
+          "description": "Setup time in minutes",
+          "minimum": 0
+        },
+        "cost_per_unit": {
+          "type": "number",
+          "description": "Estimated cost per unit in dollars",
+          "minimum": 0
+        },
+        "min_batch_size": {
+          "type": "integer",
+          "description": "Minimum batch size",
+          "minimum": 1
+        }
+      }
+    },
+    "compatible_cad_formats": {
+      "type": "array",
+      "description": "Compatible CAD file formats",
+      "items": {
+        "type": "string",
+        "enum": ["STEP", "IGES", "DXF", "ACIS", "DWFX", "SAT"]
+      }
+    },
+    "warranty_info": {
+      "type": "string",
+      "description": "Warranty information",
+      "maxLength": 500
+    },
+    "notes": {
+      "type": "array",
+      "description": "Additional notes and remarks",
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
+      "maxItems": 20
+    }
+  },
+  "definitions": {
+    "range": {
+      "type": "object",
+      "required": ["min", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

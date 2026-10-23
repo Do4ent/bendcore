@@ -1,0 +1,430 @@
+/**
+ * Template Creator Wizard Styles
+ * Q4 Task 2: JSON Template System
+ * Step-by-step wizard with form validation
+ */
+
+:root {
+  --color-primary: #4f46e5;
+  --color-primary-dark: #4338ca;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --color-bg-primary: #1a1a2e;
+  --color-bg-secondary: #16213e;
+  --color-bg-tertiary: #0f3460;
+
+  --color-text-primary: #ecf0f1;
+  --color-text-secondary: #bdc3c7;
+  --color-text-muted: #95a5a6;
+
+  --color-border: #34495e;
+
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 1rem;
+  --spacing-md: 1.5rem;
+  --spacing-lg: 2rem;
+  --spacing-xl: 3rem;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+/* ============ GLOBAL ============ */
+
+.template-creator {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+  min-height: 100vh;
+  padding-bottom: var(--spacing-xl);
+}
+
+/* ============ HEADER ============ */
+
+.template-creator .creator-header {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  padding: var(--spacing-xl);
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.template-creator .creator-header h1 {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.template-creator .creator-header p {
+  margin: 0;
+  font-size: 1.1rem;
+  opacity: 0.95;
+}
+
+/* ============ MAIN CONTAINER ============ */
+
+.template-creator .creator-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--spacing-xl) var(--spacing-lg);
+}
+
+/* ============ PROGRESS BAR ============ */
+
+.template-creator .progress-bar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-xl);
+  gap: var(--spacing-md);
+}
+
+.template-creator .progress-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  position: relative;
+}
+
+.template-creator .progress-step .step-number {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background-color: var(--color-bg-secondary);
+  border: 2px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  transition: all 0.3s;
+}
+
+.template-creator .progress-step .step-name {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.template-creator .progress-step.active .step-number {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+}
+
+.template-creator .progress-step.active .step-name {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.template-creator .progress-step.completed .step-number {
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+  color: white;
+}
+
+.template-creator .progress-step.completed .step-name {
+  color: var(--color-success);
+}
+
+/* ============ STEP WRAPPER ============ */
+
+.template-creator .step-wrapper {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ============ STEP CONTENT ============ */
+
+.template-creator .step-content h3 {
+  margin: 0 0 var(--spacing-xl) 0;
+  font-size: 1.8rem;
+  color: var(--color-text-primary);
+  border-bottom: 2px solid var(--color-border);
+  padding-bottom: var(--spacing-md);
+}
+
+/* ============ FORMS ============ */
+
+.template-creator .form-group {
+  margin-bottom: var(--spacing-lg);
+}
+
+.template-creator .form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: var(--spacing-sm);
+  color: var(--color-text-primary);
+}
+
+.template-creator .form-group input,
+.template-creator .form-group textarea,
+.template-creator .form-group select {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.template-creator .form-group input:focus,
+.template-creator .form-group textarea:focus,
+.template-creator .form-group select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.template-creator .form-group input.error,
+.template-creator .form-group textarea.error,
+.template-creator .form-group select.error {
+  border-color: var(--color-error);
+}
+
+.template-creator .form-group small {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.template-creator .error-text {
+  display: block;
+  color: var(--color-error);
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+/* ============ FORM LAYOUT ============ */
+
+.template-creator .form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.template-creator .form-row .form-group {
+  margin-bottom: 0;
+}
+
+/* ============ CHECKBOXES ============ */
+
+.template-creator .checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.template-creator .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  transition: all 0.2s;
+}
+
+.template-creator .checkbox-label:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+.template-creator .checkbox-label input {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+/* ============ BUTTONS ============ */
+
+.template-creator .button-group {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xl);
+  justify-content: space-between;
+}
+
+.template-creator .btn {
+  padding: 0.75rem 2rem;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 120px;
+}
+
+.template-creator .btn-primary {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.template-creator .btn-primary:hover {
+  background-color: var(--color-primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.template-creator .btn-secondary {
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.template-creator .btn-secondary:hover {
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
+}
+
+.template-creator .btn-success {
+  background-color: var(--color-success);
+  color: white;
+}
+
+.template-creator .btn-success:hover {
+  background-color: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.template-creator .btn-outline {
+  background-color: transparent;
+  border: 2px solid var(--color-primary);
+  color: var(--color-primary);
+}
+
+.template-creator .btn-outline:hover {
+  background-color: rgba(79, 70, 229, 0.1);
+}
+
+.template-creator .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ============ PREVIEW SECTION ============ */
+
+.template-creator .preview-container {
+  background-color: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.template-creator .preview-form h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--color-text-primary);
+}
+
+.template-creator .preview-form p {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--color-text-secondary);
+}
+
+.template-creator .preview-section {
+  margin: var(--spacing-lg) 0;
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.template-creator .preview-section:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.template-creator .preview-section h5 {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--color-primary);
+}
+
+.template-creator .json-preview {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ============ MESSAGES ============ */
+
+.template-creator .message {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  background-color: var(--color-success);
+  color: white;
+  text-align: center;
+  margin-top: var(--spacing-lg);
+  font-weight: 500;
+}
+
+.template-creator .message.error {
+  background-color: var(--color-error);
+}
+
+/* ============ RESPONSIVE ============ */
+
+@media (max-width: 768px) {
+  .template-creator .creator-header h1 {
+    font-size: 1.8rem;
+  }
+
+  .template-creator .progress-bar {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .template-creator .progress-step {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--spacing-md);
+  }
+
+  .template-creator .progress-step .step-number {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 0.9rem;
+  }
+
+  .template-creator .progress-step .step-name {
+    text-align: left;
+  }
+
+  .template-creator .step-wrapper {
+    padding: var(--spacing-lg);
+  }
+
+  .template-creator .button-group {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .template-creator .btn {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .template-creator .form-row {
+    grid-template-columns: 1fr;
+  }
+}

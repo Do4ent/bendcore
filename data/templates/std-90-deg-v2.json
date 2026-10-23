@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "id": "std-90-deg-v2",
+  "name": "Standard 90° Bend v2",
+  "description": "Improved standard tube bending template for 90 degree bends with optimal manufacturing parameters",
+  "metadata": {
+    "author": "engineering-team",
+    "created_at": "2026-11-01T00:00:00Z",
+    "updated_at": "2026-12-01T00:00:00Z",
+    "category": "standard",
+    "popularity": 92,
+    "tags": ["90-degree", "standard", "popular", "fast-turnaround"]
+  },
+  "constraints": {
+    "outer_diameter": {
+      "min": 6,
+      "max": 100
+    },
+    "wall_thickness": {
+      "min": 0.5,
+      "max": 5
+    },
+    "bend_radius_ratio": {
+      "min": 1.5,
+      "max": 3.0
+    },
+    "max_bend_angle": 180,
+    "max_consecutive_bends": 2,
+    "min_bend_spacing": 10
+  },
+  "manufacturing": {
+    "materials": [
+      "Steel",
+      "Aluminum"
+    ],
+    "method": "3D CNC bending",
+    "setup_time_min": 15,
+    "cost_per_unit": 50,
+    "min_batch_size": 10
+  },
+  "compatible_cad_formats": [
+    "STEP",
+    "IGES",
+    "DXF"
+  ],
+  "warranty_info": "12 months standard",
+  "notes": [
+    "Optimal for standard bends",
+    "Fast turnaround time",
+    "Suitable for high-volume production"
+  ]
+}

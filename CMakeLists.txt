@@ -46,7 +46,7 @@ else()
   set(OpenCASCADE_FOUND FALSE)
 endif()
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp src/occt_init.cpp src/step_reader.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp src/growthbook_client.cpp src/analytics_event.cpp)
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp src/occt_init.cpp src/step_reader.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp src/growthbook_client.cpp src/analytics_event.cpp src/drawing_editor.cpp src/drawing_layers.cpp src/drawing_undo_redo.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
 
@@ -315,6 +315,19 @@ bendcore_add_test(ab_testing test_ab_testing)
 add_executable(test_event_batch_sender tests/test_event_batch_sender.cpp)
 target_link_libraries(test_event_batch_sender PRIVATE bendcore_core)
 bendcore_add_test(event_batch_sender test_event_batch_sender)
+
+# Q4 Task 1: Advanced Drawing Features
+add_executable(test_drawing_editor tests/test_drawing_editor.cpp)
+target_link_libraries(test_drawing_editor PRIVATE bendcore_core)
+bendcore_add_test(drawing_editor test_drawing_editor)
+
+add_executable(test_drawing_layers_manager tests/test_drawing_layers_manager.cpp)
+target_link_libraries(test_drawing_layers_manager PRIVATE bendcore_core)
+bendcore_add_test(drawing_layers_manager test_drawing_layers_manager)
+
+add_executable(test_drawing_undo_redo tests/test_drawing_undo_redo.cpp)
+target_link_libraries(test_drawing_undo_redo PRIVATE bendcore_core)
+bendcore_add_test(drawing_undo_redo test_drawing_undo_redo)
 
 # Subtask 7: Integration Testing & Documentation
 add_executable(e2e_analytics tests/e2e_analytics.cpp)
