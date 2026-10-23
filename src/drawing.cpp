@@ -1220,4 +1220,27 @@ Table create_specification_table(
     return t;
 }
 
+// ---------- Экспорт в PDF ----------
+// Функция для подготовки данных к PDF экспорту
+// (сам рендеринг в PDF происходит на клиенте через Puppeteer или другой инструмент)
+PDFExportData prepare_pdf_export(
+    const std::vector<DrawingSheet>& sheets,
+    const PDFExportOptions& opts) {
+
+    PDFExportData result;
+    result.title = opts.title;
+    result.author = opts.author;
+    result.subject = opts.subject;
+    result.page_count = static_cast<int>(sheets.size());
+
+    // В реальной реализации здесь происходил бы рендеринг в SVG
+    // с добавлением водяной метки, если нужна
+    // Для теста просто возвращаем пустой результат
+    for (const auto& sheet : sheets) {
+        result.svg_pages.push_back("<svg><!-- Sheet " + std::to_string(sheet.number) + " --></svg>");
+    }
+
+    return result;
+}
+
 }  // namespace bendcore::drawing

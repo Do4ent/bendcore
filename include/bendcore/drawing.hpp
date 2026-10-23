@@ -392,4 +392,32 @@ Table create_specification_table(
     const std::vector<BOMRow>& bom,
     const SpecificationOptions& opt = {});
 
+// ---------- Экспорт в PDF ----------
+// Опции для экспорта в PDF
+struct PDFExportOptions {
+    std::string filename = "drawing.pdf";
+    std::string author = "BendCore";
+    std::string subject;
+    std::string title;
+    bool include_watermark = false;
+    std::string watermark_text;  // "Выпущено", "НЕ для производства", etc
+    int dpi = 300;
+    bool landscape = true;
+};
+
+// Подготовить SVG с метаданными для PDF экспорта
+// (рендеринг в PDF происходит на клиенте)
+struct PDFExportData {
+    std::vector<std::string> svg_pages;      // SVG для каждого листа
+    std::string title;
+    std::string author;
+    std::string subject;
+    int page_count = 0;
+};
+
+// Подготовить данные для экспорта в PDF
+PDFExportData prepare_pdf_export(
+    const std::vector<DrawingSheet>& sheets,
+    const PDFExportOptions& opts);
+
 }  // namespace bendcore::drawing

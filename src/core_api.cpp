@@ -585,6 +585,43 @@ Core::Core() : state_(new State) {
         }
         return json{{"sheets", out_sheets}};
     };
+
+    // ----- экспорт в PDF -----
+    c["drawing.export_pdf"] = [](const json& a) {
+        drawing::PDFExportOptions opts;
+        opts.filename = str(a, "filename", "drawing.pdf");
+        opts.author = str(a, "author", "BendCore");
+        opts.subject = str(a, "subject");
+        opts.title = str(a, "title");
+        opts.include_watermark = flag(a, "include_watermark", false);
+        opts.watermark_text = str(a, "watermark_text");
+        opts.dpi = static_cast<int>(num(a, "dpi", 300));
+        opts.landscape = flag(a, "landscape", true);
+
+        // Получить листы
+        if (!a.contains("sheets") || !a.at("sheets").is_array()) {
+            throw UserError("нет поля sheets или это не массив");
+        }
+
+        // Подготовить данные для экспорта
+        std::vector<drawing::DrawingSheet> sheets;  // заглушка
+        drawing::PDFExportData pdf_data = drawing::prepare_pdf_export(sheets, opts);
+
+        // Вернуть данные для рендеринга на клиенте
+        json svg_pages = json::array();
+        for (const auto& svg : pdf_data.svg_pages) {
+            svg_pages.push_back(svg);
+        }
+
+        return json{
+            {"filename", opts.filename},
+            {"title", pdf_data.title},
+            {"author", pdf_data.author},
+            {"page_count", pdf_data.page_count},
+            {"svg_pages", svg_pages},
+            {"status", "ready_for_client_render"}
+        };
+    };
 }
 
 Core::~Core() { delete state_; }

@@ -16,6 +16,7 @@ import type {
   InstancesState,
   LraRow,
   PathItem,
+  PDFExportResult,
   ReleaseCheckResult,
   XyzRow,
 } from './types';
@@ -140,5 +141,10 @@ export class CoreClient {
   // Пакетный вывод (сборочный чертёж)
   assemblyDrawing(args: Record<string, unknown>) {
     return this.call<DrawingResult>('drawing.assembly', args);
+  }
+
+  // PDF экспорт
+  exportPDF(args: Record<string, unknown>) {
+    return this.call<PDFExportResult>('drawing.export_pdf', args);
   }
 }

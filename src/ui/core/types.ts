@@ -219,3 +219,24 @@ export interface AssemblyDrawingInput {
   sort_by_position?: boolean;
   group_by_material?: boolean;
 }
+
+// ----- PDF экспорт -----
+export interface PDFExportOptions {
+  filename?: string;
+  author?: string;
+  subject?: string;
+  title?: string;
+  include_watermark?: boolean;
+  watermark_text?: string;
+  dpi?: number;
+  landscape?: boolean;
+}
+
+export interface PDFExportResult {
+  filename: string;
+  title: string;
+  author: string;
+  page_count: number;
+  svg_pages: string[];
+  status: 'ready_for_client_render' | 'error';
+}
