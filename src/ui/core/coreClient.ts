@@ -4,6 +4,8 @@
  * с функцией dispatch). Ошибка ядра приходит как CoreClientError с текстом для пользователя.
  */
 import type {
+  AddSketchRequest,
+  AddSketchResult,
   AssociativeDrawing,
   BendDataResult,
   CheckResult,
@@ -18,6 +20,8 @@ import type {
   PathItem,
   PDFExportResult,
   ReleaseCheckResult,
+  SketchBboxResult,
+  Sketch2D,
   XyzRow,
 } from './types';
 
@@ -146,5 +150,19 @@ export class CoreClient {
   // PDF экспорт
   exportPDF(args: Record<string, unknown>) {
     return this.call<PDFExportResult>('drawing.export_pdf', args);
+  }
+
+  // 2D Sketches (v7.9)
+  addSketch(args: AddSketchRequest) {
+    return this.call<AddSketchResult>('drawing.add_sketch', args);
+  }
+  sketchBbox(sketch: Sketch2D) {
+    return this.call<SketchBboxResult>('drawing.sketch_bbox', {
+      sheet_number: sketch.sheet_number,
+      name: sketch.name,
+      author: sketch.created_by,
+      elements: sketch.elements,
+      dimensions: sketch.dimensions,
+    });
   }
 }

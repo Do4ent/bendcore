@@ -240,3 +240,81 @@ export interface PDFExportResult {
   svg_pages: string[];
   status: 'ready_for_client_render' | 'error';
 }
+
+// ---------- 2D Sketches (v7.9) ----------
+export type SketchElementType = 'line' | 'arc' | 'text' | 'dimension';
+
+export interface SketchElement {
+  id: string;
+  type: SketchElementType;
+  p0_x: number;
+  p0_y: number;
+  p1_x: number;
+  p1_y: number;
+  text?: string;
+  radius?: number;
+  arc_large?: boolean;
+  arc_sweep?: boolean;
+  text_height?: number;
+  is_construction?: boolean;
+  style?: LineStyle;
+}
+
+export interface SketchDimension {
+  id: string;
+  p0_x: number;
+  p0_y: number;
+  p1_x: number;
+  p1_y: number;
+  offset_x?: number;
+  offset_y?: number;
+  text: string;
+  reference?: boolean;
+  driven?: boolean;
+}
+
+export interface Sketch2D {
+  id: string;
+  sheet_number: number;
+  name: string;
+  elements: SketchElement[];
+  dimensions: SketchDimension[];
+  visible: boolean;
+  locked: boolean;
+  created_by: string;
+  created_at: string;
+  modified_at: string;
+}
+
+export interface SketchValidationResult {
+  valid: boolean;
+  errors?: string[];
+  warnings?: string[];
+}
+
+export interface AddSketchRequest {
+  sheet_number?: number;
+  name?: string;
+  author?: string;
+  elements?: SketchElement[];
+  dimensions?: SketchDimension[];
+}
+
+export interface AddSketchResult extends SketchValidationResult {
+  id: string;
+  name: string;
+  sheet_number: number;
+  element_count: number;
+  dimension_count: number;
+  created_at: string;
+}
+
+export interface SketchBboxResult {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  width: number;
+  height: number;
+  empty: boolean;
+}

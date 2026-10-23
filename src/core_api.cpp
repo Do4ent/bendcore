@@ -622,6 +622,129 @@ Core::Core() : state_(new State) {
             {"status", "ready_for_client_render"}
         };
     };
+
+    // ----- 2D эскизы на чертежах -----
+    c["drawing.add_sketch"] = [](const json& a) {
+        drawing::Sketch2D sketch = drawing::make_sketch(
+            static_cast<int>(num(a, "sheet_number", 1)),
+            str(a, "name", "Sketch"),
+            str(a, "author", "")
+        );
+
+        // Добавить элементы эскиза, если они переданы
+        if (a.contains("elements") && a.at("elements").is_array()) {
+            for (const auto& elem_data : a.at("elements")) {
+                const std::string type_str = str(elem_data, "type", "line");
+                drawing::Vec2 p0{num(elem_data, "p0_x", 0), num(elem_data, "p0_y", 0)};
+                drawing::Vec2 p1{num(elem_data, "p1_x", 0), num(elem_data, "p1_y", 0)};
+
+                drawing::SketchElement elem;
+                elem.id = str(elem_data, "id", "");
+
+                if (type_str == "line") {
+                    elem = drawing::make_sketch_line(p0, p1, elem.id);
+                } else if (type_str == "arc") {
+                    double radius = num(elem_data, "radius", 0);
+                    bool large = flag(elem_data, "arc_large", false);
+                    bool sweep = flag(elem_data, "arc_sweep", false);
+                    elem = drawing::make_sketch_arc(p0, p1, radius, large, sweep, elem.id);
+                } else if (type_str == "text") {
+                    std::string text = str(elem_data, "text", "");
+                    double height = num(elem_data, "text_height", 3.5);
+                    elem = drawing::make_sketch_text(p0, text, height, elem.id);
+                }
+
+                if (!elem.id.empty()) {
+                    sketch.elements.push_back(elem);
+                }
+            }
+        }
+
+        // Добавить размеры, если они переданы
+        if (a.contains("dimensions") && a.at("dimensions").is_array()) {
+            for (const auto& dim_data : a.at("dimensions")) {
+                drawing::Vec2 p0{num(dim_data, "p0_x", 0), num(dim_data, "p0_y", 0)};
+                drawing::Vec2 p1{num(dim_data, "p1_x", 0), num(dim_data, "p1_y", 0)};
+                drawing::Vec2 offset{num(dim_data, "offset_x", 0), num(dim_data, "offset_y", 10)};
+                std::string text = str(dim_data, "text", "");
+
+                drawing::SketchDimension dim = drawing::make_sketch_dimension(p0, p1, text, offset, "");
+                sketch.dimensions.push_back(dim);
+            }
+        }
+
+        // Валидировать эскиз
+        drawing::SketchValidationResult validation = drawing::validate_sketch(sketch);
+
+        json result{
+            {"id", sketch.id},
+            {"name", sketch.name},
+            {"sheet_number", sketch.sheet_number},
+            {"element_count", static_cast<int>(sketch.elements.size())},
+            {"dimension_count", static_cast<int>(sketch.dimensions.size())},
+            {"valid", validation.valid},
+            {"created_at", sketch.created_at}
+        };
+
+        if (!validation.errors.empty()) {
+            result["errors"] = validation.errors;
+        }
+        if (!validation.warnings.empty()) {
+            result["warnings"] = validation.warnings;
+        }
+
+        return result;
+    };
+
+    // Получить информацию о эскизе
+    c["drawing.sketch_bbox"] = [](const json& a) {
+        drawing::Sketch2D sketch = drawing::make_sketch(
+            static_cast<int>(num(a, "sheet_number", 1)),
+            str(a, "name", "Sketch"),
+            str(a, "author", "")
+        );
+
+        // Восстановить элементы из JSON
+        if (a.contains("elements") && a.at("elements").is_array()) {
+            for (const auto& elem_data : a.at("elements")) {
+                drawing::Vec2 p0{num(elem_data, "p0_x", 0), num(elem_data, "p0_y", 0)};
+                drawing::Vec2 p1{num(elem_data, "p1_x", 0), num(elem_data, "p1_y", 0)};
+                const std::string type_str = str(elem_data, "type", "line");
+
+                drawing::SketchElement elem;
+                elem.id = str(elem_data, "id", "");
+
+                if (type_str == "line") {
+                    elem = drawing::make_sketch_line(p0, p1, elem.id);
+                } else if (type_str == "arc") {
+                    double radius = num(elem_data, "radius", 0);
+                    bool large = flag(elem_data, "arc_large", false);
+                    bool sweep = flag(elem_data, "arc_sweep", false);
+                    elem = drawing::make_sketch_arc(p0, p1, radius, large, sweep, elem.id);
+                } else if (type_str == "text") {
+                    std::string text = str(elem_data, "text", "");
+                    double height = num(elem_data, "text_height", 3.5);
+                    elem = drawing::make_sketch_text(p0, text, height, elem.id);
+                }
+
+                if (!elem.id.empty()) {
+                    sketch.elements.push_back(elem);
+                }
+            }
+        }
+
+        drawing::Box2 bbox = drawing::sketch_bbox(sketch);
+
+        return json{
+            {"x0", bbox.lo[0]},
+            {"y0", bbox.lo[1]},
+            {"x1", bbox.hi[0]},
+            {"y1", bbox.hi[1]},
+            {"width", bbox.w()},
+            {"height", bbox.h()},
+            {"empty", bbox.empty}
+        };
+    };
 }
 
 Core::~Core() { delete state_; }
