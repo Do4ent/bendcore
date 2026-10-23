@@ -3,6 +3,7 @@
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
+#include "bendcore/core_api.hpp"
 #include "bendcore/sketch2d.hpp"
 #include "bendcore/tube_model.hpp"
 #include "bendcore/tubegeom.hpp"
@@ -183,6 +184,12 @@ val importTubeJs(const std::string& format, const std::string& text, const std::
 
 }  // namespace
 
+// Тот же диспетчер команд, что в bendcore_cli: строка запроса JSON → строка ответа JSON.
+std::string dispatchJs(const std::string& line) {
+    static bendcore::api::Core core;
+    return core.handle_line(line);
+}
+
 EMSCRIPTEN_BINDINGS(bendcore_module) {
     class_<Sketch>("Sketch")
         .constructor<>()
@@ -214,4 +221,5 @@ EMSCRIPTEN_BINDINGS(bendcore_module) {
     function("axisLength", &axisLengthJs);
     function("manualPort", &manualPortJs);
     function("tracePath", &tracePathJs);
+    function("dispatch", &dispatchJs);
 }

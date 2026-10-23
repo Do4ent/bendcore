@@ -5,8 +5,14 @@
 
 import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
+import { CoreBridge, defaultCliPath } from './core_bridge';
 
 let mainWindow: BrowserWindow | null = null;
+
+// Ядро C++ отдельным процессом (bendcore_cli). Команды вида «раздел.действие» идут в ядро.
+const core = new CoreBridge({
+  executable: defaultCliPath(process.resourcesPath, path.join(__dirname, '..'), process.platform),
+});
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -41,19 +47,18 @@ ipcMain.handle('bendcore:command', async (event, { command, args }) => {
   console.log(`IPC Command: ${command}`, args);
 
   try {
-    // Route commands to C++ backend
-    // TODO: Implement C++ command router via WASM or native module
-    const result = await handleCommand(command, args);
+    const result = command.includes('.')
+      ? await core.call(command, args ?? {})
+      : await handleCommand(command, args);
     return { status: 'ok', data: result };
   } catch (error) {
     console.error(`Command error: ${command}`, error);
-    return { status: 'error', message: String(error) };
+    return { status: 'error', message: error instanceof Error ? error.message : String(error) };
   }
 });
 
-// Command handler (placeholder for C++ integration)
+// Команды оболочки, ещё не перенесённые в ядро (заглушки документа).
 async function handleCommand(command: string, args: any) {
-  // This will be replaced with actual C++ calls via WASM/native module
   console.log(`Handling: ${command}`, args);
 
   switch (command) {
@@ -71,6 +76,8 @@ async function handleCommand(command: string, args: any) {
 
 // App events
 app.on('ready', createWindow);
+
+app.on('will-quit', () => core.dispose());
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
