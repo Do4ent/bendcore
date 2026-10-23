@@ -1,0 +1,207 @@
+/**
+ * Viewport3D Styling
+ * Dark mode compatible styles for 3D viewport
+ */
+
+.viewport-3d-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewport-3d-container {
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  }
+}
+
+.viewport-3d-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.viewport-3d-canvas canvas {
+  display: block;
+}
+
+/* Viewport Controls */
+.viewport-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewport-controls {
+    background: #1f2937;
+    border-color: #374151;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.viewport-control-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  transition: all 0.15s ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewport-control-button {
+    background: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+}
+
+.viewport-control-button:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewport-control-button:hover {
+    background: #4b5563;
+    border-color: #6b7280;
+  }
+}
+
+.viewport-control-button.active {
+  background: #3b82f6;
+  border-color: #2563eb;
+  color: white;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewport-control-button.active {
+    background: #2563eb;
+    border-color: #1d4ed8;
+  }
+}
+
+.viewport-control-button.snap-toggle {
+  font-size: 16px;
+}
+
+.viewport-control-button.view-button {
+  font-size: 11px;
+  padding: 0 6px;
+  width: auto;
+  min-width: 40px;
+}
+
+.viewport-control-button.home-button {
+  font-size: 12px;
+  padding: 0 8px;
+  width: auto;
+  min-width: 50px;
+}
+
+.viewport-control-separator {
+  width: 1px;
+  height: 24px;
+  background: #e5e7eb;
+  margin: 0 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewport-control-separator {
+    background: #4b5563;
+  }
+}
+
+/* Viewport Hints */
+.viewport-hints {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: #6b7280;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewport-hints {
+    background: rgba(31, 41, 55, 0.95);
+    border-color: #374151;
+    color: #9ca3af;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.viewport-hint-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.viewport-hint-row + .viewport-hint-row {
+  margin-top: 6px;
+}
+
+.viewport-hint-label {
+  font-weight: 600;
+  color: #374151;
+  flex-shrink: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewport-hint-label {
+    color: #d1d5db;
+  }
+}
+
+.viewport-hint-text {
+  color: #6b7280;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viewport-hint-text {
+    color: #9ca3af;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .viewport-controls {
+    top: 8px;
+    right: 8px;
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .viewport-hints {
+    font-size: 11px;
+    padding: 8px 12px;
+    left: 8px;
+    bottom: 8px;
+  }
+}

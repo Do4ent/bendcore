@@ -8,6 +8,9 @@
 #include "bendcore/feature_tree.hpp"
 #include "bendcore/command_search.hpp"
 #include "bendcore/shortcuts.hpp"
+#include "bendcore/viewport_manager.hpp"
+#include "bendcore/camera_manager.hpp"
+#include "bendcore/snap_system.hpp"
 #include <cmath>
 #include <ctime>
 
@@ -98,6 +101,24 @@ void CommandRouter::register_default_handlers() {
   register_command("toggle-snap", commands::toggle_snap);
   register_command("find", commands::find);
   register_command("history", commands::show_history);
+
+  // VIEWPORT & CAMERA CONTROL (Phase 33)
+  register_command("set-camera-position", commands::set_camera_position);
+  register_command("get-camera-position", commands::get_camera_position);
+  register_command("orbit-camera", commands::orbit_camera);
+  register_command("pan-camera", commands::pan_camera);
+  register_command("zoom-camera", commands::zoom_camera);
+  register_command("fit-to-view", commands::fit_to_view);
+  register_command("set-snap-mode", commands::set_snap_mode);
+  register_command("get-snap-points", commands::get_snap_points);
+
+  // TOOLBAR & SETTINGS (Phase 34)
+  register_command("get-settings", commands::get_settings);
+  register_command("set-settings", commands::set_settings);
+  register_command("load-profile", commands::load_profile);
+  register_command("save-profile", commands::save_profile);
+  register_command("get-icon-theme", commands::get_icon_theme);
+  register_command("set-icon-theme", commands::set_icon_theme);
 }
 
 // ============ COMMAND IMPLEMENTATIONS ============
@@ -739,6 +760,292 @@ CommandResult show_history(const json& args) {
 
   return CommandResult{true, "History shown",
     json{{"items", history_items}, {"count", 2}}};
+}
+
+// ============ VIEWPORT & CAMERA CONTROL (Phase 33) ============
+
+CommandResult set_camera_position(const json& args) {
+  double x = args.value("x", 0.0);
+  double y = args.value("y", 0.0);
+  double z = args.value("z", 100.0);
+
+  auto& viewport = bendcore::ViewportManager::instance();
+  viewport.set_camera_position(x, y, z);
+
+  return CommandResult{true, "Camera position set", json{
+    {"position", json{{"x", x}, {"y", y}, {"z", z}}}
+  }};
+}
+
+CommandResult get_camera_position(const json& args) {
+  auto& viewport = bendcore::ViewportManager::instance();
+  auto state = viewport.get_camera_state();
+
+  return CommandResult{true, "Camera position retrieved", json{
+    {"position", json{
+      {"x", state.position.x},
+      {"y", state.position.y},
+      {"z", state.position.z}
+    }},
+    {"target", json{
+      {"x", state.target.x},
+      {"y", state.target.y},
+      {"z", state.target.z}
+    }},
+    {"distance", state.distance},
+    {"pitch", state.pitch},
+    {"yaw", state.yaw}
+  }};
+}
+
+CommandResult orbit_camera(const json& args) {
+  double delta_pitch = args.value("deltaPitch", 0.0);
+  double delta_yaw = args.value("deltaYaw", 0.0);
+
+  auto& viewport = bendcore::ViewportManager::instance();
+  viewport.orbit_camera(delta_pitch, delta_yaw);
+
+  auto state = viewport.get_camera_state();
+  return CommandResult{true, "Camera orbit executed", json{
+    {"pitch", state.pitch},
+    {"yaw", state.yaw}
+  }};
+}
+
+CommandResult pan_camera(const json& args) {
+  double delta_x = args.value("deltaX", 0.0);
+  double delta_y = args.value("deltaY", 0.0);
+
+  auto& viewport = bendcore::ViewportManager::instance();
+  viewport.pan_camera(delta_x, delta_y);
+
+  auto state = viewport.get_camera_state();
+  return CommandResult{true, "Camera pan executed", json{
+    {"target", json{
+      {"x", state.target.x},
+      {"y", state.target.y},
+      {"z", state.target.z}
+    }}
+  }};
+}
+
+CommandResult zoom_camera(const json& args) {
+  double factor = args.value("factor", 1.1);
+
+  auto& viewport = bendcore::ViewportManager::instance();
+  viewport.zoom_camera(factor);
+
+  auto state = viewport.get_camera_state();
+  return CommandResult{true, "Camera zoom executed", json{
+    {"distance", state.distance}
+  }};
+}
+
+CommandResult fit_to_view(const json& args) {
+  std::vector<std::string> object_ids;
+  if (args.contains("objectIds") && args["objectIds"].is_array()) {
+    for (const auto& id : args["objectIds"]) {
+      object_ids.push_back(id.get<std::string>());
+    }
+  }
+
+  auto& viewport = bendcore::ViewportManager::instance();
+  viewport.fit_to_view(object_ids);
+
+  auto state = viewport.get_camera_state();
+  return CommandResult{true, "Fit to view executed", json{
+    {"distance", state.distance},
+    {"pitch", state.pitch},
+    {"yaw", state.yaw},
+    {"objectCount", object_ids.size()}
+  }};
+}
+
+CommandResult set_snap_mode(const json& args) {
+  std::string mode_str = args.value("mode", "grid");
+  bool enabled = args.value("enabled", true);
+
+  auto& snap_system = bendcore::SnapSystem::instance();
+  auto mode = bendcore::snap_mode_from_string(mode_str);
+  snap_system.set_snap_mode(mode, enabled);
+
+  return CommandResult{true, "Snap mode set", json{
+    {"mode", mode_str},
+    {"enabled", enabled},
+    {"activeModes", json::array()}
+  }};
+}
+
+CommandResult get_snap_points(const json& args) {
+  double cursor_x = args.value("cursorX", 0.0);
+  double cursor_y = args.value("cursorY", 0.0);
+
+  auto& snap_system = bendcore::SnapSystem::instance();
+  // Note: In a real implementation, we'd pass the actual view and projection matrices
+  // For now, we return an empty array with snap configuration
+  json snap_points = json::array();
+
+  return CommandResult{true, "Snap points detected", json{
+    {"points", snap_points},
+    {"count", 0},
+    {"cursor", json{
+      {"x", cursor_x},
+      {"y", cursor_y}
+    }},
+    {"snapEnabled", snap_system.is_snap_enabled()}
+  }};
+}
+
+// ============ SETTINGS & TOOLBAR (Phase 34) ============
+
+CommandResult get_settings(const json& args) {
+  auto& settings = bendcore::SettingsManager::instance();
+  json all_settings = settings.get_all();
+
+  return CommandResult{true, "Settings retrieved", all_settings};
+}
+
+CommandResult set_settings(const json& args) {
+  auto& settings = bendcore::SettingsManager::instance();
+
+  // Update toolbar if provided
+  if (args.contains("toolbar")) {
+    if (args["toolbar"].contains("buttons")) {
+      auto buttons = args["toolbar"]["buttons"].get<std::vector<std::string>>();
+      settings.set_toolbar_buttons(buttons);
+    }
+  }
+
+  // Update theme if provided
+  if (args.contains("theme")) {
+    settings.set(std::string("theme"), args["theme"]);
+  }
+
+  // Update profile if provided
+  if (args.contains("currentProfile")) {
+    settings.set_current_profile(args["currentProfile"].get<std::string>());
+  }
+
+  // Update shortcuts if provided
+  if (args.contains("shortcuts")) {
+    settings.set(std::string("shortcuts"), args["shortcuts"]);
+  }
+
+  settings.save();
+
+  return CommandResult{true, "Settings updated", json{
+    {"updated", true},
+    {"savedPath", settings.get_settings_path()}
+  }};
+}
+
+CommandResult load_profile(const json& args) {
+  if (!args.contains("profile_name")) {
+    return CommandResult{false, "profile_name required"};
+  }
+
+  std::string profile_name = args["profile_name"].get<std::string>();
+  auto& settings = bendcore::SettingsManager::instance();
+  settings.set_current_profile(profile_name);
+  settings.save();
+
+  return CommandResult{true, "Profile loaded", json{
+    {"profileName", profile_name},
+    {"currentProfile", settings.get_current_profile()}
+  }};
+}
+
+CommandResult save_profile(const json& args) {
+  if (!args.contains("profile_name") || !args.contains("profile_data")) {
+    return CommandResult{false, "profile_name and profile_data required"};
+  }
+
+  std::string profile_name = args["profile_name"].get<std::string>();
+  json profile_data = args["profile_data"];
+
+  auto& settings = bendcore::SettingsManager::instance();
+  settings.set(profile_name, profile_data);
+  settings.save();
+
+  return CommandResult{true, "Profile saved", json{
+    {"profileName", profile_name},
+    {"saved", true}
+  }};
+}
+
+CommandResult get_icon_theme(const json& args) {
+  auto& theme_manager = bendcore::IconThemeManager::instance();
+
+  std::string preset_str;
+  auto preset = theme_manager.get_current_preset();
+  switch (preset) {
+    case bendcore::ThemePreset::kLight:
+      preset_str = "light";
+      break;
+    case bendcore::ThemePreset::kDark:
+      preset_str = "dark";
+      break;
+    case bendcore::ThemePreset::kHighContrast:
+      preset_str = "highContrast";
+      break;
+    case bendcore::ThemePreset::kColorblind:
+      preset_str = "colorblind";
+      break;
+    case bendcore::ThemePreset::kCustom:
+      preset_str = "custom";
+      break;
+  }
+
+  return CommandResult{true, "Theme retrieved", json{
+    {"theme_name", theme_manager.get_theme_name()},
+    {"preset", preset_str},
+    {"colors", theme_manager.get_colors_json()}
+  }};
+}
+
+CommandResult set_icon_theme(const json& args) {
+  auto& theme_manager = bendcore::IconThemeManager::instance();
+
+  // Apply preset if provided
+  if (args.contains("preset")) {
+    std::string preset_str = args["preset"].get<std::string>();
+    if (preset_str == "light") {
+      theme_manager.set_preset(bendcore::ThemePreset::kLight);
+    } else if (preset_str == "dark") {
+      theme_manager.set_preset(bendcore::ThemePreset::kDark);
+    } else if (preset_str == "highContrast") {
+      theme_manager.set_preset(bendcore::ThemePreset::kHighContrast);
+    } else if (preset_str == "colorblind") {
+      theme_manager.set_preset(bendcore::ThemePreset::kColorblind);
+    }
+  }
+
+  // Apply custom colors if provided
+  if (args.contains("colors") && args["colors"].is_object()) {
+    for (auto& [key, value] : args["colors"].items()) {
+      std::string color = value.get<std::string>();
+      if (bendcore::IconThemeManager::is_valid_hex_color(color)) {
+        try {
+          theme_manager.set_custom_color(key, color);
+        } catch (const std::exception& e) {
+          // Continue with other colors if one fails
+        }
+      }
+    }
+  }
+
+  // Save to settings
+  auto& settings = bendcore::SettingsManager::instance();
+  settings.set("theme", json{
+    {"name", theme_manager.get_theme_name()},
+    {"colors", theme_manager.get_colors_json()}
+  });
+  settings.save();
+
+  return CommandResult{true, "Theme applied", json{
+    {"theme_name", theme_manager.get_theme_name()},
+    {"colors", theme_manager.get_colors_json()}
+  }};
 }
 
 }  // namespace commands

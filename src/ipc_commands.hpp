@@ -157,6 +157,24 @@ CommandResult toggle_snap(const json& args);
 CommandResult find(const json& args);
 CommandResult show_history(const json& args);
 
+// Viewport & Camera Control (Phase 33)
+CommandResult set_camera_position(const json& args);
+CommandResult get_camera_position(const json& args);
+CommandResult orbit_camera(const json& args);
+CommandResult pan_camera(const json& args);
+CommandResult zoom_camera(const json& args);
+CommandResult fit_to_view(const json& args);
+CommandResult set_snap_mode(const json& args);
+CommandResult get_snap_points(const json& args);
+
+// Settings & Profiles (Phase 34)
+CommandResult get_settings(const json& args);
+CommandResult set_settings(const json& args);
+CommandResult load_profile(const json& args);
+CommandResult save_profile(const json& args);
+CommandResult get_icon_theme(const json& args);
+CommandResult set_icon_theme(const json& args);
+
 }  // namespace commands
 
 }  // namespace bendcore
