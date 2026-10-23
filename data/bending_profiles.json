@@ -561,6 +561,58 @@
           "discrete_type": "continuous"
         }
       ]
+    },
+    {
+      "id": "nc-servo-bender",
+      "name": "NC Servo Bender",
+      "category": "NC Servo Bender",
+      "manufacturer": "BendPak Industrial",
+      "type": "cnc",
+      "description": "High-precision NC servo bender with programmable bending sequences",
+      "capacity_max_OD": 4.0,
+      "capacity_max_wall": 0.188,
+      "diameters": [
+        {
+          "id": "1.0",
+          "OD": 1.0,
+          "R": 2.0,
+          "S_min": 0.35,
+          "N": 1,
+          "B_min": 0.5,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "2.0",
+          "OD": 2.0,
+          "R": 4.0,
+          "S_min": 0.7,
+          "N": 1,
+          "B_min": 0.5,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "3.0",
+          "OD": 3.0,
+          "R": 6.0,
+          "S_min": 1.0,
+          "N": 1,
+          "B_min": 0.5,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        },
+        {
+          "id": "4.0",
+          "OD": 4.0,
+          "R": 8.0,
+          "S_min": 1.4,
+          "N": 1,
+          "B_min": 0.5,
+          "B_max": 179.0,
+          "discrete_type": "continuous"
+        }
+      ]
     }
   ]
 }
