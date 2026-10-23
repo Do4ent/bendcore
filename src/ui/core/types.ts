@@ -132,6 +132,28 @@ export interface DrawingTable {
   note: string;
 }
 /** Лист чертежа (ответ drawing.part → sheets[]). */
+// ----- слои и управление видимостью (Q2 2027) -----
+export enum LayerType {
+  Contour = 0,
+  Dimensions = 1,
+  Axis = 2,
+  Markup = 3,
+  ConstructionGeometry = 4,
+}
+
+export interface Layer {
+  type: LayerType;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  color: string;  // hex color
+  element_count: number;
+}
+
+export interface LayerVisibility {
+  layer_visibility: Record<number, boolean>;
+}
+
 export interface DrawingData {
   number: number;
   count: number;
@@ -145,6 +167,8 @@ export interface DrawingData {
   title: Record<string, string>;
   not_for_production: boolean;
   warnings: string[];
+  layers?: Layer[];
+  layer_visibility?: LayerVisibility;
 }
 
 export interface DrawingResult {
@@ -163,9 +187,26 @@ export interface ReleaseCheckResult {
 // ----- ассоциативность (версионирование) -----
 export type AssociativityStatus = 'fresh' | 'stale' | 'broken' | 'not_applicable';
 
+// ---------- Ручные размеры (Task 2.1-2.7) ----------
+export interface ManualDimension {
+  id: string;
+  position: Vec2;
+  text: string;
+  reference: boolean;
+  author: string;
+  created_at: string;
+}
+
+export interface ManualDimensionTable {
+  dimensions: ManualDimension[];
+}
+
 export interface DrawingVersion {
   revision: number;
   fingerprint: string;
+  sheets: DrawingData[];
+  sketches: any[];  // Sketch2D
+  manual_dimensions?: Record<number, ManualDimensionTable>;  // По номерам листов
   timestamp: string;
   author: string;
   comment: string;

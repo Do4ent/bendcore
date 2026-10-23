@@ -1,0 +1,356 @@
+/* Стили для редактора ручных размеров */
+
+.manual-dimension-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px;
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.editor-header {
+  border-bottom: 2px solid #333;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.editor-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Форма добавления размера */
+.add-dimension-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"] {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="number"]:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1);
+}
+
+.form-group input[type="checkbox"] {
+  width: auto;
+  margin-right: 4px;
+}
+
+.validation-error {
+  grid-column: 1 / -1;
+  padding: 8px 12px;
+  background: #ffebee;
+  border: 1px solid #ef5350;
+  border-radius: 3px;
+  color: #c62828;
+  font-size: 13px;
+}
+
+.btn-add {
+  grid-column: 1 / -1;
+  padding: 8px 16px;
+  background: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-add:hover {
+  background: #0052a3;
+}
+
+.btn-add:active {
+  background: #003d7a;
+}
+
+/* Preview на SVG */
+.svg-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.svg-preview h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+}
+
+.drawing-svg {
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 4px;
+  width: 100%;
+  max-width: 600px;
+  height: auto;
+}
+
+.dimension-group {
+  cursor: grab;
+}
+
+.dimension-group:active {
+  cursor: grabbing;
+}
+
+.dimension-group.dragging circle {
+  fill: orange;
+  r: 4;
+}
+
+.dimension-group.dragging text {
+  fill: orange;
+  font-weight: bold;
+}
+
+.dimension-text {
+  pointer-events: none;
+  user-select: none;
+}
+
+.dimension-highlight {
+  pointer-events: none;
+}
+
+/* Список размеров */
+.dimensions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dimensions-list h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+}
+
+.empty-message {
+  padding: 16px;
+  background: white;
+  border: 1px dashed #ddd;
+  border-radius: 4px;
+  color: #999;
+  font-size: 13px;
+  text-align: center;
+  margin: 0;
+}
+
+.dimensions-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dimension-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  gap: 12px;
+}
+
+.dimension-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dimension-text-value {
+  font-weight: 500;
+  color: #333;
+  font-size: 13px;
+}
+
+.dimension-position {
+  color: #999;
+  font-size: 12px;
+}
+
+.dimension-author {
+  color: #0066cc;
+  font-size: 12px;
+}
+
+.dimension-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-edit,
+.btn-remove {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-edit {
+  background: #e3f2fd;
+  color: #0066cc;
+  border-color: #90caf9;
+}
+
+.btn-edit:hover {
+  background: #bbdefb;
+  border-color: #64b5f6;
+}
+
+.btn-remove {
+  background: #ffebee;
+  color: #c62828;
+  border-color: #ef5350;
+}
+
+.btn-remove:hover {
+  background: #ffcdd2;
+  border-color: #e57373;
+}
+
+/* Информация о черновике */
+.draft-info {
+  padding: 8px 12px;
+  background: #f1f8e9;
+  border: 1px solid #aed581;
+  border-radius: 4px;
+  color: #558b2f;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Темная тема (при необходимости) */
+@media (prefers-color-scheme: dark) {
+  .manual-dimension-editor {
+    background: #1e1e1e;
+    border-color: #444;
+  }
+
+  .editor-header h3 {
+    color: #e0e0e0;
+  }
+
+  .add-dimension-form {
+    background: #2a2a2a;
+    border-color: #444;
+  }
+
+  .form-group label {
+    color: #aaa;
+  }
+
+  .form-group input[type="text"],
+  .form-group input[type="number"] {
+    background: #333;
+    color: #e0e0e0;
+    border-color: #555;
+  }
+
+  .form-group input[type="text"]:focus,
+  .form-group input[type="number"]:focus {
+    border-color: #66b3ff;
+  }
+
+  .drawing-svg {
+    background: #2a2a2a;
+    border-color: #444;
+  }
+
+  .dimensions-list h4 {
+    color: #aaa;
+  }
+
+  .empty-message {
+    background: #2a2a2a;
+    border-color: #444;
+    color: #666;
+  }
+
+  .dimension-item {
+    background: #2a2a2a;
+    border-color: #444;
+  }
+
+  .dimension-text-value {
+    color: #e0e0e0;
+  }
+
+  .dimension-position {
+    color: #888;
+  }
+
+  .draft-info {
+    background: #1b5e20;
+    border-color: #558b2f;
+    color: #a5d6a7;
+  }
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+  .manual-dimension-editor {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .add-dimension-form {
+    grid-template-columns: 1fr;
+  }
+
+  .dimension-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dimension-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
