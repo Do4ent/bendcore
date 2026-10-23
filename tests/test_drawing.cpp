@@ -188,30 +188,52 @@ static void test_release() {
           "снять выпуск: Выпускающий или администратор");
 }
 
-static void test_layout() {
-    DrawingInput in;
-    in.path = spatial();
-    in.od = 20;
-    in.title["Обозначение"] = "БК.001";
-    DrawingSheet m = make_part_drawing(in);
-    check(m.views.size() == 3, "минимальный набор: главный, изометрия, развёртка");
-    check(m.tables.size() == 2, "таблица гибов и карта заготовки");
-    check(m.title.at("Масштаб").size() > 0 && m.title.at("Обозначение") == "БК.001", "поля штампа");
+static bool overlap(double ax0, double ax1, double ay0, double ay1, const Rect& r) {
+    return ax0 < r.x1 - 1e-6 && ax1 > r.x0 + 1e-6 && ay0 < r.y1 - 1e-6 && ay1 > r.y0 + 1e-6;
+}
+
+// Вид внутри рамки и не заходит на штамп и таблицы.
+static void check_inside(const DrawingSheet& m) {
     for (const auto& v : m.views) {
-        check(is_standard_scale(v.scale, Standard::GOST), "масштабы из ряда ГОСТ");
+        check(is_standard_scale(v.scale, m.standard), "масштабы из ряда стандарта");
         const Box2 b = v.geom.bbox();
         const double x0 = v.origin[0] + v.scale * b.lo[0], x1 = v.origin[0] + v.scale * b.hi[0];
         const double y0 = v.origin[1] + v.scale * b.lo[1], y1 = v.origin[1] + v.scale * b.hi[1];
-        check(x0 >= m.frame.border.x0 - 1e-6 && x1 <= m.frame.title_block.x0 + 1e-6 && y0 >= m.frame.border.y0 - 1e-6 &&
-                  y1 <= m.frame.border.y1 + 1e-6,
-              "вид внутри рамки и левее колонки таблиц");
+        bool ok = x0 >= m.frame.border.x0 - 1e-6 && x1 <= m.frame.border.x1 + 1e-6 && y0 >= m.frame.border.y0 - 1e-6 &&
+                  y1 <= m.frame.border.y1 + 1e-6 && !overlap(x0, x1, y0, y1, m.frame.title_block);
+        for (const auto& t : m.tables) {
+            const double h = 8.0 + 7.0 + (t.table.note.empty() ? 0.0 : 6.0) + 6.0 * static_cast<double>(t.table.rows.size());
+            ok = ok && !overlap(x0, x1, y0, y1, Rect{t.top_left[0], t.top_left[1] - h, t.top_left[0] + t.width, t.top_left[1]});
+        }
+        if (!ok) std::printf("  вид %s: [%.1f, %.1f]×[%.1f, %.1f]\n", v.id.c_str(), x0, x1, y0, y1);
+        check(ok, "вид внутри рамки, не на штампе и не на таблицах");
     }
+}
 
+static void test_layout() {
+    DrawingInput in;
+    in.path = L_tube();
+    in.od = 20;
+    in.title["Обозначение"] = "БК.001";
+    auto small = make_part_drawing(in);
+    check(small.size() == 1, "простая труба: один лист");
+    check(small[0].views.size() == 3, "минимальный набор: главный, изометрия, развёртка");
+    check(small[0].tables.size() == 3, "таблица гибов, карта заготовки, метки");
+    check(small[0].title.at("Масштаб").size() > 0 && small[0].title.at("Обозначение") == "БК.001", "поля штампа");
+    check_inside(small[0]);
+
+    in.path = spatial();
     in.preset = Preset::Full;
-    DrawingSheet f = make_part_drawing(in);
-    check(f.views.size() == 5 && f.tables.size() == 3, "полный набор: 4 вида + развёртка, 3 таблицы");
+    in.unfold.N_first = 160;
+    auto f = make_part_drawing(in);
+    check(f.size() == 2, "пространственная труба на A3: развёртка на листе 2");
+    check(f[0].count == 2 && f[1].number == 2 && f[1].title.at("Лист") == "2", "нумерация листов");
+    check(near(f[1].frame.title_block.h(), 15), "лист 2 по ГОСТ: основная надпись 185×15");
+    check(f[1].views.size() == 1 && f[1].views[0].kind == ViewKind::Unfold, "на листе 2 — развёртка");
+    check(f[0].tables.size() == 2 && f[1].tables.size() == 2, "таблицы распределены по листам");
+    for (const auto& sh : f) check_inside(sh);
     const PlacedView *front = nullptr, *top = nullptr, *side = nullptr;
-    for (const auto& v : f.views) {
+    for (const auto& v : f[0].views) {
         if (v.kind == ViewKind::Front) front = &v;
         if (v.kind == ViewKind::Top) top = &v;
         if (v.kind == ViewKind::Left || v.kind == ViewKind::Right) side = &v;
@@ -219,27 +241,30 @@ static void test_layout() {
     check(front && top && side, "главный, сверху и боковой");
     check(near(front->origin[0], top->origin[0]) && near(front->origin[1], side->origin[1]), "проекционная связь");
     check(top->origin[1] < front->origin[1] && side->kind == ViewKind::Left, "первый угол: сверху — под главным, слева — справа");
+    check(front->scale >= 0.2, "масштаб видов не мельче 1:5 после выноса развёртки");
 
     in.standard = Standard::ANSI;
     in.format = "ANSI B";
-    DrawingSheet a = make_part_drawing(in);
-    for (const auto& v : a.views) {
+    auto a = make_part_drawing(in);
+    for (const auto& v : a[0].views) {
         if (v.kind == ViewKind::Front) front = &v;
         if (v.kind == ViewKind::Top) top = &v;
         if (v.kind == ViewKind::Right) side = &v;
     }
     check(top->origin[1] > front->origin[1] && side->kind == ViewKind::Right, "ANSI третий угол: сверху — над главным");
+    for (const auto& sh : a) check_inside(sh);
 
     DrawingInput err = in;
     err.has_errors = true;
-    check(make_part_drawing(err).not_for_production, "«Не для производства» при ошибках");
+    check(make_part_drawing(err)[0].not_for_production, "«Не для производства» при ошибках");
 
     DrawingInput longtube;
     longtube.path = Path{Straight{60000}, Bend{40, 90}, Straight{100}};
     longtube.od = 20;
     longtube.format = "A4";
     bool warned = false;
-    for (const auto& w : make_part_drawing(longtube).warnings) warned = warned || w.find("разрыв") != std::string::npos;
+    for (const auto& sh : make_part_drawing(longtube))
+        for (const auto& w : sh.warnings) warned = warned || w.find("разрыв") != std::string::npos;
     check(warned, "длинная труба: предупреждение о разрыве вида");
 }
 

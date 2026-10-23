@@ -1,0 +1,161 @@
+/**
+ * Типы ответов ядра (команды core_api). Поля совпадают с JSON из src/core_api.cpp.
+ */
+
+export type PathItem =
+  | { kind: 'straight'; length: number }
+  | { kind: 'bend'; radius: number; angle: number; rotation?: number }
+  | { kind: 'spiral'; radius: number; pitch: number; turns: number; direction?: 1 | -1 };
+
+export type Feed = 'A' | 'B';
+export type Vec3 = [number, number, number];
+export type Vec2 = [number, number];
+
+export interface Frame {
+  origin?: Vec3;
+  x?: Vec3;
+  y?: Vec3;
+  z?: Vec3;
+}
+
+export interface LraRow {
+  bend_no: number;
+  L: number;
+  rotation: number;
+  angle: number;
+  radius: number;
+  is_end: boolean;
+}
+export interface XyzRow {
+  label: string;
+  bend_no: number;
+  p: Vec3;
+  radius: number | null;
+}
+export interface BendDataResult<R> {
+  rows: R[];
+  csv: string;
+}
+
+/** Класс нарушения (4.5) в порядке убывания тяжести. */
+export enum Severity {
+  Geometric = 0,
+  Technological = 1,
+  Warning = 2,
+  Mark = 3,
+  Info = 4,
+}
+
+export interface Violation {
+  tube: string;
+  element: number;
+  severity: Severity;
+  class: string;
+  rule: string;
+  message: string;
+  value: number | null;
+  limit: number | null;
+  other: string;
+  at_s: number | null;
+}
+
+export interface TubeCheckSummary {
+  state: 'passed' | 'violations';
+  worst: Severity | null;
+  blocks_output: boolean;
+  fingerprint: string;
+}
+
+export interface CheckResult {
+  violations: Violation[];
+  tubes: Record<string, TubeCheckSummary>;
+  counts: Record<string, number>;
+  pairs_tested: number;
+}
+
+export interface CheckTubeInput {
+  id: string;
+  name?: string;
+  path: PathItem[];
+  od: number;
+  B_min?: number;
+  B_max?: number;
+  L_min?: number;
+  N_first?: number;
+  N_last?: number;
+  E_A?: number;
+  E_B?: number;
+  cut_allowed?: boolean;
+  placement?: Frame;
+}
+
+export interface InstanceInfo {
+  id: string;
+  part: string;
+  primary: boolean;
+  adaptive: boolean;
+  designation: string;
+  editable: boolean;
+}
+export interface PositionInfo {
+  number: number;
+  designation: string;
+  instances: string[];
+  quantity: number;
+  designations_differ: boolean;
+}
+export interface InstancesState {
+  instances: InstanceInfo[];
+  positions: PositionInfo[];
+}
+
+// ----- чертёж -----
+export type LineStyle = 'contour' | 'thin' | 'axis' | 'cut' | 'hidden';
+export interface Geometry {
+  lines: Array<{ pts: Vec2[]; style: LineStyle; closed: boolean }>;
+  circles: Array<{ c: Vec2; r: number; style: LineStyle }>;
+  texts: Array<{ p: Vec2; text: string; h: number; anchor: 'start' | 'middle' | 'end'; frame: boolean; shift: Vec2 }>;
+  dims: Array<{ a: Vec2; b: Vec2; offset: number; model_offset: number; text: string; reference: boolean }>;
+  hatches: Array<{ outline: Vec2[] }>;
+  bbox: { lo: Vec2; hi: Vec2 };
+}
+export interface Rect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+export interface DrawingTable {
+  title: string;
+  header: string[];
+  rows: string[][];
+  note: string;
+}
+/** Лист чертежа (ответ drawing.part → sheets[]). */
+export interface DrawingData {
+  number: number;
+  count: number;
+  standard: 'GOST' | 'ISO' | 'DIN' | 'ANSI';
+  projection: 'first' | 'third';
+  format: { name: string; w: number; h: number };
+  border: Rect;
+  title_block: Rect;
+  views: Array<{ id: string; kind: string; label: string; scale: number; origin: Vec2; geom: Geometry }>;
+  tables: Array<{ table: DrawingTable; top_left: Vec2; width: number }>;
+  title: Record<string, string>;
+  not_for_production: boolean;
+  warnings: string[];
+}
+
+export interface DrawingResult {
+  sheets: DrawingData[];
+}
+
+export interface ReleaseCheckResult {
+  blocking: string[];
+  warnings: string[];
+  can_release: boolean;
+  not_for_production: boolean;
+  offer_update_and_release: boolean;
+  can_unrelease: boolean;
+}

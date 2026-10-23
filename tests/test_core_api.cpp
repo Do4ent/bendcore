@@ -66,8 +66,9 @@ int main() {
     check(other["data"]["instances"].empty(), "у другого документа свой реестр");
 
     auto dr = core.call("drawing.part", {{"path", L_path()}, {"od", 20}, {"title", {{"Обозначение", "БК.001"}}}});
-    check(dr["ok"] == true && dr["data"]["views"].size() == 3 && dr["data"]["tables"].size() == 2, "drawing.part");
-    check(dr["data"]["title"]["Масштаб"].is_string(), "drawing.part: масштаб в штампе");
+    check(dr["ok"] == true && dr["data"]["sheets"].size() == 1, "drawing.part: один лист");
+    check(dr["data"]["sheets"][0]["views"].size() == 3 && dr["data"]["sheets"][0]["tables"].size() == 3, "drawing.part: виды и таблицы");
+    check(dr["data"]["sheets"][0]["title"]["Масштаб"].is_string(), "drawing.part: масштаб в штампе");
     auto rel = core.call("drawing.release_check", {{"lost_dim_refs", 1}, {"strictness", "soft"}, {"role", "Выпускающий"}});
     check(rel["data"]["can_release"] == true && rel["data"]["can_unrelease"] == true, "release_check мягкий");
 

@@ -134,7 +134,7 @@ Format format_by_name(const std::string& name, bool landscape) {
     throw std::invalid_argument("неизвестный формат: " + name);
 }
 
-SheetFrame make_sheet(Standard s, const Format& f) {
+SheetFrame make_sheet(Standard s, const Format& f, bool first_sheet) {
     SheetFrame sf;
     sf.format = f;
     double left = 20, other = 5, tbw = 185, tbh = 55;  // ГОСТ 2.104, форма 1
@@ -143,6 +143,7 @@ SheetFrame make_sheet(Standard s, const Format& f) {
     } else if (s == Standard::ANSI) {
         left = 10; other = 10; tbw = 178; tbh = 45;     // ASME Y14.1
     }
+    if (!first_sheet && s == Standard::GOST) tbh = 15;   // форма 2а для последующих листов
     sf.border = {left, other, f.w - other, f.h - other};
     sf.title_block = {sf.border.x1 - tbw, sf.border.y0, sf.border.x1, sf.border.y0 + tbh};
     sf.drawable = {sf.border.x0 + 5, sf.border.y0 + 5, sf.border.x1 - tbw - 5, sf.border.y1 - 5};
@@ -357,9 +358,6 @@ UnfoldResult unfold_view(const Path& path, double od, const UnfoldOptions& opt) 
         g.hatches.push_back({{{0, -r}, {res.delta_start, -r}, {res.delta_start, r}, {0, r}}});
         x = res.delta_start;
         g.lines.push_back({{{x, -r}, {x, r}}, LineStyle::Cut});
-        Text2 t{{x / 2.0, r}, "подрезать", 2.5};
-        t.shift = {0, 3};
-        g.texts.push_back(t);
     }
     const double trim0 = x;
     if (E0 > 1e-9) {
@@ -388,7 +386,7 @@ UnfoldResult unfold_view(const Path& path, double od, const UnfoldOptions& opt) 
             if (row.side == Side::Left) lbl += " Л";
             if (row.side == Side::Right) lbl += " П";
             Text2 t{{(xs + xe) / 2.0, -r}, lbl, 2.5};
-            t.shift = {0, -9};
+            t.shift = {0, (row.bend_no % 2) ? -6.0 : -11.0};  // соседние подписи — в шахматном порядке
             g.texts.push_back(t);
         }
         if (opt.arc_lengths) {
@@ -423,9 +421,6 @@ UnfoldResult unfold_view(const Path& path, double od, const UnfoldOptions& opt) 
     if (res.delta_end > 1e-9) {
         g.lines.push_back({{{x, -r}, {x, r}}, LineStyle::Cut});
         g.hatches.push_back({{{x, -r}, {x + res.delta_end, -r}, {x + res.delta_end, r}, {x, r}}});
-        Text2 t{{x + res.delta_end / 2.0, r}, "подрезать", 2.5};
-        t.shift = {0, 3};
-        g.texts.push_back(t);
         x += res.delta_end;
     }
     const double total = x;
@@ -459,17 +454,21 @@ UnfoldResult unfold_view(const Path& path, double od, const UnfoldOptions& opt) 
     }
 
     // Снизу: Δ, E, длина после подрезки (справочная) и длина заготовки (основная).
-    auto below = [&](double a, double b, double offset, double value, bool ref) {
-        Dim2 d{{b, -r}, {a, -r}, offset, 0.0, F(value), ref};
+    auto below = [&](double a, double b, double offset, double value, bool ref, const std::string& prefix = "") {
+        Dim2 d{{b, -r}, {a, -r}, offset, 0.0, prefix + F(value), ref};
         g.dims.push_back(d);
     };
-    double boff = 14.0;
-    if (res.delta_start > 1e-9) below(0, res.delta_start, boff, res.delta_start, false);
-    if (res.delta_end > 1e-9) below(trim1, total, boff, res.delta_end, false);
+    double boff = 16.0;  // ниже подписей углов гибов
+    const bool any_delta = res.delta_start > 1e-9 || res.delta_end > 1e-9;
+    // Подпись «подрезать» с размером Δ (7.3).
+    if (res.delta_start > 1e-9) below(0, res.delta_start, boff, res.delta_start, false, "подрезать ");
+    if (res.delta_end > 1e-9) below(trim1, total, boff, res.delta_end, false, "подрезать ");
+    if (any_delta) boff += 7.0;  // E — на следующем уровне, чтобы короткие размеры не слипались
+    const bool any_e = E0 > 1e-9 || E1 > 1e-9;
     if (E0 > 1e-9) below(trim0, trim0 + E0, boff, E0, false);
     if (E1 > 1e-9) below(trim1 - E1, trim1, boff, E1, false);
-    boff += 7.0;
-    if (res.delta_start > 1e-9 || res.delta_end > 1e-9) {
+    if (any_e) boff += 7.0;
+    if (any_delta) {
         below(trim0, trim1, boff, res.trimmed_length, true);
         boff += 7.0;
     }
@@ -585,10 +584,6 @@ bool can_unrelease(const std::string& role) { return role == "Выпускающ
 // ---------- компоновка листа ----------
 namespace {
 
-struct Cell {
-    Rect r;
-};
-
 Vec2 center(const Rect& r) { return {(r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0}; }
 
 double table_height(const Table& t) {
@@ -597,164 +592,250 @@ double table_height(const Table& t) {
 
 }  // namespace
 
-DrawingSheet make_part_drawing(const DrawingInput& in) {
-    DrawingSheet ds;
-    ds.standard = in.standard;
-    ds.projection = projection_method(in.standard);
-    ds.frame = make_sheet(in.standard, format_by_name(in.format, in.landscape));
-    ds.not_for_production = in.has_errors;
-    const char dec = decimal_for(in.standard);
-    const Rect& area = ds.frame.drawable;
+Table marks_table(const UnfoldResult& u, const UnfoldOptions& opt) {
+    Table t;
+    t.title = "Метки гибов";
+    t.header = {"№", "Метка", "B, °", "A, °"};
+    const char* base = opt.mark_base == MarkBase::Vertex ? "вершина" : opt.mark_base == MarkBase::ArcMid ? "середина дуги" : "начало дуги";
+    t.note = std::string("от торца заготовки, база: ") + base;
+    for (const auto& m : u.marks) {
+        t.rows.push_back({std::to_string(m.bend_no), fmt(m.position, opt.precision, opt.decimal),
+                          fmt(m.B, opt.precision, opt.decimal), fmt(m.A, opt.precision, opt.decimal)});
+    }
+    return t;
+}
 
-    // Развёртка: полоса внизу поля, высота — под стопку размеров.
-    UnfoldOptions uo = in.unfold;
-    uo.decimal = dec;
-    uo.precision = in.precision;
-    UnfoldResult unf = unfold_view(in.path, in.od, uo);
-    int dims_above = 0;
-    for (const auto& d : unf.geom.dims) dims_above += d.a[1] > 0;
-    const double dims_h_above = 8.0 + 7.0 * dims_above + 12.0;  // плюс подпись
-    const double dims_h_below = 14.0 + 7.0 * 3 + 12.0;
-    const double strip_h = std::clamp(dims_h_above + dims_h_below + 10.0, 50.0, area.h() * 0.5);
-    const Rect strip{area.x0, area.y0, area.x1, area.y0 + strip_h};
-    const Rect upper{area.x0, strip.y1 + 5, area.x1, area.y1};
+namespace {
 
-    // Ортогональные виды и изометрия.
+struct ViewsLayout {
+    std::vector<PlacedView> views;
+    double scale = 1.0;
+    bool fits = true;
+    std::vector<std::string> warnings;
+};
+
+// Ортогональные виды и изометрия в области. Главный и боковой — в одном ряду (общий Y),
+// главный и вид сверху — в одной колонке (общий X); масштаб — наибольший из ряда.
+ViewsLayout layout_views(const DrawingInput& in, const Rect& upper, Projection proj, char dec) {
+    ViewsLayout L;
     ViewOptions vo;
     vo.dims = in.dims;
     vo.E_A = in.unfold.end_A.E;
     vo.E_B = in.unfold.end_B.E;
     vo.precision = in.precision;
     vo.decimal = dec;
-    const bool first = ds.projection == Projection::FirstAngle;
+    const bool first = proj == Projection::FirstAngle;
     const ViewKind side = first ? ViewKind::Left : ViewKind::Right;
+    const bool full = in.preset == Preset::Full;
+    const double gap = 22.0;  // место под размеры и подписи между видами
 
-    struct Planned {
-        ViewKind kind;
-        Rect cell;
-        Geometry g;
-    };
-    std::vector<Planned> plan;
-    if (in.preset == Preset::Minimal) {
-        const double xm = upper.x0 + upper.w() * 0.6;
-        plan.push_back({ViewKind::Front, {upper.x0, upper.y0, xm, upper.y1}, {}});
-        plan.push_back({ViewKind::Iso, {xm, upper.y0, upper.x1, upper.y1}, {}});
+    Geometry gf = tube_view(in.path, in.od, ViewKind::Front, vo);
+    Geometry gt, gs;
+    if (full) {
+        gt = tube_view(in.path, in.od, ViewKind::Top, vo);
+        gs = tube_view(in.path, in.od, side, vo);
+    }
+    ViewOptions io = vo;
+    io.dims = DimMode::TableOnly;
+    Geometry gi = tube_view(in.path, in.od, ViewKind::Iso, io);
+    const Box2 bf = gf.bbox(), bt = gt.bbox(), bs = gs.bbox(), bi = gi.bbox();
+
+    const double sumw = bf.w() + (full ? bs.w() : 0.0);
+    const double sumh = bf.h() + (full ? bt.h() : 0.0);
+    const double iso_share = full ? 0.0 : 0.38;  // в минимальном наборе изометрия справа от главного
+    const double avail_w = upper.w() * (1.0 - iso_share) - gap * (full ? 3 : 2);
+    const double avail_h = upper.h() - gap * (full ? 3 : 2);
+    std::optional<double> os = pick_scale(sumw, sumh, avail_w, avail_h, in.standard);
+    if (!os) {
+        os = scale_series(in.standard).back();
+        L.fits = false;
+        L.warnings.push_back("виды не помещаются на формат даже в самом мелком масштабе: выберите больший формат");
+    }
+    const double s = *os;
+    L.scale = s;
+
+    const double left_x = upper.x0 + gap;
+    const double top_y = upper.y1 - gap;
+    Vec2 of{}, ot{}, oside{};
+    if (full) {
+        const double front_h = bf.h() * s, top_h = bt.h() * s;
+        const double fy_top = first ? top_y : top_y - top_h - gap;
+        of = {left_x - s * bf.lo[0], fy_top - s * bf.hi[1]};
+        const double ty_top = first ? fy_top - front_h - gap : top_y;
+        ot = {of[0], ty_top - s * bt.hi[1]};
+        oside = {left_x + bf.w() * s + gap - s * bs.lo[0], of[1]};
     } else {
-        const double xm = upper.x0 + upper.w() * 0.55;
-        const double ym = upper.y0 + upper.h() * 0.5;
-        const Rect tl{upper.x0, ym, xm, upper.y1}, tr{xm, ym, upper.x1, upper.y1};
-        const Rect bl{upper.x0, upper.y0, xm, ym}, brc{xm, upper.y0, upper.x1, ym};
-        if (first) {  // вид сверху под главным, вид слева справа от главного
-            plan.push_back({ViewKind::Front, tl, {}});
-            plan.push_back({side, tr, {}});
-            plan.push_back({ViewKind::Top, bl, {}});
-            plan.push_back({ViewKind::Iso, brc, {}});
-        } else {      // третий угол: вид сверху над главным
-            plan.push_back({ViewKind::Top, tl, {}});
-            plan.push_back({ViewKind::Iso, tr, {}});
-            plan.push_back({ViewKind::Front, bl, {}});
-            plan.push_back({side, brc, {}});
-        }
+        of = {left_x - s * bf.lo[0], (upper.y0 + upper.y1) / 2.0 - s * (bf.lo[1] + bf.hi[1]) / 2.0};
     }
-    const double pad = 30.0;  // место под размеры и подписи
-    double ortho_scale = std::numeric_limits<double>::max();
-    bool fits = true;
-    for (auto& p : plan) {
-        ViewOptions o = vo;
-        if (p.kind == ViewKind::Iso) o.dims = DimMode::TableOnly;
-        p.g = tube_view(in.path, in.od, p.kind, o);
-        if (p.kind == ViewKind::Iso) continue;
-        const Box2 b = p.g.bbox();
-        const auto s = pick_scale(b.w(), b.h(), p.cell.w() - pad, p.cell.h() - pad, in.standard);
-        if (!s) {
-            fits = false;
-            ortho_scale = std::min(ortho_scale, scale_series(in.standard).back());
-        } else {
-            ortho_scale = std::min(ortho_scale, *s);
-        }
-    }
-    if (!fits) ds.warnings.push_back("виды не помещаются на формат даже в самом мелком масштабе: выберите больший формат");
-
-    // Главный вид задаёт выравнивание: у вида сверху общий X, у бокового — общий Y.
-    const Planned* front = nullptr;
-    for (const auto& p : plan)
-        if (p.kind == ViewKind::Front) front = &p;
-    const Box2 fb = front->g.bbox();
-    const Vec2 fc = center(front->cell);
-    const Vec2 front_origin{fc[0] - ortho_scale * (fb.lo[0] + fb.hi[0]) / 2.0,
-                            fc[1] - ortho_scale * (fb.lo[1] + fb.hi[1]) / 2.0};
-    for (auto& p : plan) {
+    auto place = [&](ViewKind k, Geometry g, double scale, Vec2 origin, std::string label) {
         PlacedView pv;
-        pv.kind = p.kind;
-        pv.id = view_name(p.kind);
-        pv.geom = std::move(p.g);
-        const Box2 b = pv.geom.bbox();
-        const Vec2 c = center(p.cell);
-        if (p.kind == ViewKind::Iso) {
-            const auto s = pick_scale(b.w(), b.h(), p.cell.w() - 10, p.cell.h() - 10, in.standard);
-            pv.scale = s ? std::min(*s, ortho_scale) : scale_series(in.standard).back();
-            pv.origin = {c[0] - pv.scale * (b.lo[0] + b.hi[0]) / 2.0, c[1] - pv.scale * (b.lo[1] + b.hi[1]) / 2.0};
-        } else {
-            pv.scale = ortho_scale;
-            pv.origin = {c[0] - pv.scale * (b.lo[0] + b.hi[0]) / 2.0, c[1] - pv.scale * (b.lo[1] + b.hi[1]) / 2.0};
-            if (p.kind == ViewKind::Front) pv.origin = front_origin;
-            if (p.kind == ViewKind::Top) pv.origin[0] = front_origin[0];
-            if (p.kind == ViewKind::Left || p.kind == ViewKind::Right) pv.origin[1] = front_origin[1];
-        }
-        pv.label = pv.kind == ViewKind::Front ? "" : std::string(view_name(pv.kind));
-        if (std::abs(pv.scale - ortho_scale) > 1e-12) pv.label += " (" + scale_label(pv.scale, in.standard) + ")";
-        ds.views.push_back(std::move(pv));
+        pv.kind = k;
+        pv.id = view_name(k);
+        pv.geom = std::move(g);
+        pv.scale = scale;
+        pv.origin = origin;
+        pv.label = std::move(label);  // виды в проекционной связи не обозначаются (ГОСТ 2.305)
+        L.views.push_back(std::move(pv));
+    };
+    place(ViewKind::Front, std::move(gf), s, of, "");
+    if (full) {
+        place(ViewKind::Top, std::move(gt), s, ot, "");
+        place(side, std::move(gs), s, oside, "");
     }
 
-    // Развёртка.
-    {
-        PlacedView pv;
-        pv.kind = ViewKind::Unfold;
-        pv.id = "Развёртка";
-        const Box2 b = unf.geom.bbox();
-        const double avail_h = strip.h() - dims_h_above - dims_h_below;
-        auto s = pick_scale(b.w(), b.h(), strip.w() - 20, std::max(2.0, avail_h), in.standard);
-        if (!s) {
-            s = scale_series(in.standard).back();
-            ds.warnings.push_back("развёртка не помещается: нужен разрыв вида или больший формат");
+    Rect iso_cell;
+    if (full) {
+        const double right_of_top = left_x + bt.w() * s + gap;
+        const double right_of_front = left_x + bf.w() * s + gap;
+        if (first) {  // свободно справа от вида сверху, под боковым
+            iso_cell = {std::max(right_of_top, right_of_front), upper.y0, upper.x1, of[1] + s * bs.lo[1] - gap};
+        } else {      // свободно справа от вида сверху, над боковым
+            iso_cell = {right_of_top, of[1] + s * bs.hi[1] + gap, upper.x1, upper.y1};
         }
-        pv.scale = *s;
-        pv.origin = {strip.x0 + (strip.w() - pv.scale * b.w()) / 2.0 - pv.scale * b.lo[0],
-                     strip.y0 + dims_h_below + (avail_h > 0 ? avail_h / 2.0 : 0.0)};
-        pv.label = "Развёртка (" + scale_label(pv.scale, in.standard) + ")";
-        pv.geom = std::move(unf.geom);
-        ds.views.push_back(std::move(pv));
+        if (iso_cell.w() < 40 || iso_cell.h() < 40) {
+            iso_cell = {right_of_front + bs.w() * s + gap, upper.y0, upper.x1, upper.y1};
+        }
+    } else {
+        iso_cell = {left_x + bf.w() * s + gap, upper.y0, upper.x1, upper.y1};
     }
+    if (iso_cell.w() > 20 && iso_cell.h() > 20) {
+        const auto si = pick_scale(bi.w(), bi.h(), iso_cell.w() - 10, iso_cell.h() - 10, in.standard);
+        const double sc = si ? std::min(*si, s) : scale_series(in.standard).back();
+        const Vec2 c = center(iso_cell);
+        place(ViewKind::Iso, std::move(gi), sc,
+              {c[0] - sc * (bi.lo[0] + bi.hi[0]) / 2.0, c[1] - sc * (bi.lo[1] + bi.hi[1]) / 2.0},
+              std::abs(sc - s) > 1e-12 ? "(" + scale_label(sc, in.standard) + ")" : "");
+    } else {
+        L.warnings.push_back("изометрия не помещается на лист");
+    }
+    return L;
+}
 
-    // Таблицы — колонка над штампом.
+double strip_height(const UnfoldResult& u) {
+    int above = 0;
+    for (const auto& d : u.geom.dims) above += d.a[1] > 0;
+    return (8.0 + 7.0 * above + 14.0) + (16.0 + 7.0 * 4 + 6.0) + 10.0;
+}
+
+// Развёртка в полосе; масштаб — наибольший из ряда по ширине и свободной высоте.
+PlacedView place_unfold(const DrawingInput& in, UnfoldResult& u, const Rect& strip, double main_scale,
+                        std::vector<std::string>& warnings) {
+    PlacedView pv;
+    pv.kind = ViewKind::Unfold;
+    pv.id = "Развёртка";
+    const Box2 b = u.geom.bbox();
+    int above = 0;
+    for (const auto& d : u.geom.dims) above += d.a[1] > 0;
+    const double h_above = 8.0 + 7.0 * above + 14.0;
+    const double h_below = 16.0 + 7.0 * 4 + 6.0;
+    const double avail_h = strip.h() - h_above - h_below;
+    auto s = pick_scale(b.w(), b.h(), strip.w() - 20, std::max(2.0, avail_h), in.standard);
+    if (!s) {
+        s = scale_series(in.standard).back();
+        warnings.push_back("развёртка не помещается: нужен разрыв вида или больший формат");
+    }
+    pv.scale = *s;
+    pv.origin = {strip.x0 + (strip.w() - pv.scale * b.w()) / 2.0 - pv.scale * b.lo[0],
+                 strip.y0 + h_below - pv.scale * b.lo[1]};
+    pv.label = "Развёртка" + (std::abs(pv.scale - main_scale) > 1e-12 ? " (" + scale_label(pv.scale, in.standard) + ")"
+                                                                      : std::string());
+    pv.geom = std::move(u.geom);
+    return pv;
+}
+
+void place_tables(DrawingSheet& ds, std::vector<Table> tables) {
     const Rect& tb = ds.frame.title_block;
-    std::vector<Table> tables;
-    tables.push_back(bend_table(in.path, in.unfold.end_A.E, in.unfold.end_B.E, in.unfold.direction,
-                                in.unfold.minimize, in.precision, dec));
-    tables.push_back(blank_map(in.path, uo));
-    if (in.preset == Preset::Full) {
-        tables.push_back(vertex_table(in.path, in.unfold.end_A.E, in.unfold.end_B.E, {}, in.precision, dec));
-    }
     double y = ds.frame.border.y1 - 5;
     for (auto& t : tables) {
         const double h = table_height(t);
         if (y - h < tb.y1 + 5) ds.warnings.push_back("таблица «" + t.title + "» не помещается в колонку");
-        ds.tables.push_back({t, {tb.x0, y}, tb.w()});
+        ds.tables.push_back({std::move(t), {tb.x0, y}, tb.w()});
         y -= h + 5;
     }
+}
 
-    // Штамп.
-    ds.title = in.title;
-    const auto& fview = ds.views.front();
-    double main_scale = fview.scale;
-    for (const auto& v : ds.views)
-        if (v.kind == ViewKind::Front) main_scale = v.scale;
-    ds.title["Масштаб"] = scale_label(main_scale, in.standard);
-    ds.title["Лист"] = "1";
-    ds.title["Листов"] = "1";
-    if (!is_standard_scale(main_scale, in.standard)) ds.warnings.push_back("нестандартный масштаб");
-    for (const auto& is : unf.issues) ds.warnings.push_back("развёртка: " + is.text);
-    return ds;
+}  // namespace
+
+std::vector<DrawingSheet> make_part_drawing(const DrawingInput& in) {
+    const Format fmt_ = format_by_name(in.format, in.landscape);
+    const Projection proj = projection_method(in.standard);
+    const char dec = decimal_for(in.standard);
+
+    UnfoldOptions uo = in.unfold;
+    uo.decimal = dec;
+    uo.precision = in.precision;
+
+    auto new_sheet = [&](bool first) {
+        DrawingSheet ds;
+        ds.standard = in.standard;
+        ds.projection = proj;
+        ds.frame = make_sheet(in.standard, fmt_, first);
+        ds.not_for_production = in.has_errors;
+        ds.title = in.title;
+        return ds;
+    };
+
+    DrawingSheet s1 = new_sheet(true);
+    const Rect area = s1.frame.drawable;
+
+    // Вариант «всё на одном листе»: развёртка полосой внизу.
+    UnfoldResult unf = unfold_view(in.path, in.od, uo);
+    const double strip_h = std::clamp(strip_height(unf), 50.0, area.h() * 0.5);
+    const Rect strip{area.x0, area.y0, area.x1, area.y0 + strip_h};
+    const Rect upper{area.x0, strip.y1 + 5, area.x1, area.y1};
+    ViewsLayout one = layout_views(in, upper, proj, dec);
+    ViewsLayout alone = layout_views(in, area, proj, dec);
+    const bool split = alone.scale > one.scale + 1e-12;  // развёртка отнимает масштаб видов → на лист 2
+
+    const ViewsLayout& vl = split ? alone : one;
+    s1.views = vl.views;
+    s1.warnings = vl.warnings;
+    std::vector<Table> t1;
+    t1.push_back(bend_table(in.path, in.unfold.end_A.E, in.unfold.end_B.E, in.unfold.direction, in.unfold.minimize,
+                            in.precision, dec));
+    if (in.preset == Preset::Full) {
+        t1.push_back(vertex_table(in.path, in.unfold.end_A.E, in.unfold.end_B.E, {}, in.precision, dec));
+    }
+
+    std::vector<DrawingSheet> out;
+    std::vector<Table> tu{blank_map(in.path, uo), marks_table(unf, uo)};
+    std::vector<std::string> unfold_warnings;
+    for (const auto& is : unf.issues) unfold_warnings.push_back("развёртка: " + is.text);
+    if (!split) {
+        s1.views.push_back(place_unfold(in, unf, strip, vl.scale, s1.warnings));
+        for (auto& t : tu) t1.push_back(std::move(t));
+        place_tables(s1, std::move(t1));
+        out.push_back(std::move(s1));
+    } else {
+        place_tables(s1, std::move(t1));
+        out.push_back(std::move(s1));
+        DrawingSheet s2 = new_sheet(false);
+        // Лист 2: таблицы — вверху справа; развёртка — на всю ширину рамки под таблицами
+        // (штамп формы 2а низкий, поэтому полоса идёт над ним).
+        place_tables(s2, std::move(tu));
+        double tables_bottom = s2.frame.border.y1;
+        for (const auto& t : s2.tables) tables_bottom = std::min(tables_bottom, t.top_left[1] - table_height(t.table));
+        const Rect& bd = s2.frame.border;
+        Rect strip2{bd.x0 + 5, s2.frame.title_block.y1 + 5, bd.x1 - 5, tables_bottom - 5};
+        if (strip2.h() < strip_height(unf)) strip2 = s2.frame.drawable;  // таблицы высокие — слева от колонки
+        s2.views.push_back(place_unfold(in, unf, strip2, vl.scale, s2.warnings));
+        out.push_back(std::move(s2));
+    }
+
+    // Штамп: масштаб главного вида, номера листов.
+    double main_scale = vl.scale;
+    const int count = static_cast<int>(out.size());
+    for (int i = 0; i < count; ++i) {
+        auto& ds = out[static_cast<std::size_t>(i)];
+        ds.number = i + 1;
+        ds.count = count;
+        ds.title["Масштаб"] = scale_label(i == 0 ? main_scale : ds.views.front().scale, in.standard);
+        ds.title["Лист"] = std::to_string(i + 1);
+        ds.title["Листов"] = std::to_string(count);
+    }
+    if (!is_standard_scale(main_scale, in.standard)) out.front().warnings.push_back("нестандартный масштаб");
+    for (auto& w : unfold_warnings) out.back().warnings.push_back(w);
+    return out;
 }
 
 }  // namespace bendcore::drawing

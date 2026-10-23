@@ -428,24 +428,30 @@ Core::Core() : state_(new State) {
         in.precision = static_cast<int>(num(a, "precision", 1));
         in.has_errors = flag(a, "has_errors", false);
         if (a.contains("title")) in.title = a.at("title").get<std::map<std::string, std::string>>();
-        const auto ds = drawing::make_part_drawing(in);
-        json views = json::array();
-        for (const auto& v : ds.views)
-            views.push_back({{"id", v.id}, {"kind", kind_name(v.kind)}, {"label", v.label}, {"scale", v.scale},
-                             {"origin", vec2_json(v.origin)}, {"geom", geometry_json(v.geom)}});
-        json tables = json::array();
-        for (const auto& t : ds.tables)
-            tables.push_back({{"table", table_json(t.table)}, {"top_left", vec2_json(t.top_left)}, {"width", t.width}});
-        return json{{"standard", str(a, "standard", "GOST")},
-                    {"projection", ds.projection == drawing::Projection::FirstAngle ? "first" : "third"},
-                    {"format", {{"name", ds.frame.format.name}, {"w", ds.frame.format.w}, {"h", ds.frame.format.h}}},
-                    {"border", rect_json(ds.frame.border)},
-                    {"title_block", rect_json(ds.frame.title_block)},
-                    {"views", views},
-                    {"tables", tables},
-                    {"title", ds.title},
-                    {"not_for_production", ds.not_for_production},
-                    {"warnings", ds.warnings}};
+        const auto sheets = drawing::make_part_drawing(in);
+        json out_sheets = json::array();
+        for (const auto& ds : sheets) {
+            json views = json::array();
+            for (const auto& v : ds.views)
+                views.push_back({{"id", v.id}, {"kind", kind_name(v.kind)}, {"label", v.label}, {"scale", v.scale},
+                                 {"origin", vec2_json(v.origin)}, {"geom", geometry_json(v.geom)}});
+            json tables = json::array();
+            for (const auto& t : ds.tables)
+                tables.push_back({{"table", table_json(t.table)}, {"top_left", vec2_json(t.top_left)}, {"width", t.width}});
+            out_sheets.push_back({{"number", ds.number},
+                                  {"count", ds.count},
+                                  {"standard", str(a, "standard", "GOST")},
+                                  {"projection", ds.projection == drawing::Projection::FirstAngle ? "first" : "third"},
+                                  {"format", {{"name", ds.frame.format.name}, {"w", ds.frame.format.w}, {"h", ds.frame.format.h}}},
+                                  {"border", rect_json(ds.frame.border)},
+                                  {"title_block", rect_json(ds.frame.title_block)},
+                                  {"views", views},
+                                  {"tables", tables},
+                                  {"title", ds.title},
+                                  {"not_for_production", ds.not_for_production},
+                                  {"warnings", ds.warnings}});
+        }
+        return json{{"sheets", out_sheets}};
     };
     c["drawing.release_check"] = [](const json& a) {
         drawing::ReleaseInputs in;

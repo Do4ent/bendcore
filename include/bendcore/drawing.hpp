@@ -51,7 +51,8 @@ struct SheetFrame {
     Rect title_block;  // основная надпись (штамп)
     Rect drawable;     // поле чертежа над штампом и слева от колонки таблиц
 };
-SheetFrame make_sheet(Standard s, const Format& f);
+// first_sheet = false — последующий лист (по ГОСТ 2.104 основная надпись по форме 2а, 185×15).
+SheetFrame make_sheet(Standard s, const Format& f, bool first_sheet = true);
 
 // ---------- Примитивы ----------
 enum class LineStyle { Contour, Thin, Axis, Cut, Hidden };
@@ -185,6 +186,8 @@ Table bend_table(const Path& path, double E_A, double E_B, Profile direction, bo
 Table vertex_table(const Path& path, double E_A, double E_B, const output::Frame& frame, int precision,
                    char decimal = ',');
 Table blank_map(const Path& path, const UnfoldOptions& opt);
+// Таблица меток гибов рядом с развёрткой (7.3): положения от торца заготовки, B и A.
+Table marks_table(const UnfoldResult& u, const UnfoldOptions& opt);
 
 std::string fmt(double v, int precision, char decimal);
 double round_to(double v, double step);
@@ -242,6 +245,8 @@ struct PlacedTable {
 };
 
 struct DrawingSheet {
+    int number = 1;           // номер листа
+    int count = 1;            // листов в чертеже
     Standard standard;
     Projection projection;
     SheetFrame frame;
@@ -252,6 +257,8 @@ struct DrawingSheet {
     std::vector<std::string> warnings;         // нестандартный масштаб, нужен разрыв, больший формат
 };
 
-DrawingSheet make_part_drawing(const DrawingInput& in);
+// Чертёж детали: лист 1 — виды и таблица гибов; развёртка с картой заготовки и метками — на листе 1,
+// если помещается без уменьшения масштаба видов, иначе на листе 2 («Виды раскладываются по листам», 7.1).
+std::vector<DrawingSheet> make_part_drawing(const DrawingInput& in);
 
 }  // namespace bendcore::drawing
