@@ -34,7 +34,7 @@ endif()
 # OpenSSL (для SHA256 хэширования в ассоциативных чертежах)
 find_package(OpenSSL REQUIRED)
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp)
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
 
@@ -209,6 +209,11 @@ bendcore_add_test(comments test_comments)
 add_executable(test_layers tests/test_layers.cpp)
 target_link_libraries(test_layers PRIVATE bendcore_core)
 bendcore_add_test(layers test_layers)
+
+# Поиск и фильтрация (Q3 2027, Task 3)
+add_executable(test_search tests/test_search.cpp)
+target_link_libraries(test_search PRIVATE bendcore_core)
+bendcore_add_test(search test_search)
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
 # Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
