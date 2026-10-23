@@ -1,0 +1,41 @@
+# BendCore Web - Terraform Variables Example
+# Copy to terraform.tfvars and update with your values
+
+aws_region = "us-east-1"
+environment = "prod"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+public_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.10.0/24", "10.0.11.0/24"]
+
+# Database Configuration
+db_instance_class = "db.t3.micro"
+db_allocated_storage = 20
+db_name = "bendcore"
+db_username = "bendcore"
+# Generate with: openssl rand -base64 32
+db_password = "CHANGE_ME_TO_STRONG_PASSWORD"
+db_multi_az = false
+skip_final_snapshot = false
+
+# Redis Configuration
+redis_node_type = "cache.t3.micro"
+
+# ECS Configuration
+ecs_task_cpu = "256"
+ecs_task_memory = "512"
+ecs_desired_count = 2
+ecs_min_capacity = 1
+ecs_max_capacity = 4
+
+# Docker Images
+docker_image_backend = "docker.io/yourusername/bendcore-backend:latest"
+docker_image_frontend = "docker.io/yourusername/bendcore-frontend:latest"
+
+# Tags
+tags = {
+  Project     = "BendCore"
+  Environment = "prod"
+  ManagedBy   = "Terraform"
+}

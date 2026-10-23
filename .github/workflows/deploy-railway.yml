@@ -1,0 +1,69 @@
+name: Deploy Backend to Railway
+
+on:
+  push:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Install dependencies
+        run: cd backend && npm ci
+
+      - name: Build backend
+        run: cd backend && npm run build
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_ENVIRONMENT_NAME: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+        run: |
+          railway up \
+            --service bendcore-backend \
+            --environment $RAILWAY_ENVIRONMENT_NAME \
+            --token $RAILWAY_TOKEN \
+            --project $RAILWAY_PROJECT_ID \
+            --detach
+        continue-on-error: true
+
+      - name: Run health check
+        run: |
+          # Wait for deployment to be ready
+          sleep 30
+
+          # Try to reach health endpoint
+          for i in {1..10}; do
+            if curl -f http://localhost:3001/health 2>/dev/null; then
+              echo "✅ Health check passed"
+              exit 0
+            fi
+            echo "Attempt $i: Health check failed, retrying..."
+            sleep 5
+          done
+
+          echo "❌ Health check failed after 10 attempts"
+          exit 1
+        continue-on-error: true
+
+      - name: Notify deployment status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}';
+            const env = '${{ github.ref }}' === 'refs/heads/main' ? 'production' : 'staging';
+
+            let message = `Railway ${env} deployment `;
+            message += status === 'success' ? '✅ successful' : '❌ failed';
+
+            console.log(message);

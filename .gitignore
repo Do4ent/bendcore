@@ -9,11 +9,6 @@ build-*/
 .vscode/
 __pycache__/
 
-# Agent WIP directories (will be properly committed when agents complete)
-/backend/
-/frontend/
-/docker/
-/scripts/
-/terraform/
-/nginx/
-/docs/
+# Backend & Frontend are tracked
+# Docker, scripts, terraform, and docs are now part of DevOps infrastructure
+# (completed by DevOps agent)

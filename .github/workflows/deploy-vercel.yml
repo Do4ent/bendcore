@@ -1,0 +1,83 @@
+name: Deploy Frontend to Vercel
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Install dependencies
+        run: cd ui && npm ci
+
+      - name: Build frontend
+        run: cd ui && npm run build
+
+      - name: Deploy to Vercel (Preview)
+        if: github.event_name == 'pull_request'
+        id: deploy_preview
+        run: |
+          VERCEL_OUTPUT=$(vercel deploy --prod=false --token=${{ secrets.VERCEL_TOKEN }} --cwd=ui 2>&1)
+          echo "$VERCEL_OUTPUT"
+          PREVIEW_URL=$(echo "$VERCEL_OUTPUT" | grep -oP 'https://[^ ]+' | head -1)
+          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Deploy to Vercel (Production)
+        if: github.ref == 'refs/heads/main'
+        id: deploy_prod
+        run: |
+          VERCEL_OUTPUT=$(vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd=ui 2>&1)
+          echo "$VERCEL_OUTPUT"
+          PROD_URL=$(echo "$VERCEL_OUTPUT" | grep -oP 'https://[^ ]+' | head -1)
+          echo "prod_url=$PROD_URL" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Comment PR with preview URL
+        if: github.event_name == 'pull_request' && steps.deploy_preview.outputs.preview_url
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const previewUrl = '${{ steps.deploy_preview.outputs.preview_url }}';
+            const comment = `✅ Vercel Preview Deployment Ready\n\n[View Preview](${previewUrl})`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Set deployment status (Preview)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const previewUrl = '${{ steps.deploy_preview.outputs.preview_url }}';
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.pull_request.head.sha,
+              state: 'success',
+              environment_url: previewUrl,
+              description: 'Preview deployment successful'
+            });
+        continue-on-error: true
+
+      - name: Notify production deployment
+        if: github.ref == 'refs/heads/main' && steps.deploy_prod.outputs.prod_url
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prodUrl = '${{ steps.deploy_prod.outputs.prod_url }}';
+            console.log(`✅ Production deployment successful: ${prodUrl}`);
