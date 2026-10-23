@@ -1,0 +1,43 @@
+feature,area,priority,original,clone,notes
+Путь из острых вершин с радиусом из профиля,path,must,Inventor;SW;NX;Creo;SE;CATIA,yes,PathSketch3D + sketch_solver
+Ортогональная триада направления с ручками поворота,path,should,Inventor,no,3D Orthogonal Route Tool
+Edit-in-place среда пути с кнопкой Завершить,path,should,Inventor,partial,PathSketch3D есть; режима среды нет
+Путь из существующего 3D-эскиза или рёбер,path,could,Inventor;NX;CATIA,no,derived route / existing curves
+Авто-путь между двумя портами,path,could,Inventor;SW,no,проверить патенты Dassault перед реализацией
+Переопределение радиуса на отдельный гиб,path,skip,Inventor,no,противоречит решению BendCore: R только через смену трубогиба
+Сплайновый путь,path,skip,NX;CATIA,no,не гнётся на трубогибе
+Назначение трубы из номенклатуры предприятия,spec,must,Inventor;Creo;NX;CATIA,yes,NewTubeDialog
+Профиль трубогиба R/S_min/N/B_min/B_max,spec,must,SE;Creo;NX,yes,bending_profiles.json + ProfileDialog
+Мин. прямой участок между гибами,rules,must,SE;NX;Inventor,yes,PathValidator
+Мин. прямой у концов,rules,must,CATIA;NX,yes,по спецификации BendCore
+Правила предприятия без права ослабления,rules,should,CATIA,partial,профиль предприятия есть; блокировки ослабления нет
+Таблица развёрнутой длины R x OD с интерполяцией,spec,should,Creo,no,для компенсации и длины заготовки
+Пакетная проверка всех труб сборки,rules,must,NX;CATIA,no,tube_analyzer проверяет одну трубу
+Браузер нарушений с переходом к вершине,rules,must,NX;CATIA,partial,StatusBar показывает число нарушений
+Минимальный угол гиба (порог вырожденного),rules,must,Creo,yes,0.5 град в BendCore; Creo 1.5 град
+Коллизия трубы с окружением и между трубами,rules,must,NX;CATIA,partial,geometry_ops AABB; зазор 5 мм проверить
+Таблица гибов L-S-B-A,output,must,Inventor;Creo;SE;NX,yes,BendCard / TubePropertiesPanel
+Экспорт LRA (YBC),output,must,Inventor;NX;Creo,no,поиск LRA/YBC в коде: 0 совпадений
+Экспорт XYZ,output,must,Inventor;NX;Creo,no,поиск XYZ в коде: 0 файлов
+Выбор конца А/Б для вывода,output,must,Creo,no,
+Выбор системы координат для XYZ,output,should,Creo,no,
+Угол поворота плоскости гиба (twist),output,must,Creo,no,в BendCard нет поля поворота
+Вывод для одной или всех труб сборки,output,should,SE,no,
+Компенсация пружинения в карте гибки,output,must,(нет у шести),partial,compensation.hpp
+Длина заготовки и длины реза в спецификации,output,must,SW;NX,partial,blank.cpp
+Мастер чертежа трубы с видами,drawing,must,SW,no,нет среды чертежа
+Развёртка трубы на чертеже,drawing,must,(нет у шести),partial,UnfoldingSpec + unfold_drawing; UI нет
+Лист развёрток всех труб,drawing,should,(нет у шести),no,
+Авторазмеры по оси (S),drawing,must,SW,no,
+BOM и позиции на чертеже,drawing,must,SW;NX,no,
+Выпуск чертежа с блокировками,drawing,must,(нет у шести),no,
+Главный экземпляр одинаковых труб,assembly,should,Inventor,no,сигнатура одинаковых труб есть в спецификации
+Порты на окружении,assembly,must,CATIA;Inventor,partial,ports.cpp
+Адаптивная / замороженная труба,assembly,must,Inventor,partial,
+Разбить путь / перенести трубу,assembly,could,CATIA,no,Break Run / Transfer
+Таблица гибов как живой элемент дерева,ui,could,Creo,no,save analysis
+Импорт с распознаванием труб,import,must,(слабо у шести),partial,ImportDialog + geometry_recognition
+Импорт DWF/DWFx,import,must,(нет у шести),partial,dwfx_parser.cpp
+Фитинги и отводы,scope,skip,Inventor;SW;Creo;NX;CATIA,no,вне v1
+Гибкие шланги,scope,skip,Inventor;SW;CATIA,no,вне v1
+ISOGEN / PCF,scope,skip,Inventor;CATIA,no,вне v1
