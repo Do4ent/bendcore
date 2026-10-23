@@ -8,3 +8,12 @@ build-*/
 .vs/
 .vscode/
 __pycache__/
+
+# Agent WIP directories (will be properly committed when agents complete)
+/backend/
+/frontend/
+/docker/
+/scripts/
+/terraform/
+/nginx/
+/docs/
