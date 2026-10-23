@@ -9,6 +9,10 @@ build-*/
 .vscode/
 __pycache__/
 
-# Backend & Frontend are tracked
+# Backend & Frontend WIP (being created by agents)
 # Docker, scripts, terraform, and docs are now part of DevOps infrastructure
 # (completed by DevOps agent)
+
+# Exclude WIP directories from agents still working
+/backend/
+/frontend/
