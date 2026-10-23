@@ -175,6 +175,16 @@ CommandResult save_profile(const json& args);
 CommandResult get_icon_theme(const json& args);
 CommandResult set_icon_theme(const json& args);
 
+// Path Sketch 3D Editor (Phase 35B)
+CommandResult start_path_sketch(const json& args);
+CommandResult add_sketch_vertex(const json& args);
+CommandResult create_sketch_segment(const json& args);
+CommandResult set_dimension(const json& args);
+CommandResult add_constraint(const json& args);
+CommandResult solve_constraints(const json& args);
+CommandResult validate_path(const json& args);
+CommandResult export_path_sketch(const json& args);
+
 }  // namespace commands
 
 }  // namespace bendcore

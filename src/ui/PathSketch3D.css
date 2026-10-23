@@ -1,0 +1,262 @@
+/**
+ * PathSketch3D Component Styles - Phase 35B
+ */
+
+.path-sketch-3d {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: #fafafa;
+}
+
+.path-sketch-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+.path-sketch-viewport canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+.path-sketch-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: #ffffff;
+  border-top: 1px solid #e0e0e0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.path-sketch-btn {
+  padding: 8px 16px;
+  background: #1f6fc5;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.path-sketch-btn:hover {
+  background: #1557a0;
+  box-shadow: 0 2px 8px rgba(31, 111, 197, 0.3);
+}
+
+.path-sketch-btn:active,
+.path-sketch-btn.active {
+  background: #0d3f7f;
+  box-shadow: 0 0 0 3px rgba(31, 111, 197, 0.2);
+}
+
+.path-sketch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.path-sketch-info {
+  padding: 12px;
+  background: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.path-sketch-info div {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.validation-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 0 0 20px;
+}
+
+.error-error {
+  color: #d32f2f;
+  font-weight: 500;
+}
+
+.error-warning {
+  color: #f57c00;
+  font-weight: 500;
+}
+
+.error-info {
+  color: #1976d2;
+  font-weight: 500;
+}
+
+/* ===== SEGMENT DIMENSION EDITOR MODAL ===== */
+
+.segment-editor-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.segment-editor-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.segment-editor-content h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.editor-group {
+  margin-bottom: 16px;
+}
+
+.editor-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+}
+
+.editor-group input[type='range'] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e0e0e0;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.editor-group input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #1f6fc5;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.editor-group input[type='range']::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #1f6fc5;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.editor-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+  justify-content: flex-end;
+}
+
+.editor-buttons button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.editor-buttons button:first-child {
+  background: #1f6fc5;
+  color: white;
+}
+
+.editor-buttons button:first-child:hover {
+  background: #1557a0;
+}
+
+.editor-buttons button:last-child {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.editor-buttons button:last-child:hover {
+  background: #d0d0d0;
+}
+
+/* ===== DARK MODE ===== */
+
+@media (prefers-color-scheme: dark) {
+  .path-sketch-3d {
+    background: #1e1e1e;
+  }
+
+  .path-sketch-viewport {
+    background: #2a2a2a;
+  }
+
+  .path-sketch-toolbar {
+    background: #2a2a2a;
+    border-top-color: #444;
+  }
+
+  .path-sketch-info {
+    background: #262626;
+    border-top-color: #444;
+    color: #aaa;
+  }
+
+  .segment-editor-content {
+    background: #2a2a2a;
+    color: #e0e0e0;
+  }
+
+  .segment-editor-content h3 {
+    color: #e0e0e0;
+  }
+
+  .editor-group label {
+    color: #aaa;
+  }
+
+  .editor-group input[type='range'] {
+    background: #444;
+  }
+
+  .editor-buttons button:last-child {
+    background: #444;
+    color: #e0e0e0;
+  }
+
+  .editor-buttons button:last-child:hover {
+    background: #555;
+  }
+}
