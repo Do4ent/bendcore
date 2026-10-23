@@ -16,6 +16,7 @@ import type { AssociativeDrawing, AssociativityStatus, DrawingData, DrawingVersi
 import DrawingVersionPanel from './DrawingVersionPanel';
 import SketchEditor from './SketchEditor';
 import LayersPanel from './LayersPanel';
+import CommentsPanel, { type Comment } from './CommentsPanel';
 import './panels.css';
 
 export interface DrawingTube {
@@ -83,6 +84,10 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
   // Слои и видимость (Q2 2027, Task 3)
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ layer_visibility: {} });
   const [showLayersPanel, setShowLayersPanel] = useState(true);
+
+  // Комментарии и замечания (Q2 2027, Task 4)
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [showCommentsPanel, setShowCommentsPanel] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -260,6 +265,75 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
       allHidden[i] = false;
     }
     setLayerVisibility({ layer_visibility: allHidden });
+  };
+
+  // Комментарии (Q2 2027, Task 4)
+  const handleAddComment = async (sheet: number, x: number, y: number, text: string) => {
+    try {
+      const result = await core.call('drawing.add_comment', {
+        sheet_id: sheet,
+        x,
+        y,
+        text,
+        author: user || 'anonymous',
+      });
+      if (result.ok && result.data?.id) {
+        const newComment: Comment = {
+          id: result.data.id,
+          sheet_number: sheet,
+          position: [x, y],
+          text,
+          author: user || 'anonymous',
+          created_at: new Date().toISOString(),
+          modified_at: new Date().toISOString(),
+          status: 'open',
+          replies: [],
+        };
+        setComments((prev) => [...prev, newComment]);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const handleReplyToComment = (commentId: string, text: string) => {
+    setComments((prev) =>
+      prev.map((c) =>
+        c.id === commentId
+          ? {
+              ...c,
+              replies: [
+                ...c.replies,
+                {
+                  id: `reply_${Date.now()}`,
+                  text,
+                  author: user || 'anonymous',
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+              modified_at: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+  };
+
+  const handleChangeCommentStatus = (commentId: string, status: string) => {
+    setComments((prev) =>
+      prev.map((c) =>
+        c.id === commentId
+          ? {
+              ...c,
+              status: status as 'open' | 'resolved' | 'needs_rework' | 'archived',
+              modified_at: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+  };
+
+  const handleDeleteComment = (commentId: string) => {
+    setComments((prev) => prev.filter((c) => c.id !== commentId));
   };
 
   // Загрузить состояние видимости из localStorage при изменении листа
