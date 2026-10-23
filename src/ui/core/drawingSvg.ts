@@ -205,6 +205,10 @@ function renderTitleBlock(ctx: Ctx, d: DrawingData, stamp: ReleaseStamp): void {
     text(ctx, [(tb.x0 + tb.x1 - 10) / 2, tb.y0 + Ht / 2 - 2.5], get('Обозначение'), 5);
     text(ctx, [tb.x1 - 5, tb.y1 - 4], 'Лист', 2);
     text(ctx, [tb.x1 - 5, tb.y0 + 2], get('Лист'), 3.5);
+    if (stamp.released) {
+      text(ctx, [tb.x0 + 2, tb.y0 + 2], `ВЫПУЩЕН ${stamp.date ?? ''} ${stamp.by ?? ''}`.trim(), 2, 'start', 0,
+        ' fill="var(--ok, #1a7f37)"');
+    }
     return;
   }
   // Сетка: правая часть — обозначение (верх), наименование и материал; справа — масштаб, лист.

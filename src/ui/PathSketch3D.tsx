@@ -24,6 +24,8 @@ import { OrbitCamera, CameraState } from './OrbitCamera';
 import { DimensionRenderer } from './DimensionRenderer';
 import { PathValidator, ValidationError } from './PathValidator';
 import './PathSketch3D.css';
+import { SketchConfirmCorner, AxisTriad } from './SketchControls';
+import { lockedPoint, type Axis } from './core/axisLock';
 
 // ============= TYPES =============
 
@@ -90,6 +92,10 @@ export interface PathSketchData {
 
 export interface PathSketch3DProps {
   sketch_id?: string;
+  /** «Завершить эскиз» в углу подтверждения (1.2); без обработчика угол не показывается. */
+  onFinish?: (sketch: PathSketchData) => void;
+  /** «Отменить изменения» в углу подтверждения. */
+  onCancel?: () => void;
   onCommand?: (commandId: string, args?: Record<string, any>) => void;
   onSketchChanged?: (sketch: PathSketchData) => void;
   onValidationChanged?: (errors: ValidationError[]) => void;
@@ -117,6 +123,8 @@ const SOLVER_DEBOUNCE = 200;
 
 export const PathSketch3D: React.FC<PathSketch3DProps> = ({
   sketch_id = 'sketch_' + Date.now(),
+  onFinish,
+  onCancel,
   onCommand,
   onSketchChanged,
   onValidationChanged,
@@ -163,6 +171,11 @@ export const PathSketch3D: React.FC<PathSketch3DProps> = ({
   const [editingSegment, setEditingSegment] = useState<string | null>(null);
   const [draggedVertex, setDraggedVertex] = useState<string | null>(null);
   const [solverDebounceTimer, setSolverDebounceTimer] = useState<NodeJS.Timeout | null>(null);
+  // Блокировка оси X/Y/Z (1.2): новая вершина — на оси через последнюю вершину.
+  const [lockedAxis, setLockedAxis] = useState<Axis | null>(null);
+  const lockedAxisRef = useRef<Axis | null>(null);
+  lockedAxisRef.current = lockedAxis;
+  const sketchRef = useRef<PathSketchData | null>(null);
 
   const validator = useMemo(
     () => new PathValidator(sketch.profile_s_min, sketch.profile_b_min, sketch.profile_b_max),
@@ -560,7 +573,17 @@ export const PathSketch3D: React.FC<PathSketch3DProps> = ({
         const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
         const target = new THREE.Vector3();
         raycaster.ray.intersectPlane(plane, target);
-        addVertex({ x: target.x, y: target.y, z: target.z });
+        const verts = sketchRef.current?.vertices ?? [];
+        const last = verts.length ? verts[verts.length - 1].position : null;
+        const ray = raycaster.ray;
+        const p = lockedPoint(
+          last,
+          lockedAxisRef.current,
+          { x: ray.origin.x, y: ray.origin.y, z: ray.origin.z },
+          { x: ray.direction.x, y: ray.direction.y, z: ray.direction.z },
+          { x: target.x, y: target.y, z: target.z },
+        );
+        addVertex(p);
         return;
       }
 
@@ -700,9 +723,15 @@ export const PathSketch3D: React.FC<PathSketch3DProps> = ({
 
   // ===== RENDER =====
 
+  sketchRef.current = sketch;
+
   return (
-    <div className="path-sketch-3d">
+    <div className="path-sketch-3d" style={{ position: 'relative' }}>
       <div className="path-sketch-viewport" ref={containerRef} />
+      {(onFinish || onCancel) && (
+        <SketchConfirmCorner onFinish={() => onFinish?.(sketch)} onCancel={() => onCancel?.()} />
+      )}
+      <AxisTriad locked={lockedAxis} onChange={setLockedAxis} listenKeys={!editingSegment} />
 
       <div className="path-sketch-toolbar">
         <button

@@ -16,3 +16,7 @@ __pycache__/
 # Exclude WIP directories from agents still working
 /backend/
 /frontend/
+
+# Сборка стенда панелей (esbuild)
+/tests/ui_preview/dist/main.js
+/tests/ui_preview/dist/main.css

@@ -11,6 +11,24 @@ import TubeDialog, { TubeConfig } from "./TubeDialog";
 import SearchBar from "./SearchBar";
 import FeatureTree from "./FeatureTree";
 import { initializeShortcutListeners, formatShortcutForDisplay } from "./KeyboardShortcuts";
+import BendDataDialog from "./BendDataDialog";
+import CheckPanel from "./CheckPanel";
+import InstancesPanel from "./InstancesPanel";
+import DrawingWorkspace from "./DrawingWorkspace";
+import { t } from "./core/i18n";
+import type { CheckTubeInput, Feed } from "./core/types";
+
+/** Труба документа для панелей проверки, вывода и чертежа. */
+export interface DocumentTube extends CheckTubeInput {
+  name: string;
+  designation?: string;
+  material?: string;
+  wall?: number;
+  feed?: Feed;
+  bothOrders?: boolean;
+  /** Технологическая или геометрическая ошибка по последней проверке. */
+  blocksOutput?: boolean;
+}
 
 export interface CommandHandler {
   (commandId: string, args?: Record<string, any>): Promise<void> | void;
@@ -18,6 +36,14 @@ export interface CommandHandler {
 
 export interface RibbonBarProps {
   onCommand: CommandHandler;
+  /** Трубы открытого документа (сборки или детали). */
+  tubes?: DocumentTube[];
+  /** Активная (выбранная) труба для вывода и чертежа. */
+  activeTubeId?: string;
+  /** Роль пользователя для выпуска чертежей (7.7). */
+  role?: string;
+  user?: string;
+  onNavigate?: (tubeId: string, element: number) => void;
   activeDocument?: {
     type: "part" | "assembly" | "drawing" | null;
   };
@@ -55,7 +81,16 @@ interface TechConstraints {
 const RibbonBar: React.FC<RibbonBarProps> = ({
   onCommand,
   activeDocument,
+  tubes = [],
+  activeTubeId,
+  role,
+  user,
+  onNavigate,
 }) => {
+  // Панель в рабочей области: проверка, экземпляры или чертёж; диалог данных гибки — поверх.
+  const [workPanel, setWorkPanel] = useState<"check" | "instances" | "drawing" | null>(null);
+  const [bendDataOpen, setBendDataOpen] = useState(false);
+  const activeTube = tubes.find((tb) => tb.id === activeTubeId) ?? tubes[0];
   const [activeTab, setActiveTab] = useState<string>("home");
   const [gapViolations, setGapViolations] = useState<GapViolation[]>([]);
   const [showGapPanel, setShowGapPanel] = useState(false);
@@ -77,7 +112,19 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
 
   const handleCommand = useCallback(
     (commandId: string) => {
-      if (commandId === "check-gaps") {
+      if (commandId === "check-all") {
+        setWorkPanel("check");
+        onCommand(commandId);
+      } else if (commandId === "instances") {
+        setWorkPanel("instances");
+        onCommand(commandId);
+      } else if (commandId === "drawing-workspace" || commandId === "unfold-drawing") {
+        setWorkPanel("drawing");
+        onCommand(commandId);
+      } else if (commandId === "bend-data") {
+        setBendDataOpen(true);
+        onCommand(commandId);
+      } else if (commandId === "check-gaps") {
         // Simulate gap check and display violations
         setShowGapPanel(true);
         onCommand(commandId);
@@ -292,6 +339,16 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
         />
       </RibbonButtonGroup>
 
+      <RibbonButtonGroup title={t("inst.title")}>
+        <RibbonButton
+          id="instances"
+          label={t("inst.title")}
+          colorCategory="links"
+          onClick={handleCommand}
+          tooltip={`${t("inst.makePrimary")} · ${t("inst.detach")}`}
+        />
+      </RibbonButtonGroup>
+
       <RibbonButtonGroup title="Port">
         <RibbonButton
           id="new-port"
@@ -491,6 +548,23 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   // DRAWING TAB: Drawing and documentation
   const drawingTabContent = (
     <>
+      <RibbonButtonGroup title={t("draw.title")}>
+        <RibbonButton
+          id="drawing-workspace"
+          label={t("draw.title")}
+          colorCategory="create"
+          onClick={handleCommand}
+          tooltip={t("draw.title")}
+        />
+        <RibbonButton
+          id="bend-data"
+          label="XYZ / LRA"
+          colorCategory="import"
+          onClick={handleCommand}
+          tooltip={t("bend.title")}
+        />
+      </RibbonButtonGroup>
+
       <RibbonButtonGroup title="Sheet">
         <RibbonButton
           id="new-sheet"
@@ -712,11 +786,39 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
           </div>
         )}
 
-        {/* Right Content Area (placeholder for 3D viewport) */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-4 text-gray-500">
-            3D Viewport and Properties (to be integrated)
-          </div>
+        {/* Рабочая область: панель проверки, экземпляров или чертёж; иначе — место 3D-вида */}
+        <div className="flex-1 overflow-auto" style={{ minHeight: 0 }}>
+          {workPanel === "check" && (
+            <CheckPanel tubes={tubes} onNavigate={(id, el) => onNavigate?.(id, el)} />
+          )}
+          {workPanel === "instances" && <InstancesPanel />}
+          {workPanel === "drawing" && activeTube && (
+            <DrawingWorkspace
+              role={role}
+              user={user}
+              tube={{
+                path: activeTube.path,
+                od: activeTube.od,
+                wall: activeTube.wall,
+                hasErrors: activeTube.blocksOutput,
+                title: {
+                  "Обозначение": activeTube.designation ?? activeTube.name,
+                  "Наименование": activeTube.name,
+                  "Материал": activeTube.material ?? "",
+                },
+                unfold: {
+                  E_A: activeTube.E_A ?? 0,
+                  E_B: activeTube.E_B ?? 0,
+                  N_first: activeTube.N_first ?? 0,
+                  N_last: activeTube.N_last ?? 0,
+                  cut_allowed: activeTube.cut_allowed ?? true,
+                },
+              }}
+            />
+          )}
+          {workPanel === null && (
+            <div className="p-4 text-gray-500">3D Viewport and Properties (to be integrated)</div>
+          )}
         </div>
       </div>
 
@@ -727,6 +829,22 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
         onSave={handleTubeSave}
         initialConfig={selectedTubeConfig}
       />
+
+      {activeTube && (
+        <BendDataDialog
+          open={bendDataOpen}
+          onClose={() => setBendDataOpen(false)}
+          tube={{
+            name: activeTube.designation ?? activeTube.name,
+            path: activeTube.path,
+            E_A: activeTube.E_A,
+            E_B: activeTube.E_B,
+            feed: activeTube.feed,
+            bothOrders: activeTube.bothOrders,
+            blocksOutput: activeTube.blocksOutput,
+          }}
+        />
+      )}
 
       {/* Tech Specs Modal */}
       {showTechSpecs && <TechSpecsModal />}
