@@ -34,7 +34,7 @@ endif()
 # OpenSSL (для SHA256 хэширования в ассоциативных чертежах)
 find_package(OpenSSL REQUIRED)
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp)
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
 
@@ -138,6 +138,18 @@ bendcore_add_test(reporting test_reporting)
 add_executable(test_reporting_ui tests/test_reporting_ui.cpp)
 target_link_libraries(test_reporting_ui PRIVATE bendcore_core)
 bendcore_add_test(reporting_ui test_reporting_ui)
+
+add_executable(test_formulas tests/test_formulas.cpp)
+target_link_libraries(test_formulas PRIVATE bendcore_core)
+bendcore_add_test(formulas test_formulas)
+
+# Template tests (GoogleTest)
+find_package(GTest QUIET)
+if(GTest_FOUND)
+  add_executable(test_templates tests/test_templates.cpp)
+  target_link_libraries(test_templates PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
+  bendcore_add_test(templates test_templates)
+endif()
 
 # test_performance написан на GoogleTest: собирается, только если GTest установлен.
 find_package(GTest QUIET)

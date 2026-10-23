@@ -1,0 +1,101 @@
+{
+  "templates": [
+    {
+      "id": "reinforced-heavy-duty",
+      "name": "Reinforced (Heavy-duty)",
+      "description": "For structural frames and high-stress applications",
+      "category": "Reinforced",
+      "outer_diameter": {
+        "min": 25.0,
+        "max": 60.0,
+        "default": 42.5,
+        "unit": "mm"
+      },
+      "wall_thickness": {
+        "min": 2.5,
+        "max": 4.0,
+        "default": 3.25,
+        "unit": "mm"
+      },
+      "length": {
+        "min": 100.0,
+        "max": 1000.0,
+        "default": 500.0,
+        "unit": "mm"
+      },
+      "use_case": "Structural frames, high-stress applications, load-bearing components",
+      "compatible_materials": [
+        "steel-1045",
+        "steel-4140",
+        "steel-4340",
+        "ss-304",
+        "ss-316"
+      ]
+    },
+    {
+      "id": "standard-general",
+      "name": "Standard (General purpose)",
+      "description": "Most common tube assemblies for general-purpose applications",
+      "category": "Standard",
+      "outer_diameter": {
+        "min": 16.0,
+        "max": 50.0,
+        "default": 25.0,
+        "unit": "mm"
+      },
+      "wall_thickness": {
+        "min": 1.6,
+        "max": 2.5,
+        "default": 2.0,
+        "unit": "mm"
+      },
+      "length": {
+        "min": 50.0,
+        "max": 800.0,
+        "default": 400.0,
+        "unit": "mm"
+      },
+      "use_case": "Most common tube assemblies, general-purpose hydraulic and pneumatic systems",
+      "compatible_materials": [
+        "steel-1020",
+        "steel-1045",
+        "aluminum-6061",
+        "ss-304",
+        "brass-7030"
+      ]
+    },
+    {
+      "id": "small-od-compact",
+      "name": "Small-OD (Compact)",
+      "description": "Precision assemblies for tight spaces and compact designs",
+      "category": "Small-OD",
+      "outer_diameter": {
+        "min": 8.0,
+        "max": 20.0,
+        "default": 12.0,
+        "unit": "mm"
+      },
+      "wall_thickness": {
+        "min": 1.0,
+        "max": 1.6,
+        "default": 1.2,
+        "unit": "mm"
+      },
+      "length": {
+        "min": 20.0,
+        "max": 300.0,
+        "default": 150.0,
+        "unit": "mm"
+      },
+      "use_case": "Precision assemblies, tight spaces, sensor tubing, instrumentation",
+      "compatible_materials": [
+        "steel-1018",
+        "aluminum-6061",
+        "copper-pure",
+        "titanium-grade2",
+        "ss-304l"
+      ]
+    }
+  ],
+  "active_template_id": "standard-general"
+}
