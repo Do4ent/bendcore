@@ -1,53 +1,28 @@
 {
+  "version": "1.0",
   "templates": [
     {
-      "id": "reinforced-heavy-duty",
-      "name": "Reinforced (Heavy-duty)",
-      "description": "For structural frames and high-stress applications",
-      "category": "Reinforced",
-      "outer_diameter": {
-        "min": 25.0,
-        "max": 60.0,
-        "default": 42.5,
-        "unit": "mm"
-      },
-      "wall_thickness": {
-        "min": 2.5,
-        "max": 4.0,
-        "default": 3.25,
-        "unit": "mm"
-      },
-      "length": {
-        "min": 100.0,
-        "max": 1000.0,
-        "default": 500.0,
-        "unit": "mm"
-      },
-      "use_case": "Structural frames, high-stress applications, load-bearing components",
-      "compatible_materials": [
-        "steel-1045",
-        "steel-4140",
-        "steel-4340",
-        "ss-304",
-        "ss-316"
-      ]
-    },
-    {
-      "id": "standard-general",
-      "name": "Standard (General purpose)",
-      "description": "Most common tube assemblies for general-purpose applications",
+      "id": "std-90",
+      "name": "Standard 90° Bend",
+      "description": "Most common 90-degree bend template for general-purpose applications. Optimized for balanced performance across OD, wall thickness, and bend characteristics.",
       "category": "Standard",
       "outer_diameter": {
-        "min": 16.0,
-        "max": 50.0,
+        "min": 6.0,
+        "max": 100.0,
         "default": 25.0,
         "unit": "mm"
       },
       "wall_thickness": {
-        "min": 1.6,
-        "max": 2.5,
+        "min": 0.5,
+        "max": 5.0,
         "default": 2.0,
         "unit": "mm"
+      },
+      "bend_radius_ratio": {
+        "min": 1.5,
+        "max": 3.0,
+        "default": 2.0,
+        "unit": "R/D"
       },
       "length": {
         "min": 50.0,
@@ -55,31 +30,48 @@
         "default": 400.0,
         "unit": "mm"
       },
-      "use_case": "Most common tube assemblies, general-purpose hydraulic and pneumatic systems",
-      "compatible_materials": [
+      "max_consecutive_bends": 2,
+      "max_bend_angle": 180.0,
+      "min_bend_spacing": 15.0,
+      "material_family": "Steel",
+      "recommended_materials": [
         "steel-1020",
         "steel-1045",
         "aluminum-6061",
-        "ss-304",
         "brass-7030"
-      ]
+      ],
+      "manufacturing_method": "3D CNC bending",
+      "estimated_setup_time_min": 30.0,
+      "cost_per_unit": 50.0,
+      "min_batch_size": 1.0,
+      "author": "System",
+      "created_at": "2026-10-23T00:00:00Z",
+      "modified_at": "2026-10-23T00:00:00Z",
+      "popularity_score": 95,
+      "use_case": "General-purpose 90° bends, hydraulic lines, pneumatic systems, automotive applications"
     },
     {
-      "id": "small-od-compact",
-      "name": "Small-OD (Compact)",
-      "description": "Precision assemblies for tight spaces and compact designs",
-      "category": "Small-OD",
+      "id": "rfd-small",
+      "name": "Reinforced Small Diameter",
+      "description": "Specialized template for small-diameter, high-stress applications. Features reinforced wall thickness and tighter bend constraints.",
+      "category": "Reinforced",
       "outer_diameter": {
-        "min": 8.0,
-        "max": 20.0,
+        "min": 3.0,
+        "max": 25.0,
         "default": 12.0,
         "unit": "mm"
       },
       "wall_thickness": {
         "min": 1.0,
-        "max": 1.6,
-        "default": 1.2,
+        "max": 3.0,
+        "default": 1.8,
         "unit": "mm"
+      },
+      "bend_radius_ratio": {
+        "min": 2.0,
+        "max": 4.0,
+        "default": 2.5,
+        "unit": "R/D"
       },
       "length": {
         "min": 20.0,
@@ -87,15 +79,75 @@
         "default": 150.0,
         "unit": "mm"
       },
-      "use_case": "Precision assemblies, tight spaces, sensor tubing, instrumentation",
-      "compatible_materials": [
-        "steel-1018",
+      "max_consecutive_bends": 1,
+      "max_bend_angle": 90.0,
+      "min_bend_spacing": 20.0,
+      "material_family": "Steel",
+      "recommended_materials": [
+        "steel-4140",
+        "steel-4340",
+        "ss-304",
+        "titanium-grade2"
+      ],
+      "manufacturing_method": "Hydraulic press",
+      "estimated_setup_time_min": 45.0,
+      "cost_per_unit": 75.0,
+      "min_batch_size": 5.0,
+      "author": "System",
+      "created_at": "2026-10-23T00:00:00Z",
+      "modified_at": "2026-10-23T00:00:00Z",
+      "popularity_score": 88,
+      "use_case": "Instrumentation, precision assemblies, sensor tubing, high-pressure lines, medical devices"
+    },
+    {
+      "id": "lg-asm",
+      "name": "Large Assembly Profile",
+      "description": "Template for large-diameter assemblies and complex multi-bend structures. Optimized for CNC 5-axis processing and weight-critical applications.",
+      "category": "Large-Assembly",
+      "outer_diameter": {
+        "min": 50.0,
+        "max": 200.0,
+        "default": 100.0,
+        "unit": "mm"
+      },
+      "wall_thickness": {
+        "min": 2.0,
+        "max": 10.0,
+        "default": 4.0,
+        "unit": "mm"
+      },
+      "bend_radius_ratio": {
+        "min": 3.0,
+        "max": 6.0,
+        "default": 4.0,
+        "unit": "R/D"
+      },
+      "length": {
+        "min": 200.0,
+        "max": 2000.0,
+        "default": 800.0,
+        "unit": "mm"
+      },
+      "max_consecutive_bends": 3,
+      "max_bend_angle": 180.0,
+      "min_bend_spacing": 50.0,
+      "material_family": "Aluminum",
+      "recommended_materials": [
         "aluminum-6061",
-        "copper-pure",
-        "titanium-grade2",
-        "ss-304l"
-      ]
+        "aluminum-7075",
+        "composite-carbon",
+        "titanium-grade5"
+      ],
+      "manufacturing_method": "CNC 5-axis",
+      "estimated_setup_time_min": 60.0,
+      "cost_per_unit": 120.0,
+      "min_batch_size": 10.0,
+      "author": "System",
+      "created_at": "2026-10-23T00:00:00Z",
+      "modified_at": "2026-10-23T00:00:00Z",
+      "popularity_score": 82,
+      "use_case": "Aircraft structures, automotive frames, industrial equipment, weight-critical assemblies, complex manifolds"
     }
   ],
-  "active_template_id": "standard-general"
+  "active_template_id": "std-90"
 }

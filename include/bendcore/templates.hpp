@@ -45,22 +45,44 @@ struct TemplateParameter {
 };
 
 /**
- * Complete template definition
+ * Enhanced template definition per Task 2 specification
+ * Includes bend-specific constraints and manufacturing info
  */
 struct Template {
   std::string id;
   std::string name;
   std::string description;
-  std::string category;  // "Reinforced", "Standard", "Small-OD", "Custom"
+  std::string category;  // "Standard", "Reinforced", "Large-Assembly", "Custom"
 
-  // Parameter ranges
+  // Geometry constraints
   TemplateParameter outer_diameter;
   TemplateParameter wall_thickness;
-  TemplateParameter length;
+  TemplateParameter bend_radius_ratio;  // R/D ratio (e.g., min=1.5, max=3.0)
 
-  // Optional metadata
+  // Bend constraints
+  int max_consecutive_bends = 3;
+  double max_bend_angle = 180.0;  // degrees
+  double min_bend_spacing = 10.0; // mm
+
+  // Manufacturing info
+  std::string material_family;       // "Steel", "Aluminum", "Copper"
+  std::vector<std::string> recommended_materials;
+  std::string manufacturing_method;  // "3D bending", "CNC", "Hydraulic", "CNC 5-axis"
+  double estimated_setup_time_min = 0.0;
+
+  // Cost estimation
+  double cost_per_unit = 0.0;
+  double min_batch_size = 1.0;
+
+  // Metadata
+  std::string author = "System";
+  std::string created_at;
+  std::string modified_at;
+  int popularity_score = 0;  // 0-100
   std::string use_case;
-  std::vector<std::string> compatible_materials;
+
+  // Legacy compatibility - keep old fields
+  TemplateParameter length;
 
   // JSON serialization
   friend void to_json(nlohmann::json& j, const Template& t) {
@@ -71,9 +93,22 @@ struct Template {
       {"category", t.category},
       {"outer_diameter", t.outer_diameter},
       {"wall_thickness", t.wall_thickness},
-      {"length", t.length},
+      {"bend_radius_ratio", t.bend_radius_ratio},
+      {"max_consecutive_bends", t.max_consecutive_bends},
+      {"max_bend_angle", t.max_bend_angle},
+      {"min_bend_spacing", t.min_bend_spacing},
+      {"material_family", t.material_family},
+      {"recommended_materials", t.recommended_materials},
+      {"manufacturing_method", t.manufacturing_method},
+      {"estimated_setup_time_min", t.estimated_setup_time_min},
+      {"cost_per_unit", t.cost_per_unit},
+      {"min_batch_size", t.min_batch_size},
+      {"author", t.author},
+      {"created_at", t.created_at},
+      {"modified_at", t.modified_at},
+      {"popularity_score", t.popularity_score},
       {"use_case", t.use_case},
-      {"compatible_materials", t.compatible_materials}
+      {"length", t.length}
     };
   }
 
@@ -84,19 +119,67 @@ struct Template {
     j.at("category").get_to(t.category);
     j.at("outer_diameter").get_to(t.outer_diameter);
     j.at("wall_thickness").get_to(t.wall_thickness);
-    j.at("length").get_to(t.length);
-    j.at("use_case").get_to(t.use_case);
-    j.at("compatible_materials").get_to(t.compatible_materials);
+
+    if (j.contains("bend_radius_ratio")) {
+      j.at("bend_radius_ratio").get_to(t.bend_radius_ratio);
+    }
+    if (j.contains("max_consecutive_bends")) {
+      j.at("max_consecutive_bends").get_to(t.max_consecutive_bends);
+    }
+    if (j.contains("max_bend_angle")) {
+      j.at("max_bend_angle").get_to(t.max_bend_angle);
+    }
+    if (j.contains("min_bend_spacing")) {
+      j.at("min_bend_spacing").get_to(t.min_bend_spacing);
+    }
+    if (j.contains("material_family")) {
+      j.at("material_family").get_to(t.material_family);
+    }
+    if (j.contains("recommended_materials")) {
+      j.at("recommended_materials").get_to(t.recommended_materials);
+    }
+    if (j.contains("manufacturing_method")) {
+      j.at("manufacturing_method").get_to(t.manufacturing_method);
+    }
+    if (j.contains("estimated_setup_time_min")) {
+      j.at("estimated_setup_time_min").get_to(t.estimated_setup_time_min);
+    }
+    if (j.contains("cost_per_unit")) {
+      j.at("cost_per_unit").get_to(t.cost_per_unit);
+    }
+    if (j.contains("min_batch_size")) {
+      j.at("min_batch_size").get_to(t.min_batch_size);
+    }
+    if (j.contains("author")) {
+      j.at("author").get_to(t.author);
+    }
+    if (j.contains("created_at")) {
+      j.at("created_at").get_to(t.created_at);
+    }
+    if (j.contains("modified_at")) {
+      j.at("modified_at").get_to(t.modified_at);
+    }
+    if (j.contains("popularity_score")) {
+      j.at("popularity_score").get_to(t.popularity_score);
+    }
+    if (j.contains("use_case")) {
+      j.at("use_case").get_to(t.use_case);
+    }
+    if (j.contains("length")) {
+      j.at("length").get_to(t.length);
+    }
   }
 };
 
 /**
- * Auto-selection result with confidence score
+ * Auto-selection result with confidence score and constraint violations
  */
 struct TemplateMatch {
   std::string template_id;
   std::string template_name;
   double confidence;  // 0.0 to 100.0 percent
+  std::vector<std::string> constraint_violations;
+  std::vector<std::string> recommendations;
 
   bool operator<(const TemplateMatch& other) const {
     return confidence > other.confidence;  // Sort descending
@@ -109,6 +192,7 @@ struct TemplateMatch {
 struct TemplateLibrary {
   std::vector<Template> templates;
   std::string active_template_id;
+  std::string version = "1.0";
 
   // Find template by ID
   std::optional<Template> get_template(const std::string& id) const {
@@ -121,12 +205,16 @@ struct TemplateLibrary {
   // JSON serialization
   friend void to_json(nlohmann::json& j, const TemplateLibrary& lib) {
     j = nlohmann::json{
+      {"version", lib.version},
       {"templates", lib.templates},
       {"active_template_id", lib.active_template_id}
     };
   }
 
   friend void from_json(const nlohmann::json& j, TemplateLibrary& lib) {
+    if (j.contains("version")) {
+      j.at("version").get_to(lib.version);
+    }
     j.at("templates").get_to(lib.templates);
     j.at("active_template_id").get_to(lib.active_template_id);
   }
@@ -135,8 +223,80 @@ struct TemplateLibrary {
 // ============ AUTO-SELECTION ENGINE ============
 
 /**
- * Template selection engine with scoring algorithm
- * Weights: OD=0.5, wall_thickness=0.3, length=0.2
+ * Template matcher with confidence scoring algorithm
+ * Weights: OD=30%, wall_thickness=20%, bend_angle=25%, radius_ratio=15%, spacing=10%
+ */
+class TemplateMatcher {
+ public:
+  /**
+   * Match tube parameters to best templates
+   * Returns top 3 candidates sorted by confidence score
+   */
+  static std::vector<TemplateMatch> find_best_matches(
+    const TemplateLibrary& library,
+    double outer_diameter,
+    double wall_thickness,
+    double bend_angle = 90.0,
+    double radius_ratio = 2.0,
+    double bend_spacing = 20.0,
+    int num_results = 3
+  );
+
+  /**
+   * Calculate single parameter match score (0.0 to 1.0)
+   */
+  static double calculate_parameter_score(
+    double value,
+    const TemplateParameter& param
+  );
+
+  /**
+   * Calculate weighted template match score
+   */
+  static double calculate_template_score(
+    const Template& template_obj,
+    double outer_diameter,
+    double wall_thickness,
+    double bend_angle,
+    double radius_ratio,
+    double bend_spacing
+  );
+
+  /**
+   * Check constraint violations
+   */
+  static std::vector<std::string> check_constraint_violations(
+    const Template& template_obj,
+    double outer_diameter,
+    double wall_thickness,
+    double bend_angle,
+    double radius_ratio,
+    double bend_spacing
+  );
+
+  /**
+   * Generate manufacturing recommendations
+   */
+  static std::vector<std::string> generate_recommendations(
+    const Template& template_obj,
+    double outer_diameter,
+    double wall_thickness,
+    const std::vector<std::string>& violations
+  );
+
+ private:
+  static constexpr double WEIGHT_OD = 0.30;
+  static constexpr double WEIGHT_WALL = 0.20;
+  static constexpr double WEIGHT_BEND = 0.25;
+  static constexpr double WEIGHT_RADIUS = 0.15;
+  static constexpr double WEIGHT_SPACING = 0.10;
+};
+
+// ============ LEGACY COMPATIBILITY CLASS ============
+
+/**
+ * Template selection engine (legacy)
+ * Deprecated: Use TemplateMatcher instead
  */
 class TemplateSelector {
  public:
@@ -153,7 +313,6 @@ class TemplateSelector {
 
   /**
    * Calculate single parameter match score (0.0 to 1.0)
-   * Returns 1.0 if value is within range, decreases with distance
    */
   static double calculate_parameter_score(
     double value,

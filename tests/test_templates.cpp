@@ -47,57 +47,39 @@ TEST_F(TemplateManagerTest, LoadTemplatesFromJSON) {
   const auto& templates = manager.get_all_templates();
   EXPECT_GE(templates.size(), 3) << "Should have at least 3 predefined templates";
 
-  // Check for the three main templates
-  auto reinforced = manager.get_template("reinforced-heavy-duty");
-  auto standard = manager.get_template("standard-general");
-  auto small_od = manager.get_template("small-od-compact");
+  // Check for the three main spec templates
+  auto standard_90 = manager.get_template("std-90");
+  auto reinforced_small = manager.get_template("rfd-small");
+  auto large_asm = manager.get_template("lg-asm");
 
-  EXPECT_TRUE(reinforced.has_value()) << "Should have Reinforced template";
-  EXPECT_TRUE(standard.has_value()) << "Should have Standard template";
-  EXPECT_TRUE(small_od.has_value()) << "Should have Small-OD template";
+  EXPECT_TRUE(standard_90.has_value()) << "Should have Standard 90° template";
+  EXPECT_TRUE(reinforced_small.has_value()) << "Should have Reinforced Small template";
+  EXPECT_TRUE(large_asm.has_value()) << "Should have Large Assembly template";
 }
 
 /**
- * Test 2: Auto-selection for Reinforced tube (OD=50)
+ * Test 2: Auto-selection for Standard 90° tube (OD=25, Wall=2.0)
  */
-TEST_F(TemplateManagerTest, AutoSelectReinforcedTube) {
+TEST_F(TemplateManagerTest, AutoSelectStandard90Tube) {
   const std::string templates_path = "/home/claude/bendcore/data/templates.json";
   manager.load_templates(templates_path);
 
   const auto& library = manager.get_library();
 
-  // Test reinforced parameters: OD=50, Wall=3.5, Length=500
-  auto matches = TemplateSelector::select_template(library, 50.0, 3.5, 500.0);
+  // Test standard parameters: OD=25, Wall=2.0, Bend=90°, Radius=2.0
+  auto matches = TemplateMatcher::find_best_matches(
+      library, 25.0, 2.0, 90.0, 2.0, 20.0, 3);
 
   EXPECT_GE(matches.size(), 1) << "Should return at least one match";
   EXPECT_LE(matches.size(), 3) << "Should return at most 3 matches";
 
-  // Best match should be Reinforced template
-  EXPECT_EQ(matches[0].template_id, "reinforced-heavy-duty");
-  EXPECT_GE(matches[0].confidence, 80.0) << "Should have high confidence for reinforced";
+  // Best match should be Standard 90° template
+  EXPECT_EQ(matches[0].template_id, "std-90");
+  EXPECT_GE(matches[0].confidence, 85.0) << "Should have high confidence for standard 90°";
 }
 
 /**
- * Test 3: Auto-selection for Standard tube (OD=25)
- */
-TEST_F(TemplateManagerTest, AutoSelectStandardTube) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
-  manager.load_templates(templates_path);
-
-  const auto& library = manager.get_library();
-
-  // Test standard parameters: OD=25, Wall=2.0, Length=400
-  auto matches = TemplateSelector::select_template(library, 25.0, 2.0, 400.0);
-
-  EXPECT_GE(matches.size(), 1) << "Should return at least one match";
-
-  // Best match should be Standard template
-  EXPECT_EQ(matches[0].template_id, "standard-general");
-  EXPECT_GE(matches[0].confidence, 85.0) << "Should have high confidence for standard";
-}
-
-/**
- * Test 4: Auto-selection for Small-OD tube (OD=10)
+ * Test 3: Auto-selection for Small-OD tube (OD=12, Wall=1.8)
  */
 TEST_F(TemplateManagerTest, AutoSelectSmallODTube) {
   const std::string templates_path = "/home/claude/bendcore/data/templates.json";
@@ -105,14 +87,35 @@ TEST_F(TemplateManagerTest, AutoSelectSmallODTube) {
 
   const auto& library = manager.get_library();
 
-  // Test small-OD parameters: OD=10, Wall=1.2, Length=150
-  auto matches = TemplateSelector::select_template(library, 10.0, 1.2, 150.0);
+  // Test small-OD parameters: OD=12, Wall=1.8, Bend=90°, Radius=2.5
+  auto matches = TemplateMatcher::find_best_matches(
+      library, 12.0, 1.8, 90.0, 2.5, 25.0, 3);
 
   EXPECT_GE(matches.size(), 1) << "Should return at least one match";
 
-  // Best match should be Small-OD template
-  EXPECT_EQ(matches[0].template_id, "small-od-compact");
+  // Best match should be Reinforced Small template
+  EXPECT_EQ(matches[0].template_id, "rfd-small");
   EXPECT_GE(matches[0].confidence, 80.0) << "Should have high confidence for small-OD";
+}
+
+/**
+ * Test 4: Auto-selection for Large Assembly (OD=100, Wall=4.0)
+ */
+TEST_F(TemplateManagerTest, AutoSelectLargeAssemblyTube) {
+  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  manager.load_templates(templates_path);
+
+  const auto& library = manager.get_library();
+
+  // Test large assembly parameters: OD=100, Wall=4.0, Bend=90°, Radius=4.0
+  auto matches = TemplateMatcher::find_best_matches(
+      library, 100.0, 4.0, 90.0, 4.0, 50.0, 3);
+
+  EXPECT_GE(matches.size(), 1) << "Should return at least one match";
+
+  // Best match should be Large Assembly template
+  EXPECT_EQ(matches[0].template_id, "lg-asm");
+  EXPECT_GE(matches[0].confidence, 80.0) << "Should have high confidence for large assembly";
 }
 
 /**
@@ -239,7 +242,8 @@ TEST_F(TemplateManagerTest, Top3CandidatesRanking) {
   const auto& library = manager.get_library();
 
   // Use an ambiguous parameter set that could match multiple templates
-  auto matches = TemplateSelector::select_template(library, 32.0, 2.0, 450.0);
+  auto matches = TemplateMatcher::find_best_matches(
+      library, 32.0, 2.5, 90.0, 2.0, 20.0, 3);
 
   EXPECT_LE(matches.size(), 3) << "Should return at most 3 candidates";
 
@@ -254,6 +258,50 @@ TEST_F(TemplateManagerTest, Top3CandidatesRanking) {
     EXPECT_GE(match.confidence, 0.0);
     EXPECT_LE(match.confidence, 100.0);
   }
+}
+
+/**
+ * Test 9: Constraint violations detection
+ */
+TEST_F(TemplateManagerTest, ConstraintViolationsDetection) {
+  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  manager.load_templates(templates_path);
+
+  auto std_90 = manager.get_template("std-90");
+  ASSERT_TRUE(std_90.has_value());
+
+  // Test OD violation (too large)
+  auto violations = TemplateMatcher::check_constraint_violations(
+      *std_90, 200.0, 2.0, 90.0, 2.0, 20.0);
+  EXPECT_FALSE(violations.empty()) << "Should detect OD violation";
+
+  // Test wall thickness violation (too thin)
+  violations = TemplateMatcher::check_constraint_violations(
+      *std_90, 25.0, 0.1, 90.0, 2.0, 20.0);
+  EXPECT_FALSE(violations.empty()) << "Should detect wall thickness violation";
+
+  // Test bend angle violation
+  violations = TemplateMatcher::check_constraint_violations(
+      *std_90, 25.0, 2.0, 200.0, 2.0, 20.0);
+  EXPECT_FALSE(violations.empty()) << "Should detect bend angle violation";
+}
+
+/**
+ * Test 10: Recommendations generation
+ */
+TEST_F(TemplateManagerTest, RecommendationsGeneration) {
+  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  manager.load_templates(templates_path);
+
+  auto std_90 = manager.get_template("std-90");
+  ASSERT_TRUE(std_90.has_value());
+
+  auto violations = TemplateMatcher::check_constraint_violations(
+      *std_90, 5.0, 2.0, 90.0, 2.0, 20.0);  // OD too small
+
+  auto recommendations = TemplateMatcher::generate_recommendations(
+      *std_90, 5.0, 2.0, violations);
+  EXPECT_FALSE(recommendations.empty()) << "Should generate recommendations for OD violation";
 }
 
 // ============ PARAMETER SCORE TESTS ============

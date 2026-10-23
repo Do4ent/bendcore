@@ -1,6 +1,7 @@
 /**
  * Template Manager Implementation
- * Handles loading, saving, and CRUD operations for tube templates
+ * Handles loading, saving, CRUD operations, and auto-matching for tube templates
+ * Task 2: Smart Templates + Auto-Selection Engine
  */
 
 #include "bendcore/templates.hpp"
@@ -8,10 +9,217 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 namespace bendcore {
 
-// ============ TEMPLATE SELECTOR IMPLEMENTATION ============
+// ============ TEMPLATE MATCHER IMPLEMENTATION ============
+
+std::vector<TemplateMatch> TemplateMatcher::find_best_matches(
+    const TemplateLibrary& library,
+    double outer_diameter,
+    double wall_thickness,
+    double bend_angle,
+    double radius_ratio,
+    double bend_spacing,
+    int num_results) {
+
+  std::vector<TemplateMatch> matches;
+
+  // Score each template
+  for (const auto& template_obj : library.templates) {
+    double score = calculate_template_score(
+        template_obj, outer_diameter, wall_thickness,
+        bend_angle, radius_ratio, bend_spacing);
+
+    auto violations = check_constraint_violations(
+        template_obj, outer_diameter, wall_thickness,
+        bend_angle, radius_ratio, bend_spacing);
+
+    auto recommendations = generate_recommendations(
+        template_obj, outer_diameter, wall_thickness, violations);
+
+    matches.push_back({
+      template_obj.id,
+      template_obj.name,
+      score,
+      violations,
+      recommendations
+    });
+  }
+
+  // Sort by confidence score (descending)
+  std::sort(matches.begin(), matches.end());
+
+  // Return top N results
+  if (matches.size() > static_cast<size_t>(num_results)) {
+    matches.resize(num_results);
+  }
+
+  return matches;
+}
+
+double TemplateMatcher::calculate_parameter_score(
+    double value,
+    const TemplateParameter& param) {
+
+  // If value is within range, return perfect score
+  if (value >= param.min && value <= param.max) {
+    return 1.0;
+  }
+
+  // If value is outside range, calculate penalty based on distance
+  double distance = 0.0;
+  if (value < param.min) {
+    distance = param.min - value;
+  } else {
+    distance = value - param.max;
+  }
+
+  // Maximum penalty: distance as percentage of range
+  double range = param.max - param.min;
+  if (range < 1e-6) return 0.0;  // Avoid division by zero
+
+  // Score decreases linearly with distance
+  // At distance = range, score = 0.0
+  // At distance = 0, score = 1.0
+  double score = std::max(0.0, 1.0 - (distance / range));
+  return score;
+}
+
+double TemplateMatcher::calculate_template_score(
+    const Template& template_obj,
+    double outer_diameter,
+    double wall_thickness,
+    double bend_angle,
+    double radius_ratio,
+    double bend_spacing) {
+
+  // Score OD fit
+  double od_score = calculate_parameter_score(
+      outer_diameter, template_obj.outer_diameter);
+
+  // Score wall thickness fit
+  double wall_score = calculate_parameter_score(
+      wall_thickness, template_obj.wall_thickness);
+
+  // Score bend angle fit (0-1 scale, penalize if exceeds max)
+  double bend_score = 1.0;
+  if (bend_angle > template_obj.max_bend_angle) {
+    double overage = bend_angle - template_obj.max_bend_angle;
+    double max_penalty = template_obj.max_bend_angle;
+    bend_score = std::max(0.0, 1.0 - (overage / max_penalty));
+  }
+
+  // Score radius ratio fit
+  double radius_score = calculate_parameter_score(
+      radius_ratio, template_obj.bend_radius_ratio);
+
+  // Score bend spacing fit
+  double spacing_score = 1.0;
+  if (bend_spacing > 0 && bend_spacing < template_obj.min_bend_spacing) {
+    double shortfall = template_obj.min_bend_spacing - bend_spacing;
+    spacing_score = std::max(0.0, 1.0 - (shortfall / template_obj.min_bend_spacing));
+  }
+
+  // Weighted sum: OD=30%, Wall=20%, Bend=25%, Radius=15%, Spacing=10%
+  double total_score =
+      (WEIGHT_OD * od_score) +
+      (WEIGHT_WALL * wall_score) +
+      (WEIGHT_BEND * bend_score) +
+      (WEIGHT_RADIUS * radius_score) +
+      (WEIGHT_SPACING * spacing_score);
+
+  // Convert to percentage
+  return total_score * 100.0;
+}
+
+std::vector<std::string> TemplateMatcher::check_constraint_violations(
+    const Template& template_obj,
+    double outer_diameter,
+    double wall_thickness,
+    double bend_angle,
+    double radius_ratio,
+    double bend_spacing) {
+
+  std::vector<std::string> violations;
+
+  // Check OD
+  if (outer_diameter < template_obj.outer_diameter.min) {
+    violations.push_back("OD too small (below " +
+        std::to_string(static_cast<int>(template_obj.outer_diameter.min)) + "mm)");
+  } else if (outer_diameter > template_obj.outer_diameter.max) {
+    violations.push_back("OD too large (above " +
+        std::to_string(static_cast<int>(template_obj.outer_diameter.max)) + "mm)");
+  }
+
+  // Check wall thickness
+  if (wall_thickness < template_obj.wall_thickness.min) {
+    violations.push_back("Wall thickness too thin");
+  } else if (wall_thickness > template_obj.wall_thickness.max) {
+    violations.push_back("Wall thickness too thick");
+  }
+
+  // Check bend angle
+  if (bend_angle > template_obj.max_bend_angle) {
+    violations.push_back("Bend angle exceeds maximum (" +
+        std::to_string(static_cast<int>(template_obj.max_bend_angle)) + "°)");
+  }
+
+  // Check radius ratio
+  if (radius_ratio < template_obj.bend_radius_ratio.min) {
+    violations.push_back("Bend radius ratio too small");
+  } else if (radius_ratio > template_obj.bend_radius_ratio.max) {
+    violations.push_back("Bend radius ratio too large");
+  }
+
+  // Check bend spacing
+  if (bend_spacing > 0 && bend_spacing < template_obj.min_bend_spacing) {
+    violations.push_back("Bend spacing too close (minimum " +
+        std::to_string(static_cast<int>(template_obj.min_bend_spacing)) + "mm)");
+  }
+
+  return violations;
+}
+
+std::vector<std::string> TemplateMatcher::generate_recommendations(
+    const Template& template_obj,
+    double outer_diameter,
+    double wall_thickness,
+    const std::vector<std::string>& violations) {
+
+  std::vector<std::string> recommendations;
+
+  // Wall thickness recommendations
+  if (wall_thickness < template_obj.wall_thickness.min) {
+    recommendations.push_back("Consider using template with thinner wall range");
+  } else if (wall_thickness > template_obj.wall_thickness.max) {
+    recommendations.push_back("Consider using template with thicker wall range");
+  }
+
+  // OD recommendations
+  if (outer_diameter < template_obj.outer_diameter.min) {
+    recommendations.push_back("Consider template: Small-OD (Compact)");
+  } else if (outer_diameter > template_obj.outer_diameter.max) {
+    recommendations.push_back("Consider template: Large Assembly Profile");
+  }
+
+  // Manufacturing recommendations
+  if (!recommendations.empty() && !template_obj.manufacturing_method.empty()) {
+    recommendations.push_back("Recommended method: " + template_obj.manufacturing_method);
+  }
+
+  if (template_obj.estimated_setup_time_min > 0) {
+    recommendations.push_back("Est. setup time: " +
+        std::to_string(static_cast<int>(template_obj.estimated_setup_time_min)) + " min");
+  }
+
+  return recommendations;
+}
+
+// ============ LEGACY TEMPLATE SELECTOR IMPLEMENTATION ============
 
 std::vector<TemplateMatch> TemplateSelector::select_template(
     const TemplateLibrary& library,
@@ -29,7 +237,9 @@ std::vector<TemplateMatch> TemplateSelector::select_template(
     matches.push_back({
       template_obj.id,
       template_obj.name,
-      score
+      score,
+      {},
+      {}
     });
   }
 
@@ -63,11 +273,9 @@ double TemplateSelector::calculate_parameter_score(
 
   // Maximum penalty: distance as percentage of range
   double range = param.max - param.min;
-  if (range == 0) return 0.0;
+  if (range < 1e-6) return 0.0;
 
   // Score decreases linearly with distance
-  // At distance = range, score = 0.0
-  // At distance = 0, score = 1.0
   double score = std::max(0.0, 1.0 - (distance / range));
   return score;
 }
