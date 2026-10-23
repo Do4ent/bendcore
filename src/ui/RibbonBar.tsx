@@ -38,6 +38,17 @@ interface MassResult {
   density: number;        // g/cm³
 }
 
+interface TechConstraints {
+  tubeMaxOD: number;
+  tubeMaxWT: number;
+  tubeMaxLength: number;
+  bendMaxAngle: number;
+  bendMinRadius: string; // "OD/2"
+  materials: Array<{ name: string; density: number }>;
+  maxComplexityScore: number;
+  maxBendCount: string; // "unlimited"
+}
+
 const RibbonBar: React.FC<RibbonBarProps> = ({
   onCommand,
   activeDocument,
@@ -49,6 +60,7 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   const [showMassPanel, setShowMassPanel] = useState(false);
   const [tubeDialogOpen, setTubeDialogOpen] = useState(false);
   const [selectedTubeConfig, setSelectedTubeConfig] = useState<TubeConfig | undefined>();
+  const [showTechSpecs, setShowTechSpecs] = useState(false);
 
   const handleCommand = useCallback(
     (commandId: string) => {
@@ -148,6 +160,13 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
           colorCategory="auxiliary"
           onClick={handleCommand}
           tooltip="Application settings"
+        />
+        <RibbonButton
+          id="tech-specs"
+          label="Tech Specs"
+          colorCategory="auxiliary"
+          onClick={() => setShowTechSpecs(true)}
+          tooltip="View technical constraints and specifications"
         />
       </RibbonButtonGroup>
     </>
@@ -526,6 +545,132 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
     { id: "drawing", name: "Drawing", content: drawingTabContent },
   ];
 
+  // Tech Constraints
+  const techConstraints: TechConstraints = {
+    tubeMaxOD: 100,
+    tubeMaxWT: 10,
+    tubeMaxLength: 5000,
+    bendMaxAngle: 180,
+    bendMinRadius: "OD/2",
+    materials: [
+      { name: "Steel", density: 7.85 },
+      { name: "Aluminum", density: 2.70 },
+      { name: "Copper", density: 8.96 },
+      { name: "Titanium", density: 4.54 },
+      { name: "Custom", density: 0 },
+    ],
+    maxComplexityScore: 100,
+    maxBendCount: "unlimited",
+  };
+
+  const TechSpecsModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
+        <div className="p-6">
+          <h2 className="text-2xl font-bold mb-6 text-gray-900">
+            Technical Constraints & Specifications
+          </h2>
+
+          {/* Tube Specifications */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4 text-gray-800 border-b pb-2">
+              Tube Specifications
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-gray-600 text-sm">Max Outer Diameter</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {techConstraints.tubeMaxOD} mm
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm">Max Wall Thickness</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {techConstraints.tubeMaxWT} mm
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm">Max Length</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {techConstraints.tubeMaxLength} mm
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm">Min Bend Radius</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {techConstraints.bendMinRadius}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bend Specifications */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4 text-gray-800 border-b pb-2">
+              Bend Specifications
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-gray-600 text-sm">Max Bend Angle</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {techConstraints.bendMaxAngle}°
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm">Max Bends</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {techConstraints.maxBendCount}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Material Support */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4 text-gray-800 border-b pb-2">
+              Material Support
+            </h3>
+            <div className="space-y-2">
+              {techConstraints.materials.map((material, idx) => (
+                <div key={idx} className="flex justify-between items-center py-2">
+                  <span className="text-gray-700">✓ {material.name}</span>
+                  {material.density > 0 && (
+                    <span className="text-gray-500 text-sm">
+                      {material.density} g/cm³
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Complexity Limits */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4 text-gray-800 border-b pb-2">
+              Complexity Limits
+            </h3>
+            <div>
+              <p className="text-gray-600 text-sm">Max Complexity Score</p>
+              <p className="text-xl font-semibold text-gray-900">
+                {techConstraints.maxComplexityScore} points
+              </p>
+            </div>
+          </div>
+
+          {/* Close Button */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowTechSpecs(false)}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div className="bg-gray-50 border-b border-gray-400">
@@ -543,6 +688,9 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
         onSave={handleTubeSave}
         initialConfig={selectedTubeConfig}
       />
+
+      {/* Tech Specs Modal */}
+      {showTechSpecs && <TechSpecsModal />}
     </>
   );
 };
