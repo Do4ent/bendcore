@@ -4,8 +4,9 @@
  * Phase 29 Day 6: Complete implementation
  */
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { getColorHex } from "./ColorScheme";
+import { useTemplates, TemplateMatch } from "./hooks/useTemplates";
 
 // ============ INTERFACES ============
 
@@ -200,6 +201,7 @@ interface GeometryTabProps {
   onChange: (config: TubeConfig) => void;
   errors: ValidationError[];
   calculatedMass: number | null;
+  onTemplateSelected?: (templateId: string) => void;
 }
 
 const GeometryTab: React.FC<GeometryTabProps> = ({
@@ -207,8 +209,21 @@ const GeometryTab: React.FC<GeometryTabProps> = ({
   onChange,
   errors,
   calculatedMass,
+  onTemplateSelected,
 }) => {
   const geometry = config.geometry;
+  const { selectTemplates, getTemplate } = useTemplates();
+  const [suggestedTemplates, setSuggestedTemplates] = useState<TemplateMatch[]>([]);
+
+  // Update suggested templates when geometry changes
+  useEffect(() => {
+    const suggestions = selectTemplates(
+      geometry.outerDiameter,
+      geometry.wallThickness,
+      geometry.length
+    );
+    setSuggestedTemplates(suggestions);
+  }, [geometry.outerDiameter, geometry.wallThickness, geometry.length, selectTemplates]);
 
   const handleChange = useCallback(
     (field: keyof GeometryParams, value: any) => {
@@ -218,6 +233,28 @@ const GeometryTab: React.FC<GeometryTabProps> = ({
       });
     },
     [config, onChange, geometry]
+  );
+
+  const handleApplyTemplate = useCallback(
+    (templateId: string) => {
+      const template = getTemplate(templateId);
+      if (template) {
+        // Apply template defaults to geometry
+        onChange({
+          ...config,
+          geometry: {
+            ...geometry,
+            outerDiameter: template.outer_diameter.default,
+            wallThickness: template.wall_thickness.default,
+            length: template.length.default,
+          },
+        });
+        if (onTemplateSelected) {
+          onTemplateSelected(templateId);
+        }
+      }
+    },
+    [config, geometry, onChange, getTemplate, onTemplateSelected]
   );
 
   const getFieldError = (field: string) =>
@@ -237,6 +274,31 @@ const GeometryTab: React.FC<GeometryTabProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Quick Select Template */}
+      {suggestedTemplates.length > 0 && (
+        <div className="bg-blue-50 border border-blue-300 rounded p-4">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3">
+            Quick Select Template
+          </h4>
+          <div className="space-y-2">
+            {suggestedTemplates.map((match) => (
+              <button
+                key={match.template_id}
+                onClick={() => handleApplyTemplate(match.template_id)}
+                className="w-full text-left px-3 py-2 border border-blue-300 rounded hover:bg-blue-100 transition flex justify-between items-center"
+              >
+                <span className="text-sm font-medium text-gray-800">
+                  {match.template_name}
+                </span>
+                <span className="text-xs font-semibold text-blue-600">
+                  {Math.round(match.confidence)}% match
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Outer Diameter */}
       <div className="border-l-4 border-ochre-600 pl-3">
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1313,6 +1375,9 @@ const TubeDialog: React.FC<TubeDialogProps> = ({
               onChange={setConfig}
               errors={errors}
               calculatedMass={calculatedMass}
+              onTemplateSelected={(id) => {
+                // Optional: handle template selection in parent
+              }}
             />
           )}
           {activeTab === "bends" && (
