@@ -46,7 +46,7 @@ else()
   set(OpenCASCADE_FOUND FALSE)
 endif()
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp src/occt_init.cpp src/step_reader.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp)
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp src/occt_init.cpp src/step_reader.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp src/growthbook_client.cpp src/analytics_event.cpp src/ab_testing.cpp src/event_batch_sender.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
 
@@ -294,6 +294,11 @@ if(WIN32 OR OpenCASCADE_FOUND)
   target_link_libraries(e2e_import PRIVATE bendcore_core)
   bendcore_add_test(e2e_import e2e_import)
 endif()
+
+# GrowthBook Analytics (Q3 2027, Task 4, Subtask 1)
+add_executable(test_growthbook_client tests/test_growthbook_client.cpp)
+target_link_libraries(test_growthbook_client PRIVATE bendcore_core)
+bendcore_add_test(growthbook_client test_growthbook_client)
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
 # Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
