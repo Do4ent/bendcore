@@ -34,9 +34,28 @@ endif()
 # OpenSSL (для SHA256 хэширования в ассоциативных чертежах)
 find_package(OpenSSL REQUIRED)
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp)
+# OCCT (Open Cascade Technology) для импорта STEP файлов (Q3 2027, Task 1)
+# Windows-only integration with OCCT 7.7+
+if(WIN32)
+  find_package(OpenCASCADE 7.7 QUIET)
+  if(NOT OpenCASCADE_FOUND)
+    # Try to find OCCT via vcpkg
+    find_package(OpenCASCADE CONFIG QUIET)
+  endif()
+else()
+  set(OpenCASCADE_FOUND FALSE)
+endif()
+
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp src/occt_init.cpp src/step_reader.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
+
+# Link OCCT libraries if available
+if(OpenCASCADE_FOUND)
+  target_include_directories(bendcore_core SYSTEM PRIVATE ${OpenCASCADE_INCLUDE_DIRS})
+  target_link_libraries(bendcore_core PRIVATE ${OpenCASCADE_LIBRARIES})
+  target_compile_definitions(bendcore_core PRIVATE BENDCORE_WITH_OCCT=1)
+endif()
 
 enable_testing()
 
@@ -214,6 +233,67 @@ bendcore_add_test(layers test_layers)
 add_executable(test_search tests/test_search.cpp)
 target_link_libraries(test_search PRIVATE bendcore_core)
 bendcore_add_test(search test_search)
+
+# OCCT initialization test (Q3 2027, Task 1, Subtask 1)
+if(WIN32 OR OpenCASCADE_FOUND)
+  add_executable(test_occt_init tests/test_occt_init.cpp)
+  target_include_directories(test_occt_init PRIVATE include)
+  if(OpenCASCADE_FOUND)
+    target_include_directories(test_occt_init SYSTEM PRIVATE ${OpenCASCADE_INCLUDE_DIRS})
+    target_link_libraries(test_occt_init PRIVATE ${OpenCASCADE_LIBRARIES})
+    target_compile_definitions(test_occt_init PRIVATE BENDCORE_WITH_OCCT=1)
+  else()
+    target_link_libraries(test_occt_init PRIVATE bendcore_core)
+  endif()
+  bendcore_add_test(occt_init test_occt_init)
+
+  # STEP File Reader test (Q3 2027, Task 1, Subtask 2)
+  add_executable(test_step_reader tests/test_step_reader.cpp)
+  target_include_directories(test_step_reader PRIVATE include)
+  target_link_libraries(test_step_reader PRIVATE bendcore_core)
+  if(OpenCASCADE_FOUND)
+    target_include_directories(test_step_reader SYSTEM PRIVATE ${OpenCASCADE_INCLUDE_DIRS})
+    target_link_libraries(test_step_reader PRIVATE ${OpenCASCADE_LIBRARIES})
+    target_compile_definitions(test_step_reader PRIVATE BENDCORE_WITH_OCCT=1)
+  endif()
+  bendcore_add_test(step_reader test_step_reader)
+
+  # Geometry Analyzer test (Q3 2027, Task 1, Subtask 3)
+  add_executable(test_geometry_analyzer tests/test_geometry_analyzer.cpp)
+  target_include_directories(test_geometry_analyzer PRIVATE include)
+  target_link_libraries(test_geometry_analyzer PRIVATE bendcore_core)
+  bendcore_add_test(geometry_analyzer test_geometry_analyzer)
+
+  # Parametric Builder test (Q3 2027, Task 1, Subtask 4)
+  add_executable(test_parametric_builder tests/test_parametric_builder.cpp)
+  target_include_directories(test_parametric_builder PRIVATE include)
+  target_link_libraries(test_parametric_builder PRIVATE bendcore_core)
+  bendcore_add_test(parametric_builder test_parametric_builder)
+
+  # Geometry Cache test (Q3 2027, Task 1, Subtask 5)
+  add_executable(test_geometry_cache tests/test_geometry_cache.cpp)
+  target_include_directories(test_geometry_cache PRIVATE include)
+  target_link_libraries(test_geometry_cache PRIVATE bendcore_core)
+  bendcore_add_test(geometry_cache test_geometry_cache)
+
+  # DXF Reader test (Q3 2027, Task 1, Subtask 6)
+  add_executable(test_dxf_reader tests/test_dxf_reader.cpp)
+  target_include_directories(test_dxf_reader PRIVATE include)
+  target_link_libraries(test_dxf_reader PRIVATE bendcore_core)
+  bendcore_add_test(dxf_reader test_dxf_reader)
+
+  # Import Workflow test (Q3 2027, Task 1, Subtask 7)
+  add_executable(test_import_workflow tests/test_import_workflow.cpp)
+  target_include_directories(test_import_workflow PRIVATE include)
+  target_link_libraries(test_import_workflow PRIVATE bendcore_core)
+  bendcore_add_test(import_workflow test_import_workflow)
+
+  # E2E Import test (Q3 2027, Task 1, Subtask 10)
+  add_executable(e2e_import tests/e2e_import.cpp)
+  target_include_directories(e2e_import PRIVATE include)
+  target_link_libraries(e2e_import PRIVATE bendcore_core)
+  bendcore_add_test(e2e_import e2e_import)
+endif()
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
 # Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
