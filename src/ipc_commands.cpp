@@ -63,6 +63,12 @@ void CommandRouter::register_default_handlers() {
   register_command("unfold-drawing", commands::unfold_drawing);
   register_command("add-dimension", commands::add_dimension);
   register_command("add-text", commands::add_text);
+
+  // MATERIALS (Phase 30)
+  register_command("get-materials", commands::get_materials);
+  register_command("get-material", commands::get_material);
+  register_command("get-materials-by-category", commands::get_materials_by_category);
+  register_command("add-custom-material", commands::add_custom_material);
 }
 
 // ============ COMMAND IMPLEMENTATIONS ============
@@ -344,6 +350,168 @@ CommandResult add_dimension(const json& args) {
 
 CommandResult add_text(const json& args) {
   return CommandResult{true, "Text added"};
+}
+
+// MATERIALS COMMANDS
+
+CommandResult get_materials(const json& args) {
+  using namespace bendcore::analysis;
+
+  auto& db = MaterialDatabase::instance();
+  auto materials = db.getAllMaterials();
+
+  json materialsJson = json::array();
+  for (const auto& mat : materials) {
+    materialsJson.push_back(json{
+      {"id", mat.id},
+      {"name", mat.name},
+      {"category", mat.category},
+      {"density", mat.density},
+      {"availability", mat.availability},
+      {"color", mat.color},
+      {"standards", mat.standards},
+      {"properties", json{
+        {"youngsModulus", mat.properties.youngsModulus},
+        {"yieldStrength", mat.properties.yieldStrength},
+        {"tensileStrength", mat.properties.tensileStrength},
+        {"elongation", mat.properties.elongation},
+        {"hardness", mat.properties.hardness},
+        {"cost", mat.properties.cost}
+      }},
+      {"applications", mat.applications}
+    });
+  }
+
+  return CommandResult{true, "Materials retrieved", json{
+    {"materials", materialsJson},
+    {"count", materialsJson.size()}
+  }};
+}
+
+CommandResult get_material(const json& args) {
+  using namespace bendcore::analysis;
+
+  std::string materialId = args.value("id", "");
+  if (materialId.empty()) {
+    return CommandResult{false, "Material ID is required"};
+  }
+
+  auto& db = MaterialDatabase::instance();
+  auto mat = db.getMaterial(materialId);
+
+  if (!mat.has_value()) {
+    return CommandResult{false, "Material not found: " + materialId};
+  }
+
+  json matJson{
+    {"id", mat->id},
+    {"name", mat->name},
+    {"category", mat->category},
+    {"density", mat->density},
+    {"availability", mat->availability},
+    {"color", mat->color},
+    {"standards", mat->standards},
+    {"properties", json{
+      {"youngsModulus", mat->properties.youngsModulus},
+      {"yieldStrength", mat->properties.yieldStrength},
+      {"tensileStrength", mat->properties.tensileStrength},
+      {"elongation", mat->properties.elongation},
+      {"hardness", mat->properties.hardness},
+      {"cost", mat->properties.cost}
+    }},
+    {"applications", mat->applications}
+  };
+
+  return CommandResult{true, "Material retrieved", json{
+    {"material", matJson}
+  }};
+}
+
+CommandResult get_materials_by_category(const json& args) {
+  using namespace bendcore::analysis;
+
+  std::string category = args.value("category", "");
+  if (category.empty()) {
+    return CommandResult{false, "Category is required"};
+  }
+
+  auto& db = MaterialDatabase::instance();
+  auto materials = db.getMaterialsByCategory(category);
+
+  json materialsJson = json::array();
+  for (const auto& mat : materials) {
+    materialsJson.push_back(json{
+      {"id", mat.id},
+      {"name", mat.name},
+      {"category", mat.category},
+      {"density", mat.density},
+      {"availability", mat.availability},
+      {"color", mat.color},
+      {"standards", mat.standards},
+      {"properties", json{
+        {"youngsModulus", mat.properties.youngsModulus},
+        {"yieldStrength", mat.properties.yieldStrength},
+        {"tensileStrength", mat.properties.tensileStrength},
+        {"elongation", mat.properties.elongation},
+        {"hardness", mat.properties.hardness},
+        {"cost", mat.properties.cost}
+      }},
+      {"applications", mat.applications}
+    });
+  }
+
+  return CommandResult{true, "Materials by category retrieved", json{
+    {"category", category},
+    {"materials", materialsJson},
+    {"count", materialsJson.size()}
+  }};
+}
+
+CommandResult add_custom_material(const json& args) {
+  using namespace bendcore::analysis;
+
+  MaterialProperties mat;
+  mat.id = args.value("id", "");
+  mat.name = args.value("name", "");
+  mat.category = args.value("category", "Custom");
+  mat.density = args.value("density", 5.0);
+  mat.availability = args.value("availability", "Custom");
+  mat.color = args.value("color", "#808080");
+
+  if (mat.id.empty() || mat.name.empty()) {
+    return CommandResult{false, "Material ID and name are required"};
+  }
+
+  // Parse properties if provided
+  if (args.contains("properties")) {
+    auto props = args["properties"];
+    mat.properties.youngsModulus = props.value("youngsModulus", 0.0);
+    mat.properties.yieldStrength = props.value("yieldStrength", 0.0);
+    mat.properties.tensileStrength = props.value("tensileStrength", 0.0);
+    mat.properties.elongation = props.value("elongation", 0.0);
+    mat.properties.hardness = props.value("hardness", 0.0);
+    mat.properties.cost = props.value("cost", 0.0);
+  }
+
+  // Parse standards and applications if provided
+  if (args.contains("standards")) {
+    mat.standards = args["standards"].get<std::vector<std::string>>();
+  }
+  if (args.contains("applications")) {
+    mat.applications = args["applications"].get<std::vector<std::string>>();
+  }
+
+  auto& db = MaterialDatabase::instance();
+  bool success = db.addCustomMaterial(mat);
+
+  if (!success) {
+    return CommandResult{false, "Failed to add custom material"};
+  }
+
+  return CommandResult{true, "Custom material added", json{
+    {"id", mat.id},
+    {"name", mat.name}
+  }};
 }
 
 }  // namespace commands

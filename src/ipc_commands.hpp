@@ -118,6 +118,12 @@ CommandResult measure(const json& args);
 CommandResult calculate_mass(const json& args);
 CommandResult generate_report(const json& args);
 
+// Materials
+CommandResult get_materials(const json& args);
+CommandResult get_material(const json& args);
+CommandResult get_materials_by_category(const json& args);
+CommandResult add_custom_material(const json& args);
+
 // Drawing
 CommandResult new_sheet(const json& args);
 CommandResult create_view(const json& args);

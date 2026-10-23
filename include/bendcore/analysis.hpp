@@ -1,5 +1,6 @@
 // Анализ трубы: напряжения, допуски, коллизии, проверка стандартов
 // Phase 25 Stage 1: Basic Analysis System
+// Phase 30 Part A: Extended Materials Library
 #pragma once
 
 #include "bendcore/tube_model.hpp"
@@ -8,6 +9,8 @@
 #include <string>
 #include <vector>
 #include <optional>
+#include <map>
+#include <memory>
 
 namespace bendcore::analysis {
 
@@ -86,13 +89,74 @@ struct MaterialDensity {
     double density;  // g/cm³
 };
 
-// Standard material densities
+// Standard material densities (legacy - keep for backward compatibility)
 static const std::vector<MaterialDensity> MATERIAL_DENSITIES = {
     {"Steel", 7.85},
     {"Aluminum", 2.70},
     {"Copper", 8.96},
     {"Titanium", 4.54},
     {"Custom", 5.0}
+};
+
+// Extended material properties for comprehensive materials database
+struct MaterialProperties {
+    std::string id;                           // Unique identifier (e.g., "steel-1020")
+    std::string name;                         // Display name
+    std::string category;                     // Category (Carbon Steel, Stainless Steel, etc.)
+    double density;                           // g/cm³
+
+    struct Properties {
+        double youngsModulus;                 // GPa
+        double yieldStrength;                 // MPa
+        double tensileStrength;               // MPa
+        double elongation;                    // %
+        double hardness;                      // HV
+        double cost;                          // $/kg
+    } properties;
+
+    std::vector<std::string> standards;       // DIN, EN, ASTM, ISO standards
+    std::vector<std::string> applications;    // Use cases
+    std::string availability;                 // Common, Standard, Premium
+    std::string color;                        // Hex color for UI (#RRGGBB)
+};
+
+// MaterialDatabase singleton for managing all materials
+class MaterialDatabase {
+public:
+    static MaterialDatabase& instance();
+
+    // Load materials from JSON file
+    void loadMaterialsFromFile(const std::string& filepath);
+
+    // Lookup operations
+    std::optional<MaterialProperties> getMaterial(const std::string& id);
+    std::vector<MaterialProperties> getAllMaterials();
+    std::vector<MaterialProperties> getMaterialsByCategory(const std::string& category);
+    std::vector<MaterialProperties> getMaterialsByAvailability(const std::string& availability);
+
+    // Custom material operations
+    bool addCustomMaterial(const MaterialProperties& props);
+    bool removeCustomMaterial(const std::string& id);
+    bool updateCustomMaterial(const std::string& id, const MaterialProperties& props);
+
+    // Utility methods
+    double getMaterialDensity(const std::string& materialId);
+    std::vector<std::string> getCategories();
+    std::vector<std::string> getAvailabilityLevels();
+
+    // Standards compliance
+    bool checkStandardsCompliance(const std::string& materialId, const std::vector<std::string>& requiredStandards);
+    std::vector<std::string> getCommonStandards(const std::string& materialId);
+
+private:
+    MaterialDatabase();
+    ~MaterialDatabase();
+    MaterialDatabase(const MaterialDatabase&) = delete;
+    MaterialDatabase& operator=(const MaterialDatabase&) = delete;
+
+    std::map<std::string, MaterialProperties> materials_;
+    std::vector<std::string> categories_;
+    bool initialized_ = false;
 };
 
 // Параметры материала для анализа
@@ -180,6 +244,14 @@ public:
         double outerDiameter,      // mm
         double wallThickness,      // mm
         const std::string& materialName  // "Steel", "Aluminum", etc.
+    ) const;
+
+    // Extended mass calculation using material ID from database
+    double calculateTubeMassFromDatabase(
+        const TubeModel& model,
+        double outerDiameter,      // mm
+        double wallThickness,      // mm
+        const std::string& materialId      // "steel-1020", etc.
     ) const;
 
 private:

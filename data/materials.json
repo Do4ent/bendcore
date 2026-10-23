@@ -1,0 +1,609 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2026-10-23",
+  "materials": [
+    {
+      "id": "steel-1020",
+      "name": "Carbon Steel 1020",
+      "category": "Carbon Steel",
+      "density": 7.85,
+      "properties": {
+        "youngsModulus": 200,
+        "yieldStrength": 355,
+        "tensileStrength": 420,
+        "elongation": 15,
+        "hardness": 155,
+        "cost": 1.50
+      },
+      "standards": ["DIN 17100", "EN 10025", "ASTM A36"],
+      "applications": ["General purpose tubing", "Hydraulic systems", "Structural components"],
+      "availability": "Common",
+      "color": "#B0B0B0"
+    },
+    {
+      "id": "steel-1045",
+      "name": "Carbon Steel 1045",
+      "category": "Carbon Steel",
+      "density": 7.85,
+      "properties": {
+        "youngsModulus": 205,
+        "yieldStrength": 450,
+        "tensileStrength": 565,
+        "elongation": 12,
+        "hardness": 207,
+        "cost": 1.75
+      },
+      "standards": ["DIN 17100", "EN 10025", "ASTM 1045"],
+      "applications": ["Medium strength tubing", "Drive shafts", "Cranks"],
+      "availability": "Common",
+      "color": "#A8A8A8"
+    },
+    {
+      "id": "steel-1060",
+      "name": "Carbon Steel 1060",
+      "category": "Carbon Steel",
+      "density": 7.85,
+      "properties": {
+        "youngsModulus": 210,
+        "yieldStrength": 530,
+        "tensileStrength": 625,
+        "elongation": 10,
+        "hardness": 255,
+        "cost": 1.95
+      },
+      "standards": ["DIN 17100", "EN 10025", "ASTM 1060"],
+      "applications": ["High strength tubing", "Springs", "Heavy machinery"],
+      "availability": "Common",
+      "color": "#9E9E9E"
+    },
+    {
+      "id": "steel-ck45",
+      "name": "Carbon Steel CK45 (C45)",
+      "category": "Carbon Steel",
+      "density": 7.85,
+      "properties": {
+        "youngsModulus": 205,
+        "yieldStrength": 435,
+        "tensileStrength": 570,
+        "elongation": 13,
+        "hardness": 200,
+        "cost": 1.80
+      },
+      "standards": ["DIN 1652", "EN 10083-2", "ISO 683"],
+      "applications": ["European standard tubing", "Machinery components", "Fasteners"],
+      "availability": "Common",
+      "color": "#A5A5A5"
+    },
+    {
+      "id": "steel-1018",
+      "name": "Carbon Steel 1018",
+      "category": "Carbon Steel",
+      "density": 7.85,
+      "properties": {
+        "youngsModulus": 200,
+        "yieldStrength": 340,
+        "tensileStrength": 400,
+        "elongation": 16,
+        "hardness": 143,
+        "cost": 1.45
+      },
+      "standards": ["ASTM 1018", "SAE 1018", "EN 10083"],
+      "applications": ["Carburizing", "Case hardening", "General purpose"],
+      "availability": "Common",
+      "color": "#B2B2B2"
+    },
+    {
+      "id": "steel-4140",
+      "name": "Alloy Steel 4140",
+      "category": "Carbon Steel",
+      "density": 7.85,
+      "properties": {
+        "youngsModulus": 210,
+        "yieldStrength": 1000,
+        "tensileStrength": 1310,
+        "elongation": 8,
+        "hardness": 380,
+        "cost": 3.20
+      },
+      "standards": ["ASTM 4140", "SAE 4140", "EN 19"],
+      "applications": ["Aircraft hydraulic tubing", "High strength applications", "Landing gear"],
+      "availability": "Standard",
+      "color": "#8A8A8A"
+    },
+    {
+      "id": "steel-4340",
+      "name": "Alloy Steel 4340",
+      "category": "Carbon Steel",
+      "density": 7.85,
+      "properties": {
+        "youngsModulus": 210,
+        "yieldStrength": 1160,
+        "tensileStrength": 1470,
+        "elongation": 7,
+        "hardness": 440,
+        "cost": 3.80
+      },
+      "standards": ["ASTM 4340", "SAE 4340", "EN 26"],
+      "applications": ["Aerospace components", "High performance tubing", "Racing"],
+      "availability": "Standard",
+      "color": "#7D7D7D"
+    },
+    {
+      "id": "steel-9310",
+      "name": "Alloy Steel 9310",
+      "category": "Carbon Steel",
+      "density": 7.85,
+      "properties": {
+        "youngsModulus": 210,
+        "yieldStrength": 1310,
+        "tensileStrength": 1550,
+        "elongation": 6,
+        "hardness": 470,
+        "cost": 4.50
+      },
+      "standards": ["ASTM 9310", "SAE 9310", "EN 18CrNiMo"],
+      "applications": ["Aircraft tubing", "Aerospace structures", "Premium racing"],
+      "availability": "Premium",
+      "color": "#6F6F6F"
+    },
+    {
+      "id": "ss-304",
+      "name": "Stainless Steel 304",
+      "category": "Stainless Steel",
+      "density": 8.0,
+      "properties": {
+        "youngsModulus": 193,
+        "yieldStrength": 205,
+        "tensileStrength": 515,
+        "elongation": 40,
+        "hardness": 217,
+        "cost": 3.50
+      },
+      "standards": ["ASTM 304", "EN 1.4301", "ISO 5347"],
+      "applications": ["Chemical processing", "Food industry", "Aerospace"],
+      "availability": "Common",
+      "color": "#C0C0C0"
+    },
+    {
+      "id": "ss-304l",
+      "name": "Stainless Steel 304L",
+      "category": "Stainless Steel",
+      "density": 8.0,
+      "properties": {
+        "youngsModulus": 193,
+        "yieldStrength": 170,
+        "tensileStrength": 485,
+        "elongation": 45,
+        "hardness": 200,
+        "cost": 3.75
+      },
+      "standards": ["ASTM 304L", "EN 1.4306", "ISO 5347"],
+      "applications": ["Welded structures", "Chemical tubing", "Cryogenic"],
+      "availability": "Common",
+      "color": "#B8B8B8"
+    },
+    {
+      "id": "ss-316",
+      "name": "Stainless Steel 316",
+      "category": "Stainless Steel",
+      "density": 8.0,
+      "properties": {
+        "youngsModulus": 193,
+        "yieldStrength": 170,
+        "tensileStrength": 510,
+        "elongation": 40,
+        "hardness": 217,
+        "cost": 4.50
+      },
+      "standards": ["ASTM 316", "EN 1.4401", "ISO 5347"],
+      "applications": ["Marine environments", "Seawater resistant", "Corrosive service"],
+      "availability": "Common",
+      "color": "#BFBFBF"
+    },
+    {
+      "id": "ss-316l",
+      "name": "Stainless Steel 316L",
+      "category": "Stainless Steel",
+      "density": 8.0,
+      "properties": {
+        "youngsModulus": 193,
+        "yieldStrength": 170,
+        "tensileStrength": 485,
+        "elongation": 45,
+        "hardness": 200,
+        "cost": 4.75
+      },
+      "standards": ["ASTM 316L", "EN 1.4404", "ISO 5347"],
+      "applications": ["Welded marine tubing", "Cryogenic service", "Pharmaceutical"],
+      "availability": "Common",
+      "color": "#C2C2C2"
+    },
+    {
+      "id": "ss-430",
+      "name": "Stainless Steel 430 (Ferritic)",
+      "category": "Stainless Steel",
+      "density": 7.73,
+      "properties": {
+        "youngsModulus": 200,
+        "yieldStrength": 275,
+        "tensileStrength": 450,
+        "elongation": 20,
+        "hardness": 217,
+        "cost": 2.75
+      },
+      "standards": ["ASTM 430", "EN 1.4016", "ISO 5347"],
+      "applications": ["Automotive exhaust", "Decorative applications", "Low cost tubing"],
+      "availability": "Common",
+      "color": "#CBCBCB"
+    },
+    {
+      "id": "ss-174ph",
+      "name": "Stainless Steel 17-4 PH (Precipitation Hardening)",
+      "category": "Stainless Steel",
+      "density": 7.8,
+      "properties": {
+        "youngsModulus": 207,
+        "yieldStrength": 1310,
+        "tensileStrength": 1450,
+        "elongation": 6,
+        "hardness": 450,
+        "cost": 6.50
+      },
+      "standards": ["ASTM 630", "EN 1.4548", "AMS 5604"],
+      "applications": ["Aerospace fasteners", "High strength tubing", "Jet engines"],
+      "availability": "Premium",
+      "color": "#B5B5B5"
+    },
+    {
+      "id": "ss-630",
+      "name": "Stainless Steel 630 (17-7 PH)",
+      "category": "Stainless Steel",
+      "density": 7.8,
+      "properties": {
+        "youngsModulus": 207,
+        "yieldStrength": 1380,
+        "tensileStrength": 1520,
+        "elongation": 5,
+        "hardness": 475,
+        "cost": 7.00
+      },
+      "standards": ["ASTM 630", "EN 1.4568", "AMS 5604"],
+      "applications": ["Aircraft components", "Springs", "Fasteners"],
+      "availability": "Premium",
+      "color": "#B0B0B0"
+    },
+    {
+      "id": "ss-15-5ph",
+      "name": "Stainless Steel 15-5 PH",
+      "category": "Stainless Steel",
+      "density": 7.8,
+      "properties": {
+        "youngsModulus": 207,
+        "yieldStrength": 1310,
+        "tensileStrength": 1450,
+        "elongation": 8,
+        "hardness": 440,
+        "cost": 6.25
+      },
+      "standards": ["ASTM 15-5", "EN 1.4545", "AMS 5604"],
+      "applications": ["Aerospace tubing", "High strength applications", "Pressure vessels"],
+      "availability": "Premium",
+      "color": "#ADADAD"
+    },
+    {
+      "id": "aluminum-6061",
+      "name": "Aluminum Alloy 6061",
+      "category": "Aluminum Alloy",
+      "density": 2.70,
+      "properties": {
+        "youngsModulus": 69,
+        "yieldStrength": 170,
+        "tensileStrength": 310,
+        "elongation": 17,
+        "hardness": 95,
+        "cost": 2.00
+      },
+      "standards": ["ASTM B221", "EN AW-6061", "ISO 209"],
+      "applications": ["General purpose tubing", "Automotive", "Structural components"],
+      "availability": "Common",
+      "color": "#D3D3D3"
+    },
+    {
+      "id": "aluminum-6061-t6",
+      "name": "Aluminum Alloy 6061-T6 (Heat Treated)",
+      "category": "Aluminum Alloy",
+      "density": 2.70,
+      "properties": {
+        "youngsModulus": 69,
+        "yieldStrength": 275,
+        "tensileStrength": 310,
+        "elongation": 12,
+        "hardness": 95,
+        "cost": 2.25
+      },
+      "standards": ["ASTM B221-T6", "EN AW-6061-T6", "ISO 209"],
+      "applications": ["Structural tubing", "Aircraft components", "Aerospace"],
+      "availability": "Common",
+      "color": "#DCDCDC"
+    },
+    {
+      "id": "aluminum-7075",
+      "name": "Aluminum Alloy 7075",
+      "category": "Aluminum Alloy",
+      "density": 2.81,
+      "properties": {
+        "youngsModulus": 72,
+        "yieldStrength": 505,
+        "tensileStrength": 570,
+        "elongation": 11,
+        "hardness": 150,
+        "cost": 3.50
+      },
+      "standards": ["ASTM B221", "EN AW-7075", "ISO 209"],
+      "applications": ["High strength tubing", "Aircraft structures", "Premium racing"],
+      "availability": "Standard",
+      "color": "#E5E5E5"
+    },
+    {
+      "id": "aluminum-7075-t6",
+      "name": "Aluminum Alloy 7075-T6 (Heat Treated)",
+      "category": "Aluminum Alloy",
+      "density": 2.81,
+      "properties": {
+        "youngsModulus": 72,
+        "yieldStrength": 505,
+        "tensileStrength": 570,
+        "elongation": 11,
+        "hardness": 150,
+        "cost": 4.00
+      },
+      "standards": ["ASTM B221-T6", "EN AW-7075-T6", "ISO 209"],
+      "applications": ["Aerospace tubing", "High performance", "Racing frames"],
+      "availability": "Standard",
+      "color": "#EBEBEB"
+    },
+    {
+      "id": "aluminum-5083",
+      "name": "Aluminum Alloy 5083 (Marine Grade)",
+      "category": "Aluminum Alloy",
+      "density": 2.66,
+      "properties": {
+        "youngsModulus": 70,
+        "yieldStrength": 215,
+        "tensileStrength": 345,
+        "elongation": 16,
+        "hardness": 75,
+        "cost": 2.75
+      },
+      "standards": ["ASTM B221", "EN AW-5083", "ISO 209"],
+      "applications": ["Marine tubing", "Seawater resistant", "Naval vessels"],
+      "availability": "Common",
+      "color": "#D9D9D9"
+    },
+    {
+      "id": "aluminum-5754",
+      "name": "Aluminum Alloy 5754",
+      "category": "Aluminum Alloy",
+      "density": 2.66,
+      "properties": {
+        "youngsModulus": 70,
+        "yieldStrength": 215,
+        "tensileStrength": 250,
+        "elongation": 20,
+        "hardness": 60,
+        "cost": 2.50
+      },
+      "standards": ["ASTM B221", "EN AW-5754", "ISO 209"],
+      "applications": ["Marine applications", "Offshore structures", "Windsurfing"],
+      "availability": "Standard",
+      "color": "#E0E0E0"
+    },
+    {
+      "id": "copper-pure",
+      "name": "Pure Copper",
+      "category": "Copper",
+      "density": 8.96,
+      "properties": {
+        "youngsModulus": 130,
+        "yieldStrength": 69,
+        "tensileStrength": 200,
+        "elongation": 45,
+        "hardness": 45,
+        "cost": 4.50
+      },
+      "standards": ["ASTM B152", "EN 1652", "DIN 1707"],
+      "applications": ["Electrical tubing", "Heat transfer", "Plumbing"],
+      "availability": "Common",
+      "color": "#E8A76D"
+    },
+    {
+      "id": "brass-7030",
+      "name": "Brass 70/30 (Yellow Brass)",
+      "category": "Copper",
+      "density": 8.47,
+      "properties": {
+        "youngsModulus": 103,
+        "yieldStrength": 276,
+        "tensileStrength": 380,
+        "elongation": 60,
+        "hardness": 120,
+        "cost": 3.75
+      },
+      "standards": ["ASTM B134", "EN 12165", "CW614N"],
+      "applications": ["Decorative tubing", "General purpose brass", "Fittings"],
+      "availability": "Common",
+      "color": "#FFD700"
+    },
+    {
+      "id": "bronze-cu-sn",
+      "name": "Bronze (Cu-Sn)",
+      "category": "Copper",
+      "density": 8.75,
+      "properties": {
+        "youngsModulus": 120,
+        "yieldStrength": 245,
+        "tensileStrength": 380,
+        "elongation": 40,
+        "hardness": 180,
+        "cost": 5.00
+      },
+      "standards": ["ASTM B105", "EN 1982", "ISO 1338"],
+      "applications": ["Bearing tubing", "High strength brass", "Marine components"],
+      "availability": "Standard",
+      "color": "#CD7F32"
+    },
+    {
+      "id": "cupro-nickel-9010",
+      "name": "Cupro-Nickel 90/10",
+      "category": "Copper",
+      "density": 8.94,
+      "properties": {
+        "youngsModulus": 150,
+        "yieldStrength": 200,
+        "tensileStrength": 340,
+        "elongation": 30,
+        "hardness": 110,
+        "cost": 5.50
+      },
+      "standards": ["ASTM B467", "EN 12420", "ISO 5385"],
+      "applications": ["Seawater tubing", "Condenser tubes", "Marine services"],
+      "availability": "Standard",
+      "color": "#B87333"
+    },
+    {
+      "id": "titanium-grade2",
+      "name": "Titanium Grade 2 (Commercially Pure)",
+      "category": "Titanium",
+      "density": 4.51,
+      "properties": {
+        "youngsModulus": 103,
+        "yieldStrength": 345,
+        "tensileStrength": 450,
+        "elongation": 20,
+        "hardness": 191,
+        "cost": 12.00
+      },
+      "standards": ["ASTM B265", "EN 17861", "ISO 5832"],
+      "applications": ["Aerospace tubing", "Chemical processing", "Medical implants"],
+      "availability": "Premium",
+      "color": "#E1E1E1"
+    },
+    {
+      "id": "titanium-grade5",
+      "name": "Titanium Grade 5 (Ti-6Al-4V)",
+      "category": "Titanium",
+      "density": 4.54,
+      "properties": {
+        "youngsModulus": 103,
+        "yieldStrength": 880,
+        "tensileStrength": 930,
+        "elongation": 14,
+        "hardness": 334,
+        "cost": 15.00
+      },
+      "standards": ["ASTM B265", "EN 17861", "AMS 4911"],
+      "applications": ["Aircraft structures", "Jet engines", "Aerospace frames"],
+      "availability": "Premium",
+      "color": "#D9D9D9"
+    },
+    {
+      "id": "titanium-grade23",
+      "name": "Titanium Grade 23 (Ti-6Al-2.5V ELI)",
+      "category": "Titanium",
+      "density": 4.56,
+      "properties": {
+        "youngsModulus": 100,
+        "yieldStrength": 790,
+        "tensileStrength": 860,
+        "elongation": 15,
+        "hardness": 310,
+        "cost": 18.00
+      },
+      "standards": ["ASTM B265", "EN 17861", "AMS 4918"],
+      "applications": ["Surgical implants", "Biomedical devices", "High purity aerospace"],
+      "availability": "Premium",
+      "color": "#CFCFCF"
+    },
+    {
+      "id": "inconel-625",
+      "name": "Inconel 625 (Nickel Alloy)",
+      "category": "Nickel Alloy",
+      "density": 8.44,
+      "properties": {
+        "youngsModulus": 207,
+        "yieldStrength": 515,
+        "tensileStrength": 895,
+        "elongation": 30,
+        "hardness": 313,
+        "cost": 20.00
+      },
+      "standards": ["ASTM B443", "EN 2.4856", "AMS 5599"],
+      "applications": ["Jet engines", "Cryogenic tubing", "High temperature service"],
+      "availability": "Premium",
+      "color": "#A8A8A8"
+    },
+    {
+      "id": "hastelloy-c276",
+      "name": "Hastelloy C-276 (Nickel Alloy)",
+      "category": "Nickel Alloy",
+      "density": 8.89,
+      "properties": {
+        "youngsModulus": 210,
+        "yieldStrength": 448,
+        "tensileStrength": 793,
+        "elongation": 38,
+        "hardness": 280,
+        "cost": 25.00
+      },
+      "standards": ["ASTM B575", "EN 2.4819", "AMS 5536"],
+      "applications": ["Chemical processing", "Extreme corrosion resistance", "High temp"],
+      "availability": "Premium",
+      "color": "#9C9C9C"
+    },
+    {
+      "id": "monel-400",
+      "name": "Monel 400 (Nickel-Copper Alloy)",
+      "category": "Nickel Alloy",
+      "density": 8.80,
+      "properties": {
+        "youngsModulus": 180,
+        "yieldStrength": 276,
+        "tensileStrength": 585,
+        "elongation": 30,
+        "hardness": 226,
+        "cost": 12.50
+      },
+      "standards": ["ASTM B163", "EN 2.4360", "AMS 4675"],
+      "applications": ["Seawater service", "Aerospace tubing", "Chemical plants"],
+      "availability": "Premium",
+      "color": "#B8A8A8"
+    },
+    {
+      "id": "custom",
+      "name": "Custom Material",
+      "category": "Special",
+      "density": 5.0,
+      "properties": {
+        "youngsModulus": 200,
+        "yieldStrength": 400,
+        "tensileStrength": 500,
+        "elongation": 10,
+        "hardness": 200,
+        "cost": 0.00
+      },
+      "standards": [],
+      "applications": ["User-defined material properties"],
+      "availability": "Custom",
+      "color": "#808080"
+    }
+  ],
+  "categories": [
+    "Carbon Steel",
+    "Stainless Steel",
+    "Aluminum Alloy",
+    "Copper",
+    "Titanium",
+    "Nickel Alloy",
+    "Special"
+  ]
+}

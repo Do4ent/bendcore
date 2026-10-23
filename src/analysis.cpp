@@ -9,8 +9,199 @@
 #include <cmath>
 #include <numeric>
 #include <sstream>
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 namespace bendcore::analysis {
+
+using json = nlohmann::json;
+
+// ============ MATERIALDATABASE IMPLEMENTATION ============
+
+MaterialDatabase::MaterialDatabase() {
+    // Initialize categories
+    categories_ = {
+        "Carbon Steel",
+        "Stainless Steel",
+        "Aluminum Alloy",
+        "Copper",
+        "Titanium",
+        "Nickel Alloy",
+        "Special"
+    };
+}
+
+MaterialDatabase::~MaterialDatabase() = default;
+
+MaterialDatabase& MaterialDatabase::instance() {
+    static MaterialDatabase db;
+    return db;
+}
+
+void MaterialDatabase::loadMaterialsFromFile(const std::string& filepath) {
+    try {
+        std::ifstream file(filepath);
+        if (!file.is_open()) {
+            // If file doesn't exist, initialize with empty database
+            initialized_ = true;
+            return;
+        }
+
+        json data = json::parse(file);
+
+        if (data.contains("materials") && data["materials"].is_array()) {
+            for (const auto& matJson : data["materials"]) {
+                MaterialProperties mat;
+                mat.id = matJson.value("id", "");
+                mat.name = matJson.value("name", "");
+                mat.category = matJson.value("category", "");
+                mat.density = matJson.value("density", 5.0);
+                mat.availability = matJson.value("availability", "Standard");
+                mat.color = matJson.value("color", "#808080");
+
+                // Parse properties
+                if (matJson.contains("properties")) {
+                    auto props = matJson["properties"];
+                    mat.properties.youngsModulus = props.value("youngsModulus", 0.0);
+                    mat.properties.yieldStrength = props.value("yieldStrength", 0.0);
+                    mat.properties.tensileStrength = props.value("tensileStrength", 0.0);
+                    mat.properties.elongation = props.value("elongation", 0.0);
+                    mat.properties.hardness = props.value("hardness", 0.0);
+                    mat.properties.cost = props.value("cost", 0.0);
+                }
+
+                // Parse standards and applications
+                if (matJson.contains("standards")) {
+                    mat.standards = matJson["standards"].get<std::vector<std::string>>();
+                }
+                if (matJson.contains("applications")) {
+                    mat.applications = matJson["applications"].get<std::vector<std::string>>();
+                }
+
+                if (!mat.id.empty()) {
+                    materials_[mat.id] = mat;
+                }
+            }
+        }
+
+        initialized_ = true;
+    } catch (const std::exception& e) {
+        // Log error but don't fail - database just won't have materials
+        initialized_ = true;
+    }
+}
+
+std::optional<MaterialProperties> MaterialDatabase::getMaterial(const std::string& id) {
+    auto it = materials_.find(id);
+    if (it != materials_.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+std::vector<MaterialProperties> MaterialDatabase::getAllMaterials() {
+    std::vector<MaterialProperties> result;
+    for (const auto& pair : materials_) {
+        result.push_back(pair.second);
+    }
+    return result;
+}
+
+std::vector<MaterialProperties> MaterialDatabase::getMaterialsByCategory(const std::string& category) {
+    std::vector<MaterialProperties> result;
+    for (const auto& pair : materials_) {
+        if (pair.second.category == category) {
+            result.push_back(pair.second);
+        }
+    }
+    return result;
+}
+
+std::vector<MaterialProperties> MaterialDatabase::getMaterialsByAvailability(const std::string& availability) {
+    std::vector<MaterialProperties> result;
+    for (const auto& pair : materials_) {
+        if (pair.second.availability == availability) {
+            result.push_back(pair.second);
+        }
+    }
+    return result;
+}
+
+bool MaterialDatabase::addCustomMaterial(const MaterialProperties& props) {
+    if (props.id.empty()) {
+        return false;
+    }
+    materials_[props.id] = props;
+    return true;
+}
+
+bool MaterialDatabase::removeCustomMaterial(const std::string& id) {
+    auto it = materials_.find(id);
+    if (it != materials_.end()) {
+        materials_.erase(it);
+        return true;
+    }
+    return false;
+}
+
+bool MaterialDatabase::updateCustomMaterial(const std::string& id, const MaterialProperties& props) {
+    auto it = materials_.find(id);
+    if (it != materials_.end()) {
+        materials_[id] = props;
+        return true;
+    }
+    return false;
+}
+
+double MaterialDatabase::getMaterialDensity(const std::string& materialId) {
+    auto mat = getMaterial(materialId);
+    if (mat.has_value()) {
+        return mat->density;
+    }
+    return 5.0;  // Default fallback
+}
+
+std::vector<std::string> MaterialDatabase::getCategories() {
+    return categories_;
+}
+
+std::vector<std::string> MaterialDatabase::getAvailabilityLevels() {
+    return {"Common", "Standard", "Premium", "Custom"};
+}
+
+bool MaterialDatabase::checkStandardsCompliance(
+    const std::string& materialId,
+    const std::vector<std::string>& requiredStandards
+) {
+    auto mat = getMaterial(materialId);
+    if (!mat.has_value()) {
+        return false;
+    }
+
+    for (const auto& required : requiredStandards) {
+        bool found = false;
+        for (const auto& standard : mat->standards) {
+            if (standard == required) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<std::string> MaterialDatabase::getCommonStandards(const std::string& materialId) {
+    auto mat = getMaterial(materialId);
+    if (mat.has_value()) {
+        return mat->standards;
+    }
+    return {};
+}
+
+// ============ ANALYZER IMPLEMENTATION ============
 
 Analyzer::Analyzer() = default;
 Analyzer::~Analyzer() = default;
@@ -616,6 +807,52 @@ double Analyzer::calculateTubeMass(
         double segmentVolume = segmentLength * area / 1000.0;  // cm³
 
         // Calculate segment mass: volume × density
+        double segmentMass = segmentVolume * density;  // grams
+        totalMass += segmentMass;
+    }
+
+    // Convert to kilograms
+    return totalMass / 1000.0;
+}
+
+double Analyzer::calculateTubeMassFromDatabase(
+    const TubeModel& model,
+    double outerDiameter,      // mm
+    double wallThickness,      // mm
+    const std::string& materialId
+) const {
+    if (!model.path.has_value()) {
+        return 0.0;
+    }
+
+    // Look up material from database
+    double density = MaterialDatabase::instance().getMaterialDensity(materialId);
+
+    const auto& path = *model.path;
+    double totalMass = 0.0;  // grams
+
+    // Calculate cross-section area of the tube
+    double innerDiameter = outerDiameter - 2.0 * wallThickness;
+    double area = M_PI * (outerDiameter * outerDiameter - innerDiameter * innerDiameter) / 4.0;  // mm²
+
+    // Process each segment in the path
+    for (const auto& item : path) {
+        double segmentLength = 0.0;  // mm
+
+        if (std::holds_alternative<Straight>(item)) {
+            const auto& straight = std::get<Straight>(item);
+            segmentLength = straight.S;
+        } else if (std::holds_alternative<Bend>(item)) {
+            const auto& bend = std::get<Bend>(item);
+            double angleRadians = std::abs(bend.B) * M_PI / 180.0;
+            segmentLength = bend.R * angleRadians;
+        } else if (std::holds_alternative<Spiral>(item)) {
+            const auto& spiral = std::get<Spiral>(item);
+            double circumference = 2.0 * M_PI * spiral.R;
+            segmentLength = circumference * spiral.n;
+        }
+
+        double segmentVolume = segmentLength * area / 1000.0;  // cm³
         double segmentMass = segmentVolume * density;  // grams
         totalMass += segmentMass;
     }

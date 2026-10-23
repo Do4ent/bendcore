@@ -13,7 +13,8 @@ interface GeometryParams {
   outerDiameter: number;
   wallThickness: number;
   length: number;
-  material: "Steel" | "Aluminum" | "Copper" | "Titanium" | "Custom";
+  material: string;  // Material ID from database (e.g., "steel-1020")
+  materialName?: string;  // Display name (e.g., "Carbon Steel 1020")
 }
 
 interface BendParams {
@@ -73,12 +74,113 @@ const MATERIAL_DENSITIES: Record<string, number> = {
   Custom: 5.0,
 };
 
+// Extended material density lookup for new materials database
+const EXTENDED_MATERIAL_DENSITIES: Record<string, number> = {
+  // Legacy material names
+  "Steel": 7.85,
+  "Aluminum": 2.70,
+  "Copper": 8.96,
+  "Titanium": 4.54,
+  "Custom": 5.0,
+  // New material IDs - Carbon Steel
+  "steel-1020": 7.85,
+  "steel-1045": 7.85,
+  "steel-1060": 7.85,
+  "steel-ck45": 7.85,
+  "steel-1018": 7.85,
+  "steel-4140": 7.85,
+  "steel-4340": 7.85,
+  "steel-9310": 7.85,
+  // Stainless Steel
+  "ss-304": 8.0,
+  "ss-304l": 8.0,
+  "ss-316": 8.0,
+  "ss-316l": 8.0,
+  "ss-430": 7.73,
+  "ss-174ph": 7.8,
+  "ss-630": 7.8,
+  "ss-15-5ph": 7.8,
+  // Aluminum
+  "aluminum-6061": 2.70,
+  "aluminum-6061-t6": 2.70,
+  "aluminum-7075": 2.81,
+  "aluminum-7075-t6": 2.81,
+  "aluminum-5083": 2.66,
+  "aluminum-5754": 2.66,
+  // Copper
+  "copper-pure": 8.96,
+  "brass-7030": 8.47,
+  "bronze-cu-sn": 8.75,
+  "cupro-nickel-9010": 8.94,
+  // Titanium
+  "titanium-grade2": 4.51,
+  "titanium-grade5": 4.54,
+  "titanium-grade23": 4.56,
+  // Nickel Alloy
+  "inconel-625": 8.44,
+  "hastelloy-c276": 8.89,
+  "monel-400": 8.80,
+  // Custom
+  "custom": 5.0,
+};
+
+// Helper function to get material density
+const getMaterialDensity = (materialId: string): number => {
+  return EXTENDED_MATERIAL_DENSITIES[materialId] || 5.0;
+};
+
+// Helper function to get material display name
+const getMaterialDisplayName = (materialId: string): string => {
+  const names: Record<string, string> = {
+    "steel-1020": "Carbon Steel 1020",
+    "steel-1045": "Carbon Steel 1045",
+    "steel-1060": "Carbon Steel 1060",
+    "steel-ck45": "Carbon Steel CK45",
+    "steel-1018": "Carbon Steel 1018",
+    "steel-4140": "Alloy Steel 4140",
+    "steel-4340": "Alloy Steel 4340",
+    "steel-9310": "Alloy Steel 9310",
+    "ss-304": "Stainless Steel 304",
+    "ss-304l": "Stainless Steel 304L",
+    "ss-316": "Stainless Steel 316",
+    "ss-316l": "Stainless Steel 316L",
+    "ss-430": "Stainless Steel 430",
+    "ss-174ph": "Stainless Steel 17-4 PH",
+    "ss-630": "Stainless Steel 17-7 PH",
+    "ss-15-5ph": "Stainless Steel 15-5 PH",
+    "aluminum-6061": "Aluminum 6061",
+    "aluminum-6061-t6": "Aluminum 6061-T6",
+    "aluminum-7075": "Aluminum 7075",
+    "aluminum-7075-t6": "Aluminum 7075-T6",
+    "aluminum-5083": "Aluminum 5083",
+    "aluminum-5754": "Aluminum 5754",
+    "copper-pure": "Pure Copper",
+    "brass-7030": "Brass 70/30",
+    "bronze-cu-sn": "Bronze Cu-Sn",
+    "cupro-nickel-9010": "Cupro-Nickel 90/10",
+    "titanium-grade2": "Titanium Grade 2",
+    "titanium-grade5": "Titanium Grade 5",
+    "titanium-grade23": "Titanium Grade 23",
+    "inconel-625": "Inconel 625",
+    "hastelloy-c276": "Hastelloy C-276",
+    "monel-400": "Monel 400",
+    "custom": "Custom Material",
+    "Steel": "Steel",
+    "Aluminum": "Aluminum",
+    "Copper": "Copper",
+    "Titanium": "Titanium",
+    "Custom": "Custom",
+  };
+  return names[materialId] || materialId;
+};
+
 const DEFAULT_CONFIG: TubeConfig = {
   geometry: {
     outerDiameter: 16.0,
     wallThickness: 1.5,
     length: 1000,
-    material: "Steel",
+    material: "steel-1020",
+    materialName: "Carbon Steel 1020",
   },
   bends: [],
   ports: [],
@@ -131,7 +233,7 @@ const GeometryTab: React.FC<GeometryTabProps> = ({
     return Math.PI * (od * od - id * id) / 4;
   }, [geometry.outerDiameter, geometry.wallThickness]);
 
-  const density = MATERIAL_DENSITIES[geometry.material] || 5.0;
+  const density = getMaterialDensity(geometry.material);
 
   return (
     <div className="space-y-4">
@@ -221,17 +323,44 @@ const GeometryTab: React.FC<GeometryTabProps> = ({
           onChange={(e) =>
             handleChange(
               "material",
-              e.target.value as typeof geometry.material
+              e.target.value
             )
           }
           className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="Steel">Steel</option>
-          <option value="Aluminum">Aluminum</option>
-          <option value="Copper">Copper</option>
-          <option value="Titanium">Titanium</option>
-          <option value="Custom">Custom</option>
+          {/* Common Materials */}
+          <optgroup label="Carbon Steel">
+            <option value="steel-1020">Carbon Steel 1020</option>
+            <option value="steel-1045">Carbon Steel 1045</option>
+            <option value="steel-4140">Alloy Steel 4140</option>
+          </optgroup>
+          <optgroup label="Stainless Steel">
+            <option value="ss-304">Stainless Steel 304</option>
+            <option value="ss-316">Stainless Steel 316</option>
+            <option value="ss-174ph">Stainless Steel 17-4 PH</option>
+          </optgroup>
+          <optgroup label="Aluminum">
+            <option value="aluminum-6061">Aluminum 6061</option>
+            <option value="aluminum-6061-t6">Aluminum 6061-T6</option>
+            <option value="aluminum-7075">Aluminum 7075</option>
+          </optgroup>
+          <optgroup label="Other Metals">
+            <option value="copper-pure">Pure Copper</option>
+            <option value="titanium-grade5">Titanium Grade 5</option>
+            <option value="brass-7030">Brass 70/30</option>
+          </optgroup>
+          {/* Legacy options for backward compatibility */}
+          <optgroup label="Legacy">
+            <option value="Steel">Steel (Legacy)</option>
+            <option value="Aluminum">Aluminum (Legacy)</option>
+            <option value="Copper">Copper (Legacy)</option>
+            <option value="Titanium">Titanium (Legacy)</option>
+            <option value="Custom">Custom</option>
+          </optgroup>
         </select>
+        <p className="text-xs text-gray-500 mt-1">
+          Selected: {geometry.materialName || getMaterialDisplayName(geometry.material)}
+        </p>
       </div>
 
       {/* Calculated Properties */}
@@ -836,7 +965,7 @@ const PreviewTab: React.FC<PreviewTabProps> = ({
   errors,
 }) => {
   const geometry = config.geometry;
-  const density = MATERIAL_DENSITIES[geometry.material] || 5.0;
+  const density = getMaterialDensity(geometry.material);
 
   const totalBendAngle = config.bends.reduce((sum, bend) => sum + bend.angle, 0);
 
