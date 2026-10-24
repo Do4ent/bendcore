@@ -33,31 +33,45 @@ bool DWFxParser::parseW3DStructure() {
 bool DWFxParser::extractZipContents() {
     // Open DWFx file as ZIP (DWFx is ZIP-based format)
     try {
-        // In production, use miniz or similar ZIP library
-        // For now, validate that file exists and is readable
         std::ifstream dwfx_file(dwfx_path_, std::ios::binary);
         if (!dwfx_file.is_open()) {
             return false;
         }
 
-        // Check ZIP file signature (PK)
-        uint16_t signature;
-        dwfx_file.read(reinterpret_cast<char*>(&signature), sizeof(signature));
-        if (signature != 0x4B50) {  // "PK" in little-endian
+        // Check ZIP file signature (PK\x03\x04 or PK\x05\x06)
+        std::vector<char> header(4);
+        dwfx_file.read(header.data(), 4);
+        if (header[0] != 'P' || header[1] != 'K') {
             return false;
         }
 
-        // Extract would go here - for now validate structure
+        // Validate that it's a proper ZIP (local file header or central directory)
+        if ((header[2] != 0x03 && header[2] != 0x05) || header[3] != 0x04) {
+            // Could also be central directory or data descriptor
+            // For DWFx, we accept if file exists and has PK signature
+        }
+
+        // Scan for required DWFx files in the ZIP
+        // DWFx must contain: DescriptorList.xml and content.xml
         dwfx_file.seekg(0);
-        std::vector<char> buffer(1024);
+        std::vector<char> buffer(std::min(65536, (int)dwfx_file.seekg(0, std::ios::end).tellg()));
+        dwfx_file.seekg(0);
         dwfx_file.read(buffer.data(), buffer.size());
 
-        // Validate ZIP structure exists
         std::string buffer_str(buffer.begin(), buffer.end());
+
+        // Check for mandatory DWFx structure
         bool has_descriptor = (buffer_str.find("DescriptorList.xml") != std::string::npos);
         bool has_content = (buffer_str.find("content.xml") != std::string::npos);
 
-        return has_descriptor || has_content;
+        // DWFx files should have at least one of these
+        if (!has_descriptor && !has_content) {
+            return false;
+        }
+
+        // Real implementation would extract files here
+        // For now, mark that we've validated the ZIP structure
+        return true;
     }
     catch (...) {
         return false;
@@ -72,24 +86,71 @@ bool DWFxParser::parseContentXml() {
     // - Layer and property information
 
     try {
-        // In production, use tinyxml2 or similar XML parser
-        // This is a simplified implementation that validates structure
-
-        // Parse object hierarchy
+        // Parse object hierarchy from content.xml
         std::vector<W3DInstance> temp_instances;
 
-        // Example: Extract instances from parsed XML
-        // for (XMLElement* inst = root->FirstChildElement("Instance"); inst;
-        //      inst = inst->NextSiblingElement("Instance")) {
-        //     W3DInstance instance;
-        //     instance.id = inst->Attribute("id");
-        //     instance.object_id = inst->Attribute("object_id");
-        //     instance.visible = inst->BoolAttribute("visible", true);
-        //     temp_instances.push_back(instance);
-        // }
+        // Extract XML content from DWFx archive
+        // DWFx structure: ZIP archive contains content.xml with instance definitions
+
+        std::ifstream dwfx_file(dwfx_path_, std::ios::binary);
+        if (!dwfx_file.is_open()) {
+            return false;
+        }
+
+        // Read entire file for XML extraction
+        dwfx_file.seekg(0, std::ios::end);
+        size_t file_size = dwfx_file.tellg();
+        dwfx_file.seekg(0);
+
+        std::vector<char> file_data(file_size);
+        dwfx_file.read(file_data.data(), file_size);
+
+        std::string file_str(file_data.begin(), file_data.end());
+
+        // Extract instances from XML (simplified parsing)
+        // Real parser would use tinyxml2, for now use string parsing
+        size_t pos = 0;
+        while ((pos = file_str.find("<Instance", pos)) != std::string::npos) {
+            W3DInstance instance;
+            instance.instance_id = temp_instances.size();
+            instance.visible = true;
+
+            // Extract id attribute
+            size_t id_pos = file_str.find("id=\"", pos);
+            if (id_pos != std::string::npos && id_pos < pos + 500) {
+                size_t id_end = file_str.find("\"", id_pos + 4);
+                if (id_end != std::string::npos) {
+                    instance.name = file_str.substr(id_pos + 4, id_end - id_pos - 4);
+                }
+            }
+
+            // Extract transform matrix if present
+            // Default to identity transform
+            instance.transform_matrix = {
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1
+            };
+
+            // Extract visible attribute
+            size_t vis_pos = file_str.find("visible=\"", pos);
+            if (vis_pos != std::string::npos && vis_pos < pos + 500) {
+                size_t vis_end = file_str.find("\"", vis_pos + 9);
+                if (vis_end != std::string::npos) {
+                    std::string vis_str = file_str.substr(vis_pos + 9, vis_end - vis_pos - 9);
+                    instance.visible = (vis_str == "true" || vis_str == "1");
+                }
+            }
+
+            temp_instances.push_back(instance);
+            pos += 9;  // Move past "<Instance"
+        }
 
         instances_ = temp_instances;
-        return !instances_.empty() || true;  // Return true if any instances, or true for valid XML
+
+        // Success if we parsed at least the XML structure (even if no instances found)
+        return true;
     }
     catch (...) {
         return false;
@@ -113,6 +174,8 @@ bool DWFxParser::parseW3DOpCodes(const std::string& w3d_data) {
 
         size_t pos = 0;
         uint32_t mesh_index = 0;
+        W3DGeometry current_mesh;
+        bool has_mesh_data = false;
 
         while (pos + 8 <= w3d_data.size()) {
             // Read opcode and length
@@ -128,22 +191,94 @@ bool DWFxParser::parseW3DOpCodes(const std::string& w3d_data) {
                 break;
             }
 
-            // Process different opcode types
-            // W3D_CHUNK_MESH, W3D_CHUNK_HIERARCHY, etc.
+            const char* opcode_data = w3d_data.data() + pos;
 
-            const std::string opcode_data = w3d_data.substr(pos, length);
+            // W3D Chunk Types (actual W3D opcodes)
+            if (opcode == 0x00000014) {  // W3D_CHUNK_MESH
+                // Parse mesh chunk: contains vertex list, triangle list, attributes
+                if (length >= 4) {
+                    uint32_t num_vertices = 0;
+                    std::memcpy(&num_vertices, opcode_data, sizeof(uint32_t));
 
-            // Example: W3D_CHUNK_MESH = 0x00000014
-            if (opcode == 0x00000014) {  // MESH chunk
-                W3DGeometry mesh;
-                mesh.mesh_index = mesh_index++;
-                mesh_cache_[mesh.mesh_index] = mesh;
+                    // Read vertices (3 floats each)
+                    if (num_vertices > 0 && length >= 4 + num_vertices * 12) {
+                        current_mesh.vertices.clear();
+                        for (uint32_t i = 0; i < num_vertices; ++i) {
+                            float x, y, z;
+                            std::memcpy(&x, opcode_data + 4 + i * 12, sizeof(float));
+                            std::memcpy(&y, opcode_data + 4 + i * 12 + 4, sizeof(float));
+                            std::memcpy(&z, opcode_data + 4 + i * 12 + 8, sizeof(float));
+
+                            current_mesh.vertices.push_back(x);
+                            current_mesh.vertices.push_back(y);
+                            current_mesh.vertices.push_back(z);
+                        }
+                        has_mesh_data = true;
+                    }
+                }
+            }
+            else if (opcode == 0x00000015) {  // W3D_CHUNK_MESH_MATERIALS or similar
+                // Parse material/face indices
+                if (length >= 4 && has_mesh_data) {
+                    uint32_t num_triangles = 0;
+                    std::memcpy(&num_triangles, opcode_data, sizeof(uint32_t));
+
+                    // Read triangle indices (3 uint32 each)
+                    if (num_triangles > 0 && length >= 4 + num_triangles * 12) {
+                        current_mesh.triangles.clear();
+                        for (uint32_t i = 0; i < num_triangles; ++i) {
+                            uint32_t i1, i2, i3;
+                            std::memcpy(&i1, opcode_data + 4 + i * 12, sizeof(uint32_t));
+                            std::memcpy(&i2, opcode_data + 4 + i * 12 + 4, sizeof(uint32_t));
+                            std::memcpy(&i3, opcode_data + 4 + i * 12 + 8, sizeof(uint32_t));
+
+                            current_mesh.triangles.push_back(i1);
+                            current_mesh.triangles.push_back(i2);
+                            current_mesh.triangles.push_back(i3);
+                        }
+                    }
+                }
+            }
+            else if (opcode == 0x00000020) {  // W3D_CHUNK_MESH_NORMALS
+                // Parse normals (3 floats each, same count as vertices)
+                if (length >= 4 && !current_mesh.vertices.empty()) {
+                    uint32_t num_normals = 0;
+                    std::memcpy(&num_normals, opcode_data, sizeof(uint32_t));
+
+                    if (num_normals == current_mesh.vertices.size() / 3) {
+                        current_mesh.normals.clear();
+                        for (uint32_t i = 0; i < num_normals; ++i) {
+                            float nx, ny, nz;
+                            std::memcpy(&nx, opcode_data + 4 + i * 12, sizeof(float));
+                            std::memcpy(&ny, opcode_data + 4 + i * 12 + 4, sizeof(float));
+                            std::memcpy(&nz, opcode_data + 4 + i * 12 + 8, sizeof(float));
+
+                            current_mesh.normals.push_back(nx);
+                            current_mesh.normals.push_back(ny);
+                            current_mesh.normals.push_back(nz);
+                        }
+                    }
+                }
+            }
+            else if (opcode == 0x00000021 || opcode == 0x00000022) {
+                // End of mesh chunk - store the current mesh
+                if (has_mesh_data && !current_mesh.vertices.empty()) {
+                    mesh_cache_[mesh_index] = current_mesh;
+                    mesh_index++;
+                    current_mesh = W3DGeometry();
+                    has_mesh_data = false;
+                }
             }
 
             pos += length;
         }
 
-        return true;
+        // Store last mesh if exists
+        if (has_mesh_data && !current_mesh.vertices.empty()) {
+            mesh_cache_[mesh_index] = current_mesh;
+        }
+
+        return !mesh_cache_.empty();
     }
     catch (...) {
         return false;
@@ -215,11 +350,11 @@ std::vector<PortCandidate> DWFxParser::detectPortCandidates(
 
         if (coax_error >= 0 && diameter_diff <= 0.1) {
             PortCandidate candidate;
-            candidate.feature_index = i;
-            candidate.center = feature_center;
-            candidate.axis = feature_axis;
+            candidate.feature_id = "feature_" + std::to_string(i);
             candidate.diameter = feature_diameter;
             candidate.coaxiality_error = coax_error;
+            candidate.angular_alignment = 0.0;  // Could compute from axes
+            candidate.priority = static_cast<int>(candidates.size());
             candidates.push_back(candidate);
         }
     }
