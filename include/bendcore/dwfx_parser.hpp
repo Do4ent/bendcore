@@ -128,6 +128,12 @@ private:
     std::vector<W3DInstance> instances_;
     std::map<uint32_t, W3DGeometry> mesh_cache_;
 
+    // BC-001: ZIP extraction support
+    std::string extracted_temp_dir_;
+    std::vector<char> content_xml_data_;
+    std::vector<char> descriptor_list_data_;
+    std::vector<std::string> w3d_files_;
+
     bool extractZipContents();
     bool parseContentXml();
     bool parseW3DOpCodes(const std::string& w3d_data);

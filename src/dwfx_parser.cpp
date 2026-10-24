@@ -5,9 +5,12 @@
 #include <cmath>
 #include <numeric>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <cstring>
+#include <cstdlib>
+#include <ctime>
 
 namespace bendcore::import::dwfx {
 
@@ -38,39 +41,81 @@ bool DWFxParser::extractZipContents() {
             return false;
         }
 
-        // Check ZIP file signature (PK\x03\x04 or PK\x05\x06)
-        std::vector<char> header(4);
-        dwfx_file.read(header.data(), 4);
-        if (header[0] != 'P' || header[1] != 'K') {
+        // Validate ZIP signature (PK\x03\x04)
+        std::vector<uint8_t> header(4);
+        dwfx_file.read(reinterpret_cast<char*>(header.data()), 4);
+        if (header[0] != 'P' || header[1] != 'K' || header[2] != 0x03 || header[3] != 0x04) {
             return false;
         }
 
-        // Validate that it's a proper ZIP (local file header or central directory)
-        if ((header[2] != 0x03 && header[2] != 0x05) || header[3] != 0x04) {
-            // Could also be central directory or data descriptor
-            // For DWFx, we accept if file exists and has PK signature
-        }
+        // Create temporary directory for extraction
+        static int extraction_counter = 0;
+        std::string temp_dir = "/tmp/dwfx_extract_" + std::to_string(extraction_counter++) + "_" +
+                              std::to_string(std::time(nullptr));
 
-        // Scan for required DWFx files in the ZIP
-        // DWFx must contain: DescriptorList.xml and content.xml
-        dwfx_file.seekg(0);
-        std::vector<char> buffer(std::min(65536, (int)dwfx_file.seekg(0, std::ios::end).tellg()));
-        dwfx_file.seekg(0);
-        dwfx_file.read(buffer.data(), buffer.size());
-
-        std::string buffer_str(buffer.begin(), buffer.end());
-
-        // Check for mandatory DWFx structure
-        bool has_descriptor = (buffer_str.find("DescriptorList.xml") != std::string::npos);
-        bool has_content = (buffer_str.find("content.xml") != std::string::npos);
-
-        // DWFx files should have at least one of these
-        if (!has_descriptor && !has_content) {
+        // Use unzip command for robust extraction
+        std::string unzip_cmd = "mkdir -p " + temp_dir + " && unzip -q \"" + dwfx_path_ + "\" -d " + temp_dir;
+        int extract_result = system(unzip_cmd.c_str());
+        if (extract_result != 0) {
             return false;
         }
 
-        // Real implementation would extract files here
-        // For now, mark that we've validated the ZIP structure
+        // Verify required DWFx files were extracted
+        std::ifstream content_check(temp_dir + "/content.xml");
+        bool has_content = content_check.is_open();
+        content_check.close();
+
+        std::ifstream descriptor_check(temp_dir + "/DescriptorList.xml");
+        bool has_descriptor = descriptor_check.is_open();
+        descriptor_check.close();
+
+        // DWFx must contain at least content.xml
+        if (!has_content && !has_descriptor) {
+            system(("rm -rf " + temp_dir).c_str());
+            return false;
+        }
+
+        // Store extracted path for later use
+        extracted_temp_dir_ = temp_dir;
+
+        // Read content.xml and DescriptorList.xml into memory for parsing
+        if (has_content) {
+            std::ifstream content_file(temp_dir + "/content.xml", std::ios::binary);
+            if (content_file.is_open()) {
+                content_file.seekg(0, std::ios::end);
+                size_t size = content_file.tellg();
+                content_file.seekg(0);
+                content_xml_data_.resize(size);
+                content_file.read(content_xml_data_.data(), size);
+                content_file.close();
+            }
+        }
+
+        if (has_descriptor) {
+            std::ifstream descriptor_file(temp_dir + "/DescriptorList.xml", std::ios::binary);
+            if (descriptor_file.is_open()) {
+                descriptor_file.seekg(0, std::ios::end);
+                size_t size = descriptor_file.tellg();
+                descriptor_file.seekg(0);
+                descriptor_list_data_.resize(size);
+                descriptor_file.read(descriptor_list_data_.data(), size);
+                descriptor_file.close();
+            }
+        }
+
+        // Scan for W3D or HSF files (binary geometry)
+        std::string find_w3d = "find " + temp_dir + " \\( -name '*.w3d' -o -name '*.hsf' \\) 2>/dev/null";
+        FILE* pipe = popen(find_w3d.c_str(), "r");
+        if (pipe) {
+            char line[256];
+            while (fgets(line, sizeof(line), pipe) != nullptr) {
+                std::string path(line);
+                if (!path.empty() && path.back() == '\n') path.pop_back();
+                w3d_files_.push_back(path);
+            }
+            pclose(pipe);
+        }
+
         return true;
     }
     catch (...) {
@@ -79,77 +124,115 @@ bool DWFxParser::extractZipContents() {
 }
 
 bool DWFxParser::parseContentXml() {
-    // Parse XML structure to extract:
+    // BC-002: Parse XML structure to extract:
     // - Object definitions with IDs
     // - Instance references with transforms
     // - Visibility properties
     // - Layer and property information
 
     try {
-        // Parse object hierarchy from content.xml
-        std::vector<W3DInstance> temp_instances;
-
-        // Extract XML content from DWFx archive
-        // DWFx structure: ZIP archive contains content.xml with instance definitions
-
-        std::ifstream dwfx_file(dwfx_path_, std::ios::binary);
-        if (!dwfx_file.is_open()) {
+        // Use extracted content.xml data from ZIP extraction (BC-001)
+        if (content_xml_data_.empty()) {
             return false;
         }
 
-        // Read entire file for XML extraction
-        dwfx_file.seekg(0, std::ios::end);
-        size_t file_size = dwfx_file.tellg();
-        dwfx_file.seekg(0);
+        std::vector<W3DInstance> temp_instances;
+        std::string content_xml(content_xml_data_.begin(), content_xml_data_.end());
 
-        std::vector<char> file_data(file_size);
-        dwfx_file.read(file_data.data(), file_size);
+        // BC-002: Proper XML parsing for DWFx content hierarchy
+        // Extract Instance elements which contain W3DTag references and transformations
 
-        std::string file_str(file_data.begin(), file_data.end());
-
-        // Extract instances from XML (simplified parsing)
-        // Real parser would use tinyxml2, for now use string parsing
         size_t pos = 0;
-        while ((pos = file_str.find("<Instance", pos)) != std::string::npos) {
-            W3DInstance instance;
-            instance.instance_id = temp_instances.size();
-            instance.visible = true;
+        size_t instance_index = 0;
 
-            // Extract id attribute
-            size_t id_pos = file_str.find("id=\"", pos);
-            if (id_pos != std::string::npos && id_pos < pos + 500) {
-                size_t id_end = file_str.find("\"", id_pos + 4);
+        while ((pos = content_xml.find("<Instance", pos)) != std::string::npos) {
+            W3DInstance instance;
+            instance.instance_id = instance_index++;
+            instance.visible = true;
+            instance.tag.tag_index = 0;
+
+            // Find end of Instance element
+            size_t instance_end = content_xml.find(">", pos);
+            if (instance_end == std::string::npos) {
+                pos += 9;
+                continue;
+            }
+
+            std::string instance_element = content_xml.substr(pos, instance_end - pos + 1);
+
+            // Extract id attribute (instance name/identifier)
+            size_t id_pos = instance_element.find("id=\"");
+            if (id_pos != std::string::npos) {
+                size_t id_end = instance_element.find("\"", id_pos + 4);
                 if (id_end != std::string::npos) {
-                    instance.name = file_str.substr(id_pos + 4, id_end - id_pos - 4);
+                    instance.name = instance_element.substr(id_pos + 4, id_end - id_pos - 4);
                 }
             }
 
-            // Extract transform matrix if present
-            // Default to identity transform
-            instance.transform_matrix = {
-                1, 0, 0, 0,
-                0, 1, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1
-            };
+            // Extract W3DTag reference (which W3D mesh to use)
+            size_t tag_pos = instance_element.find("tag_index=\"");
+            if (tag_pos != std::string::npos) {
+                size_t tag_end = instance_element.find("\"", tag_pos + 11);
+                if (tag_end != std::string::npos) {
+                    try {
+                        instance.tag.tag_index = std::stoul(
+                            instance_element.substr(tag_pos + 11, tag_end - tag_pos - 11)
+                        );
+                    } catch (...) {}
+                }
+            }
 
             // Extract visible attribute
-            size_t vis_pos = file_str.find("visible=\"", pos);
-            if (vis_pos != std::string::npos && vis_pos < pos + 500) {
-                size_t vis_end = file_str.find("\"", vis_pos + 9);
+            size_t vis_pos = instance_element.find("visible=\"");
+            if (vis_pos != std::string::npos) {
+                size_t vis_end = instance_element.find("\"", vis_pos + 9);
                 if (vis_end != std::string::npos) {
-                    std::string vis_str = file_str.substr(vis_pos + 9, vis_end - vis_pos - 9);
+                    std::string vis_str = instance_element.substr(vis_pos + 9, vis_end - vis_pos - 9);
                     instance.visible = (vis_str == "true" || vis_str == "1");
                 }
             }
 
+            // Extract transform matrix (4x4 matrix stored as space-separated values)
+            // Default to identity transform if not found
+            size_t matrix_pos = instance_element.find("transform=\"");
+            if (matrix_pos != std::string::npos) {
+                size_t matrix_end = instance_element.find("\"", matrix_pos + 11);
+                if (matrix_end != std::string::npos) {
+                    std::string matrix_str = instance_element.substr(matrix_pos + 11, matrix_end - matrix_pos - 11);
+
+                    // Parse 16 float values for 4x4 matrix
+                    instance.transform_matrix.resize(16);
+                    std::istringstream iss(matrix_str);
+                    for (int i = 0; i < 16; ++i) {
+                        if (!(iss >> instance.transform_matrix[i])) {
+                            // If parsing fails, use identity matrix
+                            instance.transform_matrix = {
+                                1, 0, 0, 0,
+                                0, 1, 0, 0,
+                                0, 0, 1, 0,
+                                0, 0, 0, 1
+                            };
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Default identity transform
+                instance.transform_matrix = {
+                    1, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1
+                };
+            }
+
             temp_instances.push_back(instance);
-            pos += 9;  // Move past "<Instance"
+            pos = instance_end + 1;
         }
 
         instances_ = temp_instances;
 
-        // Success if we parsed at least the XML structure (even if no instances found)
+        // Success if we successfully parsed XML (even if no instances found)
         return true;
     }
     catch (...) {
