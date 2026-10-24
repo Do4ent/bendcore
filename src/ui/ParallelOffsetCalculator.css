@@ -1,0 +1,531 @@
+/* Основные стили для калькулятора параллельного смещения */
+
+.parallel-offset-calculator {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
+    'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.parallel-offset-calculator.light-mode {
+  background-color: #ffffff;
+  color: #333333;
+}
+
+.parallel-offset-calculator.dark-mode {
+  background-color: #1e1e1e;
+  color: #e0e0e0;
+}
+
+/* Заголовок */
+.calculator-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid currentColor;
+  opacity: 0.8;
+}
+
+.calculator-header h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.dark-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.dark-mode-toggle input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* Секции */
+section {
+  background-color: inherit;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode section {
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.1);
+}
+
+section h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 10px;
+  opacity: 0.9;
+}
+
+/* Группы параметров */
+.param-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+  gap: 8px;
+}
+
+.param-group label {
+  font-weight: 500;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.param-group input[type='text'],
+.param-group input[type='number'],
+.param-group select {
+  padding: 10px 12px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  background-color: inherit;
+  color: inherit;
+}
+
+.light-mode .param-group input,
+.light-mode .param-group select {
+  border-color: #cccccc;
+  background-color: #f5f5f5;
+}
+
+.dark-mode .param-group input,
+.dark-mode .param-group select {
+  border-color: #444444;
+  background-color: #2a2a2a;
+}
+
+.param-group input:focus,
+.param-group select:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.param-group input.input-error {
+  border-color: #cc0000 !important;
+  box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.1) !important;
+}
+
+.error-text {
+  font-size: 12px;
+  color: #cc0000;
+  font-weight: 500;
+}
+
+/* Input с dropdown */
+.input-with-dropdown {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-with-dropdown input {
+  grid-column: 1;
+}
+
+.input-with-dropdown select {
+  grid-column: 2;
+  width: auto;
+}
+
+/* Slider группа */
+.slider-group {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.slider-group input[type='range'] {
+  grid-column: 1;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, #0066cc, #00cccc);
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.slider-group input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #0066cc;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider-group input[type='range']::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #0066cc;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider-group .unit {
+  font-weight: 600;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+/* Кнопка Calculate */
+.calculate-button {
+  width: 100%;
+  padding: 14px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, #0066cc, #0048aa);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
+}
+
+.calculate-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 102, 204, 0.4);
+}
+
+.calculate-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.calculate-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Ошибки */
+.error-section {
+  background-color: rgba(204, 0, 0, 0.1);
+  border-left: 4px solid #cc0000;
+  padding: 16px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.dark-mode .error-section {
+  background-color: rgba(255, 100, 100, 0.1);
+}
+
+.error-section h4 {
+  margin: 0 0 10px 0;
+  color: #cc0000;
+  font-size: 14px;
+}
+
+.error-section ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
+.error-section li {
+  margin-bottom: 6px;
+}
+
+/* Сетка результатов */
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.result-card {
+  padding: 16px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  opacity: 0.8;
+  text-align: center;
+}
+
+.light-mode .result-card {
+  background-color: #f9f9f9;
+  border-color: #e0e0e0;
+}
+
+.dark-mode .result-card {
+  background-color: #2a2a2a;
+  border-color: #444444;
+}
+
+.result-label {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.7;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.result-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0066cc;
+}
+
+.dark-mode .result-value {
+  color: #66ccff;
+}
+
+/* Уверенность */
+.result-card.confidence {
+  grid-column: 1 / -1;
+}
+
+.confidence-bar {
+  width: 100%;
+  height: 8px;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.dark-mode .confidence-bar {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.confidence-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+/* Предупреждения */
+.warnings-box {
+  background-color: rgba(255, 170, 0, 0.1);
+  border-left: 4px solid #ffaa00;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.dark-mode .warnings-box {
+  background-color: rgba(255, 200, 0, 0.1);
+}
+
+.warnings-box strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.warnings-box p {
+  margin: 0;
+}
+
+/* 2D Preview */
+.preview-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid currentColor;
+  opacity: 0.9;
+}
+
+.preview-section h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.preview-2d {
+  width: 100%;
+  max-width: 500px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background-color: inherit;
+  margin-bottom: 12px;
+}
+
+.toggle-preview-btn {
+  padding: 8px 12px;
+  font-size: 12px;
+  border: 1px solid currentColor;
+  background-color: transparent;
+  color: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: all 0.2s;
+}
+
+.toggle-preview-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 102, 204, 0.1);
+}
+
+/* Экспорт */
+.export-controls,
+.template-controls {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.export-button,
+.save-template-btn {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid #0066cc;
+  border-radius: 6px;
+  background-color: #0066cc;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dark-mode .export-button,
+.dark-mode .save-template-btn {
+  background-color: #0088dd;
+  border-color: #0088dd;
+}
+
+.export-button:hover,
+.save-template-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.export-button:disabled,
+.save-template-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.template-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.template-input-group input {
+  flex: 1;
+  min-width: 150px;
+}
+
+/* Responsive дизайн */
+@media (max-width: 768px) {
+  .parallel-offset-calculator {
+    padding: 16px;
+  }
+
+  .calculator-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .results-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .result-card.confidence {
+    grid-column: 1 / -1;
+  }
+
+  .export-controls,
+  .template-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .slider-group {
+    grid-template-columns: 1fr auto;
+  }
+
+  .slider-group input[type='range'] {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .parallel-offset-calculator {
+    padding: 12px;
+  }
+
+  .calculator-header h2 {
+    font-size: 20px;
+  }
+
+  section {
+    padding: 16px;
+  }
+
+  .results-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dark-mode-toggle {
+    font-size: 12px;
+  }
+
+  .result-value {
+    font-size: 20px;
+  }
+}
+
+/* Анимации */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+section {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Печать */
+@media print {
+  .dark-mode-toggle,
+  .calculate-button,
+  .export-controls,
+  .template-controls {
+    display: none;
+  }
+
+  .parallel-offset-calculator {
+    background-color: white;
+    color: black;
+  }
+
+  section {
+    box-shadow: none;
+    page-break-inside: avoid;
+  }
+}

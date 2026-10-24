@@ -1,0 +1,225 @@
+.bend-creation-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--color-bg-primary);
+}
+
+.bend-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.bend-angles {
+  width: 200px;
+  padding: 16px;
+  border-right: 1px solid var(--color-border);
+  background-color: var(--color-bg-secondary);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.angles-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.angles-header h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.angles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.angle-btn {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.angle-btn:hover {
+  background-color: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.angle-value {
+  font-size: 16px;
+}
+
+.custom-angle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.custom-angle label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.angle-input {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text);
+}
+
+.add-custom-btn {
+  padding: 8px;
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.add-custom-btn:hover {
+  background-color: #0052a3;
+}
+
+.bend-list-container {
+  flex: 1;
+  padding: 16px;
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.list-header h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bend-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bend-item:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.bend-item.selected {
+  background-color: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.bend-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bend-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bend-details {
+  font-size: 11px;
+  opacity: 0.7;
+  display: flex;
+  gap: 4px;
+}
+
+.bend-delete {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 18px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.bend-delete:hover {
+  opacity: 1;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.bend-properties {
+  width: 300px;
+  border-left: 1px solid var(--color-border);
+  overflow: hidden;
+  display: flex;
+}
+
+.no-selection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  text-align: center;
+  gap: 12px;
+}
+
+.no-selection p {
+  margin: 0;
+  font-size: 12px;
+}

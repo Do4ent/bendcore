@@ -12,6 +12,14 @@
     "dev": "electron . --debug",
     "build": "tsc && webpack",
     "test": "jest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:parallel-offset": "playwright test parallel-offset.spec.ts",
+    "test:e2e:combined-3d": "playwright test combined-3d-offset.spec.ts",
+    "test:e2e:integration": "playwright test offset-integration.spec.ts",
     "lint": "eslint src/ui --ext .ts,.tsx",
     "format": "prettier --write src/ui",
     "start": "electron .",
@@ -60,7 +68,8 @@
     "@testing-library/user-event": "^14.5.0",
     "prettier": "^3.0.0",
     "eslint": "^8.42.0",
-    "eslint-plugin-react": "^7.32.0"
+    "eslint-plugin-react": "^7.32.0",
+    "@playwright/test": "^1.40.0"
   },
   "engines": {
     "node": ">=16.0.0",

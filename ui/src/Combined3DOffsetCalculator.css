@@ -1,0 +1,744 @@
+/* ============================================================================
+   ПЕРЕМЕННЫЕ И БАЗОВЫЕ СТИЛИ
+   ============================================================================ */
+
+:root {
+  --primary-color: #3b82f6;
+  --secondary-color: #10b981;
+  --danger-color: #ef4444;
+  --warning-color: #f59e0b;
+  --background: #ffffff;
+  --surface: #f3f4f6;
+  --border: #e5e7eb;
+  --text: #1f2937;
+  --text-secondary: #6b7280;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.combined-3d-offset-calculator.dark-mode {
+  --background: #1f2937;
+  --surface: #111827;
+  --border: #374151;
+  --text: #f3f4f6;
+  --text-secondary: #9ca3af;
+}
+
+/* ============================================================================
+   ОСНОВНОЙ КОНТЕЙНЕР
+   ============================================================================ */
+
+.combined-3d-offset-calculator {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 20px;
+  background: var(--background);
+  color: var(--text);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  transition: all 0.3s ease;
+}
+
+/* ============================================================================
+   ЗАГОЛОВОК
+   ============================================================================ */
+
+.combined-3d-offset-calculator .header-section {
+  text-align: center;
+  margin-bottom: 40px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--border);
+}
+
+.combined-3d-offset-calculator .header-section h1 {
+  margin: 0;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.combined-3d-offset-calculator .header-section .subtitle {
+  margin: 10px 0 0 0;
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+
+/* ============================================================================
+   ГЛАВНОЕ СОДЕРЖИМОЕ: ДВУХКОЛОННАЯ ВЕРСТКА
+   ============================================================================ */
+
+.combined-3d-offset-calculator .main-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-top: 30px;
+}
+
+@media (max-width: 1200px) {
+  .combined-3d-offset-calculator .main-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================================
+   ПАНЕЛЬ ВХОДНЫХ ПАРАМЕТРОВ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .input-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.combined-3d-offset-calculator .input-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+}
+
+.combined-3d-offset-calculator .input-section:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-lg);
+}
+
+.combined-3d-offset-calculator .input-section h3 {
+  margin: 0 0 15px 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+/* ============================================================================
+   ГРУППЫ ВХОДОВ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .point-input-group,
+.combined-3d-offset-calculator .form-group {
+  margin-bottom: 12px;
+}
+
+.combined-3d-offset-calculator .coordinate-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.combined-3d-offset-calculator .coordinate-input label {
+  min-width: 40px;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.combined-3d-offset-calculator .coordinate-input input,
+.combined-3d-offset-calculator .form-group input,
+.combined-3d-offset-calculator .form-group select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--text);
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.combined-3d-offset-calculator .coordinate-input input:focus,
+.combined-3d-offset-calculator .form-group input:focus,
+.combined-3d-offset-calculator .form-group select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.combined-3d-offset-calculator .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.combined-3d-offset-calculator .unit {
+  margin-left: 8px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+/* ============================================================================
+   СЛАЙДЕРЫ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .slider-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.combined-3d-offset-calculator .slider-group input[type="range"] {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.combined-3d-offset-calculator .slider-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.combined-3d-offset-calculator .slider-group input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.1);
+}
+
+.combined-3d-offset-calculator .slider-group input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.combined-3d-offset-calculator .slider-value {
+  min-width: 60px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+/* ============================================================================
+   ЧЕКБОКСЫ И РАДИО КНОПКИ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .form-group.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 15px 0;
+}
+
+.combined-3d-offset-calculator .form-group.checkbox input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.combined-3d-offset-calculator .form-group.checkbox label {
+  margin: 0;
+  cursor: pointer;
+}
+
+.combined-3d-offset-calculator .radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.combined-3d-offset-calculator .radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin: 0;
+  font-weight: normal;
+}
+
+.combined-3d-offset-calculator .radio-group input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* ============================================================================
+   КАСТОМНЫЕ ПОЗИЦИИ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .custom-positions {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border);
+}
+
+.combined-3d-offset-calculator .custom-positions h4 {
+  margin: 0 0 12px 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.combined-3d-offset-calculator .position-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.combined-3d-offset-calculator .position-input label {
+  min-width: 80px;
+  font-size: 0.9rem;
+}
+
+.combined-3d-offset-calculator .position-input input {
+  width: 100px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--text);
+}
+
+/* ============================================================================
+   КНОПКИ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .action-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.combined-3d-offset-calculator .btn-primary,
+.combined-3d-offset-calculator .btn-secondary {
+  flex: 1;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.combined-3d-offset-calculator .btn-primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.combined-3d-offset-calculator .btn-primary:hover:not(:disabled) {
+  background: #2563eb;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.combined-3d-offset-calculator .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.combined-3d-offset-calculator .btn-secondary {
+  background: var(--surface);
+  color: var(--primary-color);
+  border: 2px solid var(--primary-color);
+}
+
+.combined-3d-offset-calculator .btn-secondary:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+.combined-3d-offset-calculator .btn-export,
+.combined-3d-offset-calculator .btn-copy {
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--primary-color);
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.combined-3d-offset-calculator .btn-export:hover,
+.combined-3d-offset-calculator .btn-copy:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+/* ============================================================================
+   ПАНЕЛЬ РЕЗУЛЬТАТОВ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .output-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.combined-3d-offset-calculator .empty-state {
+  background: var(--surface);
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+/* ============================================================================
+   ВКЛАДКИ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .tabs {
+  display: flex;
+  gap: 5px;
+  border-bottom: 2px solid var(--border);
+  background: var(--surface);
+  border-radius: 6px 6px 0 0;
+  padding: 5px;
+}
+
+.combined-3d-offset-calculator .tab-button {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  border-radius: 4px;
+}
+
+.combined-3d-offset-calculator .tab-button.active {
+  background: var(--background);
+  color: var(--primary-color);
+  border-bottom: 3px solid var(--primary-color);
+}
+
+.combined-3d-offset-calculator .tab-button:hover {
+  color: var(--text);
+}
+
+/* ============================================================================
+   СОДЕРЖИМОЕ ВКЛАДОК
+   ============================================================================ */
+
+.combined-3d-offset-calculator .tab-content {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0 6px 6px 6px;
+  padding: 25px;
+  min-height: 400px;
+}
+
+/* ============================================================================
+   ВКЛАДКА РЕЗУЛЬТАТОВ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .results-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.combined-3d-offset-calculator .result-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+}
+
+.combined-3d-offset-calculator .summary-item {
+  background: var(--surface);
+  border-left: 4px solid var(--primary-color);
+  padding: 15px;
+  border-radius: 4px;
+}
+
+.combined-3d-offset-calculator .summary-item .label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+
+.combined-3d-offset-calculator .summary-item .value {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+/* Feasibility color coding */
+.combined-3d-offset-calculator .feasibility-0,
+.combined-3d-offset-calculator .feasibility-1 {
+  color: var(--danger-color);
+}
+
+.combined-3d-offset-calculator .feasibility-2,
+.combined-3d-offset-calculator .feasibility-3 {
+  color: var(--warning-color);
+}
+
+.combined-3d-offset-calculator .feasibility-4,
+.combined-3d-offset-calculator .feasibility-5 {
+  color: var(--secondary-color);
+}
+
+/* ============================================================================
+   ПРЕДУПРЕЖДЕНИЯ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .warnings-section {
+  background: #fef3c7;
+  color: #92400e;
+  border-left: 4px solid #f59e0b;
+  padding: 15px;
+  border-radius: 4px;
+}
+
+.combined-3d-offset-calculator .dark-mode .warnings-section {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fcd34d;
+}
+
+.combined-3d-offset-calculator .warnings-section h4 {
+  margin: 0 0 10px 0;
+  font-weight: 600;
+}
+
+.combined-3d-offset-calculator .warnings-section ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.combined-3d-offset-calculator .warnings-section li {
+  margin: 5px 0;
+}
+
+/* ============================================================================
+   ТАБЛИЦА ГИБОК
+   ============================================================================ */
+
+.combined-3d-offset-calculator .bends-table {
+  overflow-x: auto;
+}
+
+.combined-3d-offset-calculator .bends-table h4 {
+  margin: 0 0 15px 0;
+  color: var(--primary-color);
+}
+
+.combined-3d-offset-calculator .bends-table table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+
+.combined-3d-offset-calculator .bends-table th,
+.combined-3d-offset-calculator .bends-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.combined-3d-offset-calculator .bends-table th {
+  background: var(--background);
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.combined-3d-offset-calculator .bends-table tr:hover {
+  background: rgba(59, 130, 246, 0.05);
+}
+
+/* ============================================================================
+   ВКЛАДКА 3D ПРЕДПРОСМОТРА
+   ============================================================================ */
+
+.combined-3d-offset-calculator .preview-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  height: 100%;
+}
+
+.combined-3d-offset-calculator .canvas-container {
+  width: 100%;
+  height: 500px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.combined-3d-offset-calculator .preview-info {
+  background: var(--surface);
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.combined-3d-offset-calculator .preview-info p {
+  margin: 5px 0;
+}
+
+/* ============================================================================
+   ВКЛАДКА G-КОДА
+   ============================================================================ */
+
+.combined-3d-offset-calculator .cnc-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.combined-3d-offset-calculator .cnc-code-textarea {
+  width: 100%;
+  height: 400px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+/* ============================================================================
+   СООБЩЕНИЕ ОБ ОШИБКЕ
+   ============================================================================ */
+
+.combined-3d-offset-calculator .error-message {
+  background: #fee2e2;
+  color: #991b1b;
+  border-left: 4px solid var(--danger-color);
+  padding: 15px;
+  border-radius: 4px;
+}
+
+.combined-3d-offset-calculator .dark-mode .error-message {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+
+/* ============================================================================
+   КНОПКИ ЭКСПОРТА
+   ============================================================================ */
+
+.combined-3d-offset-calculator .export-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* ============================================================================
+   АДАПТИВНЫЙ ДИЗАЙН
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .combined-3d-offset-calculator {
+    padding: 15px;
+  }
+
+  .combined-3d-offset-calculator .header-section h1 {
+    font-size: 1.8rem;
+  }
+
+  .combined-3d-offset-calculator .main-content {
+    gap: 20px;
+  }
+
+  .combined-3d-offset-calculator .result-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .combined-3d-offset-calculator .canvas-container {
+    height: 300px;
+  }
+
+  .combined-3d-offset-calculator .cnc-code-textarea {
+    height: 250px;
+  }
+
+  .combined-3d-offset-calculator .action-buttons {
+    flex-direction: column;
+  }
+
+  .combined-3d-offset-calculator .point-input-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .combined-3d-offset-calculator .bends-table {
+    font-size: 0.85rem;
+  }
+
+  .combined-3d-offset-calculator .bends-table th,
+  .combined-3d-offset-calculator .bends-table td {
+    padding: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .combined-3d-offset-calculator .header-section h1 {
+    font-size: 1.4rem;
+  }
+
+  .combined-3d-offset-calculator .tabs {
+    flex-direction: column;
+  }
+
+  .combined-3d-offset-calculator .tab-button {
+    padding: 8px 12px;
+    font-size: 0.9rem;
+  }
+
+  .combined-3d-offset-calculator .input-panel {
+    gap: 15px;
+  }
+
+  .combined-3d-offset-calculator .input-section {
+    padding: 15px;
+  }
+}
+
+/* ============================================================================
+   АНИМАЦИИ
+   ============================================================================ */
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.combined-3d-offset-calculator .input-section {
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.combined-3d-offset-calculator .btn-primary:disabled {
+  animation: pulse 1.5s ease-in-out infinite;
+}

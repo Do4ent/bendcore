@@ -8,6 +8,7 @@ import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { getColorHex } from "./ColorScheme";
 import { useTemplates, TemplateMatch } from "./hooks/useTemplates";
 import { TemplateSuggestionsTab } from "./TemplateSuggestionsTab";
+import OffsetCalculatorTab from "./OffsetCalculatorTab";
 
 // ============ INTERFACES ============
 
@@ -1351,6 +1352,7 @@ const TubeDialog: React.FC<TubeDialogProps> = ({
             { id: "geometry", label: "Geometry" },
             { id: "bends", label: "Bends" },
             { id: "ports", label: "Ports" },
+            { id: "offset-calculator", label: "Offset Calculator" },
             { id: "templates", label: "Templates" },
             { id: "advanced", label: "Advanced" },
             { id: "preview", label: "Preview" },
@@ -1401,6 +1403,20 @@ const TubeDialog: React.FC<TubeDialogProps> = ({
               onEdit={handleEditPort}
               onDelete={handleDeletePort}
               errors={errors}
+            />
+          )}
+          {activeTab === "offset-calculator" && (
+            <OffsetCalculatorTab
+              tubeParams={{
+                outerDiameter: config.geometry.outerDiameter,
+                wallThickness: config.geometry.wallThickness,
+                length: config.geometry.length,
+                material: config.geometry.material,
+              }}
+              onResultSync={(offsetData) => {
+                // Optional: Handle offset results synchronization
+                console.log("Offset results:", offsetData);
+              }}
             />
           )}
           {activeTab === "templates" && (

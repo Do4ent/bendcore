@@ -1,0 +1,142 @@
+.path-sketch-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--color-bg-primary);
+}
+
+.sketch-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sketch-tools {
+  width: 240px;
+  padding: 16px;
+  border-right: 1px solid var(--color-border);
+  background-color: var(--color-bg-secondary);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tools-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tools-section h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.tool-select {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text);
+}
+
+.view-buttons,
+.sketch-buttons {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.view-btn,
+.sketch-btn {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 13px;
+}
+
+.view-btn:hover,
+.sketch-btn:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.view-btn.active,
+.sketch-btn.active {
+  background-color: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.save-sketch-btn {
+  padding: 10px;
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.2s;
+  margin-top: auto;
+}
+
+.save-sketch-btn:hover:not(:disabled) {
+  background-color: #0052a3;
+}
+
+.save-sketch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sketch-canvas-container {
+  flex: 1;
+  position: relative;
+  background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 100%);
+  overflow: hidden;
+}
+
+.sketch-canvas {
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.canvas-info {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.canvas-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+
+.canvas-info p {
+  margin: 4px 0;
+}
+
+.info-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

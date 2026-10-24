@@ -1,0 +1,291 @@
+{
+  "test_cases": [
+    {
+      "name": "Simple 2-Bend Path - Steel",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 100, "y": 100, "z": 50 },
+        "outer_diameter": 25,
+        "wall_thickness": 2.0,
+        "bend_radius": 40,
+        "num_bends": 2,
+        "distribution": "equal",
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "steel"
+      },
+      "expected": {
+        "total_length_approx": 200,
+        "bends_count": 2,
+        "feasibility_min": 0.80,
+        "has_cnc_code": true,
+        "cnc_has_m_codes": true
+      }
+    },
+    {
+      "name": "Complex 3-Bend Path - Aluminum",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 200, "y": 150, "z": 100 },
+        "outer_diameter": 19.05,
+        "wall_thickness": 1.5,
+        "bend_radius": 35,
+        "num_bends": 3,
+        "distribution": "equal",
+        "inclination_angle": 25,
+        "springback_correction": true,
+        "material": "aluminum"
+      },
+      "expected": {
+        "total_length_approx": 280,
+        "bends_count": 3,
+        "feasibility_min": 0.85,
+        "has_cnc_code": true
+      }
+    },
+    {
+      "name": "5-Bend Path - Stainless Steel",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 250, "y": 200, "z": 150 },
+        "outer_diameter": 50.8,
+        "wall_thickness": 2.4,
+        "bend_radius": 80,
+        "num_bends": 5,
+        "distribution": "equal",
+        "inclination_angle": 35,
+        "springback_correction": true,
+        "material": "stainless_steel"
+      },
+      "expected": {
+        "total_length_approx": 400,
+        "bends_count": 5,
+        "feasibility_min": 0.75,
+        "has_cnc_code": true
+      }
+    },
+    {
+      "name": "Custom Distribution - Titanium",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 150, "y": 100, "z": 80 },
+        "outer_diameter": 25,
+        "wall_thickness": 2.0,
+        "bend_radius": 50,
+        "num_bends": 3,
+        "distribution": "custom",
+        "custom_bend_positions": [0.25, 0.50, 0.75],
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "titanium"
+      },
+      "expected": {
+        "total_length_approx": 220,
+        "bends_count": 3,
+        "feasibility_min": 0.78,
+        "has_cnc_code": true
+      }
+    },
+    {
+      "name": "Vertical Path - Copper",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 0, "y": 0, "z": 200 },
+        "outer_diameter": 12.7,
+        "wall_thickness": 1.0,
+        "bend_radius": 25,
+        "num_bends": 2,
+        "distribution": "equal",
+        "inclination_angle": 90,
+        "springback_correction": true,
+        "material": "copper"
+      },
+      "expected": {
+        "total_length_approx": 220,
+        "bends_count": 2,
+        "feasibility_min": 0.70,
+        "has_cnc_code": true
+      }
+    },
+    {
+      "name": "Horizontal Path - Brass",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 50 },
+        "end_point": { "x": 250, "y": 0, "z": 50 },
+        "outer_diameter": 15.88,
+        "wall_thickness": 1.24,
+        "bend_radius": 30,
+        "num_bends": 2,
+        "distribution": "equal",
+        "inclination_angle": 0,
+        "springback_correction": true,
+        "material": "brass"
+      },
+      "expected": {
+        "total_length_approx": 270,
+        "bends_count": 2,
+        "feasibility_min": 0.80,
+        "has_cnc_code": true
+      }
+    },
+    {
+      "name": "Minimal Distance - Small Diameter",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 30, "y": 30, "z": 20 },
+        "outer_diameter": 6.35,
+        "wall_thickness": 0.5,
+        "bend_radius": 15,
+        "num_bends": 2,
+        "distribution": "equal",
+        "inclination_angle": 20,
+        "springback_correction": true,
+        "material": "steel"
+      },
+      "expected": {
+        "total_length_approx": 50,
+        "bends_count": 2,
+        "feasibility_min": 0.65,
+        "has_cnc_code": true
+      }
+    }
+  ],
+  "edge_cases": [
+    {
+      "name": "Invalid - Start = End Point",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 0, "y": 0, "z": 0 },
+        "outer_diameter": 25,
+        "wall_thickness": 2.0,
+        "bend_radius": 40,
+        "num_bends": 2,
+        "distribution": "equal",
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "steel"
+      },
+      "should_error": true,
+      "error_type": "validation"
+    },
+    {
+      "name": "Invalid - Zero Number of Bends",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 100, "y": 100, "z": 50 },
+        "outer_diameter": 25,
+        "wall_thickness": 2.0,
+        "bend_radius": 40,
+        "num_bends": 0,
+        "distribution": "equal",
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "steel"
+      },
+      "should_error": true,
+      "error_type": "validation"
+    },
+    {
+      "name": "Invalid - Too Many Bends",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 100, "y": 100, "z": 50 },
+        "outer_diameter": 25,
+        "wall_thickness": 2.0,
+        "bend_radius": 40,
+        "num_bends": 100,
+        "distribution": "equal",
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "steel"
+      },
+      "should_error": true,
+      "error_type": "validation"
+    },
+    {
+      "name": "Invalid - Negative Diameter",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 100, "y": 100, "z": 50 },
+        "outer_diameter": -25,
+        "wall_thickness": 2.0,
+        "bend_radius": 40,
+        "num_bends": 2,
+        "distribution": "equal",
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "steel"
+      },
+      "should_error": true,
+      "error_type": "validation"
+    },
+    {
+      "name": "Invalid - Invalid Distribution Type",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 100, "y": 100, "z": 50 },
+        "outer_diameter": 25,
+        "wall_thickness": 2.0,
+        "bend_radius": 40,
+        "num_bends": 2,
+        "distribution": "invalid",
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "steel"
+      },
+      "should_error": true,
+      "error_type": "validation"
+    },
+    {
+      "name": "Invalid - Invalid Material",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 100, "y": 100, "z": 50 },
+        "outer_diameter": 25,
+        "wall_thickness": 2.0,
+        "bend_radius": 40,
+        "num_bends": 2,
+        "distribution": "equal",
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "unknown_material"
+      },
+      "should_error": true,
+      "error_type": "validation"
+    }
+  ],
+  "performance_cases": [
+    {
+      "name": "Performance - Single Bend",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 100, "y": 100, "z": 50 },
+        "outer_diameter": 25,
+        "wall_thickness": 2.0,
+        "bend_radius": 40,
+        "num_bends": 1,
+        "distribution": "equal",
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "steel"
+      },
+      "max_time_ms": 500
+    },
+    {
+      "name": "Performance - Multiple Bends",
+      "params": {
+        "start_point": { "x": 0, "y": 0, "z": 0 },
+        "end_point": { "x": 300, "y": 300, "z": 200 },
+        "outer_diameter": 50.8,
+        "wall_thickness": 2.4,
+        "bend_radius": 80,
+        "num_bends": 10,
+        "distribution": "equal",
+        "inclination_angle": 30,
+        "springback_correction": true,
+        "material": "steel"
+      },
+      "max_time_ms": 500
+    }
+  ]
+}

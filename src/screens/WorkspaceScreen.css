@@ -1,0 +1,76 @@
+.workspace-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--color-bg-primary);
+}
+
+.workspace-screen.dark {
+  --color-bg-primary: #1e1e1e;
+  --color-bg-secondary: #2d2d2d;
+  --color-text: #e0e0e0;
+}
+
+.workspace-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.workspace-left {
+  width: 280px;
+  border-right: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.workspace-viewport {
+  flex: 1;
+  background: linear-gradient(135deg, #2a3f5f 0%, #1a2a3f 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.workspace-viewport canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.viewport-overlay {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.viewport-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.viewport-controls button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.viewport-controls button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.workspace-right {
+  width: 320px;
+  border-left: 1px solid var(--color-border);
+  overflow: hidden;
+}

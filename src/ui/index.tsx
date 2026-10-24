@@ -13,6 +13,13 @@ import { createTubePropertyGroup } from './PropertyGroups';
 import './styles.css';
 export { default as TubeDialog } from './TubeDialog';
 export type { TubeConfig } from './TubeDialog';
+export { default as OffsetCalculatorTab } from './OffsetCalculatorTab';
+export { OffsetTypeSelector } from './OffsetTypeSelector';
+export type { OffsetType } from './OffsetTypeSelector';
+export { OffsetResultsDisplay } from './OffsetResultsDisplay';
+export { OffsetVisualization } from './OffsetVisualization';
+export { ParallelOffsetCalculator } from './ParallelOffsetCalculator';
+export { default as Combined3DOffsetCalculator } from './Combined3DOffsetCalculator';
 
 interface AppProps {
   onCommand?: (commandId: string, args?: Record<string, any>) => void;
