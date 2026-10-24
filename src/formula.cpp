@@ -6,6 +6,9 @@
 #include <cmath>
 #include <iostream>
 #include <sstream>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 namespace bendcore::formula {
 
@@ -687,6 +690,100 @@ std::string dimension_formula_to_json(const DimensionFormula& dim_formula) {
     return oss.str();
 }
 
+// Forward declaration for recursive JSON deserialization
+static ASTNodePtr deserialize_formula_json(const json& j);
+
+// Recursive JSON deserialization implementation
+static ASTNodePtr deserialize_formula_json(const json& j) {
+    if (!j.contains("type")) {
+        throw std::invalid_argument("Formula JSON missing 'type' field");
+    }
+
+    std::string type = j["type"].get<std::string>();
+
+    if (type == "constant") {
+        if (!j.contains("value")) {
+            throw std::invalid_argument("Constant formula missing 'value'");
+        }
+        double value = j["value"].get<double>();
+        return ASTNode::make_number(value);
+    }
+    else if (type == "variable") {
+        if (!j.contains("name")) {
+            throw std::invalid_argument("Variable formula missing 'name'");
+        }
+        std::string name = j["name"].get<std::string>();
+        return ASTNode::make_variable("$" + name);
+    }
+    else if (type == "binary_op") {
+        if (!j.contains("left") || !j.contains("right") || !j.contains("op")) {
+            throw std::invalid_argument("Binary op formula missing 'left', 'right', or 'op'");
+        }
+        auto left = deserialize_formula_json(j["left"]);
+        auto right = deserialize_formula_json(j["right"]);
+        std::string op = j["op"].get<std::string>();
+
+        BinaryOp binary_op;
+        if (op == "+") binary_op = BinaryOp::Add;
+        else if (op == "-") binary_op = BinaryOp::Sub;
+        else if (op == "*") binary_op = BinaryOp::Mul;
+        else if (op == "/") binary_op = BinaryOp::Div;
+        else if (op == "^") binary_op = BinaryOp::Pow;
+        else if (op == "min") binary_op = BinaryOp::Min;
+        else if (op == "max") binary_op = BinaryOp::Max;
+        else throw std::invalid_argument("Unknown binary operator: " + op);
+
+        return ASTNode::make_binary(binary_op, left, right);
+    }
+    else if (type == "unary_op") {
+        if (!j.contains("operand") || !j.contains("op")) {
+            throw std::invalid_argument("Unary op formula missing 'operand' or 'op'");
+        }
+        auto operand = deserialize_formula_json(j["operand"]);
+        std::string op = j["op"].get<std::string>();
+
+        UnaryOp unary_op;
+        if (op == "-") unary_op = UnaryOp::Neg;
+        else if (op == "abs") unary_op = UnaryOp::Abs;
+        else if (op == "sqrt") unary_op = UnaryOp::Sqrt;
+        else if (op == "sin") unary_op = UnaryOp::Sin;
+        else if (op == "cos") unary_op = UnaryOp::Cos;
+        else if (op == "tan") unary_op = UnaryOp::Tan;
+        else if (op == "floor") unary_op = UnaryOp::Floor;
+        else if (op == "ceil") unary_op = UnaryOp::Ceil;
+        else throw std::invalid_argument("Unknown unary operator: " + op);
+
+        return ASTNode::make_unary(unary_op, operand);
+    }
+    else if (type == "function") {
+        if (!j.contains("name") || !j.contains("args")) {
+            throw std::invalid_argument("Function formula missing 'name' or 'args'");
+        }
+        std::string func_name = j["name"].get<std::string>();
+        std::vector<ASTNodePtr> args;
+
+        for (const auto& arg : j["args"]) {
+            args.push_back(deserialize_formula_json(arg));
+        }
+
+        return ASTNode::make_function(func_name, args);
+    }
+    else if (type == "spec_reference") {
+        if (!j.contains("table") || !j.contains("column") || !j.contains("row")) {
+            throw std::invalid_argument("Spec reference missing 'table', 'column', or 'row'");
+        }
+        std::string table = j["table"].get<std::string>();
+        std::string col_str = j["column"].get<std::string>();
+        int row = j["row"].get<int>();
+
+        char column = col_str.empty() ? 'A' : col_str[0];
+        return ASTNode::make_spec_reference(table, column, row);
+    }
+    else {
+        throw std::invalid_argument("Unknown formula type: " + type);
+    }
+}
+
 DimensionFormula dimension_formula_from_json(const std::string& json_text) {
     DimensionFormula dim_formula;
     dim_formula.is_valid = true;
@@ -699,61 +796,29 @@ DimensionFormula dimension_formula_from_json(const std::string& json_text) {
             return dim_formula;
         }
 
-        // Check for type field
-        if (json_text.find("\"type\"") == std::string::npos) {
-            throw std::invalid_argument("Missing 'type' in formula JSON");
-        }
+        // Use nlohmann::json for proper JSON parsing
+        json j = json::parse(json_text);
 
-        // Simple type extraction (real implementation would use nlohmann::json)
-        size_t type_pos = json_text.find("\"type\"");
-        size_t colon_pos = json_text.find(":", type_pos);
-        size_t quote_pos = json_text.find("\"", colon_pos);
-        size_t end_quote = json_text.find("\"", quote_pos + 1);
+        // Deserialize the formula AST
+        dim_formula.formula_ast = deserialize_formula_json(j);
 
-        if (end_quote == std::string::npos) {
-            throw std::invalid_argument("Invalid JSON format for type");
-        }
-
-        std::string type = json_text.substr(quote_pos + 1, end_quote - quote_pos - 1);
-
-        if (type == "constant") {
-            // Extract value from JSON
-            size_t value_pos = json_text.find("\"value\"");
-            if (value_pos != std::string::npos) {
-                size_t colon = json_text.find(":", value_pos);
-                double value = std::stod(json_text.substr(colon + 1));
-                dim_formula.formula_ast = ASTNode::make_number(value);
-                dim_formula.result = value;
-                dim_formula.formula_text = std::to_string(value);
-            }
-        }
-        else if (type == "variable") {
-            // Extract variable name
-            size_t name_pos = json_text.find("\"name\"");
-            if (name_pos != std::string::npos) {
-                size_t quote = json_text.find("\"", name_pos + 6);
-                size_t end = json_text.find("\"", quote + 1);
-                if (end != std::string::npos) {
-                    std::string name = json_text.substr(quote + 1, end - quote - 1);
-                    dim_formula.formula_ast = ASTNode::make_variable("$" + name);
-                    dim_formula.formula_text = "$" + name;
-                }
-            }
-        }
-        else if (type == "binary_op" || type == "function") {
-            // For complex types, mark as valid but note as parsed from JSON
-            dim_formula.formula_text = "parsed_from_json[" + type + "]";
-            dim_formula.is_valid = true;
-        }
-        else {
-            throw std::invalid_argument("Unknown formula type: " + type);
+        // Generate formula text representation
+        if (j.contains("formula_text")) {
+            dim_formula.formula_text = j["formula_text"].get<std::string>();
+        } else {
+            dim_formula.formula_text = "[parsed from JSON]";
         }
 
         return dim_formula;
     }
+    catch (const json::exception& e) {
+        dim_formula.is_valid = false;
+        dim_formula.error_message = std::string("JSON parse error: ") + e.what();
+        return dim_formula;
+    }
     catch (const std::exception& e) {
         dim_formula.is_valid = false;
-        dim_formula.error_message = std::string("JSON parsing error: ") + e.what();
+        dim_formula.error_message = std::string("Formula deserialization error: ") + e.what();
         return dim_formula;
     }
 }
