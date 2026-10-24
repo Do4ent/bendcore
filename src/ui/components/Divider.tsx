@@ -11,7 +11,7 @@
 import React from 'react';
 import './Divider.css';
 
-interface DividerProps {
+export interface DividerProps {
   orientation?: 'horizontal' | 'vertical';
   label?: string;
   color?: string;

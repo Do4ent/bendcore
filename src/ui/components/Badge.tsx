@@ -13,7 +13,7 @@
 import React, { useState } from 'react';
 import './Badge.css';
 
-interface BadgeProps {
+export interface BadgeProps {
   variant?: 'default' | 'success' | 'warning' | 'error' | 'info';
   children: React.ReactNode;
   dismissible?: boolean;

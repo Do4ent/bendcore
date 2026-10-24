@@ -18,7 +18,7 @@ import './RibbonBar.css';
 
 // ============ Types ============
 
-interface RibbonCommand {
+export interface RibbonCommand {
   id: string;
   label: string;
   icon: string;
@@ -30,13 +30,13 @@ interface RibbonCommand {
   variant?: 'primary' | 'secondary' | 'danger';
 }
 
-interface RibbonTab {
+export interface RibbonTab {
   id: string;
   label: string;
   commands: RibbonCommand[];
 }
 
-interface RibbonBarProps {
+export interface RibbonBarProps {
   activeTab?: string;
   onTabChange?: (tab: string) => void;
   onCommand?: (command: string, args?: any) => void;

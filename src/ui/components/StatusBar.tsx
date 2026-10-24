@@ -16,13 +16,13 @@ import './StatusBar.css';
 
 // ============ Types ============
 
-interface Coordinates {
+export interface Coordinates {
   x: number;
   y: number;
   z: number;
 }
 
-interface StatusBarProps {
+export interface StatusBarProps {
   message?: string;
   coordinates?: Coordinates;
   mode?: 'design' | 'sketch' | 'idle' | 'loading' | 'error';

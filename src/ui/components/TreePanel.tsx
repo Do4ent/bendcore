@@ -35,7 +35,7 @@ interface ContextMenuPosition {
   y: number;
 }
 
-interface TreePanelProps {
+export interface TreePanelProps {
   nodes: TreeNode[];
   selectedNode?: string | null;
   onSelect?: (nodeId: string | null) => void;

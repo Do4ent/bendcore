@@ -26,12 +26,12 @@ export interface ContextMenuItem {
   divider?: boolean;
 }
 
-interface Position {
+export interface Position {
   x: number;
   y: number;
 }
 
-interface ContextMenuProps {
+export interface ContextMenuProps {
   items: ContextMenuItem[];
   position: Position;
   onClose: () => void;

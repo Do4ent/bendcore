@@ -10,7 +10,7 @@
 import React from 'react';
 import './Spinner.css';
 
-interface SpinnerProps {
+export interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg';
   color?: string;
   isDarkMode?: boolean;

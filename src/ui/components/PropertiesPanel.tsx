@@ -44,7 +44,7 @@ export interface PropertyField {
   validation?: (value: PropertyValue) => string | null;
 }
 
-interface PropertiesPanelProps {
+export interface PropertiesPanelProps {
   selectedNode?: any;
   properties: PropertyField[];
   onPropertyChange?: (fieldId: string, value: PropertyValue) => void;

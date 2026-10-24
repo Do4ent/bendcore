@@ -12,7 +12,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import './Tooltip.css';
 
-interface TooltipProps {
+export interface TooltipProps {
   content: string;
   position?: 'top' | 'right' | 'bottom' | 'left';
   delay?: number;

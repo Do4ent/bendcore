@@ -1,0 +1,34 @@
+/* /home/claude/bendcore/src/ui/components/Icon.css */
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: inherit;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.icon-xs {
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+}
+
+.icon-sm {
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+}
+
+.icon-md {
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+}
+
+.icon-lg {
+  width: 32px;
+  height: 32px;
+  font-size: 24px;
+}

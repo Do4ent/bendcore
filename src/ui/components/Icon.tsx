@@ -9,7 +9,7 @@
 
 import React from 'react';
 
-interface IconProps {
+export interface IconProps {
   name: string;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   color?: string;
