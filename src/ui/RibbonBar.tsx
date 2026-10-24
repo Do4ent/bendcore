@@ -149,17 +149,34 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   );
 
   const handleTubeSave = useCallback(
-    (config: TubeConfig) => {
+    async (config: TubeConfig) => {
       console.log("Saving tube config:", config);
-      // Send to backend via IPC
-      if (window.electron?.ipc) {
-        const command = selectedTubeConfig ? "edit-tube" : "new-tube";
-        window.electron.ipc.invoke("bendcore:command", {
-          command: command,
-          args: config,
-        });
+      try {
+        // Send to backend via IPC and WAIT for result
+        if (window.electron?.ipc) {
+          const command = selectedTubeConfig ? "edit-tube" : "new-tube";
+          const result = await window.electron.ipc.invoke("bendcore:command", {
+            command: command,
+            args: config,
+          });
+
+          // Check result before closing dialog
+          if (!result || (result.success === false)) {
+            console.error("Save failed:", result?.error || "Unknown error");
+            // Could show error toast here
+            return;
+          }
+
+          console.log("Tube saved successfully");
+        }
+
+        // Only close dialog AFTER successful save
+        setTubeDialogOpen(false);
+        setSelectedTubeConfig(undefined);
+      } catch (error) {
+        console.error("Failed to save tube config:", error);
+        // Could show error dialog here
       }
-      setTubeDialogOpen(false);
     },
     [selectedTubeConfig]
   );
