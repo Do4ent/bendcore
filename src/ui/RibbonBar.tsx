@@ -101,11 +101,6 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   const [showTechSpecs, setShowTechSpecs] = useState(false);
   const [showFeatureTree, setShowFeatureTree] = useState(true);
 
-  // Initialize keyboard shortcuts on mount
-  useEffect(() => {
-    initializeShortcutListeners(handleCommand);
-  }, [handleCommand]);
-
   const handleCommand = useCallback(
     (commandId: string) => {
       if (commandId === "check-all") {
@@ -143,6 +138,11 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
     },
     [onCommand]
   );
+
+  // Initialize keyboard shortcuts on mount
+  useEffect(() => {
+    initializeShortcutListeners(handleCommand);
+  }, [handleCommand]);
 
   const handleTubeSave = useCallback(
     async (config: TubeConfig) => {
