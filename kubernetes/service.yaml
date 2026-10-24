@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bendcore-backend
+  namespace: bendcore-production
+  labels:
+    app: bendcore
+    tier: backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3001
+    targetPort: http
+    name: http
+    protocol: TCP
+  - port: 9090
+    targetPort: metrics
+    name: metrics
+    protocol: TCP
+  selector:
+    app: bendcore
+    tier: backend
+  sessionAffinity: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bendcore-frontend
+  namespace: bendcore-production
+  labels:
+    app: bendcore
+    tier: frontend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    name: http
+    protocol: TCP
+  - port: 443
+    targetPort: https
+    name: https
+    protocol: TCP
+  selector:
+    app: bendcore
+    tier: frontend
+  sessionAffinity: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bendcore-frontend-lb
+  namespace: bendcore-production
+  labels:
+    app: bendcore
+    tier: frontend
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: http
+    name: http
+    protocol: TCP
+  - port: 443
+    targetPort: https
+    name: https
+    protocol: TCP
+  selector:
+    app: bendcore
+    tier: frontend
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: bendcore-production
+  labels:
+    app: prometheus
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: prometheus
+  selector:
+    app: prometheus
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: bendcore-production
+  labels:
+    app: grafana
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: grafana
+  selector:
+    app: grafana

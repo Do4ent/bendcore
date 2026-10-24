@@ -1,0 +1,336 @@
+name: Production Deployment Pipeline
+
+on:
+  push:
+    branches: [main, production]
+    tags: ['v*']
+  pull_request:
+    branches: [main, production]
+  workflow_dispatch:
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: bendcore
+
+jobs:
+  # ============================================
+  # STAGE 1: TESTING
+  # ============================================
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Lint code
+      run: npm run lint -- --max-warnings 0
+
+    - name: Run unit tests
+      run: npm run test -- --coverage --passWithNoTests
+
+    - name: Run integration tests
+      run: npm run test:integration -- --passWithNoTests
+      continue-on-error: true
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage/coverage-final.json
+        fail_ci_if_error: false
+
+  # ============================================
+  # STAGE 2: E2E TESTING
+  # ============================================
+  e2e-test:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Start services
+      run: |
+        docker-compose up -d
+        sleep 10
+
+    - name: Run E2E tests
+      run: npm run test:e2e
+      env:
+        BASE_URL: http://localhost:3000
+
+    - name: Upload E2E results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: e2e-results
+        path: test-results/
+
+    - name: Cleanup
+      if: always()
+      run: docker-compose down
+
+  # ============================================
+  # STAGE 3: SECURITY SCAN
+  # ============================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: OWASP Dependency check
+      uses: dependency-check/Dependency-Check_Action@main
+      with:
+        path: '.'
+        format: 'JSON'
+        args: >
+          --enable-retired
+      continue-on-error: true
+
+  # ============================================
+  # STAGE 4: BUILD
+  # ============================================
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [test, e2e-test, security]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push backend image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./docker/Dockerfile.backend
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./docker/Dockerfile.frontend
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}-frontend
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # ============================================
+  # STAGE 5: DEPLOY TO KUBERNETES
+  # ============================================
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://bendcore.app
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure kubectl
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+        chmod 600 $HOME/.kube/config
+
+    - name: Verify cluster connectivity
+      run: kubectl cluster-info
+
+    - name: Apply namespace
+      run: kubectl apply -f kubernetes/namespace.yaml
+
+    - name: Create secrets
+      run: |
+        kubectl create secret generic bendcore-secrets \
+          --from-literal=database-url="${{ secrets.DATABASE_URL }}" \
+          --from-literal=redis-url="${{ secrets.REDIS_URL }}" \
+          --from-literal=jwt-secret="${{ secrets.JWT_SECRET }}" \
+          --namespace=bendcore-production \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Deploy services
+      run: |
+        kubectl apply -f kubernetes/deployment-backend.yaml
+        kubectl apply -f kubernetes/deployment-frontend.yaml
+        kubectl apply -f kubernetes/service.yaml
+        kubectl apply -f kubernetes/ingress.yaml
+        kubectl apply -f kubernetes/hpa.yaml
+
+    - name: Wait for rollout
+      run: |
+        kubectl rollout status deployment/bendcore-backend \
+          -n bendcore-production \
+          --timeout=5m
+        kubectl rollout status deployment/bendcore-frontend \
+          -n bendcore-production \
+          --timeout=5m
+
+    - name: Run smoke tests
+      run: |
+        kubectl run smoke-test \
+          --image=curlimages/curl:latest \
+          --rm -it \
+          --restart=Never \
+          -- curl http://bendcore-backend.bendcore-production/api/health
+      continue-on-error: true
+
+    - name: Notify Slack
+      if: always()
+      uses: slackapi/slack-github-action@v1
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+        payload: |
+          {
+            "text": "Deployment ${{ job.status }}",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "BendCore Production Deployment *${{ job.status }}*\n*Branch:* ${{ github.ref }}\n*Commit:* ${{ github.sha }}"
+                }
+              }
+            ]
+          }
+
+  # ============================================
+  # STAGE 6: POST-DEPLOYMENT TESTS
+  # ============================================
+  post-deploy-tests:
+    name: Post-Deployment Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: deploy
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+
+    - name: Install test dependencies
+      run: npm ci --only=dev
+
+    - name: Run smoke tests
+      run: npm run test:smoke
+      env:
+        API_URL: https://api.bendcore.app
+      continue-on-error: true
+
+    - name: Run performance tests
+      run: npm run test:performance
+      env:
+        API_URL: https://api.bendcore.app
+      continue-on-error: true
+
+    - name: Check uptime
+      run: |
+        curl -f https://bendcore.app/health || exit 1
+
+  # ============================================
+  # STAGE 7: METRICS & MONITORING
+  # ============================================
+  metrics:
+    name: Collect Metrics
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: post-deploy-tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: Configure kubectl
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+
+    - name: Collect pod metrics
+      run: |
+        kubectl top nodes -n bendcore-production || true
+        kubectl top pods -n bendcore-production || true
+
+    - name: Check HPA status
+      run: |
+        kubectl get hpa -n bendcore-production
+        kubectl get events -n bendcore-production --sort-by='.lastTimestamp' | head -20

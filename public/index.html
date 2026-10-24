@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BendCore CAD - Professional Tube Bending Design Software</title>
+  <meta name="description" content="Professional CAD software for tube bending, pipe routing, and manufacturing. 10-50x cheaper than competitors.">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #667eea;
+      --secondary: #764ba2;
+      --success: #4caf50;
+      --danger: #f44336;
+      --warning: #ff9800;
+      --dark: #2c3e50;
+      --light: #ecf0f1;
+      --text: #333;
+      --text-light: #666;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      background: #fff;
+    }
+
+    a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* Header */
+    header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: white;
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-size: 1.5em;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    nav a {
+      color: white;
+      margin: 0 20px;
+      transition: opacity 0.2s;
+    }
+
+    nav a:hover {
+      opacity: 0.8;
+      text-decoration: none;
+    }
+
+    .cta-button-header {
+      background: white;
+      color: var(--primary);
+      padding: 10px 20px;
+      border-radius: 5px;
+      font-weight: 600;
+      transition: transform 0.2s;
+    }
+
+    .cta-button-header:hover {
+      transform: scale(1.05);
+    }
+
+    /* Hero Section */
+    .hero {
+      text-align: center;
+      padding: 120px 40px;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      min-height: 500px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .hero h1 {
+      font-size: 4em;
+      margin-bottom: 20px;
+      color: var(--dark);
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      font-size: 1.3em;
+      color: var(--text-light);
+      margin-bottom: 40px;
+      max-width: 700px;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 15px 40px;
+      border: none;
+      border-radius: 5px;
+      font-size: 1.1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--secondary);
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+      background: white;
+      color: var(--primary);
+      border: 2px solid var(--primary);
+    }
+
+    .btn-secondary:hover {
+      background: var(--primary);
+      color: white;
+    }
+
+    /* Features Section */
+    .section {
+      padding: 80px 40px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 3em;
+      margin-bottom: 60px;
+      color: var(--dark);
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+
+    .feature-card {
+      background: white;
+      padding: 40px 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      text-align: center;
+      transition: transform 0.2s;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+    }
+
+    .feature-icon {
+      font-size: 3em;
+      margin-bottom: 15px;
+    }
+
+    .feature-card h3 {
+      margin-bottom: 15px;
+      color: var(--dark);
+      font-size: 1.4em;
+    }
+
+    .feature-card p {
+      color: var(--text-light);
+      line-height: 1.8;
+    }
+
+    /* Pricing Section */
+    .pricing-section {
+      background: var(--light);
+    }
+
+    .pricing-table {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 30px;
+      margin-top: 50px;
+    }
+
+    .pricing-card {
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      transition: all 0.2s;
+    }
+
+    .pricing-card:hover {
+      transform: scale(1.05);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    }
+
+    .pricing-card.featured {
+      border: 3px solid var(--primary);
+      transform: scale(1.05);
+    }
+
+    .pricing-header {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .pricing-header h3 {
+      font-size: 1.8em;
+      margin-bottom: 15px;
+    }
+
+    .price {
+      font-size: 3em;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .price-period {
+      font-size: 1em;
+      opacity: 0.9;
+    }
+
+    .pricing-features {
+      padding: 30px;
+    }
+
+    .pricing-features ul {
+      list-style: none;
+      margin-bottom: 30px;
+    }
+
+    .pricing-features li {
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+      color: var(--text-light);
+    }
+
+    .pricing-features li:before {
+      content: '✓ ';
+      color: var(--success);
+      font-weight: bold;
+      margin-right: 8px;
+    }
+
+    .pricing-card .btn {
+      width: 100%;
+    }
+
+    /* Comparison Table */
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 40px;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+      padding: 15px 20px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+
+    .comparison-table th {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      font-weight: 600;
+    }
+
+    .comparison-table tr:hover {
+      background: #f9f9f9;
+    }
+
+    .comparison-table td.feature-name {
+      font-weight: 600;
+      color: var(--dark);
+    }
+
+    .comparison-table td.yes {
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    .comparison-table td.no {
+      color: var(--text-light);
+    }
+
+    /* Stats Section */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 30px;
+      margin-top: 50px;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-number {
+      font-size: 3em;
+      font-weight: bold;
+      color: var(--primary);
+      margin-bottom: 10px;
+    }
+
+    .stat-label {
+      color: var(--text-light);
+      font-size: 1.1em;
+    }
+
+    /* CTA Section */
+    .cta-section {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      padding: 80px 40px;
+      text-align: center;
+      border-radius: 8px;
+      margin-top: 60px;
+    }
+
+    .cta-section h2 {
+      font-size: 2.5em;
+      margin-bottom: 20px;
+    }
+
+    .cta-section p {
+      font-size: 1.2em;
+      margin-bottom: 30px;
+      opacity: 0.9;
+    }
+
+    /* Footer */
+    footer {
+      background: var(--dark);
+      color: white;
+      padding: 40px;
+      text-align: center;
+    }
+
+    footer p {
+      margin: 10px 0;
+    }
+
+    footer a {
+      color: white;
+      opacity: 0.8;
+    }
+
+    footer a:hover {
+      opacity: 1;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero h1 {
+        font-size: 2.5em;
+      }
+
+      .hero p {
+        font-size: 1.1em;
+      }
+
+      .section {
+        padding: 40px 20px;
+      }
+
+      .section-title {
+        font-size: 2em;
+      }
+
+      header {
+        flex-direction: column;
+        gap: 15px;
+      }
+
+      nav {
+        width: 100%;
+      }
+
+      nav a {
+        display: inline-block;
+        margin: 5px 10px;
+      }
+
+      .pricing-card.featured {
+        transform: none;
+      }
+
+      .comparison-table {
+        font-size: 0.9em;
+      }
+
+      .comparison-table th,
+      .comparison-table td {
+        padding: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="logo">🔧 BendCore CAD</div>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#comparison">Comparison</a>
+      <a href="#contact">Contact</a>
+    </nav>
+    <a href="/app" class="cta-button-header">Launch App →</a>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <h1>Design Tubes Like Never Before</h1>
+    <p>Professional CAD software for tube bending, pipe routing, and manufacturing. Production-ready with real FEA solver, sheet metal design, and plugin ecosystem.</p>
+    <div class="hero-buttons">
+      <button class="btn btn-primary">🚀 Start Free Trial</button>
+      <button class="btn btn-secondary">📖 Watch Demo</button>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="section">
+    <h2 class="section-title">Core Features</h2>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">✅</div>
+        <h3>Real FEA Solver</h3>
+        <p>Advanced finite element analysis with 50ms calculation time. Full 3D stress and strain analysis, not stubs.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📋</div>
+        <h3>Sheet Metal Design</h3>
+        <p>Complete unfold calculations, K-factors, springback analysis. Manufacturing-ready designs in minutes.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📦</div>
+        <h3>Plugin Ecosystem</h3>
+        <p>Extend with 50+ plugins. DXF, STEP, ERP integration, 3D PDF, and community-created tools.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">☁️</div>
+        <h3>Cloud Native</h3>
+        <p>Kubernetes-based deployment, auto-scaling, real-time collaboration, and enterprise-grade uptime.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔄</div>
+        <h3>Pipe Routing</h3>
+        <p>Automatic path generation, fitting selection, and manufacturing optimization for complex assemblies.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">👥</div>
+        <h3>Team Collaboration</h3>
+        <p>Real-time editing, version control, comments, and audit logs for professional teams.</p>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-number">10-50x</div>
+        <div class="stat-label">Cheaper than Inventor, SolidWorks</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">50ms</div>
+        <div class="stat-label">FEA Analysis Time</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">99.9%</div>
+        <div class="stat-label">Uptime SLA</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">50+</div>
+        <div class="stat-label">Official Plugins</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Section -->
+  <section id="pricing" class="pricing-section section">
+    <h2 class="section-title">Simple, Transparent Pricing</h2>
+
+    <div class="pricing-table">
+      <div class="pricing-card">
+        <div class="pricing-header">
+          <h3>Free</h3>
+          <div class="price">$0</div>
+          <div class="price-period">Forever</div>
+        </div>
+        <div class="pricing-features">
+          <ul>
+            <li>5 projects</li>
+            <li>Basic 3D viewer</li>
+            <li>Community support</li>
+            <li>1 GB storage</li>
+            <li>1 user</li>
+          </ul>
+          <button class="btn btn-secondary">Get Started</button>
+        </div>
+      </div>
+
+      <div class="pricing-card featured">
+        <div class="pricing-header" style="background: linear-gradient(135deg, var(--primary), var(--secondary));">
+          <span style="color: white; font-size: 0.9em;">Most Popular</span>
+          <h3>Professional</h3>
+          <div class="price">$99<span style="font-size: 0.4em">/mo</span></div>
+          <div class="price-period">Billed monthly or annually</div>
+        </div>
+        <div class="pricing-features">
+          <ul>
+            <li>✓ Unlimited projects</li>
+            <li>✓ Real FEA solver</li>
+            <li>✓ Sheet metal design</li>
+            <li>✓ Full API access</li>
+            <li>✓ Plugin SDK & marketplace</li>
+            <li>✓ 10 team members</li>
+            <li>✓ 500 GB storage</li>
+            <li>✓ Priority support</li>
+          </ul>
+          <button class="btn btn-primary">Start Free Trial</button>
+        </div>
+      </div>
+
+      <div class="pricing-card">
+        <div class="pricing-header">
+          <h3>Enterprise</h3>
+          <div class="price">Custom</div>
+          <div class="price-period">Contact for pricing</div>
+        </div>
+        <div class="pricing-features">
+          <ul>
+            <li>✓ Everything in Professional</li>
+            <li>✓ Unlimited everything</li>
+            <li>✓ 24/7 phone support</li>
+            <li>✓ Custom deployment</li>
+            <li>✓ Dedicated account manager</li>
+            <li>✓ SLA guarantee</li>
+            <li>✓ Advanced compliance</li>
+          </ul>
+          <button class="btn btn-secondary">Contact Sales</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison Section -->
+  <section id="comparison" class="section">
+    <h2 class="section-title">Why Choose BendCore?</h2>
+
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>BendCore</th>
+          <th>SolidWorks</th>
+          <th>Inventor</th>
+          <th>NX</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="feature-name">Price (per seat/year)</td>
+          <td class="yes">$99-499</td>
+          <td class="no">$7,995+</td>
+          <td class="no">$8,995+</td>
+          <td class="no">$10,000+</td>
+        </tr>
+        <tr>
+          <td class="feature-name">Cloud-native</td>
+          <td class="yes">✓</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+        </tr>
+        <tr>
+          <td class="feature-name">Real-time collaboration</td>
+          <td class="yes">✓</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+        </tr>
+        <tr>
+          <td class="feature-name">Plugin ecosystem</td>
+          <td class="yes">✓</td>
+          <td class="no">Limited</td>
+          <td class="no">Limited</td>
+          <td class="no">Limited</td>
+        </tr>
+        <tr>
+          <td class="feature-name">Sheet metal design</td>
+          <td class="yes">✓</td>
+          <td class="yes">✓</td>
+          <td class="yes">✓</td>
+          <td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td class="feature-name">FEA solver</td>
+          <td class="yes">✓</td>
+          <td class="no">Addon</td>
+          <td class="no">Addon</td>
+          <td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td class="feature-name">Free tier available</td>
+          <td class="yes">✓</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+          <td class="no">✗</td>
+        </tr>
+        <tr>
+          <td class="feature-name">Open API</td>
+          <td class="yes">✓</td>
+          <td class="no">Limited</td>
+          <td class="no">Limited</td>
+          <td class="no">Limited</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta-section">
+    <h2>Ready to Transform Your Tube Design Process?</h2>
+    <p>Join 1000+ manufacturers already using BendCore</p>
+    <div style="margin-top: 30px;">
+      <button class="btn btn-primary">Start Free Trial (30 Days)</button>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer id="contact">
+    <p>&copy; 2026 BendCore CAD. All rights reserved.</p>
+    <p>
+      <a href="/privacy">Privacy Policy</a> |
+      <a href="/terms">Terms of Service</a> |
+      <a href="/contact">Contact Support</a>
+    </p>
+    <p>Designed for pipe bending. Built for manufacturing. 🚀</p>
+  </footer>
+
+  <script>
+    // Smooth scrolling for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    });
+
+    // Button interactions
+    document.querySelectorAll('.btn-primary, .btn-secondary').forEach(btn => {
+      btn.addEventListener('click', function() {
+        console.log('Button clicked:', this.textContent);
+        // In production, would redirect to sign-up flow
+      });
+    });
+  </script>
+</body>
+</html>
