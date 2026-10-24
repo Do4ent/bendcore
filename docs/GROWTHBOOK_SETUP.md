@@ -1,352 +1,515 @@
-# GrowthBook Setup Guide
+# GrowthBook A/B Testing and Feature Flags Setup
+
+This document covers the GrowthBook integration for BendCore CAD, including A/B testing, feature flags, and analytics event tracking.
 
 ## Overview
 
-GrowthBook is used for feature flag management and A/B testing in BendCore. This guide covers setup, configuration, and integration.
+GrowthBook is integrated into BendCore CAD to enable:
+- **Feature Flags**: Control feature availability across user segments
+- **A/B Testing**: Run concurrent experiments to measure feature impact
+- **Analytics**: Track user interactions and measure conversion rates
+- **Metrics**: Monitor adoption, conversion rates, and time-to-value
 
-## Prerequisites
+## Installation
 
-- GrowthBook account (https://app.growthbook.io)
-- API key and SDK key
-- Node.js 16+ (for BendCore backend)
+### 1. Install GrowthBook SDK
 
-## Step 1: Create GrowthBook Account
+```bash
+npm install @growthbook/sdk-js
+```
 
-1. Visit https://app.growthbook.io/signup
-2. Sign up with email and password
-3. Create organization (e.g., "BendCore Development")
-4. Verify email address
+### 2. Set Environment Variables
 
-## Step 2: Create API Keys
-
-### Generate API Key (Server-side)
-
-1. Go to Settings → API Keys
-2. Click "Create API Key"
-3. Select permissions:
-   - Read features
-   - Read experiments
-   - Write events
-4. Copy API Key (starts with `gbpk_`)
-5. Store securely in environment variables
-
-### Generate SDK Key (Client-side)
-
-1. Go to Settings → SDK Keys
-2. Click "Create SDK Key"
-3. Select SDK key type: "JavaScript" or "General"
-4. Copy SDK Key (starts with `gb_`)
-5. Store in environment configuration
-
-## Step 3: Environment Configuration
-
-### Backend Setup (.env)
+Add the following to your `.env` file:
 
 ```env
 # GrowthBook Configuration
-GB_API_KEY=gbpk_xxxxxxxxxxxxxxxx
-GB_SDK_KEY=gb_xxxxxxxxxxxxxxxx
-GB_ENVIRONMENT=production
-GB_ENABLE_ANALYTICS=true
-GB_BATCH_DELAY_MS=5000
-
-# Optional: GrowthBook API endpoint (if self-hosted)
-# GB_API_URL=https://growthbook.yourcompany.com/api/v1
+REACT_APP_GROWTHBOOK_API_KEY=<your-api-key>
+REACT_APP_VERSION=2.0.0
 ```
 
-### C++ Integration
+Or for other build systems:
 
-```cpp
-#include "bendcore/growthbook_client.hpp"
-
-using namespace bendcore;
-
-// Initialize in application startup
-GrowthBookClient& gb = GrowthBookClient::getInstance();
-GrowthBookClient::Config config;
-config.api_key = std::getenv("GB_API_KEY");
-config.sdk_key = std::getenv("GB_SDK_KEY");
-config.environment = "production";
-gb.initialize(config);
+```env
+GROWTHBOOK_API_KEY=<your-api-key>
+VUE_APP_GROWTHBOOK_API_KEY=<your-api-key>
 ```
 
-### React Integration
+## Architecture
 
-```tsx
-import { useAnalytics } from './hooks/useAnalytics';
+### Core Modules
+
+#### 1. **GrowthBook Manager** (`src/growthbook.ts`)
+Manages GrowthBook SDK initialization and feature flag evaluation.
+
+```typescript
+import { initializeGrowthBook, getGrowthBookManager } from "./src/growthbook";
+
+// Initialize when app starts
+await initializeGrowthBook("user_123", "web");
+
+// Get the manager
+const manager = getGrowthBookManager();
+const isEnabled = manager.isFeatureEnabled("parametric_dimensions");
+```
+
+#### 2. **Experiment Manager** (`src/experiment.ts`)
+Handles A/B test variant assignment and event tracking.
+
+```typescript
+import { getExperimentManager } from "./src/experiment";
+
+const manager = getExperimentManager();
+
+// Register an experiment
+manager.registerExperiment({
+  experiment_id: "parametric_test",
+  name: "Parametric Dimensions A/B Test",
+  description: "Testing impact of parametric dimensions feature",
+  variants: [
+    { id: "control", name: "Control (Disabled)" },
+    { id: "treatment", name: "Treatment (Enabled)" }
+  ],
+  weight_distribution: [50, 50],
+  active: true,
+  created_at: Date.now()
+});
+
+// Assign user to variant
+const variant = manager.assignVariant("parametric_test", "user_123");
+
+// Track events
+manager.trackEvent({
+  experiment_id: "parametric_test",
+  event_type: "conversion",
+  event_name: "Template Saved",
+  properties: { user_id: "user_123" },
+  timestamp: Date.now(),
+  variant_id: variant
+});
+```
+
+#### 3. **Analytics Manager** (`src/analytics.ts`)
+Tracks analytics events and batches them for API transmission.
+
+```typescript
+import { getAnalyticsManager, STANDARD_EVENTS, trackEvent } from "./src/analytics";
+
+// Initialize
+const analytics = getAnalyticsManager();
+analytics.initialize("user_123", "session_abc");
+
+// Track events using standard event types
+trackEvent(STANDARD_EVENTS.TUBE_CREATED, {
+  tube_name: "Main Tube Assembly",
+  diameter: 10,
+  material: "Steel"
+});
+
+// Custom events
+trackEvent("custom_event", {
+  custom_property: "value"
+});
+
+// Feature flag exposure tracking
+trackEvent(STANDARD_EVENTS.FEATURE_FLAG_EXPOSED, {
+  feature_name: "parametric_dimensions",
+  enabled: true
+});
+```
+
+### React Hooks
+
+#### `useFeatureFlag(name)`
+Check if a feature flag is enabled.
+
+```typescript
+import { useFeatureFlag } from "./ui/src/hooks/useFeatureFlag";
 
 export function MyComponent() {
-  const { trackEvent } = useAnalytics();
+  const { enabled, isLoading } = useFeatureFlag("parametric_dimensions");
 
-  const handleClick = async () => {
-    await trackEvent('button_clicked', { 
-      button_name: 'Submit' 
-    });
+  if (isLoading) return <div>Loading...</div>;
+
+  return enabled ? <ParametricUI /> : <StandardUI />;
+}
+```
+
+#### `useExperiment(experimentId)`
+Get the assigned experiment variant.
+
+```typescript
+import { useExperiment } from "./ui/src/hooks/useFeatureFlag";
+
+export function MyComponent() {
+  const { variant, isLoading } = useExperiment("parametric_test");
+
+  if (isLoading) return <div>Loading...</div>;
+
+  return variant === "treatment" ? <NewUI /> : <OldUI />;
+}
+```
+
+#### `useExperimentConversion(experimentId, variantId)`
+Track conversions for A/B tests.
+
+```typescript
+import { useExperimentConversion } from "./ui/src/hooks/useFeatureFlag";
+
+export function MyComponent() {
+  const { trackConversion } = useExperimentConversion("parametric_test", "treatment");
+
+  const handleSave = () => {
+    // Save logic...
+    trackConversion("template_saved");
   };
 
-  return <button onClick={handleClick}>Click Me</button>;
+  return <button onClick={handleSave}>Save Template</button>;
 }
 ```
 
-## Step 4: Setup Feature Flags
+### Components
 
-### Create Feature Flags in GrowthBook
+#### `<FeatureFlag>` Component
+Conditionally render content based on feature flag status.
 
-1. Go to Features → Create Feature
-2. Set feature key (e.g., `enhanced_template_matcher`)
-3. Configure rule targeting (optional):
-   - By user ID
-   - By user attributes
-   - Percentage-based rollout
-4. Enable/disable feature
-5. Save and publish
+```typescript
+import { FeatureFlag } from "./ui/src/components/FeatureFlag";
 
-### Example: Template Matcher Feature Flag
-
-```
-Feature Key: enhanced_template_matcher
-Feature Name: Enhanced Template Matcher
-Default: OFF (0% rollout)
-Rules:
-  - 100% on for beta users
-  - 50% on for all other users
+<FeatureFlag 
+  name="parametric_dimensions"
+  fallback={<div>Feature not available</div>}
+>
+  <ParametricDimensionsUI />
+</FeatureFlag>
 ```
 
-### Use Feature Flags in Code
+#### `<FeatureFlagSection>` Component
+Render a section with title and conditional visibility.
 
-```cpp
-// C++
-if (gb.is_feature_enabled("enhanced_template_matcher")) {
-  // Use new template matcher UI
-  showEnhancedTemplateMatcher();
-} else {
-  // Use legacy template matcher
-  showLegacyTemplateMatcher();
-}
+```typescript
+<FeatureFlagSection 
+  name="smart_templates"
+  title="Smart Templates"
+>
+  <SmartTemplatesPanel />
+</FeatureFlagSection>
 ```
 
-```tsx
-// React
-const useFeatureFlag = (featureName: string) => {
-  const [enabled, setEnabled] = useState(false);
-  
-  useEffect(() => {
-    fetch(`/api/feature-flags/${featureName}`)
-      .then(r => r.json())
-      .then(data => setEnabled(data.enabled));
-  }, [featureName]);
-  
-  return enabled;
-};
+#### `<ConditionalRender>` Component
+Render different content based on feature flag status.
 
-export function MyComponent() {
-  const enhancedMatcher = useFeatureFlag('enhanced_template_matcher');
-  
-  return enhancedMatcher ? <EnhancedMatcher /> : <LegacyMatcher />;
-}
+```typescript
+<ConditionalRender
+  flag="parametric_dimensions"
+  enabled={<NewParametricUI />}
+  disabled={<OldParametricUI />}
+/>
 ```
 
-## Step 5: Setup A/B Experiments
+## Pre-seeded Test Experiments
 
-### Create Experiment in GrowthBook
+Three experiments are pre-configured in GrowthBook:
 
-1. Go to Experiments → Create Experiment
-2. Set experiment key (e.g., `template_match_ui_v1`)
-3. Select feature to test
-4. Configure experiment:
-   - **Hypothesis:** "Enhanced UI increases template selection rate"
-   - **Control Variation:** Current UI (feature OFF)
-   - **Treatment Variation:** New UI (feature ON)
-   - **Sample Size:** 5000 users
-   - **Tracking Key:** User ID hash
-5. Set experiment status to "Running"
+### 1. Parametric Dimensions
+- **Experiment ID**: `parametric_dimensions_test`
+- **Description**: A/B test for parametric dimensions feature
+- **Variants**:
+  - Control (A): Feature disabled
+  - Treatment (B): Feature enabled
+- **Weight Distribution**: 50/50
+- **KPIs**:
+  - Adoption rate (% of users with feature active)
+  - Conversion rate (users who save templates with feature)
+  - Time to first use (avg minutes before first parametric formula)
 
-### Example Experiments
+### 2. Smart Templates
+- **Experiment ID**: `smart_templates_test`
+- **Description**: A/B test for new template recommendation UI
+- **Variants**:
+  - Control (A): Old UI (list-based)
+  - Treatment (B): New UI (grid-based with recommendations)
+- **Weight Distribution**: 50/50
+- **KPIs**:
+  - Template adoption rate
+  - Conversion rate (templates selected)
+  - User satisfaction (rating)
 
-#### 1. Template Match UI Test
-```
-Experiment Key: template_match_ui_v1
-Feature: enhanced_template_matcher
-Control: Dropdown (top 3 results)
-Treatment: Full panel with advanced filters
-Target: 50/50 split
-Duration: 2 weeks
-```
+### 3. Search Filters
+- **Experiment ID**: `search_filters_test`
+- **Description**: A/B test for advanced search and filtering
+- **Variants**:
+  - Control (A): Simple search (text only)
+  - Treatment (B): Advanced filters (by type, material, dimensions)
+- **Weight Distribution**: 50/50
+- **KPIs**:
+  - Search execution rate
+  - Filter adoption rate
+  - Time to find template
 
-#### 2. Search Filter Layout Test
-```
-Experiment Key: search_filter_layout_v1
-Feature: horizontal_search_filters
-Control: Vertical sidebar
-Treatment: Horizontal toolbar
-Target: 50/50 split
-Duration: 2 weeks
-```
+## Standard Analytics Events
 
-#### 3. Formula Editor UX Test
-```
-Experiment Key: formula_editor_ux_v1
-Feature: formula_autocomplete
-Control: Text input only
-Treatment: Text + autocomplete + syntax highlighting
-Target: 50/50 split
-Duration: 2 weeks
-```
+BendCore CAD tracks 50+ standard events across multiple categories:
 
-## Step 6: Configure Analytics
+### Tube Operations
+- `tube_created` - When a new tube is created
+- `tube_deleted` - When a tube is deleted
+- `tube_duplicated` - When a tube is duplicated
+- `tube_saved` - When a tube is saved
 
-### Event Categories
+### Dimension Operations
+- `dimension_added` - When a dimension is added
+- `dimension_removed` - When a dimension is removed
+- `dimension_modified` - When a dimension is modified
 
-Events are automatically tracked in these categories:
+### Formula/Parametric
+- `formula_evaluated` - When a parametric formula is evaluated
+- `parametric_formula_changed` - When parametric formula is edited
+- `parametric_feature_enabled` - When parametric feature is enabled
+- `parametric_feature_disabled` - When parametric feature is disabled
 
-- **IMPORT**: Import workflow events
-- **TEMPLATE**: Template operations
-- **SEARCH**: Search and filtering
-- **FORMULA**: Formula/dimension creation
-- **TUBE_DESIGN**: Design operations
-- **EXPORT**: Export/output operations
-- **SYSTEM**: Session and system events
+### Templates
+- `template_selected` - When a template is selected
+- `template_auto_selected` - When a template is auto-selected
+- `custom_template_saved` - When a custom template is saved
+- `template_editor_opened` - When template editor is opened
+- `smart_template_feature_enabled` - When smart templates are enabled
 
-### Event Tracking
+### Search & Filters
+- `search_executed` - When a search is performed
+- `filter_applied` - When filters are applied
+- `search_filter_feature_enabled` - When search filter feature is enabled
 
-Events are tracked automatically when users interact with the application:
+### Import/Export
+- `file_imported` - When a file is imported
+- `file_exported` - When a file is exported
+- `import_completed` - When import completes
 
-```cpp
-// Example: Track import success
-AnalyticsEventQueue queue;
-queue.track_event(events::import_step_success(
-  user_id,
-  session_id,
-  {{"file_size", "2048"}, {"duration_ms", "3500"}}
-));
+### Version Control
+- `version_rollback` - When a version is rolled back
+- `version_created` - When a new version is created
 
-// Events are batched and sent to GrowthBook:
-// - Batch size: 50 events
-// - Batch timeout: 5 seconds
-// - Auto-flush: enabled
-```
+### Collaboration
+- `collaboration_enabled` - When collaboration is enabled
+- `comment_added` - When a comment is added
+- `comment_resolved` - When a comment is resolved
 
-### View Analytics in GrowthBook
+### And more...
+See `src/analytics.ts` for the complete list of standard events.
 
-1. Go to Analytics Dashboard
-2. Filter by date range
-3. View metrics:
-   - Event counts by category
-   - User engagement
-   - Conversion rates
-   - Funnel analysis
+## Event Tracking Examples
 
-## Step 7: Monitor Experiments
+### Track Tube Creation
+```typescript
+import { trackEvent, STANDARD_EVENTS } from "./src/analytics";
 
-### View Experiment Results
-
-1. Go to Experiments
-2. Click experiment name
-3. View dashboard:
-   - Control vs Treatment metrics
-   - Statistical significance
-   - Sample size
-   - Conversion rates
-   - Confidence level
-
-### Interpret Results
-
-**Statistically Significant (p < 0.05):**
-- If Treatment > Control: Winner! 🎉
-- If Control > Treatment: Control wins
-- Implement winning variant
-
-**Not Significant (p ≥ 0.05):**
-- Continue running experiment
-- Collect more data
-- May indicate no real difference
-
-### Example Results
-
-```
-Template Match UI Experiment
-├─ Control (Dropdown)
-│  └─ Conversion: 10.5%
-│  └─ Sample: 2617
-├─ Treatment (Full Panel)
-│  └─ Conversion: 12.3%
-│  └─ Sample: 2617
-└─ Significance: 92% ✓ (Treatment wins)
+trackEvent(STANDARD_EVENTS.TUBE_CREATED, {
+  tube_name: "Main Assembly",
+  material: "Steel",
+  diameter: 10,
+  length: 200
+});
 ```
 
-## Step 8: Rollout Winning Features
+### Track Feature Flag Exposure
+```typescript
+import { trackFeatureFlagExposure, STANDARD_EVENTS } from "./src/analytics";
 
-### Gradual Rollout
-
-1. Start with small percentage (e.g., 10%)
-2. Monitor for issues
-3. Increase gradually: 10% → 25% → 50% → 100%
-4. At each step, monitor error rates and performance
-
-### Full Rollout
-
+trackFeatureFlagExposure("parametric_dimensions", true);
 ```
-Day 1: 10% rollout - Monitor error rates
-Day 3: 25% rollout - Monitor user feedback
-Day 5: 50% rollout - Check performance metrics
-Day 7: 100% rollout - Full release
+
+### Track Experiment Conversion
+```typescript
+const analytics = getAnalyticsManager();
+analytics.trackExperimentConversion(
+  "parametric_test",
+  "treatment",
+  "template_saved"
+);
 ```
+
+## GrowthBook API Setup
+
+### Create GrowthBook Account
+
+1. Go to [GrowthBook](https://www.growthbook.io/)
+2. Sign up for a free account
+3. Create an organization
+4. Generate an API key
+
+### Get Your API Key
+
+1. Navigate to **Settings** → **API Keys**
+2. Create a new API key with read access
+3. Copy the key and add to `.env`:
+   ```env
+   REACT_APP_GROWTHBOOK_API_KEY=sk_live_xxxxxxxxxx
+   ```
+
+### Configure Features in GrowthBook
+
+#### Create Feature Flags
+
+1. Go to **Features** section
+2. Click **Create Feature**
+3. Name: `parametric_dimensions`
+   - Description: "Enable parametric dimensions feature"
+   - Default value: `false`
+   - Rules:
+     - Rule 1: If `platform == "web"`, value = `true`
+     - Rule 2: If user in experiment `parametric_test`, follow experiment
+
+4. Repeat for:
+   - `smart_templates`
+   - `search_filters`
+   - `advanced_reporting`
+
+#### Create Experiments
+
+Use the experiment setup wizard for each of the three pre-seeded experiments listed above.
+
+## Metrics and KPIs
+
+### Standard KPIs
+
+#### 1. Adoption Rate
+- **Definition**: % of users with feature enabled
+- **Calculation**: (Users with feature on) / (Total users) × 100
+- **Target**: >40% for new features
+
+#### 2. Conversion Rate
+- **Definition**: % of users who convert (save/create with feature)
+- **Calculation**: (Converting users) / (Exposed users) × 100
+- **Target**: >15% improvement over control
+
+#### 3. Time to Value
+- **Definition**: Average time before first feature use (minutes)
+- **Calculation**: Avg(time from exposure to first event)
+- **Target**: <5 minutes for intuitive features
+
+### Custom Dashboards
+
+Create dashboards in GrowthBook for:
+- **Q3 Features Dashboard**: Tracks all three test experiments
+- **Daily Adoption**: Shows daily adoption trends
+- **Retention Dashboard**: User retention by feature flag
+
+## Testing
+
+### Unit Tests
+
+Run unit tests for GrowthBook integration:
+
+```bash
+npm test -- tests/test_growthbook.cpp
+```
+
+Tests cover:
+1. Feature flag evaluation
+2. Experiment variant assignment
+3. Event tracking and batching
+4. localStorage persistence
+5. Attribute binding
+6. Metrics calculation
+
+### E2E Tests
+
+Run end-to-end tests:
+
+```bash
+npm test -- tests/growthbook.e2e.tsx
+```
+
+Test scenarios:
+1. User assignment → feature usage → conversion tracking
+2. Feature flag disabled for variant B → feature hidden in UI
+
+## Production Deployment
+
+### Before Going Live
+
+- [ ] Test all three experiments in staging
+- [ ] Verify analytics events are sent correctly
+- [ ] Set appropriate sampling rates for high-volume events
+- [ ] Configure alerts for experiment anomalies
+- [ ] Review KPI thresholds with product team
+
+### Monitoring
+
+1. **Daily**: Check experiment metrics for statistical significance
+2. **Weekly**: Review adoption curves and funnel completion
+3. **Monthly**: Generate reports for feature performance
+
+### Rollout Strategy
+
+1. **Day 1-3**: 5% of users in treatment group
+2. **Day 4-7**: 25% of users in treatment group
+3. **Day 8+**: 50% of users in treatment group (full A/B test)
+4. **Week 3+**: Roll out to 100% if metrics positive
 
 ## Troubleshooting
 
-### Events Not Appearing
+### Feature Flags Not Loading
 
-1. Check API key is correct
-2. Verify `GB_API_KEY` environment variable is set
-3. Confirm event names match allowed event types
-4. Check network connectivity to GrowthBook
+Check:
+1. API key is set correctly: `echo $REACT_APP_GROWTHBOOK_API_KEY`
+2. Network request to GrowthBook is successful (check browser DevTools)
+3. Features exist in GrowthBook dashboard
 
-### Feature Flag Not Working
+### Events Not Sent
 
-1. Verify SDK key in configuration
-2. Check feature flag is enabled in GrowthBook
-3. Ensure user context is set with user ID
-4. Call `gb.refresh_features()` to reload
+Check:
+1. Analytics is initialized: `getAnalyticsManager().initialize(userId, sessionId)`
+2. localStorage is available and not full
+3. Check browser console for errors
 
-### Experiments Not Running
+### Variant Assignment Not Persistent
 
-1. Verify experiment status is "Running"
-2. Check sample size requirements are met
-3. Ensure tracking keys match user identification
-4. Wait 24 hours for initial data aggregation
+Check:
+1. localStorage is enabled
+2. App doesn't clear localStorage on initialization
+3. Session hasn't expired
 
 ## Best Practices
 
-1. **Naming Convention**: Use descriptive event names with underscores
-   - ✓ `import_step_success`
-   - ✗ `evt123`
+1. **Always use constants** for feature flag names:
+   ```typescript
+   const FEATURE_FLAGS = {
+     PARAMETRIC_DIMENSIONS: "parametric_dimensions",
+     SMART_TEMPLATES: "smart_templates",
+     SEARCH_FILTERS: "search_filters"
+   };
+   
+   useFeatureFlag(FEATURE_FLAGS.PARAMETRIC_DIMENSIONS);
+   ```
 
-2. **User IDs**: Always use consistent user identification
-   - Use email hash or user database ID
-   - Never change user ID mid-session
+2. **Track meaningful events** - Only track events that matter for your KPIs
 
-3. **Event Properties**: Include relevant context
-   - File size, duration, error messages
-   - Keep properties consistent across tests
+3. **Use feature flags for gradual rollouts** - Don't launch features to 100% at once
 
-4. **Experiment Duration**: Run for at least 1-2 weeks
-   - Captures daily variation patterns
-   - Ensures statistical significance
+4. **Test in staging** - Always test experiments in staging before production
 
-5. **Rollout Strategy**: Always test before full rollout
-   - Start with 5-10% of users
-   - Monitor for 24 hours
-   - Check error rates and performance
+5. **Monitor statistical significance** - Don't stop experiments too early
+
+6. **Document experiment changes** - Keep notes on what each variant changes
+
+## References
+
+- [GrowthBook Documentation](https://docs.growthbook.io/)
+- [GrowthBook JavaScript SDK](https://docs.growthbook.io/sdk/js)
+- [A/B Testing Best Practices](https://www.growthbook.io/blog/)
+- [BendCore CAD Analytics Events](src/analytics.ts)
 
 ## Support
 
-- GrowthBook Docs: https://docs.growthbook.io
-- GrowthBook Support: support@growthbook.io
-- BendCore Documentation: /docs/ANALYTICS_TRACKING.md
+For issues or questions:
+1. Check GrowthBook documentation
+2. Review BendCore analytics logs
+3. Contact the product team
+4. Open an issue on GitHub
 
-## Security
+---
 
-- **API Keys**: Store in environment variables, never commit to git
-- **User Privacy**: Don't track PII (emails, phone numbers)
-- **Data Retention**: Events stored for 90 days then purged
-- **Compliance**: GDPR and CCPA compliant
+**Last Updated**: 2026-10-23  
+**Version**: 1.0.0  
+**Maintained By**: BendCore Development Team

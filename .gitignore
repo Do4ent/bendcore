@@ -13,9 +13,41 @@ __pycache__/
 # Docker, scripts, terraform, and docs are now part of DevOps infrastructure
 # (completed by DevOps agent)
 
-# Exclude WIP directories from agents still working
-/backend/
-/frontend/
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+*.o
+*.a
+*.so
+*.dll
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+.cache/
+temp/
+tmp/
 
 # Сборка стенда панелей (esbuild)
 /tests/ui_preview/dist/main.js
