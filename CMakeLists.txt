@@ -34,6 +34,16 @@ endif()
 # OpenSSL (для SHA256 хэширования в ассоциативных чертежах)
 find_package(OpenSSL REQUIRED)
 
+# BC-015: LibDWG для экспорта в формат DWG
+find_package(LibDWG QUIET)
+if(NOT LibDWG_FOUND)
+  # Попытка найти через pkg-config
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(LibDWG QUIET libdwg)
+  endif()
+endif()
+
 # OCCT (Open Cascade Technology) для импорта STEP файлов (Q3 2027, Task 1)
 # Windows-only integration with OCCT 7.7+
 if(WIN32)
@@ -49,6 +59,13 @@ endif()
 add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/ipc_commands.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp src/occt_init.cpp src/step_reader.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp src/growthbook_client.cpp src/analytics_event.cpp src/drawing_editor.cpp src/drawing_layers.cpp src/drawing_undo_redo.cpp src/bendcore/parallel_offset.cpp src/combined_3d_offset.cpp src/bendcore/offset_profiler.cpp src/bendcore/parallel_offset_optimized.cpp src/bendcore/combined_3d_offset_optimized.cpp src/dwfx_parser.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
+
+# BC-015: Link LibDWG if available
+if(LibDWG_FOUND)
+  target_include_directories(bendcore_core SYSTEM PRIVATE ${LibDWG_INCLUDE_DIRS})
+  target_link_libraries(bendcore_core PRIVATE ${LibDWG_LIBRARIES})
+  target_compile_definitions(bendcore_core PRIVATE BENDCORE_WITH_LIBDWG=1)
+endif()
 
 # Link OCCT libraries if available
 if(OpenCASCADE_FOUND)
