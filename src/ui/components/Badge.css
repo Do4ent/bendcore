@@ -1,0 +1,165 @@
+/**
+ * Badge Styles
+ * Status indicators
+ */
+
+:root {
+  --badge-default-bg: #e8e8e8;
+  --badge-default-text: #333333;
+  --badge-success-bg: #dffcf0;
+  --badge-success-text: #107c10;
+  --badge-warning-bg: #fff4ce;
+  --badge-warning-text: #c4a000;
+  --badge-error-bg: #fed9cc;
+  --badge-error-text: #a4373a;
+  --badge-info-bg: #d7e3f4;
+  --badge-info-text: #004578;
+}
+
+:root.dark-mode {
+  --badge-default-bg: #3f3f3f;
+  --badge-default-text: #e0e0e0;
+  --badge-success-bg: rgba(16, 124, 16, 0.3);
+  --badge-success-text: #6bc86b;
+  --badge-warning-bg: rgba(196, 160, 0, 0.3);
+  --badge-warning-text: #ffd966;
+  --badge-error-bg: rgba(164, 55, 58, 0.3);
+  --badge-error-text: #f18500;
+  --badge-info-bg: rgba(0, 69, 120, 0.3);
+  --badge-info-text: #5a9fd4;
+}
+
+/* ========== Base Badge ========== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ========== Variants ========== */
+
+.badge--default {
+  background-color: var(--badge-default-bg);
+  color: var(--badge-default-text);
+}
+
+.badge--success {
+  background-color: var(--badge-success-bg);
+  color: var(--badge-success-text);
+}
+
+.badge--warning {
+  background-color: var(--badge-warning-bg);
+  color: var(--badge-warning-text);
+}
+
+.badge--error {
+  background-color: var(--badge-error-bg);
+  color: var(--badge-error-text);
+}
+
+.badge--info {
+  background-color: var(--badge-info-bg);
+  color: var(--badge-info-text);
+}
+
+/* ========== Dark Mode ========== */
+
+.badge--dark.badge--default {
+  background-color: var(--badge-default-bg);
+  color: var(--badge-default-text);
+}
+
+.badge--dark.badge--success {
+  background-color: var(--badge-success-bg);
+  color: var(--badge-success-text);
+}
+
+.badge--dark.badge--warning {
+  background-color: var(--badge-warning-bg);
+  color: var(--badge-warning-text);
+}
+
+.badge--dark.badge--error {
+  background-color: var(--badge-error-bg);
+  color: var(--badge-error-text);
+}
+
+.badge--dark.badge--info {
+  background-color: var(--badge-info-bg);
+  color: var(--badge-info-text);
+}
+
+/* ========== Content ========== */
+
+.badge__content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========== Dismiss Button ========== */
+
+.badge__dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.badge__dismiss:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.badge--dark .badge__dismiss:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.badge__dismiss:focus {
+  outline: 1px solid currentColor;
+  outline-offset: -2px;
+}
+
+/* ========== Responsive ========== */
+
+@media (max-width: 768px) {
+  .badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    gap: 4px;
+  }
+
+  .badge__dismiss {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/* ========== Accessibility ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .badge__dismiss {
+    transition: none;
+  }
+}

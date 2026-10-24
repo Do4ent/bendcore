@@ -1,0 +1,72 @@
+/**
+ * Spinner Styles
+ * Loading animation
+ */
+
+/* ========== Container ========== */
+
+.spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+}
+
+/* ========== SVG ========== */
+
+.spinner__svg {
+  width: 100%;
+  height: 100%;
+}
+
+.spinner__circle-bg {
+  color: #e0e0e0;
+}
+
+.spinner--dark .spinner__circle-bg {
+  color: #505050;
+}
+
+/* ========== Animation ========== */
+
+.spinner__circle-progress {
+  animation: spin 1s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ========== Size Variants ========== */
+
+.spinner {
+  /* Default is md (24px) */
+}
+
+.spinner[style*="width: 16px"] {
+  width: 16px;
+  height: 16px;
+}
+
+.spinner[style*="width: 32px"] {
+  width: 32px;
+  height: 32px;
+}
+
+/* ========== Accessibility ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner__circle-progress {
+    animation: none;
+    opacity: 0.6;
+  }
+}

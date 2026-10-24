@@ -1,0 +1,402 @@
+/**
+ * TreePanel Styles
+ * Feature tree with expand/collapse and visibility toggles
+ */
+
+:root {
+  --tree-bg: #ffffff;
+  --tree-border: #d0d0d0;
+  --tree-text: #333333;
+  --tree-hover: #e8f0f8;
+  --tree-selected: #0078d4;
+  --tree-selected-bg: #e8f0f8;
+  --tree-icon: #666666;
+}
+
+:root.dark-mode,
+.tree-panel--dark {
+  --tree-bg: #2d2d2d;
+  --tree-border: #404040;
+  --tree-text: #e0e0e0;
+  --tree-hover: #3f3f3f;
+  --tree-selected: #0078d4;
+  --tree-selected-bg: #1e3a5f;
+  --tree-icon: #a0a0a0;
+}
+
+/* ========== Main Container ========== */
+
+.tree-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: var(--tree-bg);
+  border: 1px solid var(--tree-border);
+  border-radius: 2px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.tree-panel--dark {
+  background-color: var(--tree-bg);
+  border-color: var(--tree-border);
+}
+
+/* ========== Tree List ========== */
+
+.tree-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+}
+
+.tree-panel__list:focus {
+  outline: 2px solid var(--tree-selected);
+  outline-offset: -2px;
+}
+
+/* ========== Tree Node ========== */
+
+.tree-node {
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.tree-node--selected > .tree-node__content {
+  background-color: var(--tree-selected-bg);
+  color: var(--tree-selected);
+}
+
+.tree-node--dragging {
+  opacity: 0.6;
+}
+
+/* ========== Tree Node Content ========== */
+
+.tree-node__content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px;
+  margin: 0 2px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background-color 0.15s ease;
+  position: relative;
+  outline: none;
+}
+
+.tree-node__content:hover {
+  background-color: var(--tree-hover);
+}
+
+.tree-node__content:focus {
+  outline: 1px solid var(--tree-selected);
+  outline-offset: -1px;
+}
+
+/* ========== Expand/Collapse Button ========== */
+
+.tree-node__expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  color: var(--tree-icon);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.tree-node__expand:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.tree-node__expand--open {
+  transform: rotate(90deg);
+}
+
+.tree-node__expand:focus {
+  outline: 1px solid var(--tree-selected);
+  outline-offset: -1px;
+}
+
+/* ========== Expand Placeholder ========== */
+
+.tree-node__expand-placeholder {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* ========== Icon ========== */
+
+.tree-node__icon {
+  font-size: 14px;
+  min-width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--tree-icon);
+}
+
+/* ========== Name ========== */
+
+.tree-node__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tree-text);
+  min-width: 50px;
+}
+
+/* ========== Rename Input ========== */
+
+.tree-node__rename-input {
+  flex: 1;
+  padding: 2px 4px;
+  border: 1px solid var(--tree-selected);
+  border-radius: 2px;
+  background-color: var(--tree-bg);
+  color: var(--tree-text);
+  font-size: 13px;
+  font-family: inherit;
+  min-width: 50px;
+}
+
+.tree-node__rename-input:focus {
+  outline: none;
+  border-color: var(--tree-selected);
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+}
+
+/* ========== Visibility Toggle ========== */
+
+.tree-node__visibility {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.tree-node__visibility:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  opacity: 1;
+}
+
+.tree-node__visibility--hidden {
+  opacity: 0.3;
+  color: #999999;
+}
+
+.tree-node__visibility:focus {
+  outline: 1px solid var(--tree-selected);
+  outline-offset: -1px;
+}
+
+/* ========== Lock Icon ========== */
+
+.tree-node__lock {
+  font-size: 12px;
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+/* ========== Children ========== */
+
+.tree-node__children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  padding-left: 16px;
+  border-left: 1px solid var(--tree-border);
+  margin-left: 10px;
+}
+
+/* ========== Context Menu ========== */
+
+.tree-context-menu {
+  background-color: var(--tree-bg);
+  border: 1px solid var(--tree-border);
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 160px;
+  animation: slideDown 0.15s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========== Context Menu Item ========== */
+
+.tree-context-menu__item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--tree-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tree-context-menu__item:hover {
+  background-color: var(--tree-hover);
+  color: var(--tree-selected);
+}
+
+.tree-context-menu__item:focus {
+  outline: 1px solid var(--tree-selected);
+  outline-offset: -1px;
+}
+
+.tree-context-menu__item--danger {
+  color: #c50f1f;
+}
+
+.tree-context-menu__item--danger:hover {
+  background-color: #fde7e8;
+}
+
+.tree-panel--dark .tree-context-menu__item--danger:hover {
+  background-color: rgba(197, 15, 31, 0.2);
+}
+
+/* ========== Scrollbar Styling ========== */
+
+.tree-panel__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tree-panel__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tree-panel__list::-webkit-scrollbar-thumb {
+  background-color: var(--tree-border);
+  border-radius: 4px;
+}
+
+.tree-panel__list::-webkit-scrollbar-thumb:hover {
+  background-color: var(--tree-icon);
+}
+
+/* ========== Responsive Design ========== */
+
+@media (max-width: 768px) {
+  .tree-node__content {
+    padding: 6px 4px;
+  }
+
+  .tree-node__expand {
+    width: 24px;
+    height: 24px;
+  }
+
+  .tree-node__icon {
+    font-size: 16px;
+    min-width: 24px;
+  }
+
+  .tree-node__visibility {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+  }
+
+  .tree-node__children {
+    padding-left: 20px;
+    margin-left: 8px;
+  }
+}
+
+/* ========== Accessibility ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .tree-node__content,
+  .tree-node__expand,
+  .tree-node__visibility,
+  .tree-context-menu,
+  .tree-context-menu__item {
+    transition: none;
+  }
+
+  .tree-context-menu {
+    animation: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .tree-panel {
+    border-width: 2px;
+  }
+
+  .tree-node__content:focus {
+    outline-width: 2px;
+  }
+
+  .tree-context-menu {
+    border-width: 2px;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  .tree-node--selected > .tree-node__content {
+    background-color: #e8f0f8;
+  }
+
+  .tree-node__visibility:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  .tree-node__expand:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .tree-node--selected > .tree-node__content {
+    background-color: #1e3a5f;
+  }
+
+  .tree-node__visibility:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .tree-node__expand:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}

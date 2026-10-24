@@ -1,0 +1,441 @@
+/**
+ * PropertiesPanel Styles
+ * Property editors with grouped sections
+ */
+
+:root {
+  --props-bg: #ffffff;
+  --props-border: #d0d0d0;
+  --props-text: #333333;
+  --props-label: #666666;
+  --props-input-bg: #ffffff;
+  --props-input-border: #c0c0c0;
+  --props-input-focus: #0078d4;
+  --props-hover: #f5f5f5;
+  --props-error: #c50f1f;
+  --props-disabled: #999999;
+}
+
+:root.dark-mode,
+.properties-panel--dark {
+  --props-bg: #2d2d2d;
+  --props-border: #404040;
+  --props-text: #e0e0e0;
+  --props-label: #a0a0a0;
+  --props-input-bg: #3f3f3f;
+  --props-input-border: #505050;
+  --props-input-focus: #0078d4;
+  --props-hover: #404040;
+  --props-error: #f08080;
+  --props-disabled: #666666;
+}
+
+/* ========== Main Container ========== */
+
+.properties-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: var(--props-bg);
+  border: 1px solid var(--props-border);
+  border-radius: 2px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.properties-panel--dark {
+  background-color: var(--props-bg);
+  border-color: var(--props-border);
+}
+
+/* ========== Header ========== */
+
+.properties-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border-bottom: 1px solid var(--props-border);
+  background-color: var(--props-hover);
+  flex-shrink: 0;
+}
+
+.properties-panel__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--props-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.properties-panel__reset-btn {
+  background: none;
+  border: none;
+  color: var(--props-label);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.properties-panel__reset-btn:hover {
+  background-color: var(--props-input-border);
+  color: var(--props-text);
+}
+
+.properties-panel__reset-btn:focus {
+  outline: 2px solid var(--props-input-focus);
+  outline-offset: -2px;
+}
+
+/* ========== Content ========== */
+
+.properties-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+}
+
+/* ========== Category ========== */
+
+.properties-category {
+  border-bottom: 1px solid var(--props-border);
+}
+
+.properties-category:last-child {
+  border-bottom: none;
+}
+
+/* ========== Category Header ========== */
+
+.properties-category__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 8px;
+  background: none;
+  border: none;
+  color: var(--props-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.properties-category__header:hover {
+  background-color: var(--props-hover);
+}
+
+.properties-category__header:focus {
+  outline: 1px solid var(--props-input-focus);
+  outline-offset: -1px;
+}
+
+.properties-category__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.properties-category__header--open .properties-category__toggle {
+  transform: rotate(90deg);
+}
+
+.properties-category__title {
+  flex: 1;
+}
+
+/* ========== Category Fields ========== */
+
+.properties-category__fields {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ========== Property Field ========== */
+
+.property-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.property-field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.property-field--error .property-field__input {
+  border-color: var(--props-error);
+  background-color: rgba(197, 15, 31, 0.05);
+}
+
+.property-field--dark .property-field--error .property-field__input {
+  background-color: rgba(197, 15, 31, 0.1);
+}
+
+/* ========== Label ========== */
+
+.property-field__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--props-label);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.property-field--checkbox .property-field__label {
+  order: 2;
+  flex: 1;
+  margin-left: 4px;
+}
+
+.property-field__unit {
+  color: var(--props-label);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+/* ========== Input Wrapper ========== */
+
+.property-field__input-wrapper {
+  display: flex;
+  gap: 4px;
+  position: relative;
+}
+
+.property-field--checkbox .property-field__input-wrapper {
+  order: 1;
+  flex: 0 0 auto;
+}
+
+/* ========== Input Base ========== */
+
+.property-field__input {
+  flex: 1;
+  padding: 6px 8px;
+  background-color: var(--props-input-bg);
+  border: 1px solid var(--props-input-border);
+  border-radius: 2px;
+  color: var(--props-text);
+  font-size: 12px;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.property-field__input:hover {
+  border-color: var(--props-input-focus);
+}
+
+.property-field__input:focus {
+  outline: none;
+  border-color: var(--props-input-focus);
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+}
+
+.property-field__input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--props-hover);
+}
+
+.property-field__input:read-only {
+  opacity: 0.8;
+  background-color: var(--props-hover);
+  cursor: not-allowed;
+}
+
+/* ========== Text Input ========== */
+
+.property-field__input--text {
+  width: 100%;
+}
+
+/* ========== Number Input ========== */
+
+.property-field__input--number {
+  width: 100%;
+}
+
+/* Remove number spinner arrows */
+.property-field__input--number::-webkit-outer-spin-button,
+.property-field__input--number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.property-field__input--number[type='number'] {
+  -moz-appearance: textfield;
+}
+
+/* ========== Select Input ========== */
+
+.property-field__input--select {
+  width: 100%;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+.properties-panel--dark .property-field__input--select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23e0e0e0' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+}
+
+/* ========== Color Input ========== */
+
+.property-field__color-wrapper {
+  display: flex;
+  gap: 4px;
+}
+
+.property-field__input--color {
+  width: 50px;
+  height: 32px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.property-field__color-button {
+  padding: 6px 8px;
+  background-color: var(--props-input-bg);
+  border: 1px solid var(--props-input-border);
+  border-radius: 2px;
+  color: var(--props-text);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.property-field__color-button:hover {
+  border-color: var(--props-input-focus);
+}
+
+/* ========== Checkbox Input ========== */
+
+.property-field__input--checkbox {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  cursor: pointer;
+}
+
+/* ========== Textarea ========== */
+
+.property-field__input--textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: 'Courier New', monospace;
+  line-height: 1.4;
+}
+
+/* ========== Error Message ========== */
+
+.property-field__error {
+  color: var(--props-error);
+  font-size: 11px;
+  margin-top: -2px;
+}
+
+/* ========== Scrollbar ========== */
+
+.properties-panel__content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.properties-panel__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.properties-panel__content::-webkit-scrollbar-thumb {
+  background-color: var(--props-input-border);
+  border-radius: 4px;
+}
+
+.properties-panel__content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--props-label);
+}
+
+/* ========== Responsive Design ========== */
+
+@media (max-width: 768px) {
+  .properties-panel {
+    font-size: 13px;
+  }
+
+  .properties-panel__header {
+    padding: 10px;
+  }
+
+  .properties-panel__title {
+    font-size: 13px;
+  }
+
+  .property-field__label {
+    font-size: 13px;
+  }
+
+  .property-field__input {
+    font-size: 13px;
+    padding: 8px;
+  }
+
+  .properties-category__fields {
+    padding: 10px;
+    gap: 10px;
+  }
+}
+
+/* ========== Accessibility ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .properties-panel__reset-btn,
+  .property-field__input,
+  .properties-category__header,
+  .properties-category__toggle {
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .properties-panel {
+    border-width: 2px;
+  }
+
+  .property-field__input:focus {
+    outline-width: 2px;
+  }
+
+  .properties-category__header:focus {
+    outline-width: 2px;
+  }
+}
+
+/* ========== Print Styles ========== */
+
+@media print {
+  .properties-panel__reset-btn {
+    display: none;
+  }
+}

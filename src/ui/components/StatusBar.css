@@ -1,0 +1,263 @@
+/**
+ * StatusBar Styles
+ * Bottom status bar with coordinates and progress
+ */
+
+:root {
+  --status-bg: #f5f5f5;
+  --status-border: #d0d0d0;
+  --status-text: #333333;
+  --status-text-light: #666666;
+  --status-progress: #0078d4;
+  --status-error: #c50f1f;
+  --status-success: #107c10;
+  --status-loading: #0078d4;
+}
+
+:root.dark-mode {
+  --status-bg: #2d2d2d;
+  --status-border: #404040;
+  --status-text: #e0e0e0;
+  --status-text-light: #a0a0a0;
+}
+
+/* ========== Main Container ========== */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 12px;
+  height: 24px;
+  background-color: var(--status-bg);
+  border-top: 1px solid var(--status-border);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  font-size: 12px;
+  color: var(--status-text);
+  user-select: none;
+}
+
+/* ========== Section ========== */
+
+.status-bar__section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.status-bar__message-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-bar__coords-section {
+  border-left: 1px solid var(--status-border);
+  border-right: 1px solid var(--status-border);
+  padding: 0 8px;
+}
+
+.status-bar__progress-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-left: 1px solid var(--status-border);
+  border-right: 1px solid var(--status-border);
+  padding: 0 8px;
+}
+
+.status-bar__mode-section {
+  border-left: 1px solid var(--status-border);
+  padding-left: 8px;
+}
+
+/* ========== Message ========== */
+
+.status-bar__message {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status-bar__message-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status-bar__message-text {
+  color: var(--status-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========== Coordinates ========== */
+
+.status-bar__coords {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: var(--status-text-light);
+  white-space: nowrap;
+}
+
+/* ========== Progress Bar ========== */
+
+.status-bar__progress-bar {
+  width: 100px;
+  height: 4px;
+  background-color: var(--status-border);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.status-bar__progress-fill {
+  height: 100%;
+  background-color: var(--status-progress);
+  transition: width 0.2s ease;
+}
+
+.status-bar__progress-text {
+  font-size: 11px;
+  color: var(--status-text-light);
+  white-space: nowrap;
+  min-width: 30px;
+  text-align: right;
+}
+
+/* ========== Mode ========== */
+
+.status-bar__mode {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.status-bar__mode-icon {
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.status-bar__mode-label {
+  color: var(--status-text-light);
+}
+
+.status-bar--design .status-bar__mode--design,
+.status-bar--sketch .status-bar__mode--sketch,
+.status-bar--idle .status-bar__mode--idle,
+.status-bar--loading .status-bar__mode--loading,
+.status-bar--error .status-bar__mode--error {
+  background-color: rgba(0, 120, 212, 0.1);
+  color: var(--status-progress);
+}
+
+.status-bar--error .status-bar__mode--error {
+  background-color: rgba(197, 15, 31, 0.1);
+  color: var(--status-error);
+}
+
+.status-bar--error .status-bar__message-text {
+  color: var(--status-error);
+}
+
+/* ========== Loading State ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .status-bar__message-icon {
+    animation: none;
+  }
+}
+
+/* ========== Dark Mode ========== */
+
+.status-bar--dark {
+  background-color: var(--status-bg);
+  border-top-color: var(--status-border);
+}
+
+.status-bar--dark .status-bar__coords-section,
+.status-bar--dark .status-bar__progress-section,
+.status-bar--dark .status-bar__mode-section {
+  border-color: var(--status-border);
+}
+
+/* ========== Responsive Design ========== */
+
+@media (max-width: 768px) {
+  .status-bar {
+    gap: 8px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .status-bar__section {
+    gap: 4px;
+  }
+
+  .status-bar__coords-section,
+  .status-bar__progress-section,
+  .status-bar__mode-section {
+    padding: 0 4px;
+  }
+
+  .status-bar__coords {
+    font-size: 10px;
+  }
+
+  .status-bar__progress-bar {
+    width: 60px;
+  }
+
+  .status-bar__progress-text {
+    font-size: 10px;
+    min-width: 25px;
+  }
+
+  .status-bar__mode {
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+
+  .status-bar__mode-icon {
+    font-size: 11px;
+  }
+}
+
+/* ========== High Contrast ========== */
+
+@media (prefers-contrast: more) {
+  .status-bar {
+    border-top-width: 2px;
+  }
+
+  .status-bar__coords-section,
+  .status-bar__progress-section,
+  .status-bar__mode-section {
+    border-width: 2px;
+  }
+
+  .status-bar__progress-bar {
+    border: 1px solid var(--status-text);
+  }
+}

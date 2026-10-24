@@ -1,0 +1,453 @@
+/**
+ * RibbonBar Styles
+ * Microsoft Office Ribbon-style toolbar
+ */
+
+:root {
+  --ribbon-bg: #f5f5f5;
+  --ribbon-border: #d0d0d0;
+  --ribbon-hover: #e0e0e0;
+  --ribbon-active: #0078d4;
+  --ribbon-active-hover: #0063b1;
+  --ribbon-text: #333333;
+  --ribbon-text-light: #666666;
+  --ribbon-disabled: #999999;
+  --ribbon-submenu-bg: #ffffff;
+  --ribbon-submenu-border: #c0c0c0;
+}
+
+:root.dark-mode,
+.ribbon-bar--dark {
+  --ribbon-bg: #2d2d2d;
+  --ribbon-border: #404040;
+  --ribbon-hover: #3f3f3f;
+  --ribbon-active: #0078d4;
+  --ribbon-active-hover: #1084d7;
+  --ribbon-text: #e0e0e0;
+  --ribbon-text-light: #a0a0a0;
+  --ribbon-disabled: #666666;
+  --ribbon-submenu-bg: #3f3f3f;
+  --ribbon-submenu-border: #505050;
+}
+
+/* ========== Main Container ========== */
+
+.ribbon-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--ribbon-bg);
+  border-bottom: 1px solid var(--ribbon-border);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.ribbon-bar--dark {
+  background-color: var(--ribbon-bg);
+  border-bottom-color: var(--ribbon-border);
+}
+
+/* ========== Mobile Toggle ========== */
+
+.ribbon-bar__mobile-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--ribbon-text);
+  font-size: 24px;
+  padding: 8px 12px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.ribbon-bar__mobile-toggle:hover {
+  background-color: var(--ribbon-hover);
+  border-radius: 2px;
+}
+
+.ribbon-bar__mobile-toggle:focus {
+  outline: 2px solid var(--ribbon-active);
+  outline-offset: -2px;
+}
+
+@media (max-width: 768px) {
+  .ribbon-bar__mobile-toggle {
+    display: block;
+  }
+}
+
+/* ========== Tab List ========== */
+
+.ribbon-bar__tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--ribbon-border);
+  background-color: var(--ribbon-bg);
+  padding: 0 4px;
+}
+
+.ribbon-bar__tabs--open {
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+}
+
+@media (max-width: 768px) {
+  .ribbon-bar__tabs {
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px;
+  }
+}
+
+/* ========== Tab Button ========== */
+
+.ribbon-bar__tab {
+  background: transparent;
+  border: none;
+  color: var(--ribbon-text);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.ribbon-bar__tab:hover {
+  color: var(--ribbon-active);
+  background-color: var(--ribbon-hover);
+}
+
+.ribbon-bar__tab--active {
+  color: var(--ribbon-active);
+  border-bottom: 2px solid var(--ribbon-active);
+  background-color: var(--ribbon-hover);
+}
+
+.ribbon-bar__tab:focus {
+  outline: 2px solid var(--ribbon-active);
+  outline-offset: -2px;
+}
+
+/* ========== Commands Panel ========== */
+
+.ribbon-bar__commands {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--ribbon-bg);
+  flex-wrap: wrap;
+  min-height: 56px;
+  align-items: center;
+}
+
+/* ========== Commands Group ========== */
+
+.ribbon-bar__commands-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ribbon-bar__commands-group::after {
+  content: '';
+  width: 1px;
+  height: 24px;
+  background-color: var(--ribbon-border);
+  margin: 0 4px;
+}
+
+.ribbon-bar__commands-group:last-child::after {
+  display: none;
+}
+
+/* ========== Command Wrapper ========== */
+
+.ribbon-bar__command-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+/* ========== Command Button ========== */
+
+.ribbon-bar__command {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 4px 8px;
+  color: var(--ribbon-text);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+  min-width: 44px;
+  text-align: center;
+}
+
+.ribbon-bar__command:hover:not(:disabled) {
+  background-color: var(--ribbon-hover);
+  border-color: var(--ribbon-border);
+}
+
+.ribbon-bar__command:focus {
+  outline: 2px solid var(--ribbon-active);
+  outline-offset: -2px;
+}
+
+.ribbon-bar__command:active:not(:disabled) {
+  background-color: var(--ribbon-active-hover);
+  color: white;
+}
+
+.ribbon-bar__command--primary {
+  background-color: var(--ribbon-active);
+  color: white;
+  border-color: var(--ribbon-active);
+}
+
+.ribbon-bar__command--primary:hover:not(:disabled) {
+  background-color: var(--ribbon-active-hover);
+}
+
+.ribbon-bar__command--secondary {
+  background-color: transparent;
+  border-color: var(--ribbon-border);
+}
+
+.ribbon-bar__command--danger {
+  color: #c50f1f;
+}
+
+.ribbon-bar__command--danger:hover:not(:disabled) {
+  background-color: #fde7e8;
+  border-color: #c50f1f;
+}
+
+.ribbon-bar--dark .ribbon-bar__command--danger:hover:not(:disabled) {
+  background-color: rgba(197, 15, 31, 0.2);
+}
+
+.ribbon-bar__command--disabled,
+.ribbon-bar__command:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--ribbon-disabled);
+}
+
+/* ========== Command Icon ========== */
+
+.ribbon-bar__command-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ========== Command Label ========== */
+
+.ribbon-bar__command-label {
+  font-size: 11px;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========== Submenu ========== */
+
+.ribbon-bar__submenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: var(--ribbon-submenu-bg);
+  border: 1px solid var(--ribbon-submenu-border);
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  z-index: 1001;
+  margin-top: 4px;
+  animation: slideDown 0.15s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========== Submenu Item ========== */
+
+.ribbon-bar__submenu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 8px 12px;
+  width: 100%;
+  color: var(--ribbon-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ribbon-bar__submenu-item:hover:not(:disabled) {
+  background-color: var(--ribbon-hover);
+  color: var(--ribbon-active);
+}
+
+.ribbon-bar__submenu-item:focus {
+  outline: 2px solid var(--ribbon-active);
+  outline-offset: -2px;
+}
+
+.ribbon-bar__submenu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--ribbon-disabled);
+}
+
+/* ========== Submenu Icon ========== */
+
+.ribbon-bar__submenu-icon {
+  font-size: 16px;
+  min-width: 20px;
+}
+
+/* ========== Submenu Label ========== */
+
+.ribbon-bar__submenu-label {
+  flex: 1;
+}
+
+/* ========== Shortcut ========== */
+
+.ribbon-bar__shortcut {
+  color: var(--ribbon-text-light);
+  font-size: 11px;
+  margin-left: auto;
+}
+
+/* ========== Responsive Design ========== */
+
+@media (max-width: 1024px) {
+  .ribbon-bar__command {
+    min-width: 40px;
+    padding: 3px 6px;
+  }
+
+  .ribbon-bar__command-label {
+    font-size: 10px;
+    max-width: 50px;
+  }
+
+  .ribbon-bar__commands {
+    padding: 6px 8px;
+    min-height: 50px;
+  }
+}
+
+@media (max-width: 768px) {
+  .ribbon-bar__tabs {
+    border-bottom: none;
+  }
+
+  .ribbon-bar__commands {
+    padding: 4px 8px;
+    gap: 4px;
+    min-height: auto;
+  }
+
+  .ribbon-bar__commands-group {
+    gap: 2px;
+  }
+
+  .ribbon-bar__command {
+    min-width: 36px;
+    padding: 2px 4px;
+    gap: 1px;
+  }
+
+  .ribbon-bar__command-icon {
+    font-size: 14px;
+  }
+
+  .ribbon-bar__command-label {
+    font-size: 9px;
+    max-width: 40px;
+  }
+
+  .ribbon-bar__submenu {
+    min-width: 150px;
+  }
+
+  .ribbon-bar__submenu-item {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
+
+/* ========== Print Styles ========== */
+
+@media print {
+  .ribbon-bar {
+    position: static;
+    border-bottom: none;
+    box-shadow: none;
+  }
+
+  .ribbon-bar__mobile-toggle {
+    display: none;
+  }
+
+  .ribbon-bar__tabs {
+    display: none;
+  }
+
+  .ribbon-bar__commands {
+    display: none;
+  }
+}
+
+/* ========== Accessibility ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .ribbon-bar__command,
+  .ribbon-bar__submenu,
+  .ribbon-bar__submenu-item {
+    transition: none;
+  }
+
+  .ribbon-bar__submenu {
+    animation: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .ribbon-bar {
+    border-bottom-width: 2px;
+  }
+
+  .ribbon-bar__tab--active {
+    border-bottom-width: 3px;
+  }
+
+  .ribbon-bar__command:focus {
+    outline-width: 3px;
+  }
+}

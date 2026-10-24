@@ -1,0 +1,260 @@
+/**
+ * ContextMenu Styles
+ * Right-click context menu
+ */
+
+:root {
+  --context-bg: #ffffff;
+  --context-border: #d0d0d0;
+  --context-text: #333333;
+  --context-hover: #e0e0e0;
+  --context-hover-bg: #f5f5f5;
+  --context-disabled: #999999;
+}
+
+:root.dark-mode,
+.context-menu--dark {
+  --context-bg: #3f3f3f;
+  --context-border: #505050;
+  --context-text: #e0e0e0;
+  --context-hover: #505050;
+  --context-hover-bg: #505050;
+  --context-disabled: #666666;
+}
+
+/* ========== Main Container ========== */
+
+.context-menu {
+  position: fixed;
+  background-color: var(--context-bg);
+  border: 1px solid var(--context-border);
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  min-width: 200px;
+  animation: slideUp 0.15s ease;
+  outline: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  font-size: 13px;
+  color: var(--context-text);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========== Item Wrapper ========== */
+
+.context-menu__item-wrapper {
+  position: relative;
+}
+
+.context-menu__item-wrapper--focused {
+  background-color: var(--context-hover-bg);
+}
+
+/* ========== Item ========== */
+
+.context-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--context-text);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  outline: none;
+}
+
+.context-menu__item:hover:not(:disabled) {
+  background-color: var(--context-hover);
+  color: #0078d4;
+}
+
+.context-menu__item:focus {
+  background-color: var(--context-hover);
+  box-shadow: inset 0 0 0 2px #0078d4;
+}
+
+.context-menu__item:disabled,
+.context-menu__item--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--context-disabled);
+}
+
+/* ========== Item Icon ========== */
+
+.context-menu__item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* ========== Item Label ========== */
+
+.context-menu__item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========== Item Arrow (for submenu) ========== */
+
+.context-menu__item-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  flex-shrink: 0;
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+/* ========== Divider ========== */
+
+.context-menu__divider {
+  height: 1px;
+  background-color: var(--context-border);
+  margin: 4px 0;
+}
+
+/* ========== Submenu ========== */
+
+.context-menu__submenu {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-left: 4px;
+  background-color: var(--context-bg);
+  border: 1px solid var(--context-border);
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  animation: slideLeft 0.15s ease;
+  z-index: 10001;
+}
+
+@keyframes slideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ========== Dark Mode ========== */
+
+.context-menu--dark {
+  background-color: var(--context-bg);
+  border-color: var(--context-border);
+}
+
+.context-menu--dark .context-menu__divider {
+  background-color: var(--context-border);
+}
+
+.context-menu--dark .context-menu__submenu {
+  background-color: var(--context-bg);
+  border-color: var(--context-border);
+}
+
+/* ========== Responsive Design ========== */
+
+@media (max-width: 768px) {
+  .context-menu {
+    min-width: 160px;
+    font-size: 12px;
+  }
+
+  .context-menu__item {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .context-menu__item-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 12px;
+  }
+
+  .context-menu__submenu {
+    margin-left: 2px;
+  }
+}
+
+/* ========== Accessibility ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .context-menu,
+  .context-menu__submenu,
+  .context-menu__item,
+  .context-menu__item-wrapper {
+    animation: none;
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .context-menu {
+    border-width: 2px;
+  }
+
+  .context-menu__submenu {
+    border-width: 2px;
+  }
+
+  .context-menu__divider {
+    height: 2px;
+  }
+
+  .context-menu__item:focus {
+    outline: 2px solid #0078d4;
+    outline-offset: -2px;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  .context-menu__item:hover:not(:disabled) {
+    background-color: #f0f0f0;
+  }
+
+  .context-menu__item-wrapper--focused {
+    background-color: #f0f0f0;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .context-menu__item:hover:not(:disabled) {
+    background-color: #505050;
+  }
+
+  .context-menu__item-wrapper--focused {
+    background-color: #505050;
+  }
+}
