@@ -376,6 +376,27 @@ if(BENDCORE_WITH_OCCT)
   bendcore_add_test(server test_server)
 endif()
 
+# Comprehensive Test Suite for Phase 4 (90%+ coverage target)
+add_executable(test_dwfx_parser_comprehensive tests/test_dwfx_parser_comprehensive.cpp)
+target_link_libraries(test_dwfx_parser_comprehensive PRIVATE bendcore_core)
+bendcore_add_test(dwfx_parser_comprehensive test_dwfx_parser_comprehensive)
+
+add_executable(test_formula_comprehensive tests/test_formula_comprehensive.cpp)
+target_link_libraries(test_formula_comprehensive PRIVATE bendcore_formula)
+bendcore_add_test(formula_comprehensive test_formula_comprehensive)
+
+add_executable(test_analysis_comprehensive tests/test_analysis_comprehensive.cpp)
+target_link_libraries(test_analysis_comprehensive PRIVATE bendcore_core)
+bendcore_add_test(analysis_comprehensive test_analysis_comprehensive)
+
+add_executable(test_geometry_analyzer_comprehensive tests/test_geometry_analyzer_comprehensive.cpp)
+target_link_libraries(test_geometry_analyzer_comprehensive PRIVATE bendcore_core)
+bendcore_add_test(geometry_analyzer_comprehensive test_geometry_analyzer_comprehensive)
+
+add_executable(test_dxf_reader_comprehensive tests/test_dxf_reader_comprehensive.cpp)
+target_link_libraries(test_dxf_reader_comprehensive PRIVATE bendcore_core)
+bendcore_add_test(dxf_reader_comprehensive test_dxf_reader_comprehensive)
+
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.
 if(EMSCRIPTEN)
