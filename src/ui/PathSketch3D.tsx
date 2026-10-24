@@ -678,7 +678,83 @@ export const PathSketch3D: React.FC<PathSketch3DProps> = ({
 
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
-      // TODO: Show context menu with delete option
+
+      // Show context menu with delete option
+      const rect = renderer.domElement.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(new THREE.Vector2(x, y), camera.getCamera());
+
+      const objects: THREE.Object3D[] = [];
+      scene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh && obj.userData.id) {
+          objects.push(obj);
+        }
+      });
+
+      const intersects = raycaster.intersectObjects(objects);
+
+      if (intersects.length > 0) {
+        const obj = intersects[0].object;
+        const contextMenu = document.createElement('div');
+        contextMenu.style.cssText = `
+          position: fixed;
+          top: ${e.clientY}px;
+          left: ${e.clientX}px;
+          background: white;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          z-index: 10000;
+          min-width: 150px;
+          font-family: sans-serif;
+          font-size: 12px;
+        `;
+
+        const deleteOption = document.createElement('div');
+        deleteOption.textContent = 'Delete';
+        deleteOption.style.cssText = `
+          padding: 8px 12px;
+          cursor: pointer;
+          user-select: none;
+          &:hover {
+            background: #f0f0f0;
+          }
+        `;
+
+        deleteOption.addEventListener('click', () => {
+          if (obj.userData.type === 'vertex') {
+            deleteVertex(obj.userData.data.id);
+          } else if (obj.userData.type === 'segment') {
+            deleteSegment(obj.userData.data.id);
+          } else if (obj.userData.type === 'constraint') {
+            deleteConstraint(obj.userData.data.id);
+          }
+          document.body.removeChild(contextMenu);
+        });
+
+        deleteOption.addEventListener('mouseenter', () => {
+          deleteOption.style.background = '#e8e8e8';
+        });
+
+        deleteOption.addEventListener('mouseleave', () => {
+          deleteOption.style.background = 'transparent';
+        });
+
+        contextMenu.appendChild(deleteOption);
+        document.body.appendChild(contextMenu);
+
+        // Remove context menu on click outside
+        const removeMenu = () => {
+          if (document.body.contains(contextMenu)) {
+            document.body.removeChild(contextMenu);
+          }
+          document.removeEventListener('click', removeMenu);
+        };
+        document.addEventListener('click', removeMenu);
+      }
     };
 
     const handleDoubleClick = (e: MouseEvent) => {

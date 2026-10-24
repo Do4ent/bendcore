@@ -227,10 +227,47 @@ std::string write_dxf_entities(const std::vector<DWGEntity>& entities) {
                 }
                 break;
             }
-            case DWGEntity::Type::Point:
-            case DWGEntity::Type::Dimension:
-                // TODO: реализовать в будущих версиях
+            case DWGEntity::Type::Point: {
+                // Экспортировать точку как маленький круг (DXF POINT)
+                if (!entity.points.empty()) {
+                    os << "  0\nPOINT\n";
+                    os << "  8\n" << get_layer_name_str(entity.layer) << "\n";
+                    os << " 62\n" << entity.color << "\n";
+                    os << " 10\n" << std::fixed << std::setprecision(6) << entity.points[0][0] << "\n";
+                    os << " 20\n" << entity.points[0][1] << "\n";
+                    // Размер точки (в DXF это параметр PDSIZE)
+                    os << " 39\n" << std::fixed << std::setprecision(2) << 0.5 << "\n";
+                }
                 break;
+            }
+            case DWGEntity::Type::Dimension: {
+                // Экспортировать размер как DIMENSION сущность (или LINE + TEXT для совместимости)
+                // В DXF версии 1 используем комбинацию LINE (размерная линия) + TEXT (текст размера)
+                if (entity.points.size() >= 2) {
+                    // Размерная линия
+                    os << "  0\nLINE\n";
+                    os << "  8\n" << get_layer_name_str(entity.layer) << "\n";
+                    os << " 62\n" << entity.color << "\n";
+                    os << " 10\n" << std::fixed << std::setprecision(6) << entity.points[0][0] << "\n";
+                    os << " 20\n" << entity.points[0][1] << "\n";
+                    os << " 11\n" << entity.points[1][0] << "\n";
+                    os << " 21\n" << entity.points[1][1] << "\n";
+                }
+
+                // Текст размера
+                os << "  0\nTEXT\n";
+                os << "  8\n" << get_layer_name_str(entity.layer) << "\n";
+                os << " 62\n" << entity.color << "\n";
+                os << " 10\n" << std::fixed << std::setprecision(6) << entity.text_pos[0] << "\n";
+                os << " 20\n" << entity.text_pos[1] << "\n";
+                os << " 40\n" << std::fixed << std::setprecision(6) << entity.text_height << "\n";
+                os << "  1\n" << entity.text << "\n";
+
+                // Выравнивание по центру
+                int align_h = 1;  // center
+                os << " 72\n" << align_h << "\n";
+                break;
+            }
         }
     }
 

@@ -103,12 +103,8 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
 
   // Initialize keyboard shortcuts on mount
   useEffect(() => {
-    const commandHandler = (commandId: string) => {
-      // This will be called when keyboard shortcuts are triggered
-      // We'll pass it to the handleCommand logic below
-    };
-    initializeShortcutListeners(commandHandler);
-  }, []);
+    initializeShortcutListeners(handleCommand);
+  }, [handleCommand]);
 
   const handleCommand = useCallback(
     (commandId: string) => {

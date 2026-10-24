@@ -5,6 +5,7 @@
 #include "bendcore/compensation.hpp"
 #include "bendcore/spiral.hpp"
 #include "bendcore/tubegeom.hpp"
+#include "bendcore/ports.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -462,6 +463,8 @@ std::vector<Issue> Analyzer::checkPorts(const TubeModel& model, double od, doubl
         return issues;
     }
 
+    const auto& path = *model.path;
+
     // Проверка портов
     for (size_t i = 0; i < model.ports.size(); ++i) {
         const auto& port = model.ports[i];
@@ -480,7 +483,33 @@ std::vector<Issue> Analyzer::checkPorts(const TubeModel& model, double od, doubl
         // Проверка позиции портов на концах трубы (зазор ≥ 5 мм)
         const double minProtrusion = 5.0;  // 5 мм зазор
 
-        // Это упрощённая проверка; полная проверка требует геометрии
+        // Проверка минимального прямого участка перед портом
+        if (first_straight(path) < port.min_straight && port.min_straight > 0.0) {
+            issues.push_back(createIssue(
+                IssueLevel::Warning,
+                IssueType::InvalidPortPosition,
+                "Недостаточный прямой участок в начале трубы для порта",
+                {}, first_straight(path),
+                {}, port.min_straight
+            ));
+        }
+
+        // Проверка позиции портов (валидация направления и положения)
+        if (port.ref_ok && !port.occupied_by.has_value()) {
+            // Порт может быть подключен - проверить совместимость направления
+            const auto dir = port.unit_dir();
+
+            // Проверка направления (должно быть не нулевым)
+            if (std::abs(dir[0]) < 0.01 && std::abs(dir[1]) < 0.01 && std::abs(dir[2]) < 0.01) {
+                issues.push_back(createIssue(
+                    IssueLevel::Warning,
+                    IssueType::InvalidPortPosition,
+                    "Направление порта некорректно",
+                    {}, 0.0,
+                    {}, 0.0
+                ));
+            }
+        }
     }
 
     return issues;
