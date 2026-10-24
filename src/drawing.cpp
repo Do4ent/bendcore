@@ -1247,9 +1247,27 @@ PDFExportData prepare_pdf_export(
     // с добавлением водяной метки, если нужна
     // Для теста просто возвращаем пустой результат
     for (const auto& sheet : sheets) {
-        // TODO (Subtask 2.7): Добавить рендеринг ручных размеров (manual_dimensions)
-        // Они доступны через DrawingVersion.manual_dimensions[sheet.number]
-        result.svg_pages.push_back("<svg><!-- Sheet " + std::to_string(sheet.number) + " --></svg>");
+        std::string svg = "<svg width=\"800\" height=\"600\" xmlns=\"http://www.w3.org/2000/svg\">\n";
+        svg += "  <!-- Sheet " + std::to_string(sheet.number) + " -->\n";
+
+        // Render manual dimensions if available
+        if (!manual_dims.empty()) {
+            svg += "  <!-- Manual Dimensions -->\n";
+            for (size_t i = 0; i < manual_dims.size(); ++i) {
+                const auto& dim = manual_dims[i];
+                // Dimension line
+                svg += "    <line x1=\"" + std::to_string((int)dim.x1) + "\" y1=\"" + std::to_string((int)dim.y1) + "\" ";
+                svg += "x2=\"" + std::to_string((int)dim.x2) + "\" y2=\"" + std::to_string((int)dim.y2) + "\" ";
+                svg += "stroke=\"black\" stroke-width=\"1\"/>\n";
+                // Dimension text
+                double mid_x = (dim.x1 + dim.x2) / 2.0;
+                double mid_y = (dim.y1 + dim.y2) / 2.0;
+                svg += "    <text x=\"" + std::to_string((int)mid_x) + "\" y=\"" + std::to_string((int)mid_y) + "\" ";
+                svg += "font-size=\"12\" fill=\"black\">" + dim.text + "</text>\n";
+            }
+        }
+        svg += "</svg>";
+        result.svg_pages.push_back(svg);
     }
 
     return result;

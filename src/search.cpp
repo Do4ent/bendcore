@@ -754,8 +754,12 @@ std::string query_to_json(const CompoundQuery& query) {
     }
     j["filters"] = filters_arr;
 
-    // TODO: Implement nested queries serialization if needed
-    j["nested_queries"] = json::array();
+    // Serialize nested queries
+    json nested_arr = json::array();
+    for (const auto& nested : query.nested_queries) {
+        nested_arr.push_back(json::parse(query_to_json(nested)));
+    }
+    j["nested_queries"] = nested_arr;
 
     return j.dump();
 }
@@ -780,7 +784,13 @@ CompoundQuery json_to_query(const std::string& json_str) {
             }
         }
 
-        // TODO: Handle nested queries deserialization if needed
+        // Handle nested queries deserialization
+        if (j.contains("nested_queries") && j["nested_queries"].is_array()) {
+            for (const auto& nested_json : j["nested_queries"]) {
+                std::string nested_str = nested_json.dump();
+                query.nested_queries.push_back(json_to_query(nested_str));
+            }
+        }
     } catch (...) {
         // Return empty query on error
     }
