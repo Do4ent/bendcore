@@ -1,0 +1,7 @@
+#ifndef EIGEN_EIGEN_H
+#define EIGEN_EIGEN_H
+
+#include "Core"
+#include "Dense"
+
+#endif // EIGEN_EIGEN_H

@@ -1,0 +1,176 @@
+// Minimal Eigen Mock for Phase 4 Testing
+// This provides enough to compile tests without full Eigen dependency
+
+#ifndef EIGEN_CORE_H
+#define EIGEN_CORE_H
+
+#include <vector>
+#include <cmath>
+#include <cassert>
+#include <algorithm>
+#include <stdexcept>
+
+namespace Eigen {
+    using Index = long long;
+    
+    // Dynamic vector class
+    class VectorXd {
+    public:
+        std::vector<double> data_;
+        
+        VectorXd() = default;
+        explicit VectorXd(Index size) : data_(size, 0.0) {}
+        VectorXd(const VectorXd& other) = default;
+        VectorXd& operator=(const VectorXd& other) = default;
+        
+        Index size() const { return static_cast<Index>(data_.size()); }
+        double& operator()(Index i) { return data_[i]; }
+        const double& operator()(Index i) const { return data_[i]; }
+        double& operator[](Index i) { return data_[i]; }
+        const double& operator[](Index i) const { return data_[i]; }
+        
+        VectorXd operator+(const VectorXd& other) const {
+            VectorXd result = *this;
+            for (size_t i = 0; i < data_.size(); ++i) result.data_[i] += other.data_[i];
+            return result;
+        }
+        
+        VectorXd operator-(const VectorXd& other) const {
+            VectorXd result = *this;
+            for (size_t i = 0; i < data_.size(); ++i) result.data_[i] -= other.data_[i];
+            return result;
+        }
+        
+        VectorXd operator*(double scalar) const {
+            VectorXd result = *this;
+            for (auto& v : result.data_) v *= scalar;
+            return result;
+        }
+        
+        double dot(const VectorXd& other) const {
+            double sum = 0.0;
+            for (size_t i = 0; i < data_.size(); ++i) sum += data_[i] * other.data_[i];
+            return sum;
+        }
+        
+        double norm() const { return std::sqrt(dot(*this)); }
+        
+        VectorXd normalized() const {
+            double n = norm();
+            if (n < 1e-15) return VectorXd(size());
+            return (*this) * (1.0 / n);
+        }
+    };
+    
+    // Dynamic matrix class
+    class MatrixXd {
+    public:
+        std::vector<std::vector<double>> data_;
+        Index rows_ = 0, cols_ = 0;
+        
+        MatrixXd() = default;
+        MatrixXd(Index r, Index c) : rows_(r), cols_(c) {
+            data_.resize(r, std::vector<double>(c, 0.0));
+        }
+        
+        MatrixXd(const MatrixXd& other) = default;
+        MatrixXd& operator=(const MatrixXd& other) = default;
+        
+        Index rows() const { return rows_; }
+        Index cols() const { return cols_; }
+        
+        double& operator()(Index i, Index j) { return data_[i][j]; }
+        const double& operator()(Index i, Index j) const { return data_[i][j]; }
+        
+        VectorXd col(Index j) const {
+            VectorXd v(rows_);
+            for (Index i = 0; i < rows_; ++i) v[i] = data_[i][j];
+            return v;
+        }
+        
+        MatrixXd transpose() const {
+            MatrixXd result(cols_, rows_);
+            for (Index i = 0; i < rows_; ++i) {
+                for (Index j = 0; j < cols_; ++j) {
+                    result(j, i) = data_[i][j];
+                }
+            }
+            return result;
+        }
+        
+        VectorXd operator*(const VectorXd& v) const {
+            assert(cols_ == v.size());
+            VectorXd result(rows_);
+            for (Index i = 0; i < rows_; ++i) {
+                for (Index j = 0; j < cols_; ++j) {
+                    result[i] += data_[i][j] * v[j];
+                }
+            }
+            return result;
+        }
+        
+        // Simplified LDLT solver
+        VectorXd ldlt_solve(const VectorXd& b) const {
+            // Very basic Gaussian elimination for now
+            MatrixXd A = *this;
+            VectorXd x = b;
+            
+            for (Index k = 0; k < rows_ - 1; ++k) {
+                Index max_row = k;
+                for (Index i = k + 1; i < rows_; ++i) {
+                    if (std::abs(A.data_[i][k]) > std::abs(A.data_[max_row][k])) {
+                        max_row = i;
+                    }
+                }
+                std::swap(A.data_[k], A.data_[max_row]);
+                std::swap(x.data_[k], x.data_[max_row]);
+                
+                for (Index i = k + 1; i < rows_; ++i) {
+                    if (std::abs(A.data_[k][k]) < 1e-15) continue;
+                    double factor = A.data_[i][k] / A.data_[k][k];
+                    for (Index j = k; j < cols_; ++j) {
+                        A.data_[i][j] -= factor * A.data_[k][j];
+                    }
+                    x.data_[i] -= factor * x.data_[k];
+                }
+            }
+            
+            // Back substitution
+            for (Index i = rows_ - 1; i >= 0; --i) {
+                for (Index j = i + 1; j < cols_; ++j) {
+                    x.data_[i] -= A.data_[i][j] * x.data_[j];
+                }
+                if (std::abs(A.data_[i][i]) > 1e-15) {
+                    x.data_[i] /= A.data_[i][i];
+                }
+            }
+            
+            return x;
+        }
+    };
+    
+    // LDLT decomposition class
+    class LDLT {
+    public:
+        MatrixXd A;
+        explicit LDLT(const MatrixXd& m) : A(m) {}
+        VectorXd solve(const VectorXd& b) const { return A.ldlt_solve(b); }
+    };
+    
+    // Helper for creating map
+    class Map {
+    public:
+        template<typename Derived>
+        static VectorXd CreateVector(double* ptr, Index size) {
+            VectorXd v(size);
+            std::copy(ptr, ptr + size, v.data_.begin());
+            return v;
+        }
+    };
+}
+
+// Provide Eigen::Map template specialization
+template<typename T>
+class Eigen::Map<T> {};
+
+#endif // EIGEN_CORE_H
