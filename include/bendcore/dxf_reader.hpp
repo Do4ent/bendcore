@@ -39,12 +39,24 @@ struct Spline {
     int color = 256;
 };
 
+// Dimension structure (BC-012: Drawing dimensions)
+struct Dimension {
+    Point2D start_point;          // First definition point
+    Point2D end_point;            // Second definition point
+    Point2D text_position;        // Text label position
+    std::string text_value;       // Dimension text (e.g., "125.5")
+    std::string dimension_type;   // "LINEAR", "RADIUS", "DIAMETER", "ANGULAR"
+    double measured_value = 0.0;  // Parsed numeric value in mm
+    int color = 256;
+};
+
 // DXF geometry collection
 struct DXFGeometry {
     std::vector<Line> lines;
     std::vector<Circle> circles;
     std::vector<Polyline> polylines;
     std::vector<Spline> splines;
+    std::vector<Dimension> dimensions;  // Dimensions extracted from drawing
     std::map<std::string, std::string> layers;
     std::map<std::string, std::string> properties;
     int entity_count = 0;
@@ -81,11 +93,17 @@ private:
     // Extract splines from DXF
     void extract_splines(const std::string& file_content);
 
+    // Extract dimensions from DXF (BC-012: Drawing dimensions)
+    void extract_dimensions(const std::string& file_content);
+
     // Extract layer information
     void extract_layers(const std::string& file_content);
 
     // Parse DXF coordinate
     static double parse_coordinate(const std::string& value);
+
+    // Parse dimension text value to numeric value
+    static double parse_dimension_value(const std::string& text_value);
 };
 
 }  // namespace bendcore::dxf

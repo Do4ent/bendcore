@@ -278,4 +278,118 @@ double GeometryAnalyzer::estimate_confidence(const ExtractedParams& params) {
     return confidence;
 }
 
+TubeAxisResult GeometryAnalyzer::find_tube_axis_pca(
+    const std::vector<std::vector<double>>& points_3d) {
+
+    TubeAxisResult result;
+
+    // Need at least 3 points for PCA
+    if (points_3d.size() < 3) {
+        result.confidence = 0.0;
+        result.axis_direction = {1.0, 0.0, 0.0};  // Default X axis
+        result.axis_origin = {0.0, 0.0, 0.0};
+        return result;
+    }
+
+    // Step 1: Calculate centroid (mean of all points)
+    std::vector<double> centroid(3, 0.0);
+    for (const auto& pt : points_3d) {
+        if (pt.size() >= 3) {
+            centroid[0] += pt[0];
+            centroid[1] += pt[1];
+            centroid[2] += pt[2];
+        }
+    }
+
+    double n = static_cast<double>(points_3d.size());
+    centroid[0] /= n;
+    centroid[1] /= n;
+    centroid[2] /= n;
+
+    // Step 2: Build covariance matrix
+    std::vector<std::vector<double>> cov(3, std::vector<double>(3, 0.0));
+
+    for (const auto& pt : points_3d) {
+        if (pt.size() >= 3) {
+            double x = pt[0] - centroid[0];
+            double y = pt[1] - centroid[1];
+            double z = pt[2] - centroid[2];
+
+            cov[0][0] += x * x;
+            cov[0][1] += x * y;
+            cov[0][2] += x * z;
+            cov[1][1] += y * y;
+            cov[1][2] += y * z;
+            cov[2][2] += z * z;
+        }
+    }
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            cov[i][j] /= n;
+            cov[j][i] = cov[i][j];  // Make symmetric
+        }
+    }
+
+    // Step 3: Find dominant eigenvector using power iteration
+    // Initialize with random vector
+    std::vector<double> v = {1.0, 0.0, 0.0};
+
+    // 10 power iterations
+    for (int iter = 0; iter < 10; iter++) {
+        // Compute Av
+        std::vector<double> av(3, 0.0);
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                av[i] += cov[i][j] * v[j];
+            }
+        }
+
+        // Normalize
+        double norm = std::sqrt(av[0] * av[0] + av[1] * av[1] + av[2] * av[2]);
+        if (norm > 1e-10) {
+            v[0] = av[0] / norm;
+            v[1] = av[1] / norm;
+            v[2] = av[2] / norm;
+        }
+    }
+
+    // Set results
+    result.axis_direction = v;
+    result.axis_origin = centroid;
+
+    // Calculate confidence based on point cloud linearity
+    // If all points are close to the fitted axis, confidence is high
+    double total_deviation = 0.0;
+    for (const auto& pt : points_3d) {
+        if (pt.size() >= 3) {
+            // Distance from point to axis
+            double dx = pt[0] - centroid[0];
+            double dy = pt[1] - centroid[1];
+            double dz = pt[2] - centroid[2];
+
+            // Dot product with axis
+            double dot = dx * v[0] + dy * v[1] + dz * v[2];
+
+            // Perpendicular distance
+            double perp_dist = std::sqrt(
+                (dx - dot * v[0]) * (dx - dot * v[0]) +
+                (dy - dot * v[1]) * (dy - dot * v[1]) +
+                (dz - dot * v[2]) * (dz - dot * v[2])
+            );
+
+            total_deviation += perp_dist;
+        }
+    }
+
+    double avg_deviation = total_deviation / n;
+
+    // Confidence decreases with deviation
+    // Assume typical tube radius, good confidence if deviation < 10% of radius
+    result.confidence = 1.0 / (1.0 + avg_deviation / 1.0);  // Sigmoid-like
+    result.confidence = std::max(0.0, std::min(1.0, result.confidence));
+
+    return result;
+}
+
 }  // namespace bendcore::geometry

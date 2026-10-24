@@ -28,6 +28,13 @@ struct ExtractedParams {
     }
 };
 
+// Tube axis result from PCA
+struct TubeAxisResult {
+    std::vector<double> axis_direction;  // Normalized 3D direction vector
+    std::vector<double> axis_origin;     // Origin point of axis (3D)
+    double confidence = 0.0;              // 0.0-1.0 confidence
+};
+
 // Geometry analyzer class
 class GeometryAnalyzer {
 public:
@@ -46,6 +53,10 @@ public:
 
     // Calculate bend angles from curvature data
     std::vector<double> calculate_bend_angles(const std::vector<double>& curvature_points);
+
+    // Find tube axis using PCA (Principal Component Analysis)
+    // points: 3D points sampled from tube surface (shape: N x 3)
+    TubeAxisResult find_tube_axis_pca(const std::vector<std::vector<double>>& points_3d);
 
     // Estimate confidence score based on analysis quality
     static double estimate_confidence(const ExtractedParams& params);
