@@ -38,7 +38,7 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "three": "^r128.0.0",
+    "three": "^0.128.0",
     "@growthbook/sdk-js": "^0.36.0"
   },
   "devDependencies": {
