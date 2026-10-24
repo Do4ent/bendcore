@@ -52,3 +52,4 @@ tmp/
 # Сборка стенда панелей (esbuild)
 /tests/ui_preview/dist/main.js
 /tests/ui_preview/dist/main.css
+third_party/eigen-*
