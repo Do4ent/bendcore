@@ -18,12 +18,18 @@ if(EMSCRIPTEN)
   add_link_options(-fexceptions)
 endif()
 
-# Eigen (MPL-2.0): системный или каталог BENDCORE_EIGEN_DIR (содержит папку Eigen/) — для решателя эскиза.
+# Eigen (MPL-2.0): системный или stub для облачной среды
 find_package(Eigen3 3.3 QUIET NO_MODULE)
 if(NOT TARGET Eigen3::Eigen)
   set(BENDCORE_EIGEN_DIR "" CACHE PATH "Каталог Eigen (внутри папка Eigen/), если нет системного Eigen")
-  find_path(BENDCORE_EIGEN_INCLUDE Eigen/Core HINTS ${BENDCORE_EIGEN_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/third_party/eigen-5.0.0 ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/eigen-5.0.0 NO_CMAKE_FIND_ROOT_PATH REQUIRED)
-  # NO_CMAKE_FIND_ROOT_PATH: Eigen — заголовки; корень тулчейна Emscripten не должен переписывать путь.
+  find_path(BENDCORE_EIGEN_INCLUDE Eigen/Core HINTS ${BENDCORE_EIGEN_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/third_party/eigen-5.0.0 ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/eigen-5.0.0 ${CMAKE_CURRENT_SOURCE_DIR}/third_party_stubs NO_CMAKE_FIND_ROOT_PATH)
+
+  # Fallback to stub if not found
+  if(NOT BENDCORE_EIGEN_INCLUDE)
+    set(BENDCORE_EIGEN_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/third_party_stubs)
+    message(STATUS "Using Eigen stub from third_party_stubs/")
+  endif()
+
   add_library(bendcore_eigen INTERFACE)
   target_include_directories(bendcore_eigen SYSTEM INTERFACE ${BENDCORE_EIGEN_INCLUDE})
 else()
@@ -57,7 +63,7 @@ else()
 endif()
 
 add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/dwg_export.cpp src/formula.cpp src/template_manager.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp src/growthbook_client.cpp src/analytics_event.cpp src/drawing_editor.cpp src/drawing_layers.cpp src/drawing_undo_redo.cpp src/combined_3d_offset.cpp src/bendcore/offset_profiler.cpp src/dwfx_parser.cpp)
-target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
+target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
 
 # BC-015: Link LibDWG if available

@@ -1,0 +1,59 @@
+#pragma once
+#include <vector>
+#include <cmath>
+#include <stdexcept>
+
+namespace Eigen {
+
+// Vector template
+template<typename Scalar>
+class Matrix {
+public:
+    int rows_, cols_;
+    std::vector<Scalar> data_;
+    
+    Matrix(int rows = 0, int cols = 0) 
+        : rows_(rows), cols_(cols), data_(rows * cols, 0) {}
+    
+    Scalar& operator()(int r, int c) {
+        return data_[r * cols_ + c];
+    }
+    
+    const Scalar& operator()(int r, int c) const {
+        return data_[r * cols_ + c];
+    }
+    
+    Scalar& coeff(int r, int c) {
+        return operator()(r, c);
+    }
+    
+    int rows() const { return rows_; }
+    int cols() const { return cols_; }
+};
+
+// Vector types
+using Vector2d = Matrix<double>;
+using Vector3d = Matrix<double>;
+using Vector4d = Matrix<double>;
+using VectorXd = Matrix<double>;
+using MatrixXd = Matrix<double>;
+
+// QR decomposition stub
+template<typename MatrixType>
+class HouseholderQR {
+public:
+    HouseholderQR() {}
+    HouseholderQR(const MatrixType& mat) : m_(mat) {}
+    
+    MatrixType matrixQR() const { return m_; }
+    
+private:
+    MatrixType m_;
+};
+
+// Basic operations
+inline double sqrt(double x) { return std::sqrt(x); }
+inline double cos(double x) { return std::cos(x); }
+inline double sin(double x) { return std::sin(x); }
+
+} // namespace Eigen
