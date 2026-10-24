@@ -46,7 +46,7 @@ else()
   set(OpenCASCADE_FOUND FALSE)
 endif()
 
-add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp src/occt_init.cpp src/step_reader.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp src/growthbook_client.cpp src/analytics_event.cpp src/drawing_editor.cpp src/drawing_layers.cpp src/drawing_undo_redo.cpp src/bendcore/parallel_offset.cpp src/combined_3d_offset.cpp src/bendcore/offset_profiler.cpp src/bendcore/parallel_offset_optimized.cpp src/bendcore/combined_3d_offset_optimized.cpp)
+add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/sketch.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/drawing.cpp src/dwg_export.cpp src/core_api.cpp src/formula.cpp src/template_manager.cpp src/search.cpp src/occt_init.cpp src/step_reader.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp src/growthbook_client.cpp src/analytics_event.cpp src/drawing_editor.cpp src/drawing_layers.cpp src/drawing_undo_redo.cpp src/bendcore/parallel_offset.cpp src/combined_3d_offset.cpp src/bendcore/offset_profiler.cpp src/bendcore/parallel_offset_optimized.cpp src/bendcore/combined_3d_offset_optimized.cpp src/dwfx_parser.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
 
@@ -96,6 +96,10 @@ bendcore_add_test(dwg_export test_dwg_export)
 add_executable(dwg_export_e2e tests/dwg_export.e2e.cpp)
 target_link_libraries(dwg_export_e2e PRIVATE bendcore_core)
 bendcore_add_test(dwg_export_e2e dwg_export_e2e)
+
+add_executable(e2e_ui_core tests/e2e_ui_core_test.cpp)
+target_link_libraries(e2e_ui_core PRIVATE bendcore_core)
+bendcore_add_test(e2e_ui_core e2e_ui_core)
 
 add_executable(test_core_api tests/test_core_api.cpp)
 target_link_libraries(test_core_api PRIVATE bendcore_core)

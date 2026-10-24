@@ -13,7 +13,7 @@
  * />
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import './RibbonBar.css';
 
 // ============ Types ============
@@ -287,6 +287,48 @@ export const RibbonBar: React.FC<RibbonBarProps> = ({
 
   const currentTab = tabs.find((tab) => tab.id === activeTab);
   const currentCommands = currentTab?.commands || [];
+
+  // Обработчик горячих клавиш
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Найти всех доступные команды со всех табов
+      const allCommands: { command: RibbonCommand; tab: RibbonTab }[] = [];
+
+      for (const tab of tabs) {
+        for (const cmd of tab.commands) {
+          allCommands.push({ command: cmd, tab });
+        }
+      }
+
+      // Проверить каждую команду на её горячую клавишу
+      for (const { command } of allCommands) {
+        if (!command.shortcut || command.disabled) continue;
+
+        // Парсить горячую клавишу (e.g., "Ctrl+S")
+        const keys = command.shortcut.toLowerCase().split('+');
+        const isCtrl = keys.includes('ctrl') && e.ctrlKey;
+        const isShift = keys.includes('shift') && e.shiftKey;
+        const isAlt = keys.includes('alt') && e.altKey;
+
+        // Найти клавишу (последний элемент)
+        const keyChar = keys[keys.length - 1];
+        const eventKey = e.key.toLowerCase();
+
+        // Проверить соответствие
+        if (isCtrl && (isShift || !keys.includes('shift')) && (isAlt || !keys.includes('alt'))) {
+          if (eventKey === keyChar || eventKey === keyChar.toLocaleUpperCase()) {
+            e.preventDefault();
+            command.action?.();
+            onCommand?.(command.id);
+            return;
+          }
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [tabs, onCommand]);
 
   return (
     <div

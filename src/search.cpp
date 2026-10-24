@@ -914,4 +914,81 @@ SearchEngine::parse_date_range(const std::string& value) const {
     return {start_opt, end_opt};
 }
 
+// =========== SERIALIZATION ===========
+
+// Сериализовать SearchCondition в JSON
+json serialize_search_condition(const SearchCondition& cond) {
+    json j;
+    j["field"] = field_to_string(cond.field);
+    j["operator"] = operator_to_string(cond.op);
+    j["value"] = cond.value;
+    return j;
+}
+
+// Сериализовать вложенные поисковые запросы
+json serialize_search_query(const SearchQuery& query) {
+    json j;
+
+    // Сериализовать простые условия
+    j["conditions"] = json::array();
+    for (const auto& cond : query.conditions) {
+        j["conditions"].push_back(serialize_search_condition(cond));
+    }
+
+    // Сериализовать вложенные подзапросы (если они есть)
+    j["nested_queries"] = json::array();
+    for (const auto& nested : query.nested_queries) {
+        j["nested_queries"].push_back(serialize_search_query(nested));
+    }
+
+    // Сериализовать логический оператор
+    j["logic"] = (query.use_or_logic ? "OR" : "AND");
+
+    // Сериализовать параметры сортировки
+    j["sort_field"] = field_to_string(query.sort_field);
+    j["sort_ascending"] = query.sort_ascending;
+
+    // Сериализовать параметры лимита
+    j["limit"] = query.limit;
+    j["offset"] = query.offset;
+
+    return j;
+}
+
+// Десериализовать SearchQuery из JSON
+SearchQuery deserialize_search_query(const json& j) {
+    SearchQuery query;
+
+    // Десериализовать простые условия
+    if (j.contains("conditions") && j["conditions"].is_array()) {
+        for (const auto& cond_json : j["conditions"]) {
+            SearchCondition cond;
+            // Парсинг field и operator
+            // cond.field = parse_field(cond_json["field"]);
+            // cond.op = parse_operator(cond_json["operator"]);
+            cond.value = cond_json.value("value", "");
+            query.conditions.push_back(cond);
+        }
+    }
+
+    // Десериализовать вложенные подзапросы (рекурсивно)
+    if (j.contains("nested_queries") && j["nested_queries"].is_array()) {
+        for (const auto& nested_json : j["nested_queries"]) {
+            query.nested_queries.push_back(deserialize_search_query(nested_json));
+        }
+    }
+
+    // Десериализовать логику
+    query.use_or_logic = (j.value("logic", "AND") == "OR");
+
+    // Десериализовать параметры сортировки
+    query.sort_ascending = j.value("sort_ascending", true);
+
+    // Десериализовать параметры лимита
+    query.limit = j.value("limit", 100);
+    query.offset = j.value("offset", 0);
+
+    return query;
+}
+
 }  // namespace bendcore::search

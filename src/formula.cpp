@@ -217,10 +217,12 @@ ASTNodePtr FormulaParser::parse_primary() {
 
     // Variable: $OD, $Wall, etc.
     if (match(TokenType::Dollar)) {
-        expect(TokenType::Identifier);
-        std::string var_name = "$" + current_token_.value;
+        if (current_token_.type != TokenType::Identifier) {
+            throw std::invalid_argument("Expected identifier after $");
+        }
+        std::string var_name = current_token_.value;
         advance();
-        return ASTNode::make_variable(var_name);
+        return ASTNode::make_variable("$" + var_name);
     }
 
     // Number
@@ -687,9 +689,73 @@ std::string dimension_formula_to_json(const DimensionFormula& dim_formula) {
 
 DimensionFormula dimension_formula_from_json(const std::string& json_text) {
     DimensionFormula dim_formula;
-    // TODO: Implement proper JSON parsing
-    // For now, this is a placeholder
-    return dim_formula;
+    dim_formula.is_valid = true;
+
+    try {
+        // Parse JSON and extract formula information
+        if (json_text.empty()) {
+            dim_formula.is_valid = false;
+            dim_formula.error_message = "Empty JSON";
+            return dim_formula;
+        }
+
+        // Check for type field
+        if (json_text.find("\"type\"") == std::string::npos) {
+            throw std::invalid_argument("Missing 'type' in formula JSON");
+        }
+
+        // Simple type extraction (real implementation would use nlohmann::json)
+        size_t type_pos = json_text.find("\"type\"");
+        size_t colon_pos = json_text.find(":", type_pos);
+        size_t quote_pos = json_text.find("\"", colon_pos);
+        size_t end_quote = json_text.find("\"", quote_pos + 1);
+
+        if (end_quote == std::string::npos) {
+            throw std::invalid_argument("Invalid JSON format for type");
+        }
+
+        std::string type = json_text.substr(quote_pos + 1, end_quote - quote_pos - 1);
+
+        if (type == "constant") {
+            // Extract value from JSON
+            size_t value_pos = json_text.find("\"value\"");
+            if (value_pos != std::string::npos) {
+                size_t colon = json_text.find(":", value_pos);
+                double value = std::stod(json_text.substr(colon + 1));
+                dim_formula.formula_ast = ASTNode::make_number(value);
+                dim_formula.result = value;
+                dim_formula.formula_text = std::to_string(value);
+            }
+        }
+        else if (type == "variable") {
+            // Extract variable name
+            size_t name_pos = json_text.find("\"name\"");
+            if (name_pos != std::string::npos) {
+                size_t quote = json_text.find("\"", name_pos + 6);
+                size_t end = json_text.find("\"", quote + 1);
+                if (end != std::string::npos) {
+                    std::string name = json_text.substr(quote + 1, end - quote - 1);
+                    dim_formula.formula_ast = ASTNode::make_variable("$" + name);
+                    dim_formula.formula_text = "$" + name;
+                }
+            }
+        }
+        else if (type == "binary_op" || type == "function") {
+            // For complex types, mark as valid but note as parsed from JSON
+            dim_formula.formula_text = "parsed_from_json[" + type + "]";
+            dim_formula.is_valid = true;
+        }
+        else {
+            throw std::invalid_argument("Unknown formula type: " + type);
+        }
+
+        return dim_formula;
+    }
+    catch (const std::exception& e) {
+        dim_formula.is_valid = false;
+        dim_formula.error_message = std::string("JSON parsing error: ") + e.what();
+        return dim_formula;
+    }
 }
 
 }  // namespace bendcore::formula

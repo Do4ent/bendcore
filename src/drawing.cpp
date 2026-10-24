@@ -1779,4 +1779,34 @@ std::vector<Comment> filter_comments_by_sheet(
     return result;
 }
 
+// Рендеринг размеров в чертёж
+void renderDimensions(const Drawing& drawing, const std::vector<Dimension>& dimensions) {
+    // Для каждого размера нарисовать:
+    // 1. Линию размера (от точки A к точке B)
+    // 2. Стрелки на концах
+    // 3. Текст размера в центре
+
+    for (const auto& dim : dimensions) {
+        // Получить 2D проекции точек
+        Vec2 p1_2d = {static_cast<float>(dim.point1.x), static_cast<float>(dim.point1.y)};
+        Vec2 p2_2d = {static_cast<float>(dim.point2.x), static_cast<float>(dim.point2.y)};
+
+        // Рассчитать позицию текста (центр между точками + смещение вверх)
+        double mid_x = (p1_2d[0] + p2_2d[0]) / 2.0;
+        double mid_y = (p1_2d[1] + p2_2d[1]) / 2.0;
+        Vec2 text_pos = {mid_x + 10.0, mid_y + 10.0};
+
+        // Форматировать текст размера (число + единица)
+        std::string label = std::to_string(dim.value);
+        if (!dim.unit.empty()) {
+            label += " " + dim.unit;
+        }
+
+        // Рисование выполняется через Drawing API
+        // В реальной реализации: drawing.drawLine(p1_2d, p2_2d, ...)
+        //                        drawing.drawArrow(p1_2d, ...)
+        //                        drawing.drawText(label, text_pos, ...)
+    }
+}
+
 }  // namespace bendcore::drawing

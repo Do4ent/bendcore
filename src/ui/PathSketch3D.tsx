@@ -483,6 +483,38 @@ export const PathSketch3D: React.FC<PathSketch3DProps> = ({
 
   // ===== INITIALIZATION =====
 
+  // ===== DELETE HANDLER =====
+  const deleteSelected = useCallback(() => {
+    if (selectedSegmentId) {
+      setSketch((prev) => ({
+        ...prev,
+        segments: prev.segments.filter((s) => s.id !== selectedSegmentId),
+      }));
+      setSelectedSegmentId(null);
+    } else if (selectedVertexId) {
+      setSketch((prev) => ({
+        ...prev,
+        vertices: prev.vertices.filter((v) => v.id !== selectedVertexId),
+        segments: prev.segments.filter(
+          (s) => s.from_vertex !== selectedVertexId && s.to_vertex !== selectedVertexId
+        ),
+      }));
+      setSelectedVertexId(null);
+    }
+  }, [selectedSegmentId, selectedVertexId]);
+
+  // ===== KEYBOARD HANDLER =====
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Delete') {
+        e.preventDefault();
+        deleteSelected();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [deleteSelected]);
+
   useEffect(() => {
     if (!containerRef.current || externalRenderer) return;
 
