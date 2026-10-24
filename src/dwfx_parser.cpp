@@ -34,89 +34,171 @@ bool DWFxParser::parseW3DStructure() {
 }
 
 bool DWFxParser::extractZipContents() {
-    // Open DWFx file as ZIP (DWFx is ZIP-based format)
+    // BC-001, BC-017, BC-018, BC-019: Native ZIP parsing WITHOUT system() calls
+    // Parse ZIP Central Directory directly from file to avoid shell injection/path traversal
+
     try {
         std::ifstream dwfx_file(dwfx_path_, std::ios::binary);
         if (!dwfx_file.is_open()) {
             return false;
         }
 
-        // Validate ZIP signature (PK\x03\x04)
-        std::vector<uint8_t> header(4);
-        dwfx_file.read(reinterpret_cast<char*>(header.data()), 4);
-        if (header[0] != 'P' || header[1] != 'K' || header[2] != 0x03 || header[3] != 0x04) {
+        // Read entire file for ZIP parsing
+        dwfx_file.seekg(0, std::ios::end);
+        size_t file_size = dwfx_file.tellg();
+        dwfx_file.seekg(0);
+
+        if (file_size < 22) {
             return false;
         }
 
-        // Create temporary directory for extraction
-        static int extraction_counter = 0;
-        std::string temp_dir = "/tmp/dwfx_extract_" + std::to_string(extraction_counter++) + "_" +
-                              std::to_string(std::time(nullptr));
+        std::vector<uint8_t> file_data(file_size);
+        dwfx_file.read(reinterpret_cast<char*>(file_data.data()), file_size);
+        dwfx_file.close();
 
-        // Use unzip command for robust extraction
-        std::string unzip_cmd = "mkdir -p " + temp_dir + " && unzip -q \"" + dwfx_path_ + "\" -d " + temp_dir;
-        int extract_result = system(unzip_cmd.c_str());
-        if (extract_result != 0) {
+        // Validate Local File Header signature: PK 0x03 0x04
+        if (file_data[0] != 'P' || file_data[1] != 'K' ||
+            file_data[2] != 0x03 || file_data[3] != 0x04) {
             return false;
         }
 
-        // Verify required DWFx files were extracted
-        std::ifstream content_check(temp_dir + "/content.xml");
-        bool has_content = content_check.is_open();
-        content_check.close();
+        // Find End of Central Directory Record (0x06054b50 = PK 0x05 0x06)
+        int64_t eocd_pos = -1;
+        for (int64_t i = (int64_t)file_size - 22; i >= 0; --i) {
+            if (file_data[i] == 'P' && file_data[i+1] == 'K' &&
+                file_data[i+2] == 0x05 && file_data[i+3] == 0x06) {
+                eocd_pos = i;
+                break;
+            }
+        }
 
-        std::ifstream descriptor_check(temp_dir + "/DescriptorList.xml");
-        bool has_descriptor = descriptor_check.is_open();
-        descriptor_check.close();
-
-        // DWFx must contain at least content.xml
-        if (!has_content && !has_descriptor) {
-            system(("rm -rf " + temp_dir).c_str());
+        if (eocd_pos <= 0) {
             return false;
         }
 
-        // Store extracted path for later use
-        extracted_temp_dir_ = temp_dir;
+        // Extract Central Directory offset (4 bytes at offset +16 from EOCD)
+        uint32_t cd_offset = 0;
+        std::memcpy(&cd_offset, file_data.data() + eocd_pos + 16, sizeof(uint32_t));
 
-        // Read content.xml and DescriptorList.xml into memory for parsing
-        if (has_content) {
-            std::ifstream content_file(temp_dir + "/content.xml", std::ios::binary);
-            if (content_file.is_open()) {
-                content_file.seekg(0, std::ios::end);
-                size_t size = content_file.tellg();
-                content_file.seekg(0);
-                content_xml_data_.resize(size);
-                content_file.read(content_xml_data_.data(), size);
-                content_file.close();
-            }
+        if (cd_offset >= eocd_pos) {
+            return false;
         }
 
-        if (has_descriptor) {
-            std::ifstream descriptor_file(temp_dir + "/DescriptorList.xml", std::ios::binary);
-            if (descriptor_file.is_open()) {
-                descriptor_file.seekg(0, std::ios::end);
-                size_t size = descriptor_file.tellg();
-                descriptor_file.seekg(0);
-                descriptor_list_data_.resize(size);
-                descriptor_file.read(descriptor_list_data_.data(), size);
-                descriptor_file.close();
+        // Parse Central Directory Headers to identify files (0x02014b50 = PK 0x01 0x02)
+        bool found_content = false;
+        bool found_descriptor = false;
+
+        size_t pos = cd_offset;
+        while (pos < eocd_pos && pos + 46 <= file_size) {
+            if (file_data[pos] != 'P' || file_data[pos+1] != 'K' ||
+                file_data[pos+2] != 0x01 || file_data[pos+3] != 0x02) {
+                break;
             }
+
+            uint16_t filename_len = 0;
+            uint16_t extra_len = 0;
+            uint16_t comment_len = 0;
+
+            std::memcpy(&filename_len, file_data.data() + pos + 26, sizeof(uint16_t));
+            std::memcpy(&extra_len, file_data.data() + pos + 28, sizeof(uint16_t));
+            std::memcpy(&comment_len, file_data.data() + pos + 32, sizeof(uint16_t));
+
+            if (pos + 46 + filename_len > file_size) {
+                break;
+            }
+
+            std::string filename(
+                reinterpret_cast<const char*>(file_data.data() + pos + 46),
+                filename_len
+            );
+
+            // Validate no path traversal
+            if (filename.find("..") != std::string::npos) {
+                return false;
+            }
+
+            if (filename.find("content.xml") != std::string::npos) {
+                found_content = true;
+            }
+            if (filename.find("DescriptorList.xml") != std::string::npos) {
+                found_descriptor = true;
+            }
+
+            pos += 46 + filename_len + extra_len + comment_len;
         }
 
-        // Scan for W3D or HSF files (binary geometry)
-        std::string find_w3d = "find " + temp_dir + " \\( -name '*.w3d' -o -name '*.hsf' \\) 2>/dev/null";
-        FILE* pipe = popen(find_w3d.c_str(), "r");
-        if (pipe) {
-            char line[256];
-            while (fgets(line, sizeof(line), pipe) != nullptr) {
-                std::string path(line);
-                if (!path.empty() && path.back() == '\n') path.pop_back();
-                w3d_files_.push_back(path);
-            }
-            pclose(pipe);
+        if (!found_content && !found_descriptor) {
+            return false;
         }
 
-        return true;
+        // Parse Local File Headers and extract file data directly
+        pos = 0;
+        while (pos + 30 <= file_size) {
+            if (file_data[pos] != 'P' || file_data[pos+1] != 'K' ||
+                file_data[pos+2] != 0x03 || file_data[pos+3] != 0x04) {
+                pos++;
+                continue;
+            }
+
+            uint16_t filename_len = 0;
+            uint16_t extra_len = 0;
+            uint32_t compressed_size = 0;
+            uint16_t compression_method = 0;
+
+            std::memcpy(&filename_len, file_data.data() + pos + 26, sizeof(uint16_t));
+            std::memcpy(&extra_len, file_data.data() + pos + 28, sizeof(uint16_t));
+            std::memcpy(&compression_method, file_data.data() + pos + 8, sizeof(uint16_t));
+            std::memcpy(&compressed_size, file_data.data() + pos + 18, sizeof(uint32_t));
+
+            if (pos + 30 + filename_len > file_size) {
+                break;
+            }
+
+            std::string filename(
+                reinterpret_cast<const char*>(file_data.data() + pos + 30),
+                filename_len
+            );
+
+            // Validate no path traversal
+            if (filename.find("..") != std::string::npos) {
+                pos += 30 + filename_len + extra_len + compressed_size;
+                continue;
+            }
+
+            // BC-019: Prevent ZIP-bomb: limit extracted size to 16MB
+            if (compressed_size > 16 * 1024 * 1024) {
+                pos += 30 + filename_len + extra_len + compressed_size;
+                continue;
+            }
+
+            size_t data_offset = pos + 30 + filename_len + extra_len;
+
+            // Only handle stored files (no compression) for now
+            if (compression_method == 0 && data_offset + compressed_size <= file_size) {
+                if (filename.find("content.xml") != std::string::npos) {
+                    content_xml_data_.assign(
+                        file_data.begin() + data_offset,
+                        file_data.begin() + data_offset + compressed_size
+                    );
+                }
+
+                if (filename.find("DescriptorList.xml") != std::string::npos) {
+                    descriptor_list_data_.assign(
+                        file_data.begin() + data_offset,
+                        file_data.begin() + data_offset + compressed_size
+                    );
+                }
+
+                if (filename.find(".w3d") != std::string::npos ||
+                    filename.find(".hsf") != std::string::npos) {
+                    w3d_files_.push_back(filename);
+                }
+            }
+
+            pos += 30 + filename_len + extra_len + compressed_size;
+        }
+
+        return !content_xml_data_.empty() || !descriptor_list_data_.empty();
     }
     catch (...) {
         return false;
