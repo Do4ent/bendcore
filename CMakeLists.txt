@@ -77,6 +77,7 @@ add_library(bendcore_core STATIC
   src/analytics_event.cpp src/drawing_editor.cpp src/drawing_layers.cpp
   src/drawing_undo_redo.cpp src/combined_3d_offset.cpp src/bendcore/offset_profiler.cpp
   src/dwfx_parser.cpp src/formula_engine.cpp src/geometry_ops.cpp
+  src/document/entity_id.cpp
 )
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB)
@@ -122,6 +123,10 @@ bendcore_add_test(batch_check test_batch_check)
 add_executable(test_instances tests/test_instances.cpp)
 target_link_libraries(test_instances PRIVATE bendcore_core)
 bendcore_add_test(instances test_instances)
+
+add_executable(test_entity_id tests/document/test_entity_id.cpp)
+target_link_libraries(test_entity_id PRIVATE bendcore_core)
+bendcore_add_test(entity_id test_entity_id)
 
 add_executable(test_drawing tests/test_drawing.cpp)
 target_link_libraries(test_drawing PRIVATE bendcore_core)
