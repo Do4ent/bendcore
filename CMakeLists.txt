@@ -80,6 +80,7 @@ add_library(bendcore_core STATIC
   src/document/entity_id.cpp src/document/cad_document.cpp src/document/hierarchy_adapter.cpp
   src/commands/command.cpp src/commands/command_validator.cpp src/commands/command_executor.cpp src/commands/transaction_manager.cpp src/commands/history_stack.cpp src/commands/document_event_bus.cpp
   src/parameters/parameter_store.cpp src/dependencies/dependency_graph.cpp src/rebuild/rebuild_engine.cpp
+  src/geometry/geometry_kernel.cpp src/geometry/brep_builder.cpp src/geometry/curve_operations.cpp src/geometry/surface_operations.cpp
 )
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB)
@@ -464,6 +465,27 @@ bendcore_add_test(rebuild_engine test_rebuild_engine)
 add_executable(test_phase_c_integration tests/integration/test_phase_c_integration.cpp)
 target_link_libraries(test_phase_c_integration PRIVATE bendcore_core)
 bendcore_add_test(phase_c_integration test_phase_c_integration)
+
+# Phase D: Geometry & Topology (CAD-CORE-013 to CAD-CORE-016)
+add_executable(test_geometry_kernel tests/geometry/test_geometry_kernel.cpp)
+target_link_libraries(test_geometry_kernel PRIVATE bendcore_core)
+bendcore_add_test(geometry_kernel test_geometry_kernel)
+
+add_executable(test_brep_builder tests/geometry/test_brep_builder.cpp)
+target_link_libraries(test_brep_builder PRIVATE bendcore_core)
+bendcore_add_test(brep_builder test_brep_builder)
+
+add_executable(test_curve_operations tests/geometry/test_curve_operations.cpp)
+target_link_libraries(test_curve_operations PRIVATE bendcore_core)
+bendcore_add_test(curve_operations test_curve_operations)
+
+add_executable(test_surface_operations tests/geometry/test_surface_operations.cpp)
+target_link_libraries(test_surface_operations PRIVATE bendcore_core)
+bendcore_add_test(surface_operations test_surface_operations)
+
+add_executable(test_phase_d_integration tests/integration/test_phase_d_integration.cpp)
+target_link_libraries(test_phase_d_integration PRIVATE bendcore_core)
+bendcore_add_test(phase_d_integration test_phase_d_integration)
 
 # Comprehensive Test Suite for Phase 4 (90%+ coverage target)
 add_executable(test_dwfx_parser_comprehensive tests/test_dwfx_parser_comprehensive.cpp)
