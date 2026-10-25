@@ -1,8 +1,8 @@
 /**
  * BendCore UI Components
- * Export all 10 core UI components
+ * Export all 14 core UI components (10 existing + 4 Phase G)
  *
- * Components:
+ * Core Components (1-10):
  * 1. RibbonBar - Top toolbar with tabs and commands
  * 2. TreePanel - Feature tree with expand/collapse
  * 3. PropertiesPanel - Object properties editor
@@ -13,6 +13,12 @@
  * 8. Badge - Status badges
  * 9. Spinner - Loading spinner
  * 10. Divider - Visual dividers
+ *
+ * Phase G Components (11-14):
+ * 11. ThreeJsRenderer - 3D viewport with Three.js and LOD support (CAD-CORE-025)
+ * 12. ParametricEditor - Parametric editor UI with dependency resolution (CAD-CORE-026)
+ * 13. PropertyPanel - Properties and parameters panel with real-time updates (CAD-CORE-027)
+ * 14. ViewportControls - 3D viewport camera and interaction controls (CAD-CORE-028)
  */
 
 // 1. RibbonBar
@@ -54,3 +60,24 @@ export type { SpinnerProps } from './Spinner';
 // 10. Divider
 export { Divider } from './Divider';
 export type { DividerProps } from './Divider';
+
+// Phase G Components
+
+// 11. ThreeJsRenderer (CAD-CORE-025)
+export { ThreeJsRenderer } from './ThreeJsRenderer';
+export type { ThreeJsRendererProps } from './ThreeJsRenderer';
+
+// 12. ParametricEditor (CAD-CORE-026)
+export { ParametricEditor } from './ParametricEditor';
+export type {
+  ParameterDefinition,
+  ParametricEditorProps,
+} from './ParametricEditor';
+
+// 13. PropertyPanel (CAD-CORE-027)
+export { PropertyPanel } from './PropertyPanel';
+export type { Property, PropertyPanelProps } from './PropertyPanel';
+
+// 14. ViewportControls (CAD-CORE-028)
+export { ViewportControls } from './ViewportControls';
+export type { ViewportControlsConfig, CameraState } from './ViewportControls';
