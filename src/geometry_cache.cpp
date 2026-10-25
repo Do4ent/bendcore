@@ -5,6 +5,8 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <fstream>
+#include <sys/stat.h>
 
 namespace bendcore::cache {
 

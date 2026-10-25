@@ -163,7 +163,8 @@ ImportResult ImportWorkflow::import_step_file(const ImportConfig& config) {
 
     if (step_result.shape_ids.empty()) {
         // No shapes imported - this should be treated as an error
-        result.errors.push_back("No shapes found in STEP file");
+        result.warnings.push_back("No shapes found in STEP file");
+        result.success = false;
         return result;
     } else {
         // Use actual shape identifiers or serialized geometry
@@ -173,7 +174,8 @@ ImportResult ImportWorkflow::import_step_file(const ImportConfig& config) {
 
         // Validate that this is real geometry data, not a placeholder
         if (geometry_data == "placeholder_geometry") {
-            result.errors.push_back("Invalid placeholder geometry - STEP reader did not return real geometry");
+            result.warnings.push_back("Invalid placeholder geometry - STEP reader did not return real geometry");
+            result.success = false;
             return result;
         }
     }
