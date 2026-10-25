@@ -69,27 +69,11 @@ else()
   set(OpenCASCADE_FOUND FALSE)
 endif()
 
+# Collect all C++ sources from src/ directory (glob pattern)
+file(GLOB_RECURSE BENDCORE_SOURCES "src/*.cpp")
+
 add_library(bendcore_core STATIC
-  src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp
-  src/ports.cpp src/refs.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp
-  src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp
-  src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp
-  src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp
-  src/instances.cpp src/dwg_export.cpp src/formula.cpp src/template_manager.cpp
-  src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp
-  src/dxf_reader.cpp src/import_workflow.cpp src/growthbook_client.cpp
-  src/analytics_event.cpp src/drawing_editor.cpp src/drawing_layers.cpp
-  src/drawing_undo_redo.cpp src/combined_3d_offset.cpp src/bendcore/offset_profiler.cpp
-  src/dwfx_parser.cpp src/formula_engine.cpp src/geometry_ops.cpp
-  src/document/entity_id.cpp src/document/cad_document.cpp src/document/hierarchy_adapter.cpp
-  src/commands/command.cpp src/commands/command_validator.cpp src/commands/command_executor.cpp src/commands/transaction_manager.cpp src/commands/history_stack.cpp src/commands/document_event_bus.cpp
-  src/parameters/parameter_store.cpp src/dependencies/dependency_graph.cpp src/rebuild/rebuild_engine.cpp
-  src/geometry/geometry_kernel.cpp src/geometry/brep_builder.cpp src/geometry/curve_operations.cpp src/geometry/surface_operations.cpp
-  src/geometry/parallel_geometry.cpp src/geometry/mesh_cache.cpp
-  src/optimization/memory_optimizer.cpp src/optimization/performance_tuning.cpp
-  src/testing/test_suite.cpp src/testing/performance_profiler.cpp src/testing/production_checklist.cpp src/testing/launch_package.cpp
-  src/fea/FEAEngine.cpp src/manufacturing/FEAIntegration.cpp src/manufacturing/GCodeGenerator.cpp src/manufacturing/BOMGenerator.cpp src/manufacturing/ManufacturingWorkflow.cpp
-  src/deployment/ProductionBuild.cpp src/deployment/Installers.cpp src/deployment/LicenseManagement.cpp src/deployment/CloudDeployment.cpp
+  ${BENDCORE_SOURCES}
 )
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB OpenMP::OpenMP_CXX)

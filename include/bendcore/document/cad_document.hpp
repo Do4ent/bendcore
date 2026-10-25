@@ -1,181 +1,233 @@
 #pragma once
 
-#include <chrono>
-#include <map>
-#include <memory>
-#include <optional>
+#include "entity_id.hpp"
 #include <string>
 #include <vector>
+#include <map>
+#include <memory>
+#include <cstdint>
+#include <stdexcept>
 
-#include "bendcore/document/entity_id.hpp"
+namespace BendCore::CadCore {
 
-namespace bendcore::document {
+/**
+ * @brief Entity types in CAD document
+ */
+enum class EntityType {
+    DOCUMENT,
+    PART,
+    BODY,
+    SKETCH,
+    FEATURE,
+    ASSEMBLY,
+    COMPONENT_INSTANCE,
+    PARAMETER,
+    DRAWING,
+    REFERENCE,
+    GEOMETRY_OBJECT
+};
 
-// Базовая сущность документа
+/**
+ * @brief Entity lifecycle states
+ */
+enum class LifecycleState {
+    ACTIVE,
+    SUPPRESSED,
+    INVALID,
+    DELETED
+};
+
+/**
+ * @brief Base entity in CAD document
+ */
 struct Entity {
     EntityId id;
-    EntityId parent_id;  // родитель в иерархии (если есть)
+    EntityType type;
     std::string name;
-    bool deleted = false;
-    std::chrono::system_clock::time_point created_at;
-    std::chrono::system_clock::time_point updated_at;
+    EntityId parent_id;  // Parent in hierarchy
+    uint64_t revision;   // Incremented on changes
+    LifecycleState state;
+    std::map<std::string, std::string> metadata;
 
-    virtual ~Entity() = default;
+    Entity()
+        : id(EntityId::generate())
+        , type(EntityType::PART)
+        , name("")
+        , revision(0)
+        , state(LifecycleState::ACTIVE)
+    {}
+
+    explicit Entity(EntityType t, const std::string& n)
+        : id(EntityId::generate())
+        , type(t)
+        , name(n)
+        , revision(0)
+        , state(LifecycleState::ACTIVE)
+    {}
 };
 
-// Типы сущностей в документе
-struct Part : Entity {
-    std::string designation;
-    std::vector<EntityId> instance_ids;  // экземпляры этой детали
-    EntityId primary_instance;  // главный экземпляр
+/**
+ * @brief Parameter in CAD document
+ */
+struct Parameter {
+    std::string name;
+    double value;
+    std::string units;
+    std::string formula;
+    EntityId owner_id;  // Entity that owns this parameter
 };
 
-struct Instance : Entity {
-    EntityId part_id;  // какой Part это экземпляр
-    bool adaptive = false;
-    // Placement будет в отдельной системе
+/**
+ * @brief Reference to geometry or other entities
+ */
+struct Reference {
+    EntityId target_id;
+    std::string description;
+    uint64_t target_revision;  // Track what revision was referenced
 };
 
-struct Parameter : Entity {
-    enum class Type { Double, String, Reference };
-    Type type = Type::Double;
-
-    double value_double = 0.0;
-    std::string value_string;
-    EntityId value_reference;  // для Reference типов
-
-    std::optional<std::string> formula;  // если есть формула
-    std::vector<EntityId> dependencies;  // параметры, от которых это зависит
-};
-
-struct Feature : Entity {
-    std::string feature_type;  // "Pad", "Pocket", "Hole", etc.
-    std::map<std::string, std::string> parameters;  // ключ-значение параметры
-    EntityId input_geometry;  // входящая геометрия
-    EntityId output_geometry;  // результирующая геометрия
-};
-
-struct Body : Entity {
-    std::vector<EntityId> feature_ids;  // операции в порядке построения
-};
-
-struct Sketch : Entity {
-    EntityId attached_to;  // лицо, плоскость, или ребро, к которому привязан эскиз
-    std::string sketch_data;  // сериализованные эскизы (PlaneGCS)
-};
-
-struct Assembly : Entity {
-    std::vector<EntityId> component_ids;  // экземпляры компонентов
-};
-
-struct Drawing : Entity {
-    std::vector<EntityId> view_ids;
-    std::string layout_data;
-};
-
-// Единый документ CAD
+/**
+ * @brief Central CAD document model
+ *
+ * Single source of truth for:
+ * - Entities and hierarchy
+ * - Parameters and formulas
+ * - Geometry references
+ * - Document state and revisions
+ */
 class CadDocument {
 public:
+    /**
+     * @brief Create a new empty document
+     */
     CadDocument();
-    ~CadDocument() = default;
 
-    // Идентификация документа
-    [[nodiscard]] EntityId id() const { return document_id_; }
-    [[nodiscard]] int revision() const { return revision_; }
-    [[nodiscard]] const std::string& file_path() const { return file_path_; }
-    void set_file_path(const std::string& path) { file_path_ = path; }
+    /**
+     * @brief Get document ID
+     */
+    [[nodiscard]] const EntityId& getDocumentId() const noexcept { return doc_id_; }
 
-    // Управление сущностями
-    template <typename T>
-    EntityId add_entity(const T& entity);
+    /**
+     * @brief Get document revision number
+     */
+    [[nodiscard]] uint64_t getRevision() const noexcept { return revision_; }
 
-    template <typename T>
-    T* get_entity(EntityId id);
+    /**
+     * @brief Increment and return new revision
+     */
+    uint64_t incrementRevision() noexcept;
 
-    template <typename T>
-    const T* get_entity(EntityId id) const;
+    /**
+     * @brief Add entity to document
+     * @throws std::invalid_argument if ID already exists
+     */
+    void addEntity(const Entity& entity);
 
-    bool remove_entity(EntityId id);
+    /**
+     * @brief Get entity by ID
+     * @throws std::invalid_argument if not found or deleted
+     */
+    Entity& getEntity(const EntityId& id);
 
-    // Иерархия
-    [[nodiscard]] bool set_parent(EntityId child_id, EntityId parent_id);
-    [[nodiscard]] EntityId parent_of(EntityId id) const;
-    [[nodiscard]] std::vector<EntityId> children_of(EntityId id) const;
-    [[nodiscard]] std::vector<EntityId> tree_order() const;
+    /**
+     * @brief Get entity by ID (const version)
+     * @throws std::invalid_argument if not found or deleted
+     */
+    const Entity& getEntity(const EntityId& id) const;
 
-    // Проверка целостности
-    [[nodiscard]] bool is_valid_hierarchy() const;
-    [[nodiscard]] bool has_cycles() const;
+    /**
+     * @brief Check if entity exists and is active
+     */
+    [[nodiscard]] bool hasEntity(const EntityId& id) const noexcept;
 
-    // Версионирование
-    void increment_revision() { revision_++; }
+    /**
+     * @brief Remove entity (mark as deleted)
+     */
+    void removeEntity(const EntityId& id);
 
-    // Получение всех сущностей определённого типа
-    [[nodiscard]] std::vector<EntityId> all_parts() const;
-    [[nodiscard]] std::vector<EntityId> all_instances() const;
-    [[nodiscard]] std::vector<EntityId> all_parameters() const;
-    [[nodiscard]] std::vector<EntityId> all_features() const;
+    /**
+     * @brief Get all active entities
+     */
+    [[nodiscard]] std::vector<EntityId> getEntityIds() const;
 
-    // Проверка существования
-    [[nodiscard]] bool contains(EntityId id) const;
-    [[nodiscard]] EntityId::Type entity_type(EntityId id) const;
+    /**
+     * @brief Get entities of specific type
+     */
+    [[nodiscard]] std::vector<EntityId> getEntitiesByType(EntityType type) const;
 
-    // Path-based access (CAD-CORE-004)
-    [[nodiscard]] std::optional<EntityId> find_by_path(const std::string& path) const;
-    [[nodiscard]] std::string path_of(EntityId id) const;
+    /**
+     * @brief Add parameter to document
+     */
+    void addParameter(const EntityId& owner_id, const Parameter& param);
 
-    // Batch operations
-    [[nodiscard]] bool move_subtree(EntityId child_id, EntityId new_parent_id);
-    [[nodiscard]] std::vector<EntityId> subtree(EntityId root) const;
-    [[nodiscard]] std::vector<EntityId> siblings_of(EntityId id) const;
-    [[nodiscard]] bool is_ancestor_of(EntityId potential_ancestor, EntityId potential_descendant) const;
+    /**
+     * @brief Get parameter by name and owner
+     * @throws std::invalid_argument if not found
+     */
+    Parameter& getParameter(const EntityId& owner_id, const std::string& name);
 
-    // Performance
-    void rebuild_paths();
+    /**
+     * @brief Get parameters for owner entity
+     */
+    [[nodiscard]] std::vector<std::string> getParameterNames(const EntityId& owner_id) const;
+
+    /**
+     * @brief Add reference
+     */
+    void addReference(const Reference& ref);
+
+    /**
+     * @brief Get references to entity
+     */
+    [[nodiscard]] std::vector<Reference> getReferences(const EntityId& target_id) const;
+
+    /**
+     * @brief Validate document integrity
+     * @return error message or empty string if valid
+     */
+    [[nodiscard]] std::string validate() const noexcept;
+
+    /**
+     * @brief Check for duplicate Entity IDs
+     */
+    [[nodiscard]] bool hasDuplicateIds() const noexcept;
+
+    /**
+     * @brief Get entity count
+     */
+    [[nodiscard]] size_t getEntityCount() const noexcept { return entities_.size(); }
+
+    /**
+     * @brief Get active entity count (excluding deleted)
+     */
+    [[nodiscard]] size_t getActiveEntityCount() const noexcept;
+
+    /**
+     * @brief Clear all entities
+     */
+    void clear() noexcept;
+
+    /**
+     * @brief Mark document as modified
+     */
+    void markModified() noexcept { incrementRevision(); }
 
 private:
-    EntityId document_id_;
-    int revision_ = 0;
-    std::string file_path_;
+    EntityId doc_id_;
+    uint64_t revision_;
+    std::map<EntityId, Entity> entities_;          // All entities including deleted
+    std::map<EntityId, std::vector<Parameter>> parameters_;  // Parameters by owner
+    std::vector<Reference> references_;
 
-    // Хранилище сущностей по ID
-    std::map<EntityId, std::shared_ptr<Entity>> entities_;
+    /**
+     * @brief Check if ID conflicts exist
+     */
+    bool checkIdConflicts() const noexcept;
 
-    // Иерархия: дочерние элементы для каждого ID
-    std::map<EntityId, std::vector<EntityId>> hierarchy_;
-
-    // Порядок в дереве (для вывода)
-    std::vector<EntityId> tree_order_;
-
-    // Вспомогательные методы
-    bool validate_parent_child(EntityId parent, EntityId child) const;
-    void rebuild_tree_order();
-
-    // Кэширование путей для быстрого доступа
-    mutable std::map<EntityId, std::string> path_cache_;
-    mutable std::map<std::string, EntityId> path_index_;
+    /**
+     * @brief Check for invalid references
+     */
+    bool checkReferences() const noexcept;
 };
 
-// Специализации для каждого типа сущности
-template <>
-EntityId CadDocument::add_entity<Part>(const Part& entity);
-
-template <>
-EntityId CadDocument::add_entity<Instance>(const Instance& entity);
-
-template <>
-EntityId CadDocument::add_entity<Parameter>(const Parameter& entity);
-
-template <>
-EntityId CadDocument::add_entity<Body>(const Body& entity);
-
-template <>
-EntityId CadDocument::add_entity<Sketch>(const Sketch& entity);
-
-template <>
-Part* CadDocument::get_entity<Part>(EntityId id);
-
-template <>
-const Part* CadDocument::get_entity<Part>(EntityId id) const;
-
-}  // namespace bendcore::document
+} // namespace BendCore::CadCore

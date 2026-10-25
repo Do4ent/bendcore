@@ -1,45 +1,138 @@
 #pragma once
 
-#include <chrono>
 #include <string>
-#include <vector>
+#include <cstdint>
+#include <any>
+#include <memory>
 
-#include "nlohmann/json.hpp"
-#include "bendcore/document/entity_id.hpp"
-
-namespace bendcore::commands {
-
-using json = nlohmann::json;
-using namespace bendcore::document;
+namespace BendCore::CadCore {
 
 /**
- * Command — описание операции для выполнения на CadDocument
- * CAD-CORE-005: CommandEngine
+ * @brief Base class for all CAD commands
+ *
+ * Every change to a CAD document must go through a command.
+ * Commands support:
+ * - Execution with validation
+ * - Undo/Redo capability
+ * - Result and error tracking
+ * - Revision management
  */
-struct Command {
-    std::string id;  // Уникальный идентификатор
-    std::string type;  // Тип: "CreatePart", "CreateInstance", "SetParent", etc.
-    json args;  // Аргументы команды
-    std::string document_version;  // Версия документа при выполнении
-    std::chrono::system_clock::time_point timestamp;
+class ICommand {
+public:
+    virtual ~ICommand() = default;
 
-    Command();
-    explicit Command(const std::string& type);
+    /**
+     * @brief Execute the command
+     * @return true if successful
+     */
+    virtual bool execute() = 0;
+
+    /**
+     * @brief Undo the command
+     * @return true if successful
+     */
+    virtual bool undo() = 0;
+
+    /**
+     * @brief Get human-readable description
+     */
+    virtual std::string getDescription() const = 0;
+
+    /**
+     * @brief Get estimated memory usage
+     */
+    virtual size_t getMemorySize() const = 0;
 };
 
 /**
- * CommandResult — результат выполнения команды
+ * @brief Command execution result
  */
 struct CommandResult {
-    bool success;
-    std::string error_message;  // Если success = false
-    json result_data;  // Результат команды
-    std::string new_document_version;  // Новая версия после выполнения
-    std::vector<EntityId> affected_ids;  // Какие сущности изменились
+    bool success = false;
+    std::string error_message;
+    std::any result;
+    uint64_t command_id = 0;
+    uint64_t document_revision = 0;
 
-    CommandResult();
-    static CommandResult success_result(const json& data, const std::string& new_version);
-    static CommandResult error_result(const std::string& error);
+    CommandResult() = default;
+    CommandResult(bool ok, const std::string& msg = "")
+        : success(ok), error_message(msg) {}
 };
 
-}  // namespace bendcore::commands
+/**
+ * @brief Command validation status
+ */
+enum class CommandStatus {
+    PENDING,
+    VALIDATED,
+    EXECUTING,
+    EXECUTED,
+    FAILED,
+    UNDONE
+};
+
+/**
+ * @brief Command wrapper with metadata
+ */
+class Command {
+public:
+    /**
+     * @brief Create command with unique ID
+     */
+    Command(std::unique_ptr<ICommand> impl, uint64_t id)
+        : impl_(std::move(impl))
+        , id_(id)
+        , status_(CommandStatus::PENDING)
+    {}
+
+    /**
+     * @brief Get command ID
+     */
+    [[nodiscard]] uint64_t getId() const noexcept { return id_; }
+
+    /**
+     * @brief Get command status
+     */
+    [[nodiscard]] CommandStatus getStatus() const noexcept { return status_; }
+
+    /**
+     * @brief Get description
+     */
+    [[nodiscard]] std::string getDescription() const {
+        return impl_ ? impl_->getDescription() : "Unknown";
+    }
+
+    /**
+     * @brief Get memory size
+     */
+    [[nodiscard]] size_t getMemorySize() const {
+        return impl_ ? impl_->getMemorySize() : 0;
+    }
+
+    /**
+     * @brief Execute command
+     */
+    bool execute() {
+        if (!impl_) return false;
+        bool result = impl_->execute();
+        status_ = result ? CommandStatus::EXECUTED : CommandStatus::FAILED;
+        return result;
+    }
+
+    /**
+     * @brief Undo command
+     */
+    bool undo() {
+        if (!impl_) return false;
+        bool result = impl_->undo();
+        status_ = result ? CommandStatus::UNDONE : CommandStatus::FAILED;
+        return result;
+    }
+
+private:
+    std::unique_ptr<ICommand> impl_;
+    uint64_t id_;
+    CommandStatus status_;
+};
+
+} // namespace BendCore::CadCore

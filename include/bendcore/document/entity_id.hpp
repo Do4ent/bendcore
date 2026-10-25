@@ -1,77 +1,131 @@
 #pragma once
 
-#include <cstdint>
-#include <functional>
-#include <optional>
 #include <string>
+#include <array>
+#include <cstdint>
+#include <stdexcept>
+#include <functional>
 
-namespace bendcore::document {
+namespace BendCore::CadCore {
 
-// Типизированный идентификатор сущности CAD
-// UUID-основано для стабильности после сохранения/загрузки
+/**
+ * @brief Stable permanent identifier for all CAD objects
+ *
+ * Requirements:
+ * - Does not change after renaming
+ * - Does not change after moving in tree
+ * - Persists across save/load cycles
+ * - Does not depend on memory address
+ * - Copy creates new instance ID but preserves reference to shared part
+ * - Format validity can be checked
+ * - Serializes without loss of precision
+ *
+ * Implementation: UUID v4 (128-bit random)
+ * Format: "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx" (RFC 4122)
+ */
 class EntityId {
 public:
-    enum class Type : uint8_t {
-        Invalid = 0,
-        Part = 1,
-        Instance = 2,
-        Body = 3,
-        Sketch = 4,
-        Feature = 5,
-        Assembly = 6,
-        Parameter = 7,
-        Dimension = 8,
-        Reference = 9,
-        Drawing = 10,
-        Annotation = 11,
-        CustomProperty = 12
-    };
+    // 16 bytes for UUID
+    using UuidBytes = std::array<uint8_t, 16>;
 
-    // Конструкторы
-    EntityId() = default;  // Invalid ID
-    explicit EntityId(const std::string& uuid_str, Type type);
-    explicit EntityId(Type type);  // Генерирует новый UUID
+    /**
+     * @brief Generate a new random EntityId (UUID v4)
+     */
+    static EntityId generate() noexcept;
 
-    // Доступ к данным
-    [[nodiscard]] const std::string& uuid() const { return uuid_; }
-    [[nodiscard]] Type type() const { return type_; }
-    [[nodiscard]] bool is_valid() const { return type_ != Type::Invalid; }
+    /**
+     * @brief Parse EntityId from string representation
+     * @throws std::invalid_argument if format is invalid
+     */
+    static EntityId parse(const std::string& str);
 
-    // Сравнение
-    [[nodiscard]] bool operator==(const EntityId& other) const;
-    [[nodiscard]] bool operator!=(const EntityId& other) const;
-    [[nodiscard]] bool operator<(const EntityId& other) const;  // Для std::map
+    /**
+     * @brief Check if string is valid EntityId format
+     */
+    static bool isValid(const std::string& str) noexcept;
 
-    // Сериализация
-    [[nodiscard]] std::string to_string() const;
-    static std::optional<EntityId> from_string(const std::string& str);
+    /**
+     * @brief Default constructor - creates null ID
+     */
+    EntityId() noexcept;
 
-    // JSON сериализация (для nlohmann/json)
-    [[nodiscard]] std::string to_json() const;
-    static std::optional<EntityId> from_json(const std::string& json_str);
+    /**
+     * @brief Construct from UUID bytes
+     */
+    explicit EntityId(const UuidBytes& bytes) noexcept;
 
-    // Логирование
-    [[nodiscard]] std::string debug_str() const;
+    /**
+     * @brief Copy constructor
+     */
+    EntityId(const EntityId&) noexcept = default;
+
+    /**
+     * @brief Move constructor
+     */
+    EntityId(EntityId&&) noexcept = default;
+
+    /**
+     * @brief Copy assignment
+     */
+    EntityId& operator=(const EntityId&) noexcept = default;
+
+    /**
+     * @brief Move assignment
+     */
+    EntityId& operator=(EntityId&&) noexcept = default;
+
+    /**
+     * @brief Convert to string representation
+     */
+    std::string toString() const;
+
+    /**
+     * @brief Get raw UUID bytes
+     */
+    const UuidBytes& getBytes() const noexcept { return uuid_; }
+
+    /**
+     * @brief Check if ID is null (default constructed)
+     */
+    bool isNull() const noexcept;
+
+    /**
+     * @brief Equality comparison
+     */
+    bool operator==(const EntityId& other) const noexcept;
+
+    /**
+     * @brief Inequality comparison
+     */
+    bool operator!=(const EntityId& other) const noexcept;
+
+    /**
+     * @brief Less-than comparison (for use in maps/sets)
+     */
+    bool operator<(const EntityId& other) const noexcept;
 
 private:
-    std::string uuid_;  // 36 символов: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-    Type type_ = Type::Invalid;
+    UuidBytes uuid_;
 
-    static std::string generate_uuid();
-    [[nodiscard]] static Type parse_type(uint8_t type_byte);
+    /**
+     * @brief Check UUID format (RFC 4122 v4)
+     */
+    static bool validateUuidFormat(const std::string& str) noexcept;
+
+    /**
+     * @brief Convert hex string to byte
+     */
+    static uint8_t hexToByte(const std::string& hex);
 };
 
-// Шаблонные типы для type-safety (опционально, для будущих версий)
-// using PartId = EntityId;
-// using InstanceId = EntityId;
-// etc.
+} // namespace BendCore::CadCore
 
-// Специализация std::hash для использования в std::unordered_map
-}  // namespace bendcore::document
-
+/**
+ * @brief Hash function for EntityId (for use in unordered_map/set)
+ */
 namespace std {
-template <>
-struct hash<bendcore::document::EntityId> {
-    size_t operator()(const bendcore::document::EntityId& id) const;
+template<>
+struct hash<BendCore::CadCore::EntityId> {
+    size_t operator()(const BendCore::CadCore::EntityId& id) const noexcept;
 };
-}  // namespace std
+} // namespace std
