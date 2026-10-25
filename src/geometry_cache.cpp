@@ -31,9 +31,34 @@ std::string GeometryCache::sha256(const std::string& input) {
 }
 
 GeometryCache::CacheKey GeometryCache::compute_hash(const std::string& source_file) {
-    // Include file path and modification time in hash
-    // For simplicity, just hash the file path
-    return sha256(source_file);
+    // PERF-001: FIXED — Include file content hash, not just path
+    // Previous approach (sha256 of path only) leads to cache reuse with stale data
+
+    std::string key_input = source_file;
+
+    try {
+        // Add file modification time to key
+        struct stat file_stat;
+        if (stat(source_file.c_str(), &file_stat) == 0) {
+            key_input += "|";
+            key_input += std::to_string(file_stat.st_mtime);
+            key_input += "|";
+            key_input += std::to_string(file_stat.st_size);
+        }
+
+        // Read file content and include its hash
+        std::ifstream file(source_file, std::ios::binary);
+        if (file) {
+            std::string file_contents((std::istreambuf_iterator<char>(file)),
+                                     std::istreambuf_iterator<char>());
+            key_input += "|content_hash:";
+            key_input += sha256(file_contents);
+        }
+    } catch (...) {
+        // If we can't read file metadata/content, at least use the path
+    }
+
+    return sha256(key_input);
 }
 
 size_t GeometryCache::estimate_entry_size(const CacheEntry& entry) {
