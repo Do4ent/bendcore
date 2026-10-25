@@ -79,6 +79,7 @@ add_library(bendcore_core STATIC
   src/dwfx_parser.cpp src/formula_engine.cpp src/geometry_ops.cpp
   src/document/entity_id.cpp src/document/cad_document.cpp src/document/hierarchy_adapter.cpp
   src/commands/command.cpp src/commands/command_validator.cpp src/commands/command_executor.cpp src/commands/transaction_manager.cpp src/commands/history_stack.cpp src/commands/document_event_bus.cpp
+  src/parameters/parameter_store.cpp src/dependencies/dependency_graph.cpp src/rebuild/rebuild_engine.cpp
 )
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB)
@@ -446,6 +447,23 @@ if(BENDCORE_WITH_OCCT)
   target_compile_definitions(test_server PRIVATE BENDCORE_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
   bendcore_add_test(server test_server)
 endif()
+
+# Phase C: Parameter Store, Dependency Graph, Rebuild Engine
+add_executable(test_parameter_store tests/parameters/test_parameter_store.cpp)
+target_link_libraries(test_parameter_store PRIVATE bendcore_core)
+bendcore_add_test(parameter_store test_parameter_store)
+
+add_executable(test_dependency_graph tests/dependencies/test_dependency_graph.cpp)
+target_link_libraries(test_dependency_graph PRIVATE bendcore_core)
+bendcore_add_test(dependency_graph test_dependency_graph)
+
+add_executable(test_rebuild_engine tests/rebuild/test_rebuild_engine.cpp)
+target_link_libraries(test_rebuild_engine PRIVATE bendcore_core)
+bendcore_add_test(rebuild_engine test_rebuild_engine)
+
+add_executable(test_phase_c_integration tests/integration/test_phase_c_integration.cpp)
+target_link_libraries(test_phase_c_integration PRIVATE bendcore_core)
+bendcore_add_test(phase_c_integration test_phase_c_integration)
 
 # Comprehensive Test Suite for Phase 4 (90%+ coverage target)
 add_executable(test_dwfx_parser_comprehensive tests/test_dwfx_parser_comprehensive.cpp)
