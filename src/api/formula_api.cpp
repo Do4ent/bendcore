@@ -17,6 +17,11 @@ using json = nlohmann::json;
 using namespace bendcore;
 
 /**
+ * Format available variables for error message
+ */
+std::string format_available_variables(const std::map<std::string, double>& variables);
+
+/**
  * Evaluate formula from API request
  *
  * @param request_body JSON with formula and variables

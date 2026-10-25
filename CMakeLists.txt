@@ -69,8 +69,28 @@ else()
   set(OpenCASCADE_FOUND FALSE)
 endif()
 
-# Collect all C++ sources from src/ directory (glob pattern)
-file(GLOB_RECURSE BENDCORE_SOURCES "src/*.cpp")
+# M1 Core Components (CAD Foundation)
+set(BENDCORE_SOURCES
+  # Core architecture
+  src/entity_id.cpp
+  src/cad_document.cpp
+  src/entity_tree.cpp
+  src/dependency_graph.cpp
+  src/document_event_bus.cpp
+  src/command_manager.cpp
+  src/transaction.cpp
+  src/history_stack.cpp
+  src/parameter_store.cpp
+  src/rebuild_engine.cpp
+  src/feature_system.cpp
+
+  # I/O and serialization
+  src/serializer.cpp
+  src/atomic_save.cpp
+
+  # Constraint solver
+  src/constraint_system.cpp
+)
 
 add_library(bendcore_core STATIC
   ${BENDCORE_SOURCES}
@@ -92,12 +112,17 @@ if(OpenCASCADE_FOUND)
   target_compile_definitions(bendcore_core PRIVATE BENDCORE_WITH_OCCT=1)
 endif()
 
+# M1 Integration Test (CAD Foundation)
+add_executable(test_m1_integration tests/integration/test_m1_integration.cpp)
+target_link_libraries(test_m1_integration PRIVATE bendcore_core)
+
 enable_testing()
 
 # Тест: нативно — запуск исполняемого файла; WebAssembly — запуск через node (код возврата = результат теста).
 find_program(BENDCORE_NODE node)
 function(bendcore_add_test name target)
   if(EMSCRIPTEN)
+
     if(NOT BENDCORE_NODE)
       message(FATAL_ERROR "Для тестов WebAssembly нужен node в PATH (BENDCORE_NODE)")
     endif()
@@ -107,6 +132,9 @@ function(bendcore_add_test name target)
     add_test(NAME ${name} COMMAND ${target})
   endif()
 endfunction()
+
+# M1 Integration Test
+bendcore_add_test(m1_integration test_m1_integration)
 
 add_executable(test_bend_output tests/test_bend_output.cpp)
 target_link_libraries(test_bend_output PRIVATE bendcore_core)

@@ -274,7 +274,6 @@ void Combined3DOffsetCalculatorOptimized::calculate_sections_fast(
 std::string Combined3DOffsetCalculatorOptimized::generate_cnc_code_fast(
     const Result& result) const {
   std::ostringstream ss;
-  ss.reserve(2048);  // Pre-allocate строку
 
   // G-code заголовок
   ss << "G20  ; Дюймы\n";

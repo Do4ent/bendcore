@@ -123,6 +123,13 @@ public:
   // Генерация G-code для ЧПУ
   std::string generate_cnc_code(const Result& result);
 
+protected:
+  // Вспомогательные методы доступные подклассам
+
+  // Проверка возможности производства
+  double check_feasibility(const Parameters& params,
+                          const std::vector<BendDetail>& bends) const;
+
 private:
   // Внутренние вспомогательные методы
 
@@ -143,10 +150,6 @@ private:
   // Расчёт коррекции пружинения для материала
   double get_springback_correction(const std::string& material,
                                    double radius) const;
-
-  // Проверка возможности производства
-  double check_feasibility(const Parameters& params,
-                          const std::vector<BendDetail>& bends) const;
 
   // Генерация точек траектории для 3D визуализации
   std::vector<Point3D> generate_trajectory_points(

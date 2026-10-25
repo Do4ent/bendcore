@@ -11,8 +11,11 @@
 #include <vector>
 #include <map>
 #include <functional>
+#include <nlohmann/json.hpp>
 
 namespace bendcore {
+
+using json = nlohmann::json;
 
 /**
  * Context menu action
@@ -53,7 +56,7 @@ class ContextManager {
   std::vector<ContextAction> get_command_confirmation_menu() const;
 
   // Convert to JSON for IPC
-  nlohmann::json menu_to_json(const std::vector<ContextAction>& menu) const;
+  json menu_to_json(const std::vector<ContextAction>& menu) const;
 
  private:
   std::map<std::string, ActionHandler> action_handlers_;
