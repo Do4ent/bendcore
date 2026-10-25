@@ -81,6 +81,7 @@ add_library(bendcore_core STATIC
   src/commands/command.cpp src/commands/command_validator.cpp src/commands/command_executor.cpp src/commands/transaction_manager.cpp src/commands/history_stack.cpp src/commands/document_event_bus.cpp
   src/parameters/parameter_store.cpp src/dependencies/dependency_graph.cpp src/rebuild/rebuild_engine.cpp
   src/geometry/geometry_kernel.cpp src/geometry/brep_builder.cpp src/geometry/curve_operations.cpp src/geometry/surface_operations.cpp
+  src/testing/test_suite.cpp src/testing/performance_profiler.cpp src/testing/production_checklist.cpp src/testing/launch_package.cpp
 )
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB)
@@ -507,6 +508,28 @@ bendcore_add_test(geometry_analyzer_comprehensive test_geometry_analyzer_compreh
 add_executable(test_dxf_reader_comprehensive tests/test_dxf_reader_comprehensive.cpp)
 target_link_libraries(test_dxf_reader_comprehensive PRIVATE bendcore_core)
 bendcore_add_test(dxf_reader_comprehensive test_dxf_reader_comprehensive)
+
+# ============================================================================
+# Phase F: Production Launch (CAD-CORE-021 to 024)
+# ============================================================================
+
+# CAD-CORE-021: Comprehensive Test Suite
+add_executable(phase_f_test_suite src/testing/phase_f_main.cpp)
+target_link_libraries(phase_f_test_suite PRIVATE bendcore_core)
+bendcore_add_test(phase_f_test_suite phase_f_test_suite)
+
+# CAD-CORE-021: Individual test scenarios
+add_executable(test_integration_e2e tests/testing/test_integration_e2e.cpp)
+target_link_libraries(test_integration_e2e PRIVATE bendcore_core)
+bendcore_add_test(integration_e2e test_integration_e2e)
+
+add_executable(test_stress tests/testing/test_stress.cpp)
+target_link_libraries(test_stress PRIVATE bendcore_core)
+bendcore_add_test(stress test_stress)
+
+add_executable(test_multi_phase_integration tests/testing/test_multi_phase_integration.cpp)
+target_link_libraries(test_multi_phase_integration PRIVATE bendcore_core)
+bendcore_add_test(multi_phase_integration test_multi_phase_integration)
 
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.
