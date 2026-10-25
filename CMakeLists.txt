@@ -88,10 +88,9 @@ set(BENDCORE_SOURCES
   src/serialization/document_serializer.cpp
   src/api/document_api.cpp
 
-  # Dependencies and Rebuild - Disabled due to missing headers
-  # src/dependencies/dependency_graph.cpp
-  # src/rebuild/rebuild_engine.cpp
-  # src/rebuild/feature_rebuild.cpp
+  # Dependencies and Rebuild (M2 Phase)
+  src/dependency_graph.cpp
+  src/rebuild_engine.cpp
 
   # I/O and serialization
   src/serializer.cpp
@@ -525,12 +524,9 @@ bendcore_add_test(dependency_graph test_dependency_graph)
 #bendcore_add_test(rebuild_engine test_rebuild_engine)
 
 # M2 Phase: Rebuild System (GAP-023: Cascading updates with incremental rebuild)
-find_package(GTest QUIET)
-if(GTest_FOUND)
-  add_executable(test_rebuild_cascade tests/rebuild/test_rebuild_cascade.cpp)
-  target_link_libraries(test_rebuild_cascade PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(rebuild_cascade test_rebuild_cascade)
-endif()
+add_executable(test_rebuild_cascade tests/rebuild/test_rebuild_cascade.cpp)
+target_link_libraries(test_rebuild_cascade PRIVATE bendcore_core)
+bendcore_add_test(rebuild_cascade test_rebuild_cascade)
 
 add_executable(test_phase_c_integration tests/integration/test_phase_c_integration.cpp)
 target_link_libraries(test_phase_c_integration PRIVATE bendcore_core)
