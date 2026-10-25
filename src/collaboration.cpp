@@ -84,7 +84,7 @@ std::vector<Change> ChangeTracker::getChangeHistory(
     return result;
 }
 
-bool ChangeTracker::rollbackChange(uint64_t changeId, const std::string& userId) {
+bool ChangeTracker::rollbackChange(uint64_t changeId, [[maybe_unused]] const std::string& userId) {
     for (auto& change : changes) {
         if (change.id == changeId && !change.isRolledBack) {
             change.isRolledBack = true;
@@ -213,7 +213,7 @@ std::vector<DocumentVersion> VersionManager::getVersionHistory(int limit) const 
     return result;
 }
 
-bool VersionManager::revertToVersion(const std::string& versionString, const std::string& userId) {
+bool VersionManager::revertToVersion(const std::string& versionString, [[maybe_unused]] const std::string& userId) {
     auto it = std::find_if(versions.begin(), versions.end(),
         [&versionString](const DocumentVersion& v) {
             return v.toString() == versionString;
@@ -591,12 +591,12 @@ std::vector<UserActivity> AccessManager::getObjectActivity(
 CollaborationManager::CollaborationManager() = default;
 CollaborationManager::~CollaborationManager() = default;
 
-bool CollaborationManager::saveSession(const std::string& sessionFile) const {
+bool CollaborationManager::saveSession([[maybe_unused]] const std::string& sessionFile) const {
     // В реальной реализации здесь сохранялись бы все данные в файл
     return true;
 }
 
-bool CollaborationManager::loadSession(const std::string& sessionFile) {
+bool CollaborationManager::loadSession([[maybe_unused]] const std::string& sessionFile) {
     // В реальной реализации здесь загружались бы все данные из файла
     return true;
 }
@@ -605,7 +605,7 @@ std::vector<UserInfo> CollaborationManager::getActiveUsers() const {
     return accessManager.getUsers();
 }
 
-void CollaborationManager::reportConflict(const ConflictInfo& conflict) {
+void CollaborationManager::reportConflict([[maybe_unused]] const ConflictInfo& conflict) {
     // В реальной реализации здесь сохранялась бы информация о конфликте
 }
 
@@ -614,7 +614,7 @@ std::vector<CollaborationManager::ConflictInfo> CollaborationManager::getUnresol
     return std::vector<ConflictInfo>();
 }
 
-bool CollaborationManager::resolveConflict(const std::string& objectId, const std::string& resolution) {
+bool CollaborationManager::resolveConflict([[maybe_unused]] const std::string& objectId, [[maybe_unused]] const std::string& resolution) {
     // В реальной реализации здесь выполнялось бы разрешение конфликта
     return true;
 }

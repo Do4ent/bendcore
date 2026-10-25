@@ -53,6 +53,10 @@ if(NOT LibDWG_FOUND)
   endif()
 endif()
 
+# OpenMP (Phase H: Advanced Optimization)
+# Required for parallel geometry computations and performance optimization
+find_package(OpenMP REQUIRED)
+
 # OCCT (Open Cascade Technology) для импорта STEP файлов (Q3 2027, Task 1)
 # Windows-only integration with OCCT 7.7+
 if(WIN32)
@@ -81,10 +85,13 @@ add_library(bendcore_core STATIC
   src/commands/command.cpp src/commands/command_validator.cpp src/commands/command_executor.cpp src/commands/transaction_manager.cpp src/commands/history_stack.cpp src/commands/document_event_bus.cpp
   src/parameters/parameter_store.cpp src/dependencies/dependency_graph.cpp src/rebuild/rebuild_engine.cpp
   src/geometry/geometry_kernel.cpp src/geometry/brep_builder.cpp src/geometry/curve_operations.cpp src/geometry/surface_operations.cpp
+  src/geometry/parallel_geometry.cpp src/geometry/mesh_cache.cpp
+  src/optimization/memory_optimizer.cpp src/optimization/performance_tuning.cpp
   src/testing/test_suite.cpp src/testing/performance_profiler.cpp src/testing/production_checklist.cpp src/testing/launch_package.cpp
+  src/fea/FEAEngine.cpp src/manufacturing/FEAIntegration.cpp src/manufacturing/GCodeGenerator.cpp src/manufacturing/BOMGenerator.cpp src/manufacturing/ManufacturingWorkflow.cpp
 )
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
-target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB)
+target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB OpenMP::OpenMP_CXX)
 
 # BC-015: Link LibDWG if available
 if(LibDWG_FOUND)
@@ -530,6 +537,64 @@ bendcore_add_test(stress test_stress)
 add_executable(test_multi_phase_integration tests/testing/test_multi_phase_integration.cpp)
 target_link_libraries(test_multi_phase_integration PRIVATE bendcore_core)
 bendcore_add_test(multi_phase_integration test_multi_phase_integration)
+
+# ============================================================================
+# Phase I: Integration Testing (CAD-CORE-033 to CAD-CORE-036)
+# ============================================================================
+
+# CAD-CORE-033 through CAD-CORE-036: Phase I Integration Testing
+add_executable(test_phase_i_main tests/integration/test_phase_i_main.cpp)
+bendcore_add_test(phase_i_main test_phase_i_main)
+
+# CAD-CORE-033: E2EWorkflows — полные workflow тесты (Create → Edit → Parameters → Geometry → FEA → Export)
+add_executable(test_e2e_workflows tests/integration/test_e2e_workflows.cpp)
+target_link_libraries(test_e2e_workflows PRIVATE bendcore_core)
+bendcore_add_test(e2e_workflows test_e2e_workflows)
+
+# CAD-CORE-034: CrossPlatformValidation — тесты кроссплатформной совместимости (Windows/Linux/macOS)
+add_executable(test_cross_platform_validation tests/integration/test_cross_platform_validation.cpp)
+target_link_libraries(test_cross_platform_validation PRIVATE bendcore_core)
+bendcore_add_test(cross_platform_validation test_cross_platform_validation)
+
+# CAD-CORE-035: StressTests — тесты производительности (1K, 5K, 10K, 50K элементов)
+add_executable(test_stress_tests tests/integration/test_stress_tests.cpp)
+target_link_libraries(test_stress_tests PRIVATE bendcore_core)
+bendcore_add_test(stress_tests test_stress_tests)
+
+# CAD-CORE-036: RegressionTests — регрессионные тесты всех фаз A-F
+add_executable(test_regression_suite tests/integration/test_regression_suite.cpp)
+target_link_libraries(test_regression_suite PRIVATE bendcore_core)
+bendcore_add_test(regression_suite test_regression_suite)
+
+# Phase H: Advanced Optimization Tests (CAD-CORE-029, 030, 031, 032)
+# 100+ performance tests, stress tests for 10K+ elements, LRU caching, memory optimization
+add_executable(test_phase_h_optimization src/testing/phase_h_optimization_tests.cpp)
+target_link_libraries(test_phase_h_optimization PRIVATE bendcore_core)
+bendcore_add_test(phase_h_optimization test_phase_h_optimization)
+
+# ============================================================================
+# Phase J: Manufacturing Integration (CAD-CORE-037 to CAD-CORE-040)
+# ============================================================================
+
+# CAD-CORE-037: FEA Integration
+add_executable(test_cad_core_037_fea tests/CAD-CORE-037-FEAIntegration.test.cpp)
+target_link_libraries(test_cad_core_037_fea PRIVATE bendcore_core)
+bendcore_add_test(cad_core_037_fea test_cad_core_037_fea)
+
+# CAD-CORE-038: G-Code Generator
+add_executable(test_cad_core_038_gcode tests/CAD-CORE-038-GCodeGenerator.test.cpp)
+target_link_libraries(test_cad_core_038_gcode PRIVATE bendcore_core)
+bendcore_add_test(cad_core_038_gcode test_cad_core_038_gcode)
+
+# CAD-CORE-039: BOM Generator
+add_executable(test_cad_core_039_bom tests/CAD-CORE-039-BOMGenerator.test.cpp)
+target_link_libraries(test_cad_core_039_bom PRIVATE bendcore_core)
+bendcore_add_test(cad_core_039_bom test_cad_core_039_bom)
+
+# CAD-CORE-040: Manufacturing Workflow
+add_executable(test_cad_core_040_workflow tests/CAD-CORE-040-ManufacturingWorkflow.test.cpp)
+target_link_libraries(test_cad_core_040_workflow PRIVATE bendcore_core)
+bendcore_add_test(cad_core_040_workflow test_cad_core_040_workflow)
 
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.

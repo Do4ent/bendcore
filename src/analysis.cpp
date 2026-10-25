@@ -404,8 +404,8 @@ std::vector<Issue> Analyzer::checkGeometry(const TubeModel& model, double od) co
 
 std::vector<Issue> Analyzer::checkBendParameters(
     const TubeModel& model,
-    const MaterialSpec& material,
-    const MachineSpec& machine
+    [[maybe_unused]] const MaterialSpec& material,
+    [[maybe_unused]] const MachineSpec& machine
 ) const {
     std::vector<Issue> issues;
 
@@ -456,7 +456,7 @@ std::vector<Issue> Analyzer::checkBendParameters(
     return issues;
 }
 
-std::vector<Issue> Analyzer::checkPorts(const TubeModel& model, double od, double wall) const {
+std::vector<Issue> Analyzer::checkPorts(const TubeModel& model, double od, [[maybe_unused]] double wall) const {
     std::vector<Issue> issues;
 
     if (!model.path.has_value()) {
@@ -481,7 +481,7 @@ std::vector<Issue> Analyzer::checkPorts(const TubeModel& model, double od, doubl
         }
 
         // Проверка позиции портов на концах трубы (зазор ≥ 5 мм)
-        const double minProtrusion = 5.0;  // 5 мм зазор
+        [[maybe_unused]] const double minProtrusion = 5.0;  // 5 мм зазор
 
         // Проверка минимального прямого участка перед портом
         if (first_straight(path) < port.min_straight && port.min_straight > 0.0) {
@@ -655,8 +655,8 @@ std::string Analyzer::suggestOptimalMachine(
 
 double Analyzer::calculateComplexity(
     const TubeModel& model,
-    const MaterialSpec& material,
-    const MachineSpec& machine
+    [[maybe_unused]] const MaterialSpec& material,
+    [[maybe_unused]] const MachineSpec& machine
 ) const {
     if (!model.path.has_value()) return 0.0;
 

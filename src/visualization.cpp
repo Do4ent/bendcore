@@ -97,7 +97,7 @@ RenderMesh Visualizer::createMesh(
     return mesh;
 }
 
-RenderMesh Visualizer::optimizeMesh(const RenderMesh& mesh, int targetVertices) const {
+RenderMesh Visualizer::optimizeMesh(const RenderMesh& mesh, [[maybe_unused]] int targetVertices) const {
     RenderMesh optimized = mesh;
 
     // Удаляем дубликаты вершин
@@ -216,7 +216,7 @@ CameraParameters Visualizer::fitCameraToMesh(
 RenderMesh Visualizer::colorByIssues(
     const RenderMesh& mesh,
     const std::vector<uint32_t>& errorIndices,
-    uint32_t errorColor
+    [[maybe_unused]] uint32_t errorColor
 ) const {
     RenderMesh colored = mesh;
 
@@ -345,7 +345,7 @@ std::vector<float> Visualizer::computeNormals(
 
 std::vector<float> Visualizer::smoothNormals(
     const std::vector<float>& normals,
-    double smoothingFactor
+    [[maybe_unused]] double smoothingFactor
 ) const {
     // Упрощённое сглаживание нормалей
     std::vector<float> smoothed = normals;
