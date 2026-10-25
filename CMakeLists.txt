@@ -78,6 +78,7 @@ add_library(bendcore_core STATIC
   src/drawing_undo_redo.cpp src/combined_3d_offset.cpp src/bendcore/offset_profiler.cpp
   src/dwfx_parser.cpp src/formula_engine.cpp src/geometry_ops.cpp
   src/document/entity_id.cpp src/document/cad_document.cpp src/document/hierarchy_adapter.cpp
+  src/commands/command.cpp src/commands/command_validator.cpp src/commands/command_executor.cpp
 )
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB)
@@ -135,6 +136,10 @@ bendcore_add_test(cad_document test_cad_document)
 add_executable(test_hierarchy_extended tests/document/test_hierarchy_extended.cpp)
 target_link_libraries(test_hierarchy_extended PRIVATE bendcore_core)
 bendcore_add_test(hierarchy_extended test_hierarchy_extended)
+
+add_executable(test_command_executor tests/commands/test_command_executor.cpp)
+target_link_libraries(test_command_executor PRIVATE bendcore_core)
+bendcore_add_test(command_executor test_command_executor)
 
 add_executable(test_drawing tests/test_drawing.cpp)
 target_link_libraries(test_drawing PRIVATE bendcore_core)
