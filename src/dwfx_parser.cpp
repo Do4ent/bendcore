@@ -11,8 +11,98 @@
 #include <cstring>
 #include <cstdlib>
 #include <ctime>
+#include <zlib.h>
+#include <cstdint>
+#include <map>
+#include <cctype>
 
 namespace bendcore::import::dwfx {
+
+// Helper function: calculate CRC32 of a buffer
+static uint32_t calculate_crc32(const uint8_t* data, size_t size) {
+    uint32_t crc = crc32(0L, Z_NULL, 0);
+    crc = crc32(crc, data, size);
+    return crc;
+}
+
+// BC-002: Simple but robust XML element parser
+struct XmlElement {
+    std::string tag;
+    std::map<std::string, std::string> attributes;
+    std::string content;
+    std::vector<XmlElement> children;
+
+    std::string get_attribute(const std::string& name) const {
+        auto it = attributes.find(name);
+        return (it != attributes.end()) ? it->second : "";
+    }
+};
+
+// Parse XML tag and extract element and attributes
+static bool parse_xml_tag(const std::string& xml, size_t& pos, XmlElement& elem) {
+    // Find opening '<'
+    pos = xml.find('<', pos);
+    if (pos == std::string::npos || pos + 1 >= xml.size()) {
+        return false;
+    }
+
+    pos++; // skip '<'
+
+    // Skip whitespace
+    while (pos < xml.size() && std::isspace(xml[pos])) pos++;
+
+    // Find tag name
+    size_t tag_start = pos;
+    while (pos < xml.size() && !std::isspace(xml[pos]) && xml[pos] != '>' && xml[pos] != '/') {
+        pos++;
+    }
+
+    if (pos <= tag_start) return false;
+    elem.tag = xml.substr(tag_start, pos - tag_start);
+
+    // Parse attributes until '>' or '/>'
+    while (pos < xml.size()) {
+        // Skip whitespace
+        while (pos < xml.size() && std::isspace(xml[pos])) pos++;
+
+        if (pos >= xml.size()) return false;
+
+        if (xml[pos] == '>' || (xml[pos] == '/' && pos + 1 < xml.size() && xml[pos + 1] == '>')) {
+            break;
+        }
+
+        // Parse attribute name
+        size_t attr_name_start = pos;
+        while (pos < xml.size() && xml[pos] != '=' && !std::isspace(xml[pos]) && xml[pos] != '>' && xml[pos] != '/') {
+            pos++;
+        }
+
+        if (pos <= attr_name_start) {
+            pos++;
+            continue;
+        }
+
+        std::string attr_name = xml.substr(attr_name_start, pos - attr_name_start);
+
+        // Skip whitespace and '='
+        while (pos < xml.size() && (std::isspace(xml[pos]) || xml[pos] == '=')) pos++;
+
+        // Parse attribute value (quoted string)
+        if (pos < xml.size() && (xml[pos] == '"' || xml[pos] == '\'')) {
+            char quote = xml[pos++];
+            size_t val_start = pos;
+            while (pos < xml.size() && xml[pos] != quote) pos++;
+
+            if (pos < xml.size()) {
+                std::string attr_value = xml.substr(val_start, pos - val_start);
+                elem.attributes[attr_name] = attr_value;
+                pos++; // skip closing quote
+            }
+        }
+    }
+
+    return true;
+}
 
 DWFxParser::DWFxParser(const std::string& dwfx_path)
     : dwfx_path_(dwfx_path) {}
@@ -143,12 +233,16 @@ bool DWFxParser::extractZipContents() {
             uint16_t filename_len = 0;
             uint16_t extra_len = 0;
             uint32_t compressed_size = 0;
+            uint32_t uncompressed_size = 0;
             uint16_t compression_method = 0;
+            uint32_t crc32_expected = 0;
 
             std::memcpy(&filename_len, file_data.data() + pos + 26, sizeof(uint16_t));
             std::memcpy(&extra_len, file_data.data() + pos + 28, sizeof(uint16_t));
             std::memcpy(&compression_method, file_data.data() + pos + 8, sizeof(uint16_t));
             std::memcpy(&compressed_size, file_data.data() + pos + 18, sizeof(uint32_t));
+            std::memcpy(&uncompressed_size, file_data.data() + pos + 22, sizeof(uint32_t));
+            std::memcpy(&crc32_expected, file_data.data() + pos + 14, sizeof(uint32_t));
 
             if (pos + 30 + filename_len > file_size) {
                 break;
@@ -173,19 +267,79 @@ bool DWFxParser::extractZipContents() {
 
             size_t data_offset = pos + 30 + filename_len + extra_len;
 
-            // Only handle stored files (no compression) for now
-            if (compression_method == 0 && data_offset + compressed_size <= file_size) {
-                if (filename.find("content.xml") != std::string::npos) {
-                    content_xml_data_.assign(
+            // BC-001, BC-018: Handle both stored (0) and Deflate-compressed (8) files
+            if (data_offset + compressed_size <= file_size) {
+                std::vector<uint8_t> uncompressed_data;
+
+                if (compression_method == 0) {
+                    // Stored file - no compression
+                    uncompressed_data.assign(
                         file_data.begin() + data_offset,
                         file_data.begin() + data_offset + compressed_size
+                    );
+                } else if (compression_method == 8) {
+                    // Deflate compression - decompress using zlib
+                    // BC-019: Limit uncompressed size to 16MB to prevent ZIP bombs
+                    if (uncompressed_size > 16 * 1024 * 1024) {
+                        pos += 30 + filename_len + extra_len + compressed_size;
+                        continue;
+                    }
+
+                    if (uncompressed_size == 0 || uncompressed_size > 1024 * 1024 * 1024) {
+                        // Skip if size is invalid
+                        pos += 30 + filename_len + extra_len + compressed_size;
+                        continue;
+                    }
+
+                    uncompressed_data.resize(uncompressed_size);
+                    z_stream stream;
+                    stream.zalloc = Z_NULL;
+                    stream.zfree = Z_NULL;
+                    stream.opaque = Z_NULL;
+                    stream.avail_in = compressed_size;
+                    stream.next_in = const_cast<uint8_t*>(file_data.data() + data_offset);
+                    stream.avail_out = uncompressed_size;
+                    stream.next_out = uncompressed_data.data();
+
+                    if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) {
+                        pos += 30 + filename_len + extra_len + compressed_size;
+                        continue;
+                    }
+
+                    int ret = inflate(&stream, Z_FINISH);
+                    inflateEnd(&stream);
+
+                    if (ret != Z_STREAM_END) {
+                        // Decompression failed
+                        pos += 30 + filename_len + extra_len + compressed_size;
+                        continue;
+                    }
+                } else {
+                    // Other compression methods not supported
+                    pos += 30 + filename_len + extra_len + compressed_size;
+                    continue;
+                }
+
+                // BC-001: Verify CRC32 of extracted data
+                uint32_t crc32_calculated = calculate_crc32(uncompressed_data.data(), uncompressed_data.size());
+                if (crc32_calculated != crc32_expected) {
+                    // CRC mismatch - skip corrupted file
+                    pos += 30 + filename_len + extra_len + compressed_size;
+                    continue;
+                }
+
+                // Extract files
+                if (filename.find("content.xml") != std::string::npos) {
+                    content_xml_data_.assign(
+                        reinterpret_cast<const char*>(uncompressed_data.data()),
+                        reinterpret_cast<const char*>(uncompressed_data.data()) + uncompressed_data.size()
                     );
                 }
 
                 if (filename.find("DescriptorList.xml") != std::string::npos) {
                     descriptor_list_data_.assign(
-                        file_data.begin() + data_offset,
-                        file_data.begin() + data_offset + compressed_size
+                        reinterpret_cast<const char*>(uncompressed_data.data()),
+                        reinterpret_cast<const char*>(uncompressed_data.data()) + uncompressed_data.size()
                     );
                 }
 
@@ -221,82 +375,69 @@ bool DWFxParser::parseContentXml() {
         std::vector<W3DInstance> temp_instances;
         std::string content_xml(content_xml_data_.begin(), content_xml_data_.end());
 
-        // BC-002: Proper XML parsing for DWFx content hierarchy
-        // Extract Instance elements which contain W3DTag references and transformations
+        // BC-002: Proper XML parsing with robust attribute handling
+        // Extract Instance elements with proper XML element parsing
 
         size_t pos = 0;
         size_t instance_index = 0;
 
-        while ((pos = content_xml.find("<Instance", pos)) != std::string::npos) {
+        while (pos < content_xml.size()) {
+            // Find next Instance element
+            pos = content_xml.find("<Instance", pos);
+            if (pos == std::string::npos) break;
+
+            XmlElement elem;
+            if (!parse_xml_tag(content_xml, pos, elem)) {
+                pos++;
+                continue;
+            }
+
+            if (elem.tag != "Instance") {
+                pos++;
+                continue;
+            }
+
             W3DInstance instance;
             instance.instance_id = instance_index++;
             instance.visible = true;
             instance.tag.tag_index = 0;
 
-            // Find end of Instance element
-            size_t instance_end = content_xml.find(">", pos);
-            if (instance_end == std::string::npos) {
-                pos += 9;
-                continue;
-            }
-
-            std::string instance_element = content_xml.substr(pos, instance_end - pos + 1);
-
-            // Extract id attribute (instance name/identifier)
-            size_t id_pos = instance_element.find("id=\"");
-            if (id_pos != std::string::npos) {
-                size_t id_end = instance_element.find("\"", id_pos + 4);
-                if (id_end != std::string::npos) {
-                    instance.name = instance_element.substr(id_pos + 4, id_end - id_pos - 4);
-                }
-            }
+            // Extract attributes using robust XML parser
+            instance.name = elem.get_attribute("id");
 
             // Extract W3DTag reference (which W3D mesh to use)
-            size_t tag_pos = instance_element.find("tag_index=\"");
-            if (tag_pos != std::string::npos) {
-                size_t tag_end = instance_element.find("\"", tag_pos + 11);
-                if (tag_end != std::string::npos) {
-                    try {
-                        instance.tag.tag_index = std::stoul(
-                            instance_element.substr(tag_pos + 11, tag_end - tag_pos - 11)
-                        );
-                    } catch (...) {}
-                }
+            std::string tag_str = elem.get_attribute("tag_index");
+            if (!tag_str.empty()) {
+                try {
+                    instance.tag.tag_index = std::stoul(tag_str);
+                } catch (...) {}
             }
 
             // Extract visible attribute
-            size_t vis_pos = instance_element.find("visible=\"");
-            if (vis_pos != std::string::npos) {
-                size_t vis_end = instance_element.find("\"", vis_pos + 9);
-                if (vis_end != std::string::npos) {
-                    std::string vis_str = instance_element.substr(vis_pos + 9, vis_end - vis_pos - 9);
-                    instance.visible = (vis_str == "true" || vis_str == "1");
-                }
-            }
+            std::string vis_str = elem.get_attribute("visible");
+            instance.visible = (vis_str == "true" || vis_str == "1" || vis_str.empty());
 
             // Extract transform matrix (4x4 matrix stored as space-separated values)
-            // Default to identity transform if not found
-            size_t matrix_pos = instance_element.find("transform=\"");
-            if (matrix_pos != std::string::npos) {
-                size_t matrix_end = instance_element.find("\"", matrix_pos + 11);
-                if (matrix_end != std::string::npos) {
-                    std::string matrix_str = instance_element.substr(matrix_pos + 11, matrix_end - matrix_pos - 11);
-
-                    // Parse 16 float values for 4x4 matrix
-                    instance.transform_matrix.resize(16);
-                    std::istringstream iss(matrix_str);
-                    for (int i = 0; i < 16; ++i) {
-                        if (!(iss >> instance.transform_matrix[i])) {
-                            // If parsing fails, use identity matrix
-                            instance.transform_matrix = {
-                                1, 0, 0, 0,
-                                0, 1, 0, 0,
-                                0, 0, 1, 0,
-                                0, 0, 0, 1
-                            };
-                            break;
-                        }
+            std::string matrix_str = elem.get_attribute("transform");
+            if (!matrix_str.empty()) {
+                instance.transform_matrix.resize(16);
+                std::istringstream iss(matrix_str);
+                bool matrix_valid = true;
+                for (int i = 0; i < 16; ++i) {
+                    if (!(iss >> instance.transform_matrix[i])) {
+                        matrix_valid = false;
+                        break;
                     }
+                }
+
+                if (!matrix_valid) {
+                    // Invalid matrix, use identity
+                    instance.transform_matrix = {
+                        1, 0, 0, 0,
+                        0, 1, 0, 0,
+                        0, 0, 1, 0,
+                        0, 0, 0, 1
+                    };
                 }
             } else {
                 // Default identity transform
@@ -309,7 +450,7 @@ bool DWFxParser::parseContentXml() {
             }
 
             temp_instances.push_back(instance);
-            pos = instance_end + 1;
+            pos++;
         }
 
         instances_ = temp_instances;

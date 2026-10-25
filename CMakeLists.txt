@@ -40,6 +40,9 @@ endif()
 # OpenSSL (для SHA256 хэширования в ассоциативных чертежах)
 find_package(OpenSSL REQUIRED)
 
+# zlib (для Deflate-декомпрессии ZIP в DWFx парсере)
+find_package(ZLIB REQUIRED)
+
 # BC-015: LibDWG для экспорта в формат DWG
 find_package(LibDWG QUIET)
 if(NOT LibDWG_FOUND)
@@ -64,7 +67,7 @@ endif()
 
 add_library(bendcore_core STATIC src/tubegeom.cpp src/spiral.cpp src/blank.cpp src/compensation.cpp src/calib.cpp src/ports.cpp src/refs.cpp src/axis.cpp src/tube_model.cpp src/analysis.cpp src/visualization.cpp src/collaboration.cpp src/standards.cpp src/reporting.cpp src/reporting_ui.cpp src/performance.cpp src/ipc_bridge.cpp src/bendcore/profile_manager.cpp src/bend_output.cpp src/batch_check.cpp src/instances.cpp src/dwg_export.cpp src/formula.cpp src/template_manager.cpp src/geometry_analyzer.cpp src/parametric_builder.cpp src/geometry_cache.cpp src/dxf_reader.cpp src/import_workflow.cpp src/growthbook_client.cpp src/analytics_event.cpp src/drawing_editor.cpp src/drawing_layers.cpp src/drawing_undo_redo.cpp src/combined_3d_offset.cpp src/bendcore/offset_profiler.cpp src/dwfx_parser.cpp)
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
-target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL)
+target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB)
 
 # BC-015: Link LibDWG if available
 if(LibDWG_FOUND)
