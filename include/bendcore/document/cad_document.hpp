@@ -120,6 +120,19 @@ public:
     [[nodiscard]] bool contains(EntityId id) const;
     [[nodiscard]] EntityId::Type entity_type(EntityId id) const;
 
+    // Path-based access (CAD-CORE-004)
+    [[nodiscard]] std::optional<EntityId> find_by_path(const std::string& path) const;
+    [[nodiscard]] std::string path_of(EntityId id) const;
+
+    // Batch operations
+    [[nodiscard]] bool move_subtree(EntityId child_id, EntityId new_parent_id);
+    [[nodiscard]] std::vector<EntityId> subtree(EntityId root) const;
+    [[nodiscard]] std::vector<EntityId> siblings_of(EntityId id) const;
+    [[nodiscard]] bool is_ancestor_of(EntityId potential_ancestor, EntityId potential_descendant) const;
+
+    // Performance
+    void rebuild_paths();
+
 private:
     EntityId document_id_;
     int revision_ = 0;
@@ -137,6 +150,10 @@ private:
     // Вспомогательные методы
     bool validate_parent_child(EntityId parent, EntityId child) const;
     void rebuild_tree_order();
+
+    // Кэширование путей для быстрого доступа
+    mutable std::map<EntityId, std::string> path_cache_;
+    mutable std::map<std::string, EntityId> path_index_;
 };
 
 // Специализации для каждого типа сущности
@@ -148,6 +165,12 @@ EntityId CadDocument::add_entity<Instance>(const Instance& entity);
 
 template <>
 EntityId CadDocument::add_entity<Parameter>(const Parameter& entity);
+
+template <>
+EntityId CadDocument::add_entity<Body>(const Body& entity);
+
+template <>
+EntityId CadDocument::add_entity<Sketch>(const Sketch& entity);
 
 template <>
 Part* CadDocument::get_entity<Part>(EntityId id);
