@@ -1,5 +1,6 @@
 build/
 build-*/
+build_integration/
 *.o
 *.a
 *.so
