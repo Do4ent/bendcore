@@ -8,6 +8,8 @@
 #include <memory>
 #include <cstdint>
 #include <chrono>
+#include <thread>
+#include <functional>
 
 namespace bendcore::optimization {
 

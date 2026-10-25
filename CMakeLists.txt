@@ -89,6 +89,7 @@ add_library(bendcore_core STATIC
   src/optimization/memory_optimizer.cpp src/optimization/performance_tuning.cpp
   src/testing/test_suite.cpp src/testing/performance_profiler.cpp src/testing/production_checklist.cpp src/testing/launch_package.cpp
   src/fea/FEAEngine.cpp src/manufacturing/FEAIntegration.cpp src/manufacturing/GCodeGenerator.cpp src/manufacturing/BOMGenerator.cpp src/manufacturing/ManufacturingWorkflow.cpp
+  src/deployment/ProductionBuild.cpp src/deployment/Installers.cpp src/deployment/LicenseManagement.cpp src/deployment/CloudDeployment.cpp
 )
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB OpenMP::OpenMP_CXX)
@@ -595,6 +596,30 @@ bendcore_add_test(cad_core_039_bom test_cad_core_039_bom)
 add_executable(test_cad_core_040_workflow tests/CAD-CORE-040-ManufacturingWorkflow.test.cpp)
 target_link_libraries(test_cad_core_040_workflow PRIVATE bendcore_core)
 bendcore_add_test(cad_core_040_workflow test_cad_core_040_workflow)
+
+# ============================================================================
+# Phase K: Deployment & Distribution (CAD-CORE-041 to CAD-CORE-044)
+# ============================================================================
+
+# CAD-CORE-041: Production Build Pipeline
+add_executable(test_cad_core_041_production_build tests/CAD-CORE-041-ProductionBuild.test.cpp)
+target_link_libraries(test_cad_core_041_production_build PRIVATE bendcore_core)
+bendcore_add_test(cad_core_041_production_build test_cad_core_041_production_build)
+
+# CAD-CORE-042: Installers (Multi-platform)
+add_executable(test_cad_core_042_installers tests/CAD-CORE-042-Installers.test.cpp)
+target_link_libraries(test_cad_core_042_installers PRIVATE bendcore_core)
+bendcore_add_test(cad_core_042_installers test_cad_core_042_installers)
+
+# CAD-CORE-043: License Management
+add_executable(test_cad_core_043_license tests/CAD-CORE-043-LicenseManagement.test.cpp)
+target_link_libraries(test_cad_core_043_license PRIVATE bendcore_core)
+bendcore_add_test(cad_core_043_license test_cad_core_043_license)
+
+# CAD-CORE-044: Cloud Deployment
+add_executable(test_cad_core_044_cloud tests/CAD-CORE-044-CloudDeployment.test.cpp)
+target_link_libraries(test_cad_core_044_cloud PRIVATE bendcore_core)
+bendcore_add_test(cad_core_044_cloud test_cad_core_044_cloud)
 
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.
