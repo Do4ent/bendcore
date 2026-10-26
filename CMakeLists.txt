@@ -108,6 +108,12 @@ set(BENDCORE_SOURCES
   src/geometry/feature_operations.cpp
   src/topology/topological_reference.cpp
 
+  # M5 Phase: Advanced Feature Operations (GAP-020) - Loft, Sweep, Revolve
+  src/features/loft.cpp
+  src/features/sweep.cpp
+  src/features/revolve.cpp
+  src/features/feature_system.cpp
+
   # M3 Phase: Assembly (GAP-009, GAP-010)
   src/instances.cpp
   src/assembly/part_reference.cpp
@@ -145,6 +151,9 @@ set(BENDCORE_SOURCES
   src/drawing/publishing_manager.cpp
   src/drawing/print_manager.cpp
   src/drawing/file_handler.cpp
+
+  # M5 Phase: Direct Editing (GAP-022)
+  src/editing/direct_editing_manager.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -658,6 +667,11 @@ add_executable(test_m2_feature_operations tests/test_m2_feature_operations.cpp)
 target_link_libraries(test_m2_feature_operations PRIVATE bendcore_core)
 bendcore_add_test(m2_feature_operations test_m2_feature_operations)
 
+# M5 Phase: Advanced Feature Operations (GAP-020) - Loft, Sweep, Revolve
+add_executable(test_advanced_features_m5 tests/features/test_advanced_features_m5.cpp)
+target_link_libraries(test_advanced_features_m5 PRIVATE bendcore_core)
+bendcore_add_test(advanced_features_m5 test_advanced_features_m5)
+
 add_executable(test_phase_d_integration tests/integration/test_phase_d_integration.cpp)
 target_link_libraries(test_phase_d_integration PRIVATE bendcore_core)
 bendcore_add_test(phase_d_integration test_phase_d_integration)
@@ -778,6 +792,11 @@ if(GTest_FOUND)
   add_executable(test_bom tests/bom.test.cpp)
   target_link_libraries(test_bom PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(bom test_bom)
+
+  # M5 Phase: Direct Editing (GAP-022)
+  add_executable(test_direct_editing_manager tests/editing/direct_editing_manager.test.cpp)
+  target_link_libraries(test_direct_editing_manager PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
+  bendcore_add_test(direct_editing_manager test_direct_editing_manager)
 endif()
 
 # ============================================================================
