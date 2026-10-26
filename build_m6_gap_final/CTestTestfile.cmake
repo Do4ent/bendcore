@@ -174,8 +174,6 @@ add_test([=[m5_optimization]=] "/home/claude/bendcore/build_m6_gap_final/test_m5
 set_tests_properties([=[m5_optimization]=] PROPERTIES  _BACKTRACE_TRIPLES "/home/claude/bendcore/CMakeLists.txt;291;add_test;/home/claude/bendcore/CMakeLists.txt;893;bendcore_add_test;/home/claude/bendcore/CMakeLists.txt;0;")
 add_test([=[fea_m6]=] "/home/claude/bendcore/build_m6_gap_final/test_fea_m6")
 set_tests_properties([=[fea_m6]=] PROPERTIES  _BACKTRACE_TRIPLES "/home/claude/bendcore/CMakeLists.txt;291;add_test;/home/claude/bendcore/CMakeLists.txt;902;bendcore_add_test;/home/claude/bendcore/CMakeLists.txt;0;")
-add_test([=[mesh_optimization_m7]=] "/home/claude/bendcore/build_m6_gap_final/test_mesh_optimization_m7")
-set_tests_properties([=[mesh_optimization_m7]=] PROPERTIES  _BACKTRACE_TRIPLES "/home/claude/bendcore/CMakeLists.txt;291;add_test;/home/claude/bendcore/CMakeLists.txt;910;bendcore_add_test;/home/claude/bendcore/CMakeLists.txt;0;")
 add_test([=[cad_core_037_fea]=] "/home/claude/bendcore/build_m6_gap_final/test_cad_core_037_fea")
 set_tests_properties([=[cad_core_037_fea]=] PROPERTIES  _BACKTRACE_TRIPLES "/home/claude/bendcore/CMakeLists.txt;291;add_test;/home/claude/bendcore/CMakeLists.txt;919;bendcore_add_test;/home/claude/bendcore/CMakeLists.txt;0;")
 add_test([=[cad_core_038_gcode]=] "/home/claude/bendcore/build_m6_gap_final/test_cad_core_038_gcode")

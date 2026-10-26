@@ -151,7 +151,6 @@ all: CMakeFiles/test_stress_tests.dir/all
 all: CMakeFiles/test_regression_suite.dir/all
 all: CMakeFiles/test_m5_optimization.dir/all
 all: CMakeFiles/test_fea_m6.dir/all
-all: CMakeFiles/test_mesh_optimization_m7.dir/all
 all: CMakeFiles/test_cad_core_037_fea.dir/all
 all: CMakeFiles/test_cad_core_038_gcode.dir/all
 all: CMakeFiles/test_cad_core_039_bom.dir/all
@@ -262,7 +261,6 @@ clean: CMakeFiles/test_stress_tests.dir/clean
 clean: CMakeFiles/test_regression_suite.dir/clean
 clean: CMakeFiles/test_m5_optimization.dir/clean
 clean: CMakeFiles/test_fea_m6.dir/clean
-clean: CMakeFiles/test_mesh_optimization_m7.dir/clean
 clean: CMakeFiles/test_cad_core_037_fea.dir/clean
 clean: CMakeFiles/test_cad_core_038_gcode.dir/clean
 clean: CMakeFiles/test_cad_core_039_bom.dir/clean
@@ -287,12 +285,12 @@ clean: CMakeFiles/test_gap027_parametric_ai_comprehensive.dir/clean
 CMakeFiles/bendcore_core.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35 "Built target bendcore_core"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34 "Built target bendcore_core"
 .PHONY : CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/bendcore_core.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/bendcore_core.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/bendcore_core.dir/rule
@@ -318,7 +316,7 @@ CMakeFiles/test_m1_integration.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_m1_integration.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_m1_integration.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_m1_integration.dir/rule
@@ -339,12 +337,12 @@ CMakeFiles/test_m1_integration.dir/clean:
 CMakeFiles/test_bend_output.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_bend_output.dir/build.make CMakeFiles/test_bend_output.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_bend_output.dir/build.make CMakeFiles/test_bend_output.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=46 "Built target test_bend_output"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=45 "Built target test_bend_output"
 .PHONY : CMakeFiles/test_bend_output.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_bend_output.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_bend_output.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_bend_output.dir/rule
@@ -370,7 +368,7 @@ CMakeFiles/test_batch_check.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_batch_check.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_batch_check.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_batch_check.dir/rule
@@ -396,7 +394,7 @@ CMakeFiles/test_instances.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_instances.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_instances.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_instances.dir/rule
@@ -417,12 +415,12 @@ CMakeFiles/test_instances.dir/clean:
 CMakeFiles/test_part_reference.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_part_reference.dir/build.make CMakeFiles/test_part_reference.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_part_reference.dir/build.make CMakeFiles/test_part_reference.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=85 "Built target test_part_reference"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=84 "Built target test_part_reference"
 .PHONY : CMakeFiles/test_part_reference.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_part_reference.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_part_reference.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_part_reference.dir/rule
@@ -443,12 +441,12 @@ CMakeFiles/test_part_reference.dir/clean:
 CMakeFiles/test_assembly_constraints.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_assembly_constraints.dir/build.make CMakeFiles/test_assembly_constraints.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_assembly_constraints.dir/build.make CMakeFiles/test_assembly_constraints.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=43 "Built target test_assembly_constraints"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=42 "Built target test_assembly_constraints"
 .PHONY : CMakeFiles/test_assembly_constraints.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_assembly_constraints.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_assembly_constraints.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_assembly_constraints.dir/rule
@@ -469,7 +467,7 @@ CMakeFiles/test_assembly_constraints.dir/clean:
 CMakeFiles/test_entity_id.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_entity_id.dir/build.make CMakeFiles/test_entity_id.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_entity_id.dir/build.make CMakeFiles/test_entity_id.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_entity_id"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=68 "Built target test_entity_id"
 .PHONY : CMakeFiles/test_entity_id.dir/all
 
 # Build rule for subdir invocation for target.
@@ -495,7 +493,7 @@ CMakeFiles/test_entity_id.dir/clean:
 CMakeFiles/test_cad_document.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_document.dir/build.make CMakeFiles/test_cad_document.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_document.dir/build.make CMakeFiles/test_cad_document.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_cad_document"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=53 "Built target test_cad_document"
 .PHONY : CMakeFiles/test_cad_document.dir/all
 
 # Build rule for subdir invocation for target.
@@ -526,7 +524,7 @@ CMakeFiles/test_hierarchy_extended.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_hierarchy_extended.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_hierarchy_extended.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_hierarchy_extended.dir/rule
@@ -552,7 +550,7 @@ CMakeFiles/test_transaction.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_transaction.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_transaction.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_transaction.dir/rule
@@ -578,7 +576,7 @@ CMakeFiles/test_undo_redo_manager.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_undo_redo_manager.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_undo_redo_manager.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_undo_redo_manager.dir/rule
@@ -599,12 +597,12 @@ CMakeFiles/test_undo_redo_manager.dir/clean:
 CMakeFiles/test_document_serializer.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_document_serializer.dir/build.make CMakeFiles/test_document_serializer.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_document_serializer.dir/build.make CMakeFiles/test_document_serializer.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=61 "Built target test_document_serializer"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_document_serializer"
 .PHONY : CMakeFiles/test_document_serializer.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_document_serializer.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_document_serializer.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_document_serializer.dir/rule
@@ -625,12 +623,12 @@ CMakeFiles/test_document_serializer.dir/clean:
 CMakeFiles/test_document_api.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_document_api.dir/build.make CMakeFiles/test_document_api.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_document_api.dir/build.make CMakeFiles/test_document_api.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=60 "Built target test_document_api"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=59 "Built target test_document_api"
 .PHONY : CMakeFiles/test_document_api.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_document_api.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_document_api.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_document_api.dir/rule
@@ -651,12 +649,12 @@ CMakeFiles/test_document_api.dir/clean:
 CMakeFiles/test_command_executor.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_command_executor.dir/build.make CMakeFiles/test_command_executor.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_command_executor.dir/build.make CMakeFiles/test_command_executor.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=56 "Built target test_command_executor"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_command_executor"
 .PHONY : CMakeFiles/test_command_executor.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_command_executor.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_command_executor.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_command_executor.dir/rule
@@ -682,7 +680,7 @@ CMakeFiles/test_transaction_manager.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_transaction_manager.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_transaction_manager.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_transaction_manager.dir/rule
@@ -708,7 +706,7 @@ CMakeFiles/test_history_stack.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_history_stack.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_history_stack.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_history_stack.dir/rule
@@ -729,7 +727,7 @@ CMakeFiles/test_history_stack.dir/clean:
 CMakeFiles/test_document_event_bus.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_document_event_bus.dir/build.make CMakeFiles/test_document_event_bus.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_document_event_bus.dir/build.make CMakeFiles/test_document_event_bus.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_document_event_bus"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=60 "Built target test_document_event_bus"
 .PHONY : CMakeFiles/test_document_event_bus.dir/all
 
 # Build rule for subdir invocation for target.
@@ -760,7 +758,7 @@ CMakeFiles/test_view_management.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_view_management.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_view_management.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_view_management.dir/rule
@@ -781,7 +779,7 @@ CMakeFiles/test_view_management.dir/clean:
 CMakeFiles/test_drawing.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_drawing.dir/build.make CMakeFiles/test_drawing.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_drawing.dir/build.make CMakeFiles/test_drawing.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_drawing"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=61 "Built target test_drawing"
 .PHONY : CMakeFiles/test_drawing.dir/all
 
 # Build rule for subdir invocation for target.
@@ -812,7 +810,7 @@ CMakeFiles/test_dwg_export.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_dwg_export.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_dwg_export.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_dwg_export.dir/rule
@@ -838,7 +836,7 @@ CMakeFiles/dwg_export_e2e.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/dwg_export_e2e.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/dwg_export_e2e.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/dwg_export_e2e.dir/rule
@@ -859,12 +857,12 @@ CMakeFiles/dwg_export_e2e.dir/clean:
 CMakeFiles/e2e_ui_core.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/e2e_ui_core.dir/build.make CMakeFiles/e2e_ui_core.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/e2e_ui_core.dir/build.make CMakeFiles/e2e_ui_core.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=38 "Built target e2e_ui_core"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=37 "Built target e2e_ui_core"
 .PHONY : CMakeFiles/e2e_ui_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/e2e_ui_core.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/e2e_ui_core.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/e2e_ui_core.dir/rule
@@ -890,7 +888,7 @@ CMakeFiles/test_core_api.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_core_api.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_core_api.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_core_api.dir/rule
@@ -916,7 +914,7 @@ CMakeFiles/bendcore_cli.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/bendcore_cli.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/bendcore_cli.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/bendcore_cli.dir/rule
@@ -942,7 +940,7 @@ CMakeFiles/test_tubegeom.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_tubegeom.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_tubegeom.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_tubegeom.dir/rule
@@ -963,7 +961,7 @@ CMakeFiles/test_tubegeom.dir/clean:
 CMakeFiles/test_blank_comp.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_blank_comp.dir/build.make CMakeFiles/test_blank_comp.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_blank_comp.dir/build.make CMakeFiles/test_blank_comp.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_blank_comp"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=46 "Built target test_blank_comp"
 .PHONY : CMakeFiles/test_blank_comp.dir/all
 
 # Build rule for subdir invocation for target.
@@ -989,12 +987,12 @@ CMakeFiles/test_blank_comp.dir/clean:
 CMakeFiles/test_calib.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_calib.dir/build.make CMakeFiles/test_calib.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_calib.dir/build.make CMakeFiles/test_calib.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=54 "Built target test_calib"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_calib"
 .PHONY : CMakeFiles/test_calib.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_calib.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_calib.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_calib.dir/rule
@@ -1020,7 +1018,7 @@ CMakeFiles/test_ports.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_ports.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_ports.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_ports.dir/rule
@@ -1046,7 +1044,7 @@ CMakeFiles/test_refs.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_refs.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_refs.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_refs.dir/rule
@@ -1072,7 +1070,7 @@ CMakeFiles/test_import.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_import.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_import.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_import.dir/rule
@@ -1093,12 +1091,12 @@ CMakeFiles/test_import.dir/clean:
 CMakeFiles/test_axis.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_axis.dir/build.make CMakeFiles/test_axis.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_axis.dir/build.make CMakeFiles/test_axis.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=45 "Built target test_axis"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=44 "Built target test_axis"
 .PHONY : CMakeFiles/test_axis.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_axis.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_axis.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_axis.dir/rule
@@ -1124,7 +1122,7 @@ CMakeFiles/test_analysis.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_analysis.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_analysis.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_analysis.dir/rule
@@ -1145,7 +1143,7 @@ CMakeFiles/test_analysis.dir/clean:
 CMakeFiles/test_multi_physics_coupling.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_multi_physics_coupling.dir/build.make CMakeFiles/test_multi_physics_coupling.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_multi_physics_coupling.dir/build.make CMakeFiles/test_multi_physics_coupling.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_multi_physics_coupling"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=83 "Built target test_multi_physics_coupling"
 .PHONY : CMakeFiles/test_multi_physics_coupling.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1171,12 +1169,12 @@ CMakeFiles/test_multi_physics_coupling.dir/clean:
 CMakeFiles/test_real_time_solver.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_real_time_solver.dir/build.make CMakeFiles/test_real_time_solver.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_real_time_solver.dir/build.make CMakeFiles/test_real_time_solver.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=88 "Built target test_real_time_solver"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_real_time_solver"
 .PHONY : CMakeFiles/test_real_time_solver.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_real_time_solver.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_real_time_solver.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_real_time_solver.dir/rule
@@ -1202,7 +1200,7 @@ CMakeFiles/test_visualization.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_visualization.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_visualization.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_visualization.dir/rule
@@ -1223,7 +1221,7 @@ CMakeFiles/test_visualization.dir/clean:
 CMakeFiles/test_collaboration.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_collaboration.dir/build.make CMakeFiles/test_collaboration.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_collaboration.dir/build.make CMakeFiles/test_collaboration.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_collaboration"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=55 "Built target test_collaboration"
 .PHONY : CMakeFiles/test_collaboration.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1249,12 +1247,12 @@ CMakeFiles/test_collaboration.dir/clean:
 CMakeFiles/test_cloud_collaboration.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cloud_collaboration.dir/build.make CMakeFiles/test_cloud_collaboration.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cloud_collaboration.dir/build.make CMakeFiles/test_cloud_collaboration.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=55 "Built target test_cloud_collaboration"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=54 "Built target test_cloud_collaboration"
 .PHONY : CMakeFiles/test_cloud_collaboration.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_cloud_collaboration.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_cloud_collaboration.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_cloud_collaboration.dir/rule
@@ -1275,12 +1273,12 @@ CMakeFiles/test_cloud_collaboration.dir/clean:
 CMakeFiles/test_standards.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_standards.dir/build.make CMakeFiles/test_standards.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_standards.dir/build.make CMakeFiles/test_standards.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=93 "Built target test_standards"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_standards"
 .PHONY : CMakeFiles/test_standards.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_standards.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_standards.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_standards.dir/rule
@@ -1306,7 +1304,7 @@ CMakeFiles/test_topology_optimization_m8.dir/all: CMakeFiles/bendcore_core.dir/a
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_topology_optimization_m8.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_topology_optimization_m8.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_topology_optimization_m8.dir/rule
@@ -1332,7 +1330,7 @@ CMakeFiles/test_simple_cost_analysis.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_simple_cost_analysis.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_simple_cost_analysis.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_simple_cost_analysis.dir/rule
@@ -1358,7 +1356,7 @@ CMakeFiles/test_assembly_creation.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_assembly_creation.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_assembly_creation.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_assembly_creation.dir/rule
@@ -1379,12 +1377,12 @@ CMakeFiles/test_assembly_creation.dir/clean:
 CMakeFiles/test_assembly_validation.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_assembly_validation.dir/build.make CMakeFiles/test_assembly_validation.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_assembly_validation.dir/build.make CMakeFiles/test_assembly_validation.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=44 "Built target test_assembly_validation"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=43 "Built target test_assembly_validation"
 .PHONY : CMakeFiles/test_assembly_validation.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_assembly_validation.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_assembly_validation.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_assembly_validation.dir/rule
@@ -1405,7 +1403,7 @@ CMakeFiles/test_assembly_validation.dir/clean:
 CMakeFiles/test_reporting.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_reporting.dir/build.make CMakeFiles/test_reporting.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_reporting.dir/build.make CMakeFiles/test_reporting.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_reporting"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=90 "Built target test_reporting"
 .PHONY : CMakeFiles/test_reporting.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1436,7 +1434,7 @@ CMakeFiles/test_reporting_ui.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_reporting_ui.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_reporting_ui.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_reporting_ui.dir/rule
@@ -1457,7 +1455,7 @@ CMakeFiles/test_reporting_ui.dir/clean:
 CMakeFiles/test_surfaces_m5.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_surfaces_m5.dir/build.make CMakeFiles/test_surfaces_m5.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_surfaces_m5.dir/build.make CMakeFiles/test_surfaces_m5.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_surfaces_m5"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=95 "Built target test_surfaces_m5"
 .PHONY : CMakeFiles/test_surfaces_m5.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1483,7 +1481,7 @@ CMakeFiles/test_surfaces_m5.dir/clean:
 CMakeFiles/bendcore_formula.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_formula.dir/build.make CMakeFiles/bendcore_formula.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_formula.dir/build.make CMakeFiles/bendcore_formula.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=36 "Built target bendcore_formula"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=35 "Built target bendcore_formula"
 .PHONY : CMakeFiles/bendcore_formula.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1509,7 +1507,7 @@ CMakeFiles/bendcore_formula.dir/clean:
 CMakeFiles/test_comments.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_comments.dir/build.make CMakeFiles/test_comments.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_comments.dir/build.make CMakeFiles/test_comments.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_comments"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=56 "Built target test_comments"
 .PHONY : CMakeFiles/test_comments.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1540,7 +1538,7 @@ CMakeFiles/test_layers.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_layers.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_layers.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_layers.dir/rule
@@ -1566,7 +1564,7 @@ CMakeFiles/test_search.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_search.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_search.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_search.dir/rule
@@ -1592,7 +1590,7 @@ CMakeFiles/test_growthbook_client.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_growthbook_client.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_growthbook_client.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_growthbook_client.dir/rule
@@ -1613,7 +1611,7 @@ CMakeFiles/test_growthbook_client.dir/clean:
 CMakeFiles/test_analytics_event.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_analytics_event.dir/build.make CMakeFiles/test_analytics_event.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_analytics_event.dir/build.make CMakeFiles/test_analytics_event.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_analytics_event"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=41 "Built target test_analytics_event"
 .PHONY : CMakeFiles/test_analytics_event.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1639,12 +1637,12 @@ CMakeFiles/test_analytics_event.dir/clean:
 CMakeFiles/test_ab_testing.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ab_testing.dir/build.make CMakeFiles/test_ab_testing.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ab_testing.dir/build.make CMakeFiles/test_ab_testing.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=39 "Built target test_ab_testing"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=38 "Built target test_ab_testing"
 .PHONY : CMakeFiles/test_ab_testing.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_ab_testing.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_ab_testing.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_ab_testing.dir/rule
@@ -1670,7 +1668,7 @@ CMakeFiles/test_event_batch_sender.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_event_batch_sender.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_event_batch_sender.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_event_batch_sender.dir/rule
@@ -1696,7 +1694,7 @@ CMakeFiles/test_drawing_editor.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_drawing_editor.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_drawing_editor.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_drawing_editor.dir/rule
@@ -1717,7 +1715,7 @@ CMakeFiles/test_drawing_editor.dir/clean:
 CMakeFiles/test_drawing_layers_manager.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_drawing_layers_manager.dir/build.make CMakeFiles/test_drawing_layers_manager.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_drawing_layers_manager.dir/build.make CMakeFiles/test_drawing_layers_manager.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_drawing_layers_manager"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=63 "Built target test_drawing_layers_manager"
 .PHONY : CMakeFiles/test_drawing_layers_manager.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1748,7 +1746,7 @@ CMakeFiles/test_drawing_undo_redo.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_drawing_undo_redo.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_drawing_undo_redo.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_drawing_undo_redo.dir/rule
@@ -1769,12 +1767,12 @@ CMakeFiles/test_drawing_undo_redo.dir/clean:
 CMakeFiles/test_drawing_extraction.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_drawing_extraction.dir/build.make CMakeFiles/test_drawing_extraction.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_drawing_extraction.dir/build.make CMakeFiles/test_drawing_extraction.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=63 "Built target test_drawing_extraction"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_drawing_extraction"
 .PHONY : CMakeFiles/test_drawing_extraction.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_drawing_extraction.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_drawing_extraction.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_drawing_extraction.dir/rule
@@ -1800,7 +1798,7 @@ CMakeFiles/test_drawing_workbench_m4.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_drawing_workbench_m4.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_drawing_workbench_m4.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_drawing_workbench_m4.dir/rule
@@ -1821,12 +1819,12 @@ CMakeFiles/test_drawing_workbench_m4.dir/clean:
 CMakeFiles/test_annotation_dimension.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_annotation_dimension.dir/build.make CMakeFiles/test_annotation_dimension.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_annotation_dimension.dir/build.make CMakeFiles/test_annotation_dimension.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=42 "Built target test_annotation_dimension"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_annotation_dimension"
 .PHONY : CMakeFiles/test_annotation_dimension.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_annotation_dimension.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_annotation_dimension.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_annotation_dimension.dir/rule
@@ -1847,12 +1845,12 @@ CMakeFiles/test_annotation_dimension.dir/clean:
 CMakeFiles/e2e_analytics.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/e2e_analytics.dir/build.make CMakeFiles/e2e_analytics.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/e2e_analytics.dir/build.make CMakeFiles/e2e_analytics.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=37 "Built target e2e_analytics"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=36 "Built target e2e_analytics"
 .PHONY : CMakeFiles/e2e_analytics.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/e2e_analytics.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/e2e_analytics.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/e2e_analytics.dir/rule
@@ -1873,12 +1871,12 @@ CMakeFiles/e2e_analytics.dir/clean:
 CMakeFiles/test_parameter_store.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_parameter_store.dir/build.make CMakeFiles/test_parameter_store.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_parameter_store.dir/build.make CMakeFiles/test_parameter_store.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=84 "Built target test_parameter_store"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_parameter_store"
 .PHONY : CMakeFiles/test_parameter_store.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_parameter_store.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_parameter_store.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_parameter_store.dir/rule
@@ -1899,12 +1897,12 @@ CMakeFiles/test_parameter_store.dir/clean:
 CMakeFiles/test_dependency_graph.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dependency_graph.dir/build.make CMakeFiles/test_dependency_graph.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_dependency_graph.dir/build.make CMakeFiles/test_dependency_graph.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=59 "Built target test_dependency_graph"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_dependency_graph"
 .PHONY : CMakeFiles/test_dependency_graph.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_dependency_graph.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_dependency_graph.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_dependency_graph.dir/rule
@@ -1925,7 +1923,7 @@ CMakeFiles/test_dependency_graph.dir/clean:
 CMakeFiles/test_rebuild_cascade.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_rebuild_cascade.dir/build.make CMakeFiles/test_rebuild_cascade.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_rebuild_cascade.dir/build.make CMakeFiles/test_rebuild_cascade.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_rebuild_cascade"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=88 "Built target test_rebuild_cascade"
 .PHONY : CMakeFiles/test_rebuild_cascade.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1951,7 +1949,7 @@ CMakeFiles/test_rebuild_cascade.dir/clean:
 CMakeFiles/test_phase_c_integration.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_phase_c_integration.dir/build.make CMakeFiles/test_phase_c_integration.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_phase_c_integration.dir/build.make CMakeFiles/test_phase_c_integration.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_phase_c_integration"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=85 "Built target test_phase_c_integration"
 .PHONY : CMakeFiles/test_phase_c_integration.dir/all
 
 # Build rule for subdir invocation for target.
@@ -1982,7 +1980,7 @@ CMakeFiles/test_geometry_kernel.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_geometry_kernel.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_geometry_kernel.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_geometry_kernel.dir/rule
@@ -2003,12 +2001,12 @@ CMakeFiles/test_geometry_kernel.dir/clean:
 CMakeFiles/test_brep_builder.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_brep_builder.dir/build.make CMakeFiles/test_brep_builder.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_brep_builder.dir/build.make CMakeFiles/test_brep_builder.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=48 "Built target test_brep_builder"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=47 "Built target test_brep_builder"
 .PHONY : CMakeFiles/test_brep_builder.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_brep_builder.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_brep_builder.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_brep_builder.dir/rule
@@ -2029,7 +2027,7 @@ CMakeFiles/test_brep_builder.dir/clean:
 CMakeFiles/test_curve_operations.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_curve_operations.dir/build.make CMakeFiles/test_curve_operations.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_curve_operations.dir/build.make CMakeFiles/test_curve_operations.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_curve_operations"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=58 "Built target test_curve_operations"
 .PHONY : CMakeFiles/test_curve_operations.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2055,12 +2053,12 @@ CMakeFiles/test_curve_operations.dir/clean:
 CMakeFiles/test_surface_operations.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_surface_operations.dir/build.make CMakeFiles/test_surface_operations.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_surface_operations.dir/build.make CMakeFiles/test_surface_operations.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=95 "Built target test_surface_operations"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_surface_operations"
 .PHONY : CMakeFiles/test_surface_operations.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_surface_operations.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_surface_operations.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_surface_operations.dir/rule
@@ -2086,7 +2084,7 @@ CMakeFiles/test_m2_feature_operations.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_m2_feature_operations.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_m2_feature_operations.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_m2_feature_operations.dir/rule
@@ -2107,12 +2105,12 @@ CMakeFiles/test_m2_feature_operations.dir/clean:
 CMakeFiles/test_advanced_features_m5.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_advanced_features_m5.dir/build.make CMakeFiles/test_advanced_features_m5.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_advanced_features_m5.dir/build.make CMakeFiles/test_advanced_features_m5.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=40 "Built target test_advanced_features_m5"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=39 "Built target test_advanced_features_m5"
 .PHONY : CMakeFiles/test_advanced_features_m5.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_advanced_features_m5.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_advanced_features_m5.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_advanced_features_m5.dir/rule
@@ -2133,12 +2131,12 @@ CMakeFiles/test_advanced_features_m5.dir/clean:
 CMakeFiles/test_phase_d_integration.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_phase_d_integration.dir/build.make CMakeFiles/test_phase_d_integration.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_phase_d_integration.dir/build.make CMakeFiles/test_phase_d_integration.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=86 "Built target test_phase_d_integration"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_phase_d_integration"
 .PHONY : CMakeFiles/test_phase_d_integration.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_phase_d_integration.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_phase_d_integration.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_phase_d_integration.dir/rule
@@ -2164,7 +2162,7 @@ CMakeFiles/test_dwfx_parser_comprehensive.dir/all: CMakeFiles/bendcore_core.dir/
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_dwfx_parser_comprehensive.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_dwfx_parser_comprehensive.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_dwfx_parser_comprehensive.dir/rule
@@ -2185,12 +2183,12 @@ CMakeFiles/test_dwfx_parser_comprehensive.dir/clean:
 CMakeFiles/test_formula_comprehensive.dir/all: CMakeFiles/bendcore_formula.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_formula_comprehensive.dir/build.make CMakeFiles/test_formula_comprehensive.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_formula_comprehensive.dir/build.make CMakeFiles/test_formula_comprehensive.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_formula_comprehensive"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=70 "Built target test_formula_comprehensive"
 .PHONY : CMakeFiles/test_formula_comprehensive.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_formula_comprehensive.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 1
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 2
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_formula_comprehensive.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_formula_comprehensive.dir/rule
@@ -2211,12 +2209,12 @@ CMakeFiles/test_formula_comprehensive.dir/clean:
 CMakeFiles/test_analysis_comprehensive.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_analysis_comprehensive.dir/build.make CMakeFiles/test_analysis_comprehensive.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_analysis_comprehensive.dir/build.make CMakeFiles/test_analysis_comprehensive.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=41 "Built target test_analysis_comprehensive"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=40 "Built target test_analysis_comprehensive"
 .PHONY : CMakeFiles/test_analysis_comprehensive.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_analysis_comprehensive.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_analysis_comprehensive.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_analysis_comprehensive.dir/rule
@@ -2242,7 +2240,7 @@ CMakeFiles/test_geometry_analyzer_comprehensive.dir/all: CMakeFiles/bendcore_cor
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_geometry_analyzer_comprehensive.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_geometry_analyzer_comprehensive.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_geometry_analyzer_comprehensive.dir/rule
@@ -2268,7 +2266,7 @@ CMakeFiles/test_dxf_reader_comprehensive.dir/all: CMakeFiles/bendcore_core.dir/a
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_dxf_reader_comprehensive.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_dxf_reader_comprehensive.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_dxf_reader_comprehensive.dir/rule
@@ -2294,7 +2292,7 @@ CMakeFiles/phase_f_test_suite.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/phase_f_test_suite.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/phase_f_test_suite.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/phase_f_test_suite.dir/rule
@@ -2320,7 +2318,7 @@ CMakeFiles/test_integration_e2e.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_integration_e2e.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_integration_e2e.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_integration_e2e.dir/rule
@@ -2341,7 +2339,7 @@ CMakeFiles/test_integration_e2e.dir/clean:
 CMakeFiles/test_stress.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_stress.dir/build.make CMakeFiles/test_stress.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_stress.dir/build.make CMakeFiles/test_stress.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_stress"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=93 "Built target test_stress"
 .PHONY : CMakeFiles/test_stress.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2367,12 +2365,12 @@ CMakeFiles/test_stress.dir/clean:
 CMakeFiles/test_multi_phase_integration.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_multi_phase_integration.dir/build.make CMakeFiles/test_multi_phase_integration.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_multi_phase_integration.dir/build.make CMakeFiles/test_multi_phase_integration.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=83 "Built target test_multi_phase_integration"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_multi_phase_integration"
 .PHONY : CMakeFiles/test_multi_phase_integration.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_multi_phase_integration.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_multi_phase_integration.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_multi_phase_integration.dir/rule
@@ -2393,12 +2391,12 @@ CMakeFiles/test_multi_phase_integration.dir/clean:
 CMakeFiles/test_phase_i_main.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_phase_i_main.dir/build.make CMakeFiles/test_phase_i_main.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_phase_i_main.dir/build.make CMakeFiles/test_phase_i_main.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_phase_i_main"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=86 "Built target test_phase_i_main"
 .PHONY : CMakeFiles/test_phase_i_main.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_phase_i_main.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 1
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_phase_i_main.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_phase_i_main.dir/rule
@@ -2419,12 +2417,12 @@ CMakeFiles/test_phase_i_main.dir/clean:
 CMakeFiles/test_e2e_workflows.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_e2e_workflows.dir/build.make CMakeFiles/test_e2e_workflows.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_e2e_workflows.dir/build.make CMakeFiles/test_e2e_workflows.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=68 "Built target test_e2e_workflows"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_e2e_workflows"
 .PHONY : CMakeFiles/test_e2e_workflows.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_e2e_workflows.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_e2e_workflows.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_e2e_workflows.dir/rule
@@ -2445,12 +2443,12 @@ CMakeFiles/test_e2e_workflows.dir/clean:
 CMakeFiles/test_cross_platform_validation.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cross_platform_validation.dir/build.make CMakeFiles/test_cross_platform_validation.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cross_platform_validation.dir/build.make CMakeFiles/test_cross_platform_validation.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=58 "Built target test_cross_platform_validation"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_cross_platform_validation"
 .PHONY : CMakeFiles/test_cross_platform_validation.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_cross_platform_validation.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_cross_platform_validation.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_cross_platform_validation.dir/rule
@@ -2476,7 +2474,7 @@ CMakeFiles/test_stress_tests.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_stress_tests.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_stress_tests.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_stress_tests.dir/rule
@@ -2497,12 +2495,12 @@ CMakeFiles/test_stress_tests.dir/clean:
 CMakeFiles/test_regression_suite.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_regression_suite.dir/build.make CMakeFiles/test_regression_suite.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_regression_suite.dir/build.make CMakeFiles/test_regression_suite.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=90 "Built target test_regression_suite"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_regression_suite"
 .PHONY : CMakeFiles/test_regression_suite.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_regression_suite.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_regression_suite.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_regression_suite.dir/rule
@@ -2528,7 +2526,7 @@ CMakeFiles/test_m5_optimization.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_m5_optimization.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_m5_optimization.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_m5_optimization.dir/rule
@@ -2549,12 +2547,12 @@ CMakeFiles/test_m5_optimization.dir/clean:
 CMakeFiles/test_fea_m6.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_fea_m6.dir/build.make CMakeFiles/test_fea_m6.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_fea_m6.dir/build.make CMakeFiles/test_fea_m6.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=70 "Built target test_fea_m6"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_fea_m6"
 .PHONY : CMakeFiles/test_fea_m6.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_fea_m6.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_fea_m6.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_fea_m6.dir/rule
@@ -2569,39 +2567,13 @@ CMakeFiles/test_fea_m6.dir/clean:
 .PHONY : CMakeFiles/test_fea_m6.dir/clean
 
 #=============================================================================
-# Target rules for target CMakeFiles/test_mesh_optimization_m7.dir
-
-# All Build rule for target.
-CMakeFiles/test_mesh_optimization_m7.dir/all: CMakeFiles/bendcore_core.dir/all
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_mesh_optimization_m7.dir/build.make CMakeFiles/test_mesh_optimization_m7.dir/depend
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_mesh_optimization_m7.dir/build.make CMakeFiles/test_mesh_optimization_m7.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=82 "Built target test_mesh_optimization_m7"
-.PHONY : CMakeFiles/test_mesh_optimization_m7.dir/all
-
-# Build rule for subdir invocation for target.
-CMakeFiles/test_mesh_optimization_m7.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_mesh_optimization_m7.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
-.PHONY : CMakeFiles/test_mesh_optimization_m7.dir/rule
-
-# Convenience name for target.
-test_mesh_optimization_m7: CMakeFiles/test_mesh_optimization_m7.dir/rule
-.PHONY : test_mesh_optimization_m7
-
-# clean rule for target.
-CMakeFiles/test_mesh_optimization_m7.dir/clean:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_mesh_optimization_m7.dir/build.make CMakeFiles/test_mesh_optimization_m7.dir/clean
-.PHONY : CMakeFiles/test_mesh_optimization_m7.dir/clean
-
-#=============================================================================
 # Target rules for target CMakeFiles/test_cad_core_037_fea.dir
 
 # All Build rule for target.
 CMakeFiles/test_cad_core_037_fea.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_037_fea.dir/build.make CMakeFiles/test_cad_core_037_fea.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_037_fea.dir/build.make CMakeFiles/test_cad_core_037_fea.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_cad_core_037_fea"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=48 "Built target test_cad_core_037_fea"
 .PHONY : CMakeFiles/test_cad_core_037_fea.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2627,12 +2599,12 @@ CMakeFiles/test_cad_core_037_fea.dir/clean:
 CMakeFiles/test_cad_core_038_gcode.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_038_gcode.dir/build.make CMakeFiles/test_cad_core_038_gcode.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_038_gcode.dir/build.make CMakeFiles/test_cad_core_038_gcode.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=49 "Built target test_cad_core_038_gcode"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_cad_core_038_gcode"
 .PHONY : CMakeFiles/test_cad_core_038_gcode.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_cad_core_038_gcode.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_cad_core_038_gcode.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_cad_core_038_gcode.dir/rule
@@ -2653,12 +2625,12 @@ CMakeFiles/test_cad_core_038_gcode.dir/clean:
 CMakeFiles/test_cad_core_039_bom.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_039_bom.dir/build.make CMakeFiles/test_cad_core_039_bom.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_039_bom.dir/build.make CMakeFiles/test_cad_core_039_bom.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=50 "Built target test_cad_core_039_bom"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=49 "Built target test_cad_core_039_bom"
 .PHONY : CMakeFiles/test_cad_core_039_bom.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_cad_core_039_bom.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_cad_core_039_bom.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_cad_core_039_bom.dir/rule
@@ -2679,7 +2651,7 @@ CMakeFiles/test_cad_core_039_bom.dir/clean:
 CMakeFiles/test_cad_core_040_workflow.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_040_workflow.dir/build.make CMakeFiles/test_cad_core_040_workflow.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_040_workflow.dir/build.make CMakeFiles/test_cad_core_040_workflow.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_cad_core_040_workflow"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=50 "Built target test_cad_core_040_workflow"
 .PHONY : CMakeFiles/test_cad_core_040_workflow.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2705,12 +2677,12 @@ CMakeFiles/test_cad_core_040_workflow.dir/clean:
 CMakeFiles/test_bom_simple.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_bom_simple.dir/build.make CMakeFiles/test_bom_simple.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_bom_simple.dir/build.make CMakeFiles/test_bom_simple.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=47 "Built target test_bom_simple"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_bom_simple"
 .PHONY : CMakeFiles/test_bom_simple.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_bom_simple.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_bom_simple.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_bom_simple.dir/rule
@@ -2736,7 +2708,7 @@ CMakeFiles/test_mass_properties.dir/all: CMakeFiles/bendcore_core.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_mass_properties.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_mass_properties.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_mass_properties.dir/rule
@@ -2757,12 +2729,12 @@ CMakeFiles/test_mass_properties.dir/clean:
 CMakeFiles/test_cad_core_041_production_build.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_041_production_build.dir/build.make CMakeFiles/test_cad_core_041_production_build.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_041_production_build.dir/build.make CMakeFiles/test_cad_core_041_production_build.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=51 "Built target test_cad_core_041_production_build"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_cad_core_041_production_build"
 .PHONY : CMakeFiles/test_cad_core_041_production_build.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_cad_core_041_production_build.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_cad_core_041_production_build.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_cad_core_041_production_build.dir/rule
@@ -2783,7 +2755,7 @@ CMakeFiles/test_cad_core_041_production_build.dir/clean:
 CMakeFiles/test_cad_core_042_installers.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_042_installers.dir/build.make CMakeFiles/test_cad_core_042_installers.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_042_installers.dir/build.make CMakeFiles/test_cad_core_042_installers.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_cad_core_042_installers"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=51 "Built target test_cad_core_042_installers"
 .PHONY : CMakeFiles/test_cad_core_042_installers.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2809,12 +2781,12 @@ CMakeFiles/test_cad_core_042_installers.dir/clean:
 CMakeFiles/test_cad_core_043_license.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_043_license.dir/build.make CMakeFiles/test_cad_core_043_license.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_043_license.dir/build.make CMakeFiles/test_cad_core_043_license.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=52 "Built target test_cad_core_043_license"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_cad_core_043_license"
 .PHONY : CMakeFiles/test_cad_core_043_license.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_cad_core_043_license.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_cad_core_043_license.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_cad_core_043_license.dir/rule
@@ -2835,12 +2807,12 @@ CMakeFiles/test_cad_core_043_license.dir/clean:
 CMakeFiles/test_cad_core_044_cloud.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_044_cloud.dir/build.make CMakeFiles/test_cad_core_044_cloud.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_cad_core_044_cloud.dir/build.make CMakeFiles/test_cad_core_044_cloud.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=53 "Built target test_cad_core_044_cloud"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=52 "Built target test_cad_core_044_cloud"
 .PHONY : CMakeFiles/test_cad_core_044_cloud.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_cad_core_044_cloud.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_cad_core_044_cloud.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_cad_core_044_cloud.dir/rule
@@ -2866,7 +2838,7 @@ CMakeFiles/test_manufacturing_constraints.dir/all: CMakeFiles/bendcore_core.dir/
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_manufacturing_constraints.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_manufacturing_constraints.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_manufacturing_constraints.dir/rule
@@ -2887,7 +2859,7 @@ CMakeFiles/test_manufacturing_constraints.dir/clean:
 CMakeFiles/test_material_library.dir/all: CMakeFiles/bendcore_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_material_library.dir/build.make CMakeFiles/test_material_library.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_material_library.dir/build.make CMakeFiles/test_material_library.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num= "Built target test_material_library"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/claude/bendcore/build_m6_gap_final/CMakeFiles --progress-num=82 "Built target test_material_library"
 .PHONY : CMakeFiles/test_material_library.dir/all
 
 # Build rule for subdir invocation for target.
@@ -2918,7 +2890,7 @@ CMakeFiles/test_gap025_fea_comprehensive.dir/all: CMakeFiles/bendcore_core.dir/a
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_gap025_fea_comprehensive.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_gap025_fea_comprehensive.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_gap025_fea_comprehensive.dir/rule
@@ -2944,7 +2916,7 @@ CMakeFiles/test_gap026_generative_comprehensive.dir/all: CMakeFiles/bendcore_cor
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_gap026_generative_comprehensive.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 34
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_gap026_generative_comprehensive.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_gap026_generative_comprehensive.dir/rule
@@ -2970,7 +2942,7 @@ CMakeFiles/test_gap027_parametric_ai_comprehensive.dir/all: CMakeFiles/bendcore_
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test_gap027_parametric_ai_comprehensive.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 36
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 35
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_gap027_parametric_ai_comprehensive.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/claude/bendcore/build_m6_gap_final/CMakeFiles 0
 .PHONY : CMakeFiles/test_gap027_parametric_ai_comprehensive.dir/rule

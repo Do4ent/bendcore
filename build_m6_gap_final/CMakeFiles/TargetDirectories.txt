@@ -86,7 +86,6 @@
 /home/claude/bendcore/build_m6_gap_final/CMakeFiles/test_regression_suite.dir
 /home/claude/bendcore/build_m6_gap_final/CMakeFiles/test_m5_optimization.dir
 /home/claude/bendcore/build_m6_gap_final/CMakeFiles/test_fea_m6.dir
-/home/claude/bendcore/build_m6_gap_final/CMakeFiles/test_mesh_optimization_m7.dir
 /home/claude/bendcore/build_m6_gap_final/CMakeFiles/test_cad_core_037_fea.dir
 /home/claude/bendcore/build_m6_gap_final/CMakeFiles/test_cad_core_038_gcode.dir
 /home/claude/bendcore/build_m6_gap_final/CMakeFiles/test_cad_core_039_bom.dir

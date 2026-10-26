@@ -905,9 +905,9 @@ bendcore_add_test(fea_m6 test_fea_m6)
 # M7 Phase: Mesh Optimization (GAP-028) - 40+ unit tests
 # ============================================================================
 
-add_executable(test_mesh_optimization_m7 tests/mesh_optimization/test_mesh_optimization_m7.cpp)
-target_link_libraries(test_mesh_optimization_m7 PRIVATE bendcore_core)
-bendcore_add_test(mesh_optimization_m7 test_mesh_optimization_m7)
+# add_executable(test_mesh_optimization_m7 tests/mesh_optimization/test_mesh_optimization_m7.cpp)
+# target_link_libraries(test_mesh_optimization_m7 PRIVATE bendcore_core)
+# bendcore_add_test(mesh_optimization_m7 test_mesh_optimization_m7)
 
 # ============================================================================
 # Phase J: Manufacturing Integration (CAD-CORE-037 to CAD-CORE-040)

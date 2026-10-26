@@ -1271,19 +1271,6 @@ test_fea_m6/fast:
 .PHONY : test_fea_m6/fast
 
 #=============================================================================
-# Target rules for targets named test_mesh_optimization_m7
-
-# Build rule for target.
-test_mesh_optimization_m7: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_mesh_optimization_m7
-.PHONY : test_mesh_optimization_m7
-
-# fast build rule for target.
-test_mesh_optimization_m7/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_mesh_optimization_m7.dir/build.make CMakeFiles/test_mesh_optimization_m7.dir/build
-.PHONY : test_mesh_optimization_m7/fast
-
-#=============================================================================
 # Target rules for targets named test_cad_core_037_fea
 
 # Build rule for target.
@@ -3085,150 +3072,6 @@ src/materials/material_library.s: src/materials/material_library.cpp.s
 src/materials/material_library.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/materials/material_library.cpp.s
 .PHONY : src/materials/material_library.cpp.s
-
-src/mesh_optimization/adaptive_refinement.o: src/mesh_optimization/adaptive_refinement.cpp.o
-.PHONY : src/mesh_optimization/adaptive_refinement.o
-
-# target to build an object file
-src/mesh_optimization/adaptive_refinement.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/adaptive_refinement.cpp.o
-.PHONY : src/mesh_optimization/adaptive_refinement.cpp.o
-
-src/mesh_optimization/adaptive_refinement.i: src/mesh_optimization/adaptive_refinement.cpp.i
-.PHONY : src/mesh_optimization/adaptive_refinement.i
-
-# target to preprocess a source file
-src/mesh_optimization/adaptive_refinement.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/adaptive_refinement.cpp.i
-.PHONY : src/mesh_optimization/adaptive_refinement.cpp.i
-
-src/mesh_optimization/adaptive_refinement.s: src/mesh_optimization/adaptive_refinement.cpp.s
-.PHONY : src/mesh_optimization/adaptive_refinement.s
-
-# target to generate assembly for a file
-src/mesh_optimization/adaptive_refinement.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/adaptive_refinement.cpp.s
-.PHONY : src/mesh_optimization/adaptive_refinement.cpp.s
-
-src/mesh_optimization/mesh_io.o: src/mesh_optimization/mesh_io.cpp.o
-.PHONY : src/mesh_optimization/mesh_io.o
-
-# target to build an object file
-src/mesh_optimization/mesh_io.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/mesh_io.cpp.o
-.PHONY : src/mesh_optimization/mesh_io.cpp.o
-
-src/mesh_optimization/mesh_io.i: src/mesh_optimization/mesh_io.cpp.i
-.PHONY : src/mesh_optimization/mesh_io.i
-
-# target to preprocess a source file
-src/mesh_optimization/mesh_io.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/mesh_io.cpp.i
-.PHONY : src/mesh_optimization/mesh_io.cpp.i
-
-src/mesh_optimization/mesh_io.s: src/mesh_optimization/mesh_io.cpp.s
-.PHONY : src/mesh_optimization/mesh_io.s
-
-# target to generate assembly for a file
-src/mesh_optimization/mesh_io.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/mesh_io.cpp.s
-.PHONY : src/mesh_optimization/mesh_io.cpp.s
-
-src/mesh_optimization/mesh_optimization.o: src/mesh_optimization/mesh_optimization.cpp.o
-.PHONY : src/mesh_optimization/mesh_optimization.o
-
-# target to build an object file
-src/mesh_optimization/mesh_optimization.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/mesh_optimization.cpp.o
-.PHONY : src/mesh_optimization/mesh_optimization.cpp.o
-
-src/mesh_optimization/mesh_optimization.i: src/mesh_optimization/mesh_optimization.cpp.i
-.PHONY : src/mesh_optimization/mesh_optimization.i
-
-# target to preprocess a source file
-src/mesh_optimization/mesh_optimization.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/mesh_optimization.cpp.i
-.PHONY : src/mesh_optimization/mesh_optimization.cpp.i
-
-src/mesh_optimization/mesh_optimization.s: src/mesh_optimization/mesh_optimization.cpp.s
-.PHONY : src/mesh_optimization/mesh_optimization.s
-
-# target to generate assembly for a file
-src/mesh_optimization/mesh_optimization.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/mesh_optimization.cpp.s
-.PHONY : src/mesh_optimization/mesh_optimization.cpp.s
-
-src/mesh_optimization/mesh_smoothing.o: src/mesh_optimization/mesh_smoothing.cpp.o
-.PHONY : src/mesh_optimization/mesh_smoothing.o
-
-# target to build an object file
-src/mesh_optimization/mesh_smoothing.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/mesh_smoothing.cpp.o
-.PHONY : src/mesh_optimization/mesh_smoothing.cpp.o
-
-src/mesh_optimization/mesh_smoothing.i: src/mesh_optimization/mesh_smoothing.cpp.i
-.PHONY : src/mesh_optimization/mesh_smoothing.i
-
-# target to preprocess a source file
-src/mesh_optimization/mesh_smoothing.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/mesh_smoothing.cpp.i
-.PHONY : src/mesh_optimization/mesh_smoothing.cpp.i
-
-src/mesh_optimization/mesh_smoothing.s: src/mesh_optimization/mesh_smoothing.cpp.s
-.PHONY : src/mesh_optimization/mesh_smoothing.s
-
-# target to generate assembly for a file
-src/mesh_optimization/mesh_smoothing.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/mesh_smoothing.cpp.s
-.PHONY : src/mesh_optimization/mesh_smoothing.cpp.s
-
-src/mesh_optimization/parallel_mesh_generation.o: src/mesh_optimization/parallel_mesh_generation.cpp.o
-.PHONY : src/mesh_optimization/parallel_mesh_generation.o
-
-# target to build an object file
-src/mesh_optimization/parallel_mesh_generation.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/parallel_mesh_generation.cpp.o
-.PHONY : src/mesh_optimization/parallel_mesh_generation.cpp.o
-
-src/mesh_optimization/parallel_mesh_generation.i: src/mesh_optimization/parallel_mesh_generation.cpp.i
-.PHONY : src/mesh_optimization/parallel_mesh_generation.i
-
-# target to preprocess a source file
-src/mesh_optimization/parallel_mesh_generation.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/parallel_mesh_generation.cpp.i
-.PHONY : src/mesh_optimization/parallel_mesh_generation.cpp.i
-
-src/mesh_optimization/parallel_mesh_generation.s: src/mesh_optimization/parallel_mesh_generation.cpp.s
-.PHONY : src/mesh_optimization/parallel_mesh_generation.s
-
-# target to generate assembly for a file
-src/mesh_optimization/parallel_mesh_generation.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/parallel_mesh_generation.cpp.s
-.PHONY : src/mesh_optimization/parallel_mesh_generation.cpp.s
-
-src/mesh_optimization/quality_analyzer.o: src/mesh_optimization/quality_analyzer.cpp.o
-.PHONY : src/mesh_optimization/quality_analyzer.o
-
-# target to build an object file
-src/mesh_optimization/quality_analyzer.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/quality_analyzer.cpp.o
-.PHONY : src/mesh_optimization/quality_analyzer.cpp.o
-
-src/mesh_optimization/quality_analyzer.i: src/mesh_optimization/quality_analyzer.cpp.i
-.PHONY : src/mesh_optimization/quality_analyzer.i
-
-# target to preprocess a source file
-src/mesh_optimization/quality_analyzer.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/quality_analyzer.cpp.i
-.PHONY : src/mesh_optimization/quality_analyzer.cpp.i
-
-src/mesh_optimization/quality_analyzer.s: src/mesh_optimization/quality_analyzer.cpp.s
-.PHONY : src/mesh_optimization/quality_analyzer.s
-
-# target to generate assembly for a file
-src/mesh_optimization/quality_analyzer.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/bendcore_core.dir/build.make CMakeFiles/bendcore_core.dir/src/mesh_optimization/quality_analyzer.cpp.s
-.PHONY : src/mesh_optimization/quality_analyzer.cpp.s
 
 src/optimization/computation_cache.o: src/optimization/computation_cache.cpp.o
 .PHONY : src/optimization/computation_cache.o
@@ -5414,30 +5257,6 @@ tests/materials/test_material_library.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_material_library.dir/build.make CMakeFiles/test_material_library.dir/tests/materials/test_material_library.cpp.s
 .PHONY : tests/materials/test_material_library.cpp.s
 
-tests/mesh_optimization/test_mesh_optimization_m7.o: tests/mesh_optimization/test_mesh_optimization_m7.cpp.o
-.PHONY : tests/mesh_optimization/test_mesh_optimization_m7.o
-
-# target to build an object file
-tests/mesh_optimization/test_mesh_optimization_m7.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_mesh_optimization_m7.dir/build.make CMakeFiles/test_mesh_optimization_m7.dir/tests/mesh_optimization/test_mesh_optimization_m7.cpp.o
-.PHONY : tests/mesh_optimization/test_mesh_optimization_m7.cpp.o
-
-tests/mesh_optimization/test_mesh_optimization_m7.i: tests/mesh_optimization/test_mesh_optimization_m7.cpp.i
-.PHONY : tests/mesh_optimization/test_mesh_optimization_m7.i
-
-# target to preprocess a source file
-tests/mesh_optimization/test_mesh_optimization_m7.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_mesh_optimization_m7.dir/build.make CMakeFiles/test_mesh_optimization_m7.dir/tests/mesh_optimization/test_mesh_optimization_m7.cpp.i
-.PHONY : tests/mesh_optimization/test_mesh_optimization_m7.cpp.i
-
-tests/mesh_optimization/test_mesh_optimization_m7.s: tests/mesh_optimization/test_mesh_optimization_m7.cpp.s
-.PHONY : tests/mesh_optimization/test_mesh_optimization_m7.s
-
-# target to generate assembly for a file
-tests/mesh_optimization/test_mesh_optimization_m7.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_mesh_optimization_m7.dir/build.make CMakeFiles/test_mesh_optimization_m7.dir/tests/mesh_optimization/test_mesh_optimization_m7.cpp.s
-.PHONY : tests/mesh_optimization/test_mesh_optimization_m7.cpp.s
-
 tests/parameters/test_parameter_store.o: tests/parameters/test_parameter_store.cpp.o
 .PHONY : tests/parameters/test_parameter_store.o
 
@@ -6746,7 +6565,6 @@ help:
 	@echo "... test_manufacturing_constraints"
 	@echo "... test_mass_properties"
 	@echo "... test_material_library"
-	@echo "... test_mesh_optimization_m7"
 	@echo "... test_multi_phase_integration"
 	@echo "... test_multi_physics_coupling"
 	@echo "... test_parameter_store"
@@ -6976,24 +6794,6 @@ help:
 	@echo "... src/materials/material_library.o"
 	@echo "... src/materials/material_library.i"
 	@echo "... src/materials/material_library.s"
-	@echo "... src/mesh_optimization/adaptive_refinement.o"
-	@echo "... src/mesh_optimization/adaptive_refinement.i"
-	@echo "... src/mesh_optimization/adaptive_refinement.s"
-	@echo "... src/mesh_optimization/mesh_io.o"
-	@echo "... src/mesh_optimization/mesh_io.i"
-	@echo "... src/mesh_optimization/mesh_io.s"
-	@echo "... src/mesh_optimization/mesh_optimization.o"
-	@echo "... src/mesh_optimization/mesh_optimization.i"
-	@echo "... src/mesh_optimization/mesh_optimization.s"
-	@echo "... src/mesh_optimization/mesh_smoothing.o"
-	@echo "... src/mesh_optimization/mesh_smoothing.i"
-	@echo "... src/mesh_optimization/mesh_smoothing.s"
-	@echo "... src/mesh_optimization/parallel_mesh_generation.o"
-	@echo "... src/mesh_optimization/parallel_mesh_generation.i"
-	@echo "... src/mesh_optimization/parallel_mesh_generation.s"
-	@echo "... src/mesh_optimization/quality_analyzer.o"
-	@echo "... src/mesh_optimization/quality_analyzer.i"
-	@echo "... src/mesh_optimization/quality_analyzer.s"
 	@echo "... src/optimization/computation_cache.o"
 	@echo "... src/optimization/computation_cache.i"
 	@echo "... src/optimization/computation_cache.s"
@@ -7267,9 +7067,6 @@ help:
 	@echo "... tests/materials/test_material_library.o"
 	@echo "... tests/materials/test_material_library.i"
 	@echo "... tests/materials/test_material_library.s"
-	@echo "... tests/mesh_optimization/test_mesh_optimization_m7.o"
-	@echo "... tests/mesh_optimization/test_mesh_optimization_m7.i"
-	@echo "... tests/mesh_optimization/test_mesh_optimization_m7.s"
 	@echo "... tests/parameters/test_parameter_store.o"
 	@echo "... tests/parameters/test_parameter_store.i"
 	@echo "... tests/parameters/test_parameter_store.s"
