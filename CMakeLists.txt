@@ -134,6 +134,9 @@ set(BENDCORE_SOURCES
   # M3 Phase: Mass Properties Analysis (GAP-015)
   src/analysis/mass_properties.cpp
 
+  # M7 Phase: Multi-Physics Coupling (GAP-029)
+  src/analysis/multi_physics_coupling.cpp
+
   # M3 Phase: Drawing Extraction (GAP-014)
   src/drawing/drawing_extraction.cpp
 
@@ -397,6 +400,11 @@ bendcore_add_test(axis test_axis)
 add_executable(test_analysis tests/test_analysis.cpp)
 target_link_libraries(test_analysis PRIVATE bendcore_core)
 bendcore_add_test(analysis test_analysis)
+
+# M7 Phase: Multi-Physics Coupling (GAP-029)
+add_executable(test_multi_physics_coupling tests/test_multi_physics_coupling.cpp)
+target_link_libraries(test_multi_physics_coupling PRIVATE bendcore_core)
+bendcore_add_test(multi_physics_coupling test_multi_physics_coupling)
 
 add_executable(test_visualization tests/test_visualization.cpp)
 target_link_libraries(test_visualization PRIVATE bendcore_core)
