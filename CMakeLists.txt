@@ -107,6 +107,10 @@ set(BENDCORE_SOURCES
   # M2 Phase: Feature Operations (GAP-006, GAP-007, GAP-008)
   src/geometry/feature_operations.cpp
   src/topology/topological_reference.cpp
+
+  # M3 Phase: Assembly (GAP-010)
+  src/instances.cpp
+  src/assembly/part_reference.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -164,6 +168,10 @@ bendcore_add_test(batch_check test_batch_check)
 add_executable(test_instances tests/test_instances.cpp)
 target_link_libraries(test_instances PRIVATE bendcore_core)
 bendcore_add_test(instances test_instances)
+
+add_executable(test_part_reference tests/assembly/test_part_reference.cpp)
+target_link_libraries(test_part_reference PRIVATE bendcore_core)
+bendcore_add_test(part_reference test_part_reference)
 
 add_executable(test_entity_id tests/document/test_entity_id.cpp)
 target_link_libraries(test_entity_id PRIVATE bendcore_core)
@@ -278,6 +286,11 @@ bendcore_add_test(collaboration test_collaboration)
 add_executable(test_standards tests/test_standards.cpp)
 target_link_libraries(test_standards PRIVATE bendcore_core)
 bendcore_add_test(standards test_standards)
+
+# M3 Phase: Assembly Creation (GAP-009)
+add_executable(test_assembly_creation tests/assembly/test_assembly_creation.cpp)
+target_link_libraries(test_assembly_creation PRIVATE bendcore_core)
+bendcore_add_test(assembly_creation test_assembly_creation)
 
 add_executable(test_reporting tests/test_reporting.cpp)
 target_link_libraries(test_reporting PRIVATE bendcore_core)
