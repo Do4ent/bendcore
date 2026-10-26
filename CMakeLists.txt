@@ -115,6 +115,9 @@ set(BENDCORE_SOURCES
   src/assembly/component_instance.cpp
   src/assembly/assembly_constraints.cpp
   src/assembly/assembly_constraint_system.cpp
+
+  # M3 Phase: Manufacturing - BOM Generation (GAP-012)
+  src/manufacturing/bom.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -176,6 +179,11 @@ bendcore_add_test(instances test_instances)
 add_executable(test_part_reference tests/assembly/test_part_reference.cpp)
 target_link_libraries(test_part_reference PRIVATE bendcore_core)
 bendcore_add_test(part_reference test_part_reference)
+
+# M3 Phase: Assembly Constraints (GAP-011)
+add_executable(test_assembly_constraints tests/assembly/test_assembly_constraints.cpp)
+target_link_libraries(test_assembly_constraints PRIVATE bendcore_core)
+bendcore_add_test(assembly_constraints test_assembly_constraints)
 
 add_executable(test_entity_id tests/document/test_entity_id.cpp)
 target_link_libraries(test_entity_id PRIVATE bendcore_core)
