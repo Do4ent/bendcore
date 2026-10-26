@@ -9,7 +9,7 @@ import RibbonBar from './RibbonBar';
 import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import PropertiesPanel, { SelectedObject } from './PropertiesPanel';
 import StatusBar, { StatusBarState } from './StatusBar';
-import { createTubePropertyGroup } from './PropertyGroups';
+import Viewport3D from './Viewport3D';
 import './styles.css';
 
 // Export BendCore Landing UI component
@@ -121,19 +121,11 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
     }
   };
 
-  const handleSelectObject = () => {
-    // Example: select a tube
-    setSelectedObject({
-      id: 'tube-1',
-      type: 'tube',
-      name: 'Tube_1',
-      groups: createTubePropertyGroup({
-        name: 'Tube_1',
-        od: 12.7,
-        wt: 1.6,
-        material: 'Steel',
-      }),
-    });
+  // A selection ID is not enough to populate properties reliably. The properties
+  // panel will be connected to the document query API in GUI-009/GUI-011.
+  const handleViewportSelection = (objectId: string) => {
+    setSelectedObject(undefined);
+    setStatusState((prev) => ({ ...prev, stepHint: `Selected: ${objectId}` }));
   };
 
   return (
@@ -148,11 +140,11 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
           className="flex-1 overflow-auto bg-white"
           onContextMenu={handleContextMenu}
           onMouseMove={handleViewportMouseMove}
-          onClick={handleSelectObject}
         >
-          <div className="p-4 text-gray-500">
-            3D Viewport (right-click for context menu, click to select)
-          </div>
+          <Viewport3D
+            onCommand={handleCommand}
+            onObjectSelect={handleViewportSelection}
+          />
         </div>
 
         {/* Properties Panel */}
