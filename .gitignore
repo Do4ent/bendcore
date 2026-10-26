@@ -70,3 +70,15 @@ build/
 *.js.map
 *.d.ts
 *.d.ts.map
+
+# Build directories for phases
+build_m6_gap/
+build_m15/
+build_m12/
+build_m13/
+build_m14/
+build_m16/
+build_m17/
+build_m18/
+build_m19/
+build_m20/
