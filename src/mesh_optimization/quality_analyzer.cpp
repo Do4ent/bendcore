@@ -290,9 +290,9 @@ double QualityAnalyzer::compute_jacobian_determinant(
     Vec3 e3 = n3->position - n0->position;
 
     // Approximate Jacobian as determinant of edge matrix
-    double det = e1.x * (e2.y * e3.z - e2.z * e3.y) -
-                 e1.y * (e2.x * e3.z - e2.z * e3.x) +
-                 e1.z * (e2.x * e3.y - e2.y * e3.x);
+    double det = e1[0] * (e2[1] * e3[2] - e2[2] * e3[1]) -
+                 e1[1] * (e2[0] * e3[2] - e2[2] * e3[0]) +
+                 e1[2] * (e2[0] * e3[1] - e2[1] * e3[0]);
 
     return det / 6.0;  // Scale by tetrahedral volume factor
 }

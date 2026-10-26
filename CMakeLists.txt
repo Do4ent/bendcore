@@ -1000,6 +1000,21 @@ add_executable(test_material_library tests/materials/test_material_library.cpp)
 target_link_libraries(test_material_library PRIVATE bendcore_core)
 bendcore_add_test(material_library test_material_library)
 
+# M6 Phase: FEA Integration (GAP-025) - 35 comprehensive unit tests
+add_executable(test_gap025_fea_comprehensive tests/gap025_fea_comprehensive.cpp)
+target_link_libraries(test_gap025_fea_comprehensive PRIVATE bendcore_core)
+bendcore_add_test(gap025_fea_comprehensive test_gap025_fea_comprehensive)
+
+# M6 Phase: Generative Design (GAP-026) - 35 comprehensive unit tests
+add_executable(test_gap026_generative_comprehensive tests/gap026_generative_comprehensive.cpp)
+target_link_libraries(test_gap026_generative_comprehensive PRIVATE bendcore_core)
+bendcore_add_test(gap026_generative_comprehensive test_gap026_generative_comprehensive)
+
+# M6 Phase: Parametric AI (GAP-027) - 35 comprehensive unit tests
+add_executable(test_gap027_parametric_ai_comprehensive tests/gap027_parametric_ai_comprehensive.cpp)
+target_link_libraries(test_gap027_parametric_ai_comprehensive PRIVATE bendcore_core)
+bendcore_add_test(gap027_parametric_ai_comprehensive test_gap027_parametric_ai_comprehensive)
+
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.
 if(EMSCRIPTEN)

@@ -379,15 +379,15 @@ bool STLFormatHandler::write_binary_stl(
             auto n3 = mesh.get_node(elem.node_ids[2]);
 
             if (n1 && n2 && n3) {
-                vertices[0] = static_cast<float>(n1->position.x);
-                vertices[1] = static_cast<float>(n1->position.y);
-                vertices[2] = static_cast<float>(n1->position.z);
-                vertices[3] = static_cast<float>(n2->position.x);
-                vertices[4] = static_cast<float>(n2->position.y);
-                vertices[5] = static_cast<float>(n2->position.z);
-                vertices[6] = static_cast<float>(n3->position.x);
-                vertices[7] = static_cast<float>(n3->position.y);
-                vertices[8] = static_cast<float>(n3->position.z);
+                vertices[0] = static_cast<float>(n1->position[0]);
+                vertices[1] = static_cast<float>(n1->position[1]);
+                vertices[2] = static_cast<float>(n1->position[2]);
+                vertices[3] = static_cast<float>(n2->position[0]);
+                vertices[4] = static_cast<float>(n2->position[1]);
+                vertices[5] = static_cast<float>(n2->position[2]);
+                vertices[6] = static_cast<float>(n3->position[0]);
+                vertices[7] = static_cast<float>(n3->position[1]);
+                vertices[8] = static_cast<float>(n3->position[2]);
             }
         }
 
@@ -422,12 +422,12 @@ bool STLFormatHandler::write_ascii_stl(
 
         file << "  facet normal 0 0 0\n";
         file << "    outer loop\n";
-        file << "      vertex " << n1->position.x << " " << n1->position.y
-             << " " << n1->position.z << "\n";
-        file << "      vertex " << n2->position.x << " " << n2->position.y
-             << " " << n2->position.z << "\n";
-        file << "      vertex " << n3->position.x << " " << n3->position.y
-             << " " << n3->position.z << "\n";
+        file << "      vertex " << n1->position[0] << " " << n1->position[1]
+             << " " << n1->position[2] << "\n";
+        file << "      vertex " << n2->position[0] << " " << n2->position[1]
+             << " " << n2->position[2] << "\n";
+        file << "      vertex " << n3->position[0] << " " << n3->position[1]
+             << " " << n3->position[2] << "\n";
         file << "    endloop\n";
         file << "  endfacet\n";
     }

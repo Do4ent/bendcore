@@ -242,22 +242,22 @@ Vec3 OptimizationSmoother::compute_quality_gradient(
         Vec3 pos_minus = node->position;
 
         if (dir == 0) {
-            pos_plus.x += h;
-            pos_minus.x -= h;
+            pos_plus[0] += h;
+            pos_minus[0] -= h;
         } else if (dir == 1) {
-            pos_plus.y += h;
-            pos_minus.y -= h;
+            pos_plus[1] += h;
+            pos_minus[1] -= h;
         } else {
-            pos_plus.z += h;
-            pos_minus.z -= h;
+            pos_plus[2] += h;
+            pos_minus[2] -= h;
         }
 
         // Finite difference (simplified)
         double df = 0.0;  // Quality difference
 
-        if (dir == 0) gradient.x = df / (2 * h);
-        else if (dir == 1) gradient.y = df / (2 * h);
-        else gradient.z = df / (2 * h);
+        if (dir == 0) gradient[0] = df / (2 * h);
+        else if (dir == 1) gradient[1] = df / (2 * h);
+        else gradient[2] = df / (2 * h);
     }
 
     return gradient;

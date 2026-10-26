@@ -25,19 +25,19 @@ std::vector<SubdomainMesh> DomainDecomposer::decompose_mesh(
     Vec3 mesh_max{-1e10, -1e10, -1e10};
 
     for (const auto& node : mesh.get_nodes()) {
-        mesh_min.x = std::min(mesh_min.x, node[0]);
-        mesh_min.y = std::min(mesh_min.y, node[1]);
-        mesh_min.z = std::min(mesh_min.z, node[2]);
-        mesh_max.x = std::max(mesh_max.x, node[0]);
-        mesh_max.y = std::max(mesh_max.y, node[1]);
-        mesh_max.z = std::max(mesh_max.z, node[2]);
+        mesh_min[0] = std::min(mesh_min[0], node[0]);
+        mesh_min[1] = std::min(mesh_min[1], node[1]);
+        mesh_min[2] = std::min(mesh_min[2], node[2]);
+        mesh_max[0] = std::max(mesh_max[0], node[0]);
+        mesh_max[1] = std::max(mesh_max[1], node[1]);
+        mesh_max[2] = std::max(mesh_max[2], node[2]);
     }
 
     // Create subdomains
     int32_t subdomain_id = 0;
-    double dx = (mesh_max.x - mesh_min.x) / config.num_subdomains_x;
-    double dy = (mesh_max.y - mesh_min.y) / config.num_subdomains_y;
-    double dz = (mesh_max.z - mesh_min.z) / config.num_subdomains_z;
+    double dx = (mesh_max[0] - mesh_min[0]) / config.num_subdomains_x;
+    double dy = (mesh_max[1] - mesh_min[1]) / config.num_subdomains_y;
+    double dz = (mesh_max[2] - mesh_min[2]) / config.num_subdomains_z;
 
     for (int i = 0; i < config.num_subdomains_x; ++i) {
         for (int j = 0; j < config.num_subdomains_y; ++j) {
@@ -45,13 +45,13 @@ std::vector<SubdomainMesh> DomainDecomposer::decompose_mesh(
                 SubdomainMesh sub;
                 sub.subdomain_id = subdomain_id++;
 
-                sub[0] = mesh_min.x + i * dx;
-                sub[1] = mesh_min.y + j * dy;
-                sub[2] = mesh_min.z + k * dz;
+                sub[0] = mesh_min[0] + i * dx;
+                sub[1] = mesh_min[1] + j * dy;
+                sub[2] = mesh_min[2] + k * dz;
 
-                sub[0] = mesh_min.x + (i + 1) * dx;
-                sub[1] = mesh_min.y + (j + 1) * dy;
-                sub[2] = mesh_min.z + (k + 1) * dz;
+                sub[0] = mesh_min[0] + (i + 1) * dx;
+                sub[1] = mesh_min[1] + (j + 1) * dy;
+                sub[2] = mesh_min[2] + (k + 1) * dz;
 
                 // Assign nodes to this subdomain
                 for (const auto& node : mesh.get_nodes()) {
@@ -71,12 +71,12 @@ std::vector<SubdomainMesh> DomainDecomposer::decompose_mesh(
                     for (int32_t node_id : elem.node_ids) {
                         auto node = mesh.get_node(node_id);
                         if (node &&
-                            node->position.x >= sub[0] &&
-                            node->position.x <= sub[0] &&
-                            node->position.y >= sub[1] &&
-                            node->position.y <= sub[1] &&
-                            node->position.z >= sub[2] &&
-                            node->position.z <= sub[2]) {
+                            node->position[0] >= sub[0] &&
+                            node->position[0] <= sub[0] &&
+                            node->position[1] >= sub[1] &&
+                            node->position[1] <= sub[1] &&
+                            node->position[2] >= sub[2] &&
+                            node->position[2] <= sub[2]) {
                             elem_in_subdomain = true;
                             break;
                         }
@@ -138,9 +138,9 @@ int32_t DomainDecomposer::get_subdomain_for_point(
     const std::vector<SubdomainMesh>& subdomains) {
 
     for (const auto& sub : subdomains) {
-        if (point.x >= sub[0] && point.x <= sub[0] &&
-            point.y >= sub[1] && point.y <= sub[1] &&
-            point.z >= sub[2] && point.z <= sub[2]) {
+        if (point[0] >= sub[0] && point[0] <= sub[0] &&
+            point[1] >= sub[1] && point[1] <= sub[1] &&
+            point[2] >= sub[2] && point[2] <= sub[2]) {
             return sub.subdomain_id;
         }
     }
@@ -240,9 +240,9 @@ std::vector<Node> ParallelElementGenerator::generate_nodes_for_subdomain(
 
     std::vector<Node> nodes;
 
-    double dx = (domain_max.x - domain_min.x) / divisions_x;
-    double dy = (domain_max.y - domain_min.y) / divisions_y;
-    double dz = (domain_max.z - domain_min.z) / divisions_z;
+    double dx = (domain_max[0] - domain_min[0]) / divisions_x;
+    double dy = (domain_max[1] - domain_min[1]) / divisions_y;
+    double dz = (domain_max[2] - domain_min[2]) / divisions_z;
 
     int32_t node_id = 10000;
 
@@ -251,9 +251,9 @@ std::vector<Node> ParallelElementGenerator::generate_nodes_for_subdomain(
             for (int k = 0; k <= divisions_z; ++k) {
                 Node node;
                 node.id = node_id++;
-                node[0] = domain_min.x + i * dx;
-                node[1] = domain_min.y + j * dy;
-                node[2] = domain_min.z + k * dz;
+                node[0] = domain_min[0] + i * dx;
+                node[1] = domain_min[1] + j * dy;
+                node[2] = domain_min[2] + k * dz;
                 node.is_boundary = (i == 0 || i == divisions_x ||
                                     j == 0 || j == divisions_y ||
                                     k == 0 || k == divisions_z);
