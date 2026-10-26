@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <numeric>
 #include <random>
 #include <fstream>
