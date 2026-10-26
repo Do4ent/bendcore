@@ -196,13 +196,13 @@ set(BENDCORE_SOURCES
   src/fea/fea_solver.cpp
   src/fea/result_processor.cpp
 
-  # M7 Phase: Mesh Optimization (GAP-028) - TEMPORARILY DISABLED FOR BUILD
-  # src/mesh_optimization/quality_analyzer.cpp
-  # src/mesh_optimization/adaptive_refinement.cpp
-  # src/mesh_optimization/mesh_smoothing.cpp
-  # src/mesh_optimization/mesh_optimization.cpp
-  # src/mesh_optimization/parallel_mesh_generation.cpp
-  # src/mesh_optimization/mesh_io.cpp
+  # M7 Phase: Mesh Optimization (GAP-028)
+  src/mesh_optimization/quality_analyzer.cpp
+  src/mesh_optimization/adaptive_refinement.cpp
+  src/mesh_optimization/mesh_smoothing.cpp
+  src/mesh_optimization/mesh_optimization.cpp
+  src/mesh_optimization/parallel_mesh_generation.cpp
+  src/mesh_optimization/mesh_io.cpp
 
   # M6 Phase: Generative Design (GAP-026)
   src/generative/design_space.cpp
@@ -868,10 +868,9 @@ bendcore_add_test(fea_m6 test_fea_m6)
 # M7 Phase: Mesh Optimization (GAP-028) - 40+ unit tests
 # ============================================================================
 
-# TEMPORARILY DISABLED - mesh_optimization sources disabled for build
-# add_executable(test_mesh_optimization_m7 tests/mesh_optimization/test_mesh_optimization_m7.cpp)
-# target_link_libraries(test_mesh_optimization_m7 PRIVATE bendcore_core)
-# bendcore_add_test(mesh_optimization_m7 test_mesh_optimization_m7)
+add_executable(test_mesh_optimization_m7 tests/mesh_optimization/test_mesh_optimization_m7.cpp)
+target_link_libraries(test_mesh_optimization_m7 PRIVATE bendcore_core)
+bendcore_add_test(mesh_optimization_m7 test_mesh_optimization_m7)
 
 # ============================================================================
 # Phase J: Manufacturing Integration (CAD-CORE-037 to CAD-CORE-040)
