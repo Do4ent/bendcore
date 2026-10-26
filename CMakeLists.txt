@@ -108,9 +108,13 @@ set(BENDCORE_SOURCES
   src/geometry/feature_operations.cpp
   src/topology/topological_reference.cpp
 
-  # M3 Phase: Assembly (GAP-010)
+  # M3 Phase: Assembly (GAP-009, GAP-010)
   src/instances.cpp
   src/assembly/part_reference.cpp
+  src/assembly/assembly.cpp
+  src/assembly/component_instance.cpp
+  src/assembly/assembly_constraints.cpp
+  src/assembly/assembly_constraint_system.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -671,6 +675,18 @@ bendcore_add_test(cad_core_039_bom test_cad_core_039_bom)
 add_executable(test_cad_core_040_workflow tests/CAD-CORE-040-ManufacturingWorkflow.test.cpp)
 target_link_libraries(test_cad_core_040_workflow PRIVATE bendcore_core)
 bendcore_add_test(cad_core_040_workflow test_cad_core_040_workflow)
+
+# M3 Phase: Manufacturing - BOM Generation (GAP-012)
+add_executable(test_bom_simple tests/test_bom_simple.cpp)
+target_link_libraries(test_bom_simple PRIVATE bendcore_core)
+bendcore_add_test(bom_simple test_bom_simple)
+
+find_package(GTest QUIET)
+if(GTest_FOUND)
+  add_executable(test_bom tests/bom.test.cpp)
+  target_link_libraries(test_bom PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
+  bendcore_add_test(bom test_bom)
+endif()
 
 # ============================================================================
 # Phase K: Deployment & Distribution (CAD-CORE-041 to CAD-CORE-044)
