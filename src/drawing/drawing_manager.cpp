@@ -28,7 +28,9 @@ DrawingOperationResult DrawingManager::createDrawing(
         }
 
         drawings_[drawing_id] = drawing;
-        return DrawingOperationResult(true);
+        DrawingOperationResult result(true);
+        result.created_entity_id = drawing_id;
+        return result;
     } catch (const std::exception& e) {
         return DrawingOperationResult(false, std::string("Failed to create drawing: ") + e.what());
     }
