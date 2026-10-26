@@ -115,7 +115,7 @@ set(BENDCORE_SOURCES
   src/assembly/component_instance.cpp
   src/assembly/assembly_constraints.cpp
   src/assembly/assembly_constraint_system.cpp
-  # src/assembly/assembly_validation.cpp  # TODO: Fix compilation errors
+  src/assembly/assembly_validation.cpp
 
   # M3 Phase: Manufacturing - BOM Generation (GAP-012)
   src/manufacturing/bom.cpp
