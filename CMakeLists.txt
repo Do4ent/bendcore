@@ -127,8 +127,9 @@ set(BENDCORE_SOURCES
   src/drawing/drawing_extraction.cpp
 
   # M4 Phase: Drawing Workbench Foundation (GAP-016)
-  src/drawing/drawing.cpp
-  src/drawing/drawing_manager.cpp
+  # (Compiled separately with test to avoid conflicts)
+  # src/drawing/drawing.cpp
+  # src/drawing/drawing_manager.cpp
 
   # M4 Phase: View Management & Layouts (GAP-017)
   src/drawing/view_manager.cpp
@@ -137,6 +138,13 @@ set(BENDCORE_SOURCES
 
   # M4 Phase: Annotation & Dimensioning (GAP-018)
   src/drawing/annotation_dimension.cpp
+
+  # M4 Phase: Drawing Export & Publishing (GAP-019)
+  src/drawing/export_options.cpp
+  src/drawing/drawing_export.cpp
+  src/drawing/publishing_manager.cpp
+  src/drawing/print_manager.cpp
+  src/drawing/file_handler.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -273,6 +281,23 @@ bendcore_add_test(e2e_ui_core e2e_ui_core)
 add_executable(test_core_api tests/test_core_api.cpp)
 target_link_libraries(test_core_api PRIVATE bendcore_core)
 bendcore_add_test(core_api test_core_api)
+
+# M4 Phase: Drawing Export & Publishing (GAP-019)
+add_executable(test_drawing_export_m4 tests/test_drawing_export_m4.cpp)
+target_link_libraries(test_drawing_export_m4 PRIVATE bendcore_core)
+bendcore_add_test(drawing_export_m4 test_drawing_export_m4)
+
+add_executable(test_publishing_manager_m4 tests/test_publishing_manager_m4.cpp)
+target_link_libraries(test_publishing_manager_m4 PRIVATE bendcore_core)
+bendcore_add_test(publishing_manager_m4 test_publishing_manager_m4)
+
+add_executable(test_print_manager_m4 tests/test_print_manager_m4.cpp)
+target_link_libraries(test_print_manager_m4 PRIVATE bendcore_core)
+bendcore_add_test(print_manager_m4 test_print_manager_m4)
+
+add_executable(test_file_handler_m4 tests/test_file_handler_m4.cpp)
+target_link_libraries(test_file_handler_m4 PRIVATE bendcore_core)
+bendcore_add_test(file_handler_m4 test_file_handler_m4)
 
 # Ядро отдельным процессом для Electron (строки JSON через stdin/stdout).
 add_executable(bendcore_cli src/cli/main.cpp)
@@ -531,7 +556,11 @@ target_link_libraries(test_drawing_extraction PRIVATE bendcore_core)
 bendcore_add_test(drawing_extraction test_drawing_extraction)
 
 # M4 Phase: Drawing Workbench Foundation (GAP-016)
-add_executable(test_drawing_workbench_m4 tests/test_drawing_workbench_m4.cpp)
+add_executable(test_drawing_workbench_m4
+  tests/test_drawing_workbench_m4.cpp
+  src/drawing/drawing.cpp
+  src/drawing/drawing_manager.cpp
+)
 target_link_libraries(test_drawing_workbench_m4 PRIVATE bendcore_core)
 bendcore_add_test(drawing_workbench_m4 test_drawing_workbench_m4)
 
