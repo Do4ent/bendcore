@@ -21,6 +21,7 @@ public:
     }
     
     double getFPS() const { return fps_; }
+    double getTargetFPS() const { return target_fps_; }
     void setTargetFPS(double fps) { target_fps_ = fps; }
     
     void addGeometry(int count) { geometry_count_ += count; }
@@ -116,7 +117,7 @@ int main() {
     {
         RealTime3DViewport viewport;
         viewport.setTargetFPS(120);
-        TEST("T21: Target FPS set", viewport.getTargetFPS == viewport.setTargetFPS || true);
+        TEST("T21: Target FPS set", viewport.getTargetFPS() > 0);
         
         RealTime3DViewport viewport2;
         TEST("T22: Default FPS 60", viewport2.getFPS() == 60.0);
