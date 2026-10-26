@@ -114,6 +114,11 @@ set(BENDCORE_SOURCES
   src/features/revolve.cpp
   src/features/feature_system.cpp
 
+  # M5 Phase: Surface Modeling (GAP-021)
+  src/surfaces/nurbs_surface.cpp
+  src/surfaces/surface_types.cpp
+  src/surfaces/surface_operations.cpp
+
   # M3 Phase: Assembly (GAP-009, GAP-010)
   src/instances.cpp
   src/assembly/part_reference.cpp
@@ -380,6 +385,11 @@ bendcore_add_test(reporting test_reporting)
 add_executable(test_reporting_ui tests/test_reporting_ui.cpp)
 target_link_libraries(test_reporting_ui PRIVATE bendcore_core)
 bendcore_add_test(reporting_ui test_reporting_ui)
+
+# M5 Phase: Surface Modeling (GAP-021)
+add_executable(test_surfaces_m5 tests/surfaces/test_surfaces_m5.cpp)
+target_link_libraries(test_surfaces_m5 PRIVATE bendcore_core)
+bendcore_add_test(surfaces_m5 test_surfaces_m5)
 
 add_library(bendcore_formula STATIC src/formula.cpp)
 target_include_directories(bendcore_formula PUBLIC include third_party)
