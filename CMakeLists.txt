@@ -169,6 +169,38 @@ set(BENDCORE_SOURCES
   src/optimization/optimization_profiles.cpp
   src/optimization/memory_optimizer.cpp
   src/optimization/performance_tuning.cpp
+
+  # M6 Phase: Parametric AI (GAP-027)
+  src/parametric_ai/design_learning.cpp
+  src/parametric_ai/regression_engine.cpp
+  src/parametric_ai/classification_system.cpp
+  src/parametric_ai/prediction_system.cpp
+  src/parametric_ai/learning_pipeline.cpp
+  src/parametric_ai/design_advice.cpp
+
+  # M6 Phase: Simulation Engine (GAP-024)
+  src/simulation/cfd_solver.cpp
+  src/simulation/structural_solver.cpp
+  src/simulation/thermal_solver.cpp
+  src/simulation/simulation_manager.cpp
+  src/simulation/result_visualization.cpp
+
+  # M6 Phase: FEA Integration (GAP-025)
+  src/fea/mesh_generator.cpp
+  src/fea/element_library.cpp
+  src/fea/material_database.cpp
+  src/fea/boundary_conditions.cpp
+  src/fea/fea_solver.cpp
+  src/fea/result_processor.cpp
+
+  # M6 Phase: Generative Design (GAP-026)
+  src/generative/design_space.cpp
+  src/generative/genetic_algorithm.cpp
+  src/generative/particle_swarm.cpp
+  src/generative/constraint_handler.cpp
+  src/generative/design_generator.cpp
+  src/generative/optimization_manager.cpp
+  src/generative/visualization.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -433,6 +465,11 @@ if(GTest_FOUND)
   add_executable(test_sketch_m2 tests/sketch/sketch_m2_tests.cpp)
   target_link_libraries(test_sketch_m2 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(sketch_m2 test_sketch_m2)
+
+  # M6 Phase: Parametric AI (GAP-027)
+  add_executable(test_parametric_ai_m6 tests/parametric_ai/test_parametric_ai_m6.cpp)
+  target_link_libraries(test_parametric_ai_m6 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
+  bendcore_add_test(parametric_ai_m6 test_parametric_ai_m6)
 endif()
 
 # PlaneGCS (LGPL-2.1-or-later, извлечён из FreeCAD Sketcher, см. third_party/planegcs/NOTICE.md) — 2D-эскизы.
@@ -774,6 +811,15 @@ target_link_libraries(test_m5_optimization PRIVATE bendcore_core)
 bendcore_add_test(m5_optimization test_m5_optimization)
 
 # ============================================================================
+# M6 Phase: FEA Integration (GAP-025)
+# ============================================================================
+
+# M6 Phase: FEA Integration - 35+ unit tests
+add_executable(test_fea_m6 tests/fea/test_fea_m6.cpp)
+target_link_libraries(test_fea_m6 PRIVATE bendcore_core)
+bendcore_add_test(fea_m6 test_fea_m6)
+
+# ============================================================================
 # Phase J: Manufacturing Integration (CAD-CORE-037 to CAD-CORE-040)
 # ============================================================================
 
@@ -807,8 +853,14 @@ add_executable(test_mass_properties tests/analysis/test_mass_properties.cpp)
 target_link_libraries(test_mass_properties PRIVATE bendcore_core)
 bendcore_add_test(mass_properties test_mass_properties)
 
+# M6 Phase: Simulation Engine (GAP-024) - 30+ unit tests
 find_package(GTest QUIET)
 if(GTest_FOUND)
+  add_executable(test_simulation_m6 tests/simulation/test_simulation_m6.cpp)
+  target_link_libraries(test_simulation_m6 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
+  bendcore_add_test(simulation_m6 test_simulation_m6)
+
+  # Continue with other GTest tests
   add_executable(test_bom tests/bom.test.cpp)
   target_link_libraries(test_bom PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(bom test_bom)
@@ -817,6 +869,11 @@ if(GTest_FOUND)
   add_executable(test_direct_editing_manager tests/editing/direct_editing_manager.test.cpp)
   target_link_libraries(test_direct_editing_manager PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(direct_editing_manager test_direct_editing_manager)
+
+  # M6 Phase: Generative Design (GAP-026) - 32+ unit tests
+  add_executable(test_generative_m6 tests/generative/test_generative_m6.cpp)
+  target_link_libraries(test_generative_m6 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
+  bendcore_add_test(generative_m6 test_generative_m6)
 endif()
 
 # ============================================================================
