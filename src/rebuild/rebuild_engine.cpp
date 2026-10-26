@@ -403,4 +403,121 @@ RebuildReport RebuildEngine::build_report(const std::vector<RebuildResult>& resu
     return report;
 }
 
+// ==================== Кэширование и инкрементальный пересчет (GAP-021) ====================
+
+void RebuildEngine::invalidate_parameter(EntityId entity_id, const std::string& param_name) {
+    auto key = std::make_pair(entity_id, param_name);
+    cache_valid_[key] = false;
+    graph_.invalidate(entity_id, param_name);
+
+    if (batch_rebuild_mode_) {
+        if (std::find(batch_invalidated_params_.begin(), batch_invalidated_params_.end(), key)
+            == batch_invalidated_params_.end()) {
+            batch_invalidated_params_.push_back(key);
+        }
+    } else {
+        schedule_rebuild(entity_id, param_name);
+    }
+}
+
+void RebuildEngine::invalidate_entity(EntityId entity_id) {
+    auto param_names = store_.get_all_names(entity_id);
+    for (const auto& param_name : param_names) {
+        invalidate_parameter(entity_id, param_name);
+    }
+}
+
+size_t RebuildEngine::invalidate_dependents(EntityId entity_id, const std::string& param_name) {
+    size_t count = 0;
+    auto dependents = graph_.get_transitive_dependents(entity_id, param_name);
+
+    for (const auto& [dep_entity_id, dep_param_name] : dependents) {
+        invalidate_parameter(dep_entity_id, dep_param_name);
+        count++;
+    }
+
+    return count;
+}
+
+size_t RebuildEngine::cached_count() const {
+    size_t count = 0;
+    for (const auto& [key, valid] : cache_valid_) {
+        if (valid) {
+            count++;
+        }
+    }
+    return count;
+}
+
+bool RebuildEngine::is_cached(EntityId entity_id, const std::string& param_name) const {
+    auto key = std::make_pair(entity_id, param_name);
+    auto it = cache_valid_.find(key);
+    return it != cache_valid_.end() && it->second;
+}
+
+void RebuildEngine::clear_cache() {
+    parameter_cache_.clear();
+    cache_valid_.clear();
+    cache_hits_ = 0;
+    cache_misses_ = 0;
+}
+
+void RebuildEngine::begin_batch_rebuild() {
+    batch_rebuild_mode_ = true;
+    batch_invalidated_params_.clear();
+}
+
+RebuildReport RebuildEngine::end_batch_rebuild() {
+    batch_rebuild_mode_ = false;
+
+    std::vector<RebuildResult> results;
+
+    // Топологически отсортировать для правильного порядка вычисления
+    auto topo_order = graph_.topological_sort();
+
+    for (const auto& [entity_id, param_name] : topo_order) {
+        auto key = std::make_pair(entity_id, param_name);
+
+        // Проверить, был ли инвалидирован этот параметр
+        bool was_invalidated = std::find(batch_invalidated_params_.begin(),
+                                        batch_invalidated_params_.end(), key)
+                               != batch_invalidated_params_.end();
+
+        if (was_invalidated) {
+            auto result = rebuild_parameter(entity_id, param_name);
+            results.push_back(result);
+
+            if (is_stop_requested()) {
+                break;
+            }
+        }
+    }
+
+    batch_invalidated_params_.clear();
+    return build_report(results);
+}
+
+RebuildEngine::CacheStats RebuildEngine::get_cache_stats() const {
+    CacheStats stats;
+
+    // Подсчитать общее количество параметров
+    for (const auto& [key, _] : cache_valid_) {
+        stats.total_parameters++;
+        if (cache_valid_.at(key)) {
+            stats.cached_parameters++;
+        } else {
+            stats.dirty_parameters++;
+        }
+    }
+
+    // Вычислить коэффициент попадания в кэш
+    size_t total_accesses = cache_hits_ + cache_misses_;
+    if (total_accesses > 0) {
+        stats.cache_hit_ratio =
+            static_cast<double>(cache_hits_) / static_cast<double>(total_accesses);
+    }
+
+    return stats;
+}
+
 }  // namespace bendcore::rebuild
