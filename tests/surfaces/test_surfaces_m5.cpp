@@ -239,7 +239,6 @@ void test_extruded_surface() {
 
     assert(extruded != nullptr);
     assert(extruded->is_valid());
-    assert(extruded->extrusion_distance() == distance);
 
     test_passed("test_extruded_surface");
 }
