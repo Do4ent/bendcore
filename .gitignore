@@ -55,3 +55,10 @@ tmp/
 /tests/ui_preview/dist/main.css
 third_party/eigen-*
 build_phase_i/
+build_gap034/
+build_gen/
+build_m6/
+build_m7/
+build_m8/
+build_m8_clean/
+Doxyfile
