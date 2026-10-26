@@ -115,9 +115,16 @@ set(BENDCORE_SOURCES
   src/assembly/component_instance.cpp
   src/assembly/assembly_constraints.cpp
   src/assembly/assembly_constraint_system.cpp
+  # src/assembly/assembly_validation.cpp  # TODO: Fix compilation errors
 
   # M3 Phase: Manufacturing - BOM Generation (GAP-012)
   src/manufacturing/bom.cpp
+
+  # M3 Phase: Mass Properties Analysis (GAP-015)
+  src/analysis/mass_properties.cpp
+
+  # M3 Phase: Drawing Extraction (GAP-014)
+  src/drawing/drawing_extraction.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -303,6 +310,11 @@ bendcore_add_test(standards test_standards)
 add_executable(test_assembly_creation tests/assembly/test_assembly_creation.cpp)
 target_link_libraries(test_assembly_creation PRIVATE bendcore_core)
 bendcore_add_test(assembly_creation test_assembly_creation)
+
+# M3 Phase: Assembly Validation (GAP-013)
+add_executable(test_assembly_validation tests/assembly/test_assembly_validation.cpp)
+target_link_libraries(test_assembly_validation PRIVATE bendcore_core)
+bendcore_add_test(assembly_validation test_assembly_validation)
 
 add_executable(test_reporting tests/test_reporting.cpp)
 target_link_libraries(test_reporting PRIVATE bendcore_core)
@@ -496,6 +508,11 @@ add_executable(test_drawing_undo_redo tests/test_drawing_undo_redo.cpp)
 target_link_libraries(test_drawing_undo_redo PRIVATE bendcore_core)
 bendcore_add_test(drawing_undo_redo test_drawing_undo_redo)
 
+# M3 Phase: Drawing Extraction (GAP-014)
+add_executable(test_drawing_extraction tests/test_drawing_extraction.cpp)
+target_link_libraries(test_drawing_extraction PRIVATE bendcore_core)
+bendcore_add_test(drawing_extraction test_drawing_extraction)
+
 # Subtask 7: Integration Testing & Documentation
 add_executable(e2e_analytics tests/e2e_analytics.cpp)
 target_link_libraries(e2e_analytics PRIVATE bendcore_core)
@@ -688,6 +705,11 @@ bendcore_add_test(cad_core_040_workflow test_cad_core_040_workflow)
 add_executable(test_bom_simple tests/test_bom_simple.cpp)
 target_link_libraries(test_bom_simple PRIVATE bendcore_core)
 bendcore_add_test(bom_simple test_bom_simple)
+
+# M3 Phase: Mass Properties (GAP-015)
+add_executable(test_mass_properties tests/analysis/test_mass_properties.cpp)
+target_link_libraries(test_mass_properties PRIVATE bendcore_core)
+bendcore_add_test(mass_properties test_mass_properties)
 
 find_package(GTest QUIET)
 if(GTest_FOUND)
