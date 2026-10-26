@@ -80,30 +80,78 @@ const BendCoreLanding: React.FC = () => {
   };
 
   // Keyboard shortcuts from KEYBOARD_SHORTCUTS.md
+  const handleCommand = (command: string) => {
+    console.log(`Command: ${command}`);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.ctrlKey) {
+    if (e.ctrlKey && e.shiftKey) {
+      switch (e.key.toLowerCase()) {
+        case 'k':
+          e.preventDefault();
+          handleCommand('new-sketch');
+          break;
+      }
+    } else if (e.ctrlKey) {
       switch (e.key.toLowerCase()) {
         case 'n':
           e.preventDefault();
-          console.log('New Document');
+          handleCommand('new-document');
           break;
         case 'o':
           e.preventDefault();
-          console.log('Open Document');
+          handleCommand('open-document');
           break;
         case 's':
           e.preventDefault();
-          console.log('Save Document');
+          handleCommand('save-document');
           break;
         case 'z':
           e.preventDefault();
-          console.log('Undo');
+          handleCommand('undo');
           break;
         case 'y':
           e.preventDefault();
-          console.log('Redo');
+          handleCommand('redo');
+          break;
+        case 'x':
+          e.preventDefault();
+          handleCommand('cut');
+          break;
+        case 'c':
+          e.preventDefault();
+          handleCommand('copy');
+          break;
+        case 'v':
+          e.preventDefault();
+          handleCommand('paste');
+          break;
+        case 't':
+          e.preventDefault();
+          handleCommand('new-tube');
+          break;
+        case 'g':
+          e.preventDefault();
+          handleCommand('check-gaps');
+          break;
+        case 'm':
+          e.preventDefault();
+          handleCommand('calculate-mass');
+          break;
+        case '/':
+          e.preventDefault();
+          handleCommand('command-palette');
           break;
       }
+    } else if (e.key === 'F1') {
+      e.preventDefault();
+      handleCommand('help');
+    } else if (e.key === 'F3') {
+      e.preventDefault();
+      handleCommand('toggle-snap');
+    } else if (e.key === 'v' && !e.ctrlKey) {
+      e.preventDefault();
+      handleCommand('fit-all');
     }
   };
 
@@ -113,52 +161,52 @@ const BendCoreLanding: React.FC = () => {
       <div className="menubar">
         <div className="logo">🔧 BendCore CAD</div>
         <div className="menu-items">
-          <div className="menu-item">File</div>
-          <div className="menu-item">Edit</div>
-          <div className="menu-item">View</div>
-          <div className="menu-item">Tools</div>
-          <div className="menu-item">Window</div>
-          <div className="menu-item">Help</div>
+          <div className="menu-item" onClick={() => handleCommand('menu-file')}>File</div>
+          <div className="menu-item" onClick={() => handleCommand('menu-edit')}>Edit</div>
+          <div className="menu-item" onClick={() => handleCommand('menu-view')}>View</div>
+          <div className="menu-item" onClick={() => handleCommand('menu-tools')}>Tools</div>
+          <div className="menu-item" onClick={() => handleCommand('menu-window')}>Window</div>
+          <div className="menu-item" onClick={() => handleCommand('menu-help')}>Help</div>
         </div>
       </div>
 
       {/* Toolbar */}
       <div className="toolbar">
         <div className="toolbar-group">
-          <button className="toolbar-btn" title="New (Ctrl+N)">🏠</button>
-          <button className="toolbar-btn" title="Open (Ctrl+O)">📁</button>
-          <button className="toolbar-btn" title="Save (Ctrl+S)">💾</button>
+          <button className="toolbar-btn" title="New (Ctrl+N)" onClick={() => handleCommand('new-document')}>🏠</button>
+          <button className="toolbar-btn" title="Open (Ctrl+O)" onClick={() => handleCommand('open-document')}>📁</button>
+          <button className="toolbar-btn" title="Save (Ctrl+S)" onClick={() => handleCommand('save-document')}>💾</button>
         </div>
 
         <div className="toolbar-separator"></div>
 
         <div className="toolbar-group">
-          <button className="toolbar-btn" title="Undo (Ctrl+Z)">↶</button>
-          <button className="toolbar-btn" title="Redo (Ctrl+Y)">↷</button>
+          <button className="toolbar-btn" title="Undo (Ctrl+Z)" onClick={() => handleCommand('undo')}>↶</button>
+          <button className="toolbar-btn" title="Redo (Ctrl+Y)" onClick={() => handleCommand('redo')}>↷</button>
         </div>
 
         <div className="toolbar-separator"></div>
 
         <div className="toolbar-group">
-          <button className="toolbar-btn" title="Sketch (Ctrl+Shift+K)">✏️</button>
-          <button className="toolbar-btn" title="Tube (Ctrl+T)">📦</button>
-          <button className="toolbar-btn" title="Bend">🔀</button>
-          <button className="toolbar-btn" title="Weld">⚡</button>
-          <button className="toolbar-btn" title="Assembly">🔗</button>
+          <button className="toolbar-btn" title="Sketch (Ctrl+Shift+K)" onClick={() => handleCommand('new-sketch')}>✏️</button>
+          <button className="toolbar-btn" title="Tube (Ctrl+T)" onClick={() => handleCommand('new-tube')}>📦</button>
+          <button className="toolbar-btn" title="Bend" onClick={() => handleCommand('new-bend')}>🔀</button>
+          <button className="toolbar-btn" title="Weld" onClick={() => handleCommand('new-weld')}>⚡</button>
+          <button className="toolbar-btn" title="Assembly" onClick={() => handleCommand('new-assembly')}>🔗</button>
         </div>
 
         <div className="toolbar-separator"></div>
 
         <div className="toolbar-group">
-          <button className="toolbar-btn" title="Check Gaps (Ctrl+G)">📊</button>
-          <button className="toolbar-btn" title="Calculate Mass (Ctrl+M)">⚙️</button>
+          <button className="toolbar-btn" title="Check Gaps (Ctrl+G)" onClick={() => handleCommand('check-gaps')}>📊</button>
+          <button className="toolbar-btn" title="Calculate Mass (Ctrl+M)" onClick={() => handleCommand('calculate-mass')}>⚙️</button>
         </div>
 
         <div className="toolbar-separator"></div>
 
         <div className="toolbar-group">
-          <button className="toolbar-btn" title="Fit All (V)">🔍</button>
-          <button className="toolbar-btn" title="View Presets">📐</button>
+          <button className="toolbar-btn" title="Fit All (V)" onClick={() => handleCommand('fit-all')}>🔍</button>
+          <button className="toolbar-btn" title="View Presets" onClick={() => handleCommand('view-presets')}>📐</button>
         </div>
       </div>
 
