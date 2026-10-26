@@ -125,6 +125,18 @@ set(BENDCORE_SOURCES
 
   # M3 Phase: Drawing Extraction (GAP-014)
   src/drawing/drawing_extraction.cpp
+
+  # M4 Phase: Drawing Workbench Foundation (GAP-016)
+  src/drawing/drawing.cpp
+  src/drawing/drawing_manager.cpp
+
+  # M4 Phase: View Management & Layouts (GAP-017)
+  src/drawing/view_manager.cpp
+  src/drawing/layout_manager.cpp
+  src/drawing/view_properties.cpp
+
+  # M4 Phase: Annotation & Dimensioning (GAP-018)
+  src/drawing/annotation_dimension.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -236,6 +248,11 @@ bendcore_add_test(history_stack test_history_stack)
 add_executable(test_document_event_bus tests/commands/test_document_event_bus.cpp)
 target_link_libraries(test_document_event_bus PRIVATE bendcore_core)
 bendcore_add_test(document_event_bus test_document_event_bus)
+
+# M4 Phase: View Management & Layouts (GAP-017)
+add_executable(test_view_management tests/drawing/test_view_management.cpp)
+target_link_libraries(test_view_management PRIVATE bendcore_core)
+bendcore_add_test(view_management test_view_management)
 
 add_executable(test_drawing tests/test_drawing.cpp)
 target_link_libraries(test_drawing PRIVATE bendcore_core)
@@ -512,6 +529,16 @@ bendcore_add_test(drawing_undo_redo test_drawing_undo_redo)
 add_executable(test_drawing_extraction tests/test_drawing_extraction.cpp)
 target_link_libraries(test_drawing_extraction PRIVATE bendcore_core)
 bendcore_add_test(drawing_extraction test_drawing_extraction)
+
+# M4 Phase: Drawing Workbench Foundation (GAP-016)
+add_executable(test_drawing_workbench_m4 tests/test_drawing_workbench_m4.cpp)
+target_link_libraries(test_drawing_workbench_m4 PRIVATE bendcore_core)
+bendcore_add_test(drawing_workbench_m4 test_drawing_workbench_m4)
+
+# M4 Phase: Annotation & Dimensioning (GAP-018)
+add_executable(test_annotation_dimension tests/test_annotation_dimension.cpp)
+target_link_libraries(test_annotation_dimension PRIVATE bendcore_core)
+bendcore_add_test(annotation_dimension test_annotation_dimension)
 
 # Subtask 7: Integration Testing & Documentation
 add_executable(e2e_analytics tests/e2e_analytics.cpp)
