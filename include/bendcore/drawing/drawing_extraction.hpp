@@ -336,6 +336,7 @@ enum class ExportFormat {
     DXF,    // Drawing Exchange Format
     PDF,    // Portable Document Format
     SVG,    // Scalable Vector Graphics
+    STEP,   // 3D product data exchange
     PNG,    // Raster image format
     JPEG    // Raster image format
 };
