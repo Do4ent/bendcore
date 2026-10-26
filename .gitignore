@@ -62,3 +62,11 @@ build_m7/
 build_m8/
 build_m8_clean/
 Doxyfile
+
+
+# Build artifacts and compiled output
+dist/
+build/
+*.js.map
+*.d.ts
+*.d.ts.map
