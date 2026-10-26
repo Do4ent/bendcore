@@ -11,6 +11,10 @@ import PropertiesPanel, { SelectedObject } from './PropertiesPanel';
 import StatusBar, { StatusBarState } from './StatusBar';
 import { createTubePropertyGroup } from './PropertyGroups';
 import './styles.css';
+
+// Export BendCore Landing UI component
+export { default as BendCoreLanding } from './BendCoreLanding';
+
 export { default as TubeDialog } from './TubeDialog';
 export type { TubeConfig } from './TubeDialog';
 export { default as OffsetCalculatorTab } from './OffsetCalculatorTab';
