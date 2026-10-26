@@ -199,13 +199,13 @@ set(BENDCORE_SOURCES
   src/fea/fea_solver.cpp
   src/fea/result_processor.cpp
 
-  # M7 Phase: Mesh Optimization (GAP-028)
-  src/mesh_optimization/quality_analyzer.cpp
-  src/mesh_optimization/adaptive_refinement.cpp
-  src/mesh_optimization/mesh_smoothing.cpp
-  src/mesh_optimization/mesh_optimization.cpp
-  src/mesh_optimization/parallel_mesh_generation.cpp
-  src/mesh_optimization/mesh_io.cpp
+  # M7 Phase: Mesh Optimization (GAP-028) - SKIPPED FOR NOW
+  # src/mesh_optimization/quality_analyzer.cpp
+  # src/mesh_optimization/adaptive_refinement.cpp
+  # src/mesh_optimization/mesh_smoothing.cpp
+  # src/mesh_optimization/mesh_optimization.cpp
+  # src/mesh_optimization/parallel_mesh_generation.cpp
+  # src/mesh_optimization/mesh_io.cpp
 
   # M6 Phase: Generative Design (GAP-026)
   src/generative/design_space.cpp
