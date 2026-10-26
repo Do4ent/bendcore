@@ -131,6 +131,9 @@ set(BENDCORE_SOURCES
   # M3 Phase: Manufacturing - BOM Generation (GAP-012)
   src/manufacturing/bom.cpp
 
+  # M8 Phase: Manufacturing Constraints (GAP-034)
+  src/manufacturing_constraints.cpp
+
   # M3 Phase: Mass Properties Analysis (GAP-015)
   src/analysis/mass_properties.cpp
 
@@ -231,6 +234,21 @@ set(BENDCORE_SOURCES
   src/cloud/user_management.cpp
   src/cloud/analytics_monitoring.cpp
   src/cloud/cloud_manager.cpp
+
+  # M8 Phase: Material Library (GAP-033)
+  src/materials/material_library.cpp
+
+  # M8 Phase: Cost Analysis (GAP-035)
+  src/cost_analysis.cpp
+
+  # M8 Phase: Topology Optimization (GAP-032)
+  src/topology_optimization/simp_method.cpp
+  src/topology_optimization/sensitivity_analysis.cpp
+  src/topology_optimization/density_filtering.cpp
+  src/topology_optimization/optimization_algorithms.cpp
+  src/topology_optimization/constraint_handling.cpp
+  src/topology_optimization/post_processing.cpp
+  src/topology_optimization/topology_optimizer.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -454,6 +472,25 @@ bendcore_add_test(cloud_collaboration test_cloud_collaboration)
 add_executable(test_standards tests/test_standards.cpp)
 target_link_libraries(test_standards PRIVATE bendcore_core)
 bendcore_add_test(standards test_standards)
+
+# M8 Phase: Topology Optimization (GAP-032)
+add_executable(test_topology_optimization_m8 tests/test_topology_optimization_m8.cpp)
+target_link_libraries(test_topology_optimization_m8 PRIVATE bendcore_core)
+bendcore_add_test(topology_optimization_m8 test_topology_optimization_m8)
+
+# M8 Phase: Cost Analysis (GAP-035)
+add_executable(test_simple_cost_analysis tests/simple_cost_analysis.cpp)
+target_link_libraries(test_simple_cost_analysis PRIVATE bendcore_core)
+bendcore_add_test(simple_cost_analysis test_simple_cost_analysis)
+
+find_package(GTest QUIET)
+if(GTest_FOUND)
+  add_executable(test_cost_analysis tests/cost_analysis.test.cpp)
+  target_link_libraries(test_cost_analysis PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
+  bendcore_add_test(cost_analysis test_cost_analysis)
+else()
+  message(STATUS "GTest not found - Comprehensive Cost Analysis tests skipped (using simple test)")
+endif()
 
 # M3 Phase: Assembly Creation (GAP-009)
 add_executable(test_assembly_creation tests/assembly/test_assembly_creation.cpp)
@@ -952,6 +989,16 @@ bendcore_add_test(cad_core_043_license test_cad_core_043_license)
 add_executable(test_cad_core_044_cloud tests/CAD-CORE-044-CloudDeployment.test.cpp)
 target_link_libraries(test_cad_core_044_cloud PRIVATE bendcore_core)
 bendcore_add_test(cad_core_044_cloud test_cad_core_044_cloud)
+
+# M8 Phase (GAP-034): Manufacturing Constraints
+add_executable(test_manufacturing_constraints tests/CAD-CORE-043-ManufacturingConstraints.test.cpp)
+target_link_libraries(test_manufacturing_constraints PRIVATE bendcore_core)
+bendcore_add_test(manufacturing_constraints test_manufacturing_constraints)
+
+# M8 Phase: Material Library (GAP-033) - 45+ unit tests
+add_executable(test_material_library tests/materials/test_material_library.cpp)
+target_link_libraries(test_material_library PRIVATE bendcore_core)
+bendcore_add_test(material_library test_material_library)
 
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.
