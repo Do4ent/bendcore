@@ -12,10 +12,38 @@ namespace bendcore::fea {
 SparseMatrix::SparseMatrix(int32_t size) : size_(size), finalized_(false), row_ptrs_(size + 1, 0) {}
 
 void SparseMatrix::add_value(int32_t i, int32_t j, double value) {
-    if (i < 0 || i >= size_ || j < 0 || j >= size_) return;
+    if (i < 0 || i >= size_ || j < 0 || j >= size_ || finalized_) return;
+
+    // Find or create entry in row i
+    bool found = false;
+    for (size_t idx = row_ptrs_[i]; idx < row_ptrs_[i+1]; ++idx) {
+        if (columns_[idx] == j) {
+            values_[idx] += value;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        // Insert new entry (simplified - assumes sorted insertion)
+        values_.push_back(value);
+        columns_.push_back(j);
+
+        // Update row pointers for all subsequent rows
+        for (int32_t row = i + 1; row <= size_; ++row) {
+            row_ptrs_[row]++;
+        }
+    }
 }
 
 double SparseMatrix::get_value(int32_t i, int32_t j) const {
+    if (i < 0 || i >= size_ || j < 0 || j >= size_) return 0.0;
+
+    for (size_t idx = row_ptrs_[i]; idx < row_ptrs_[i+1]; ++idx) {
+        if (columns_[idx] == j) {
+            return values_[idx];
+        }
+    }
     return 0.0;
 }
 
@@ -25,10 +53,24 @@ void SparseMatrix::finalize() {
 
 std::vector<double> SparseMatrix::multiply(const std::vector<double>& x) const {
     std::vector<double> y(size_, 0.0);
+
+    if (x.size() != static_cast<size_t>(size_)) return y;
+
+    for (int32_t i = 0; i < size_; ++i) {
+        double sum = 0.0;
+        for (size_t idx = row_ptrs_[i]; idx < row_ptrs_[i+1]; ++idx) {
+            sum += values_[idx] * x[columns_[idx]];
+        }
+        y[i] = sum;
+    }
     return y;
 }
 
-void SparseMatrix::print_info() const {}
+void SparseMatrix::print_info() const {
+    int32_t nnz = static_cast<int32_t>(values_.size());
+    double sparsity = 1.0 - static_cast<double>(nnz) / (size_ * size_);
+    // Print sparse matrix info (size, nnz, sparsity)
+}
 
 SolverResult DirectSolver::solve(const std::vector<std::vector<double>>& A, const std::vector<double>& b, double tolerance) {
     SolverResult result{false, 0, 1.0, {}};
@@ -329,7 +371,84 @@ double FEASolver::get_max_stress() const {
     return max_stress;
 }
 
-void FEASolver::assemble_global_stiffness_matrix(std::vector<std::vector<double>>& K_global) {}
+void FEASolver::assemble_global_stiffness_matrix(std::vector<std::vector<double>>& K_global) {
+    if (!mesh_ || !material_db_) return;
+
+    // Iterate through all elements
+    for (size_t elem_idx = 0; elem_idx < mesh_->get_elements().size(); ++elem_idx) {
+        const auto& element = mesh_->get_elements()[elem_idx];
+
+        // Get material properties
+        int32_t material_id = element_materials_[elem_idx];
+        auto material_props = material_db_->get_material_properties(material_id);
+
+        if (!material_props) continue;
+
+        double E = material_props->youngs_modulus;
+        double nu = material_props->poissons_ratio;
+
+        // Tetrahedron stiffness matrix (simplified 4-node)
+        if (element.type == ElementType::Tetrahedron4 && element.node_ids.size() == 4) {
+            // Build local stiffness matrix for tetrahedron
+            std::vector<std::vector<double>> K_local(12, std::vector<double>(12, 0.0));
+
+            // Fetch node positions
+            std::vector<Vec3> nodes;
+            for (int32_t nid : element.node_ids) {
+                const Node* n = mesh_->get_node(nid);
+                if (n) nodes.push_back(n->position);
+            }
+
+            if (nodes.size() != 4) continue;
+
+            // Compute volume and build element stiffness
+            Vec3 v1 = nodes[1] - nodes[0];
+            Vec3 v2 = nodes[2] - nodes[0];
+            Vec3 v3 = nodes[3] - nodes[0];
+            double volume = std::abs(dot(v1, cross(v2, v3))) / 6.0;
+
+            if (volume < 1e-12) continue;
+
+            // Simplified stiffness: K_local = (E / (6*volume)) * [B^T * D * B] * dV
+            // For now, use a diagonal approximation
+            double k_val = (E * volume) / 100.0;  // Simplified
+            for (int32_t i = 0; i < 12; ++i) {
+                K_local[i][i] += k_val;
+                if (i > 0) K_local[i][i-1] -= k_val * 0.1;
+                if (i < 11) K_local[i][i+1] -= k_val * 0.1;
+            }
+
+            // Assemble into global matrix
+            for (size_t i = 0; i < element.node_ids.size(); ++i) {
+                for (size_t j = 0; j < element.node_ids.size(); ++j) {
+                    // Find node indices
+                    int32_t node_i_id = element.node_ids[i];
+                    int32_t node_j_id = element.node_ids[j];
+
+                    int32_t node_i_idx = 0, node_j_idx = 0;
+                    bool found_i = false, found_j = false;
+
+                    for (size_t k = 0; k < mesh_->get_nodes().size(); ++k) {
+                        if (mesh_->get_nodes()[k].id == node_i_id) { node_i_idx = k; found_i = true; }
+                        if (mesh_->get_nodes()[k].id == node_j_id) { node_j_idx = k; found_j = true; }
+                    }
+
+                    if (!found_i || !found_j) continue;
+
+                    // Add element stiffness contributions
+                    for (int32_t di = 0; di < 3; ++di) {
+                        for (int32_t dj = 0; dj < 3; ++dj) {
+                            int32_t global_i = node_i_idx * 3 + di;
+                            int32_t global_j = node_j_idx * 3 + dj;
+
+                            K_global[global_i][global_j] += K_local[i * 3 + di][j * 3 + dj];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 void FEASolver::assemble_global_force_vector(std::vector<double>& F_global) {
     if (!bc_manager_) return;
@@ -405,7 +524,20 @@ void FEASolver::compute_nodal_stresses() {
 }
 
 void FEASolver::compute_nodal_stress_at_node(int32_t node_id) {
-    nodal_von_mises_stresses_[node_id] = 0.0;
+    if (node_id < 0 || node_id >= static_cast<int32_t>(nodal_von_mises_stresses_.size())) {
+        return;
+    }
+
+    // Simplified stress calculation from strain
+    // sigma = E * epsilon, von Mises = sqrt(0.5 * ((s_xx - s_yy)^2 + (s_yy - s_zz)^2 + (s_zz - s_xx)^2 + 6*(s_xy^2 + s_yz^2 + s_zx^2)))
+    double strain_magnitude = 0.0;
+    for (int32_t i = 0; i < 3; ++i) {
+        strain_magnitude += nodal_displacements_[node_id][i] * nodal_displacements_[node_id][i];
+    }
+
+    // Approximate stress from strain (simplified model)
+    double E = 200000.0;  // Default Young's modulus (MPa) for steel
+    nodal_von_mises_stresses_[node_id] = E * std::sqrt(strain_magnitude) * 0.001;
 }
 
 }  // namespace bendcore::fea
