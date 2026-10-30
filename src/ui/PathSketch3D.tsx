@@ -167,6 +167,8 @@ export const PathSketch3D: React.FC<PathSketch3DProps> = ({
 
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [isAddingVertex, setIsAddingVertex] = useState(false);
+  const [selectedVertexId, setSelectedVertexId] = useState<string | null>(null);
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [selectedVertexForSegment, setSelectedVertexForSegment] = useState<string | null>(null);
   const [editingSegment, setEditingSegment] = useState<string | null>(null);
   const [draggedVertex, setDraggedVertex] = useState<string | null>(null);
