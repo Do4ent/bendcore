@@ -7,6 +7,7 @@
 #include <limits>
 #include <regex>
 #include <memory>
+#include <cmath>
 
 namespace bendcore::security {
 
