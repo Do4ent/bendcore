@@ -735,6 +735,71 @@ void test_serialize_to_json() {
     assert(json.find("constraints") != std::string::npos);
 }
 
+// Полный круг: все 8 типов сопряжений с параметрами переживают сохранение и загрузку.
+void test_json_round_trip_all_types() {
+    auto assembly_id = EntityId::generate();
+    AssemblyConstraintSystem system(assembly_id);
+    auto a = EntityId::generate(), b = EntityId::generate(), plane = EntityId::generate();
+
+    auto fixed = system.addFixedConstraint(a, Vector3D(1.5, -2.0, 3.25), Vector3D(0.0, 0.0, 1.0));
+    system.addCoincidentConstraint(a, b, 2, 3);
+    auto dist = system.addDistanceConstraint(a, b, 42.5, 1, 4);
+    system.addParallelConstraint(a, b);
+    system.addPerpendicularConstraint(a, b);
+    system.addTangentConstraint(a, b);
+    system.addSymmetricConstraint(a, b, plane);
+    system.addAngleConstraint(a, b, 30.0);
+    dist->setEnabled(false);
+    fixed->setPriority(5.0);
+
+    const std::string text = system.serializeToJSON();
+
+    AssemblyConstraintSystem restored(EntityId::generate());
+    restored.deserializeFromJSON(text);
+
+    assert(restored.getConstraints().size() == 8);
+    assert(restored.serializeToJSON() == text);  // побайтно тот же документ
+
+    auto rf = std::dynamic_pointer_cast<FixedConstraint>(restored.getConstraint(fixed->getId()));
+    assert(rf && rf->getComponentId() == a);
+    assert(rf->getPosition().x == 1.5 && rf->getPosition().z == 3.25);
+    assert(rf->getPriority() == 5.0);
+
+    auto rd = std::dynamic_pointer_cast<DistanceConstraint>(restored.getConstraint(dist->getId()));
+    assert(rd && rd->getDistance() == 42.5);
+    assert(rd->getGeometry1Index() == 1 && rd->getGeometry2Index() == 4);
+    assert(!rd->isEnabled());
+
+    auto syms = restored.getConstraintsByType(AssemblyConstraint::ConstraintType::SYMMETRIC);
+    assert(syms.size() == 1);
+    assert(std::static_pointer_cast<SymmetricConstraint>(syms[0])->getSymmetryPlane() == plane);
+}
+
+// Ошибка в данных не должна стирать уже загруженные сопряжения.
+void test_json_invalid_keeps_state() {
+    AssemblyConstraintSystem system(EntityId::generate());
+    system.addParallelConstraint(EntityId::generate(), EntityId::generate());
+
+    bool threw = false;
+    try { system.deserializeFromJSON("{not json"); } catch (const std::runtime_error&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try {
+        system.deserializeFromJSON(R"({"constraints":[{"id":"bad","type":"PARALLEL"}]})");
+    } catch (const std::runtime_error&) { threw = true; }
+    assert(threw);
+
+    threw = false;
+    try {
+        system.deserializeFromJSON(
+            R"({"constraints":[{"id":"00000000-0000-4000-8000-000000000001","type":"WELD"}]})");
+    } catch (const std::runtime_error&) { threw = true; }
+    assert(threw);
+
+    assert(system.getConstraints().size() == 1);
+}
+
 void test_serialize_to_binary() {
     auto assembly_id = EntityId::generate();
     AssemblyConstraintSystem system(assembly_id);
@@ -824,6 +889,8 @@ int main() {
     TestRunner runner;
 
     // FixedConstraint tests
+    runner.runTest("test_json_round_trip_all_types", test_json_round_trip_all_types);
+    runner.runTest("test_json_invalid_keeps_state", test_json_invalid_keeps_state);
     runner.runTest("test_create_fixed_constraint", test_create_fixed_constraint);
     runner.runTest("test_fixed_constraint_validation", test_fixed_constraint_validation);
     runner.runTest("test_fixed_constraint_description", test_fixed_constraint_description);

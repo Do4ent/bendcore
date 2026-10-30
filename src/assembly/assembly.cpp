@@ -141,20 +141,37 @@ std::string Assembly::validate() const noexcept {
     return "";  // Valid
 }
 
-bool Assembly::hasCircularReferences(std::set<EntityId>& checked_ids) const noexcept {
-    // Check if we've already checked this assembly (would indicate a cycle)
-    if (checked_ids.count(id_) > 0) {
+bool Assembly::hasCircularReferences(std::set<EntityId>& checked_ids,
+                                     const AssemblyResolver& resolve) const {
+    // checked_ids — сборки на текущем пути: повтор на пути и есть цикл.
+    if (!checked_ids.insert(id_).second) {
         return true;
     }
+    bool cycle = false;
+    for (const auto& instance : component_instances_) {
+        if (!instance) continue;
+        const EntityId& ref = instance->getPartId();
+        if (ref == id_ || checked_ids.count(ref) > 0) {
+            cycle = true;
+            break;
+        }
+        if (resolve) {
+            if (auto sub = resolve(ref); sub && sub->hasCircularReferences(checked_ids, resolve)) {
+                cycle = true;
+                break;
+            }
+        }
+    }
+    checked_ids.erase(id_);
+    return cycle;
+}
 
-    checked_ids.insert(id_);
-
-    // Check each component instance for circular references
-    // In a real implementation, we would check if any instance references
-    // a Part that contains an Assembly that references this Assembly
-    // For now, this is a placeholder for the logic
-
-    return false;
+bool Assembly::hasCircularReferences(std::set<EntityId>& checked_ids) const noexcept {
+    try {
+        return hasCircularReferences(checked_ids, AssemblyResolver{});
+    } catch (...) {
+        return true;  // неизвестное состояние считаем ошибкой структуры
+    }
 }
 
 std::shared_ptr<Assembly> createAssembly(

@@ -1,3 +1,4 @@
+#include <nlohmann/json.hpp>
 #include "../../include/bendcore/assembly/assembly_constraint_system.hpp"
 #include <algorithm>
 #include <sstream>
@@ -361,69 +362,156 @@ bool AssemblyConstraintSystem::setConstraintPriority(const EntityId& constraint_
 
 // ==================== Serialization ====================
 
-std::string AssemblyConstraintSystem::serializeToJSON() const {
-    std::ostringstream oss;
-    oss << "{\n";
-    oss << "  \"assembly_id\": \"" << assembly_id_.toString() << "\",\n";
-    oss << "  \"constraints\": [\n";
+namespace {
 
-    for (size_t i = 0; i < constraints_.size(); ++i) {
-        const auto& constraint = constraints_[i];
-        oss << "    {\n";
-        oss << "      \"id\": \"" << constraint->getId().toString() << "\",\n";
-        oss << "      \"type\": ";
+using nlohmann::json;
+using CT = AssemblyConstraint::ConstraintType;
 
-        switch (constraint->getType()) {
-            case AssemblyConstraint::ConstraintType::FIXED:
-                oss << "\"FIXED\"";
-                break;
-            case AssemblyConstraint::ConstraintType::COINCIDENT:
-                oss << "\"COINCIDENT\"";
-                break;
-            case AssemblyConstraint::ConstraintType::DISTANCE:
-                oss << "\"DISTANCE\"";
-                break;
-            case AssemblyConstraint::ConstraintType::PARALLEL:
-                oss << "\"PARALLEL\"";
-                break;
-            case AssemblyConstraint::ConstraintType::PERPENDICULAR:
-                oss << "\"PERPENDICULAR\"";
-                break;
-            case AssemblyConstraint::ConstraintType::TANGENT:
-                oss << "\"TANGENT\"";
-                break;
-            case AssemblyConstraint::ConstraintType::SYMMETRIC:
-                oss << "\"SYMMETRIC\"";
-                break;
-            case AssemblyConstraint::ConstraintType::ANGLE:
-                oss << "\"ANGLE\"";
-                break;
-        }
-
-        oss << ",\n";
-        oss << "      \"description\": \"" << constraint->getDescription() << "\",\n";
-        oss << "      \"enabled\": " << (constraint->isEnabled() ? "true" : "false") << ",\n";
-        oss << "      \"priority\": " << constraint->getPriority() << "\n";
-        oss << "    }";
-
-        if (i < constraints_.size() - 1) {
-            oss << ",";
-        }
-        oss << "\n";
+const char* constraint_type_name(CT t) {
+    switch (t) {
+        case CT::FIXED: return "FIXED";
+        case CT::COINCIDENT: return "COINCIDENT";
+        case CT::DISTANCE: return "DISTANCE";
+        case CT::PARALLEL: return "PARALLEL";
+        case CT::PERPENDICULAR: return "PERPENDICULAR";
+        case CT::TANGENT: return "TANGENT";
+        case CT::SYMMETRIC: return "SYMMETRIC";
+        case CT::ANGLE: return "ANGLE";
     }
-
-    oss << "  ]\n";
-    oss << "}\n";
-
-    return oss.str();
+    return "UNKNOWN";
 }
 
-void AssemblyConstraintSystem::deserializeFromJSON(const std::string& json) {
-    // Basic JSON parsing would go here
-    // For now, just a placeholder that doesn't throw
-    if (json.empty()) {
+json vec_json(const Vector3D& v) { return json::array({v.x, v.y, v.z}); }
+
+Vector3D json_vec(const json& j) {
+    if (!j.is_array() || j.size() != 3) throw std::runtime_error("ожидался вектор [x, y, z]");
+    return Vector3D(j[0].get<double>(), j[1].get<double>(), j[2].get<double>());
+}
+
+// Пары сущностей с индексами геометрии — общая часть всех ограничений, кроме FIXED.
+template <class C>
+void put_pair(json& j, const C& c) {
+    j["entity1"] = c.getEntity1().toString();
+    j["entity2"] = c.getEntity2().toString();
+    j["geometry1_index"] = c.getGeometry1Index();
+    j["geometry2_index"] = c.getGeometry2Index();
+}
+
+}  // namespace
+
+std::string AssemblyConstraintSystem::serializeToJSON() const {
+    json constraints = json::array();
+    for (const auto& c : constraints_) {
+        json j;
+        j["id"] = c->getId().toString();
+        j["type"] = constraint_type_name(c->getType());
+        switch (c->getType()) {
+            case CT::FIXED: {
+                const auto& f = static_cast<const FixedConstraint&>(*c);
+                j["component"] = f.getComponentId().toString();
+                j["position"] = vec_json(f.getPosition());
+                j["orientation"] = vec_json(f.getOrientation());
+                break;
+            }
+            case CT::COINCIDENT: put_pair(j, static_cast<const CoincidentConstraint&>(*c)); break;
+            case CT::PARALLEL: put_pair(j, static_cast<const ParallelConstraint&>(*c)); break;
+            case CT::PERPENDICULAR: put_pair(j, static_cast<const PerpendicularConstraint&>(*c)); break;
+            case CT::TANGENT: put_pair(j, static_cast<const TangentConstraint&>(*c)); break;
+            case CT::DISTANCE: {
+                const auto& d = static_cast<const DistanceConstraint&>(*c);
+                put_pair(j, d);
+                j["distance"] = d.getDistance();
+                break;
+            }
+            case CT::ANGLE: {
+                const auto& a = static_cast<const AngleConstraint&>(*c);
+                put_pair(j, a);
+                j["angle"] = a.getAngle();
+                break;
+            }
+            case CT::SYMMETRIC: {
+                const auto& s = static_cast<const SymmetricConstraint&>(*c);
+                put_pair(j, s);
+                j["symmetry_plane"] = s.getSymmetryPlane().toString();
+                break;
+            }
+        }
+        j["description"] = c->getDescription();
+        j["enabled"] = c->isEnabled();
+        j["priority"] = c->getPriority();
+        constraints.push_back(std::move(j));
+    }
+    json root{{"format", "bendcore-assembly-constraints"}, {"version", 1},
+              {"assembly_id", assembly_id_.toString()}, {"constraints", std::move(constraints)}};
+    return root.dump(2);
+}
+
+void AssemblyConstraintSystem::deserializeFromJSON(const std::string& text) {
+    if (text.empty()) {
         throw std::runtime_error("JSON string is empty");
     }
+    json root;
+    try {
+        root = json::parse(text);
+    } catch (const json::exception& e) {
+        throw std::runtime_error(std::string("некорректный JSON сопряжений: ") + e.what());
+    }
+    if (!root.is_object() || !root.contains("constraints") || !root["constraints"].is_array()) {
+        throw std::runtime_error("в JSON нет массива constraints");
+    }
+
+    // Сначала разбираем всё, затем подменяем: при ошибке существующие сопряжения не теряются.
+    std::vector<std::shared_ptr<AssemblyConstraint>> loaded;
+    try {
+        for (const auto& j : root["constraints"]) {
+            const EntityId id = EntityId::parse(j.at("id").get<std::string>());
+            const std::string type = j.at("type").get<std::string>();
+            auto ent = [&](const char* key) { return EntityId::parse(j.at(key).get<std::string>()); };
+            const size_t g1 = j.value("geometry1_index", size_t{0});
+            const size_t g2 = j.value("geometry2_index", size_t{0});
+
+            std::shared_ptr<AssemblyConstraint> c;
+            if (type == "FIXED") {
+                c = std::make_shared<FixedConstraint>(id, ent("component"), json_vec(j.at("position")),
+                                                      json_vec(j.at("orientation")));
+            } else if (type == "COINCIDENT") {
+                c = std::make_shared<CoincidentConstraint>(id, ent("entity1"), ent("entity2"), g1, g2);
+            } else if (type == "PARALLEL") {
+                c = std::make_shared<ParallelConstraint>(id, ent("entity1"), ent("entity2"), g1, g2);
+            } else if (type == "PERPENDICULAR") {
+                c = std::make_shared<PerpendicularConstraint>(id, ent("entity1"), ent("entity2"), g1, g2);
+            } else if (type == "TANGENT") {
+                c = std::make_shared<TangentConstraint>(id, ent("entity1"), ent("entity2"), g1, g2);
+            } else if (type == "DISTANCE") {
+                c = std::make_shared<DistanceConstraint>(id, ent("entity1"), ent("entity2"),
+                                                         j.at("distance").get<double>(), g1, g2);
+            } else if (type == "ANGLE") {
+                c = std::make_shared<AngleConstraint>(id, ent("entity1"), ent("entity2"),
+                                                      j.at("angle").get<double>(), g1, g2);
+            } else if (type == "SYMMETRIC") {
+                c = std::make_shared<SymmetricConstraint>(id, ent("entity1"), ent("entity2"),
+                                                          ent("symmetry_plane"), g1, g2);
+            } else {
+                throw std::runtime_error("неизвестный тип сопряжения: " + type);
+            }
+            if (!c->validate()) {
+                throw std::runtime_error("сопряжение " + j.at("id").get<std::string>() + " не проходит проверку");
+            }
+            c->setEnabled(j.value("enabled", true));
+            c->setPriority(j.value("priority", 1.0));
+            loaded.push_back(std::move(c));
+        }
+    } catch (const json::exception& e) {
+        throw std::runtime_error(std::string("неверная структура сопряжения: ") + e.what());
+    } catch (const std::invalid_argument& e) {
+        throw std::runtime_error(std::string("неверный идентификатор в сопряжении: ") + e.what());
+    }
+
+    if (root.contains("assembly_id")) {
+        assembly_id_ = EntityId::parse(root["assembly_id"].get<std::string>());
+    }
+    clearConstraints();
+    for (auto& c : loaded) addConstraint(std::move(c));
 }
 
 std::vector<uint8_t> AssemblyConstraintSystem::serializeToBinary() const {

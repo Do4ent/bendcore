@@ -9,6 +9,7 @@
 #include <iostream>
 #include <vector>
 #include <set>
+#include <map>
 #include <cmath>
 
 using namespace BendCore::CadCore;
@@ -143,9 +144,40 @@ void test_circular_dependency_detection() {
     auto assembly = createAssembly("TestAssembly", "Test circular");
     AssemblyValidator validator;
 
-    // For now, test that circular dependency check doesn't crash
     auto issues = validator.checkCircularDependencies(*assembly);
     check(issues.size() == 0, "No circular dependency in simple assembly");
+
+    // Прямая ссылка сборки на себя — цикл даже без резолвера.
+    auto self_ref = createAssembly("Self", "");
+    self_ref->addComponentInstance(createComponentInstance(self_ref->getId()));
+    check(!validator.checkCircularDependencies(*self_ref).empty(), "Self-reference detected");
+
+    // A -> B -> C -> A через резолвер подсборок.
+    auto a = createAssembly("A", ""), b = createAssembly("B", ""), c = createAssembly("C", "");
+    a->addComponentInstance(createComponentInstance(b->getId()));
+    b->addComponentInstance(createComponentInstance(c->getId()));
+    c->addComponentInstance(createComponentInstance(a->getId()));
+    std::map<EntityId, std::shared_ptr<const Assembly>> registry{
+        {a->getId(), a}, {b->getId(), b}, {c->getId(), c}};
+    Assembly::AssemblyResolver resolve = [&](const EntityId& id) -> std::shared_ptr<const Assembly> {
+        auto it = registry.find(id);
+        return it == registry.end() ? nullptr : it->second;
+    };
+    std::set<EntityId> path;
+    check(a->hasCircularReferences(path, resolve), "Indirect cycle A->B->C->A detected");
+    check(path.empty(), "Traversal path restored after check");
+
+    // Ромб: Top использует Shared дважды (через L и R) — это не цикл.
+    auto top = createAssembly("Top", ""), l = createAssembly("L", ""), r = createAssembly("R", "");
+    auto shared = createAssembly("Shared", "");
+    auto bolt = EntityId::generate();  // обычная деталь
+    shared->addComponentInstance(createComponentInstance(bolt));
+    l->addComponentInstance(createComponentInstance(shared->getId()));
+    r->addComponentInstance(createComponentInstance(shared->getId()));
+    top->addComponentInstance(createComponentInstance(l->getId()));
+    top->addComponentInstance(createComponentInstance(r->getId()));
+    registry = {{top->getId(), top}, {l->getId(), l}, {r->getId(), r}, {shared->getId(), shared}};
+    check(!top->hasCircularReferences(path, resolve), "Diamond reuse is not a cycle");
 }
 
 // ============================================================================

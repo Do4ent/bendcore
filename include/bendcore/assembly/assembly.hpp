@@ -8,6 +8,7 @@
 #include <set>
 #include <optional>
 #include <cstdint>
+#include <functional>
 
 namespace BendCore::CadCore {
 
@@ -175,11 +176,17 @@ public:
      */
     [[nodiscard]] std::string validate() const noexcept;
 
+    /// Разрешает part_id экземпляра в сборку; nullptr — обычная деталь (не сборка).
+    using AssemblyResolver = std::function<std::shared_ptr<const Assembly>(const EntityId&)>;
+
     /**
-     * @brief Check for circular references (assembly references itself)
-     * @param checked_ids Already checked assembly IDs to prevent infinite recursion
-     * @return true if circular reference found
+     * @brief Есть ли цикл вложенности: сборка прямо или через подсборки содержит саму себя.
+     * @param checked_ids Сборки на текущем пути обхода (вход: обычно пусто; на выходе восстанавливается)
+     * @param resolve Резолвер подсборок; без него проверяется только прямая ссылка на себя
+     * Повторное использование одной подсборки в разных ветках (ромб) циклом не считается.
      */
+    [[nodiscard]] bool hasCircularReferences(std::set<EntityId>& checked_ids,
+                                             const AssemblyResolver& resolve) const;
     [[nodiscard]] bool hasCircularReferences(std::set<EntityId>& checked_ids) const noexcept;
 
     /**
