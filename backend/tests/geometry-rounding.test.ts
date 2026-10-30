@@ -54,9 +54,14 @@ describe('GeometryRounder', () => {
 
   describe('roundLength', () => {
     it('should round to nearest mm', () => {
-      const inchValue = 1.0; // approximately 25.4mm
+      // roundLength converts inches→mm, rounds to nearest mm, converts back
+      // 1 inch = 25.4mm → rounds to 25mm → 25/25.4 ≈ 0.984 inches
+      // So the result should be close to 25/25.4, not the original value
+      const inchValue = 1.0;
       const result = GeometryRounder.roundLength(inchValue);
-      expect(result).toBeCloseTo(inchValue, 3);
+      const expectedMm = Math.round(inchValue * 25.4);
+      const expectedInches = expectedMm / 25.4;
+      expect(result).toBeCloseTo(expectedInches, 3);
     });
   });
 

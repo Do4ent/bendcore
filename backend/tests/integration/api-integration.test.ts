@@ -114,9 +114,10 @@ describe('BendCore Backend API Integration Tests', () => {
         .get(`/api/profiles/${profileId}/diameters`)
         .expect(200);
 
-      expect(Array.isArray(res.body.data)).toBe(true);
-      expect(res.body.data[0]).toHaveProperty('OD');
-      expect(res.body.data[0]).toHaveProperty('R');
+      expect(res.body.data).toBeDefined();
+      expect(Array.isArray(res.body.data.diameters)).toBe(true);
+      expect(res.body.data.diameters[0]).toHaveProperty('OD');
+      expect(res.body.data.diameters[0]).toHaveProperty('R');
     });
   });
 
