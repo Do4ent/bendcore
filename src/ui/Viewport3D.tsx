@@ -9,9 +9,12 @@ import { OrbitCamera, CameraState } from './OrbitCamera';
 import { MouseGestures, GestureEvent } from './MouseGestures';
 import { SnapConstraints, SnapMode, SnapPoint } from './SnapConstraints';
 import SKeyMenu from './SKeyMenu';
+import type { ViewportMesh } from './tubeService';
 import './Viewport3D.css';
 
 export interface Viewport3DProps {
+  /** Объекты документа: сетки, построенные ядром (OCCT). Пусто — сцена без геометрии. */
+  meshes?: ViewportMesh[];
   onCommand?: (commandId: string, args?: Record<string, any>) => void;
   onObjectSelect?: (objectId: string) => void;
   onCameraMove?: (state: CameraState) => void;
@@ -23,7 +26,32 @@ export interface Viewport3DProps {
 /**
  * Viewport3D: Main 3D viewport component
  */
+const NO_MESHES: ViewportMesh[] = [];
+const DEFAULT_COLOR = 0x1f6fc5;
+
+/** BufferGeometry из сетки ядра: позиции и индексы как есть, нормали — по треугольникам. */
+function geometryFromMesh(m: ViewportMesh['mesh']): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(m.vertices, 3));
+  g.setIndex(m.indices);
+  g.computeVertexNormals();
+  g.computeBoundingBox();
+  return g;
+}
+
+function disposeGroup(group: THREE.Group): void {
+  for (const child of [...group.children]) {
+    group.remove(child);
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((m) => m.dispose());
+    }
+  }
+}
+
 const Viewport3D: React.FC<Viewport3DProps> = ({
+  meshes = NO_MESHES,
   onCommand,
   onObjectSelect,
   onCameraMove,
@@ -38,6 +66,7 @@ const Viewport3D: React.FC<Viewport3DProps> = ({
   const mouseGesturesRef = useRef<MouseGestures | null>(null);
   const snapConstraintsRef = useRef<SnapConstraints | null>(null);
   const rafIdRef = useRef<number | null>(null);
+  const documentGroupRef = useRef<THREE.Group | null>(null);
 
   // State
   const [sKeyMenuOpen, setSKeyMenuOpen] = useState(false);
@@ -84,14 +113,11 @@ const Viewport3D: React.FC<Viewport3DProps> = ({
     const axesHelper = new THREE.AxesHelper(50);
     scene.add(axesHelper);
 
-    // Create example geometry for testing
-    const geometry = new THREE.BoxGeometry(10, 10, 10);
-    const material = new THREE.MeshPhongMaterial({ color: 0x1f6fc5 });
-    const cube = new THREE.Mesh(geometry, material);
-    cube.castShadow = true;
-    cube.receiveShadow = true;
-    cube.userData.id = 'cube_1';
-    scene.add(cube);
+    // Геометрия документа: отдельная группа, наполняется из props.meshes.
+    const documentGroup = new THREE.Group();
+    documentGroup.name = 'document';
+    scene.add(documentGroup);
+    documentGroupRef.current = documentGroup;
 
     // Add snap constraints
     const snapConstraints = new SnapConstraints();
@@ -155,8 +181,32 @@ const Viewport3D: React.FC<Viewport3DProps> = ({
       }
       renderer.dispose();
       mouseGestures.detachFromElement(renderer.domElement);
+      disposeGroup(documentGroup);
+      documentGroupRef.current = null;
     };
   }, [width, height]);
+
+  // Синхронизация сцены с объектами документа.
+  useEffect(() => {
+    const group = documentGroupRef.current;
+    if (!group) return;
+    disposeGroup(group);
+    const box = new THREE.Box3();
+    for (const item of meshes) {
+      if (item.mesh.vertices.length === 0 || item.mesh.indices.length === 0) continue;
+      const geometry = geometryFromMesh(item.mesh);
+      const material = new THREE.MeshPhongMaterial({ color: item.color ?? DEFAULT_COLOR, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.name = item.name;
+      mesh.userData.id = item.id;
+      group.add(mesh);
+      if (geometry.boundingBox) box.union(geometry.boundingBox);
+    }
+    setSelectedObjects((prev) => new Set([...prev].filter((id) => meshes.some((m) => m.id === id))));
+    if (!box.isEmpty()) cameraRef.current?.fitToView(box);
+  }, [meshes, width, height]);
 
   // Handle viewport gestures
   const handleGesture = (event: GestureEvent, scene: THREE.Scene) => {
@@ -339,6 +389,12 @@ const Viewport3D: React.FC<Viewport3DProps> = ({
     <div className="viewport-3d-container" ref={containerRef}>
       {/* Viewport canvas */}
       <div className="viewport-3d-canvas" />
+
+      {meshes.length === 0 && (
+        <div className="viewport-empty" role="status">
+          Нет геометрии в документе. Импортируйте STEP или постройте трубу по пути (CSV/JSON).
+        </div>
+      )}
 
       {/* S-Key Menu */}
       <SKeyMenu

@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useCallback } from "react";
+import { analyzeStep, MeshData, RecognizedTube } from "./tubeService";
 import "./ImportDialog.css";
 
 /**
@@ -26,15 +27,24 @@ export enum GroupingRule {
 /**
  * Recognized tube candidate
  */
-interface TubeCandidate {
+export interface TubeCandidate {
   id: string;
   name: string;
   diameter: number;
+  wall: number;
+  length: number;
   material?: string;
   bendingProfile?: string;
   confidence: number;  // 0-100
-  vertices: [number, number, number][];
   bendAngles: number[];
+  bendRadii: number[];
+  mesh: MeshData;      // сетка распознанного тела (ядро, OCCT)
+}
+
+export interface ImportOptions {
+  groupingRules: GroupingRule[];
+  applyRounding: boolean;
+  roundingPreferences: ImportState["roundingPreferences"];
 }
 
 /**
@@ -69,7 +79,7 @@ interface ImportState {
 }
 
 interface ImportDialogProps {
-  onImport: (tubes: TubeCandidate[], options: any) => void;
+  onImport: (tubes: TubeCandidate[], options: ImportOptions) => void;
   onCancel?: () => void;
 }
 
@@ -103,7 +113,7 @@ const FileSelector: React.FC<{
       <input
         ref={inputRef}
         type="file"
-        accept=".step,.stp,.iges,.igs"
+        accept=".step,.stp"
         onChange={handleFileChange}
         className="hidden-input"
       />
@@ -326,6 +336,28 @@ const RoundingPreferences: React.FC<RoundingPrefsProps> = ({
 /**
  * Main import dialog component
  */
+function formatMm(v: number): string {
+  return Number.isInteger(v) ? String(v) : v.toFixed(2);
+}
+
+function candidateFromRecognized(fileName: string, tube: RecognizedTube): TubeCandidate {
+  const base = fileName.replace(/\.[^.]+$/, "");
+  return {
+    id: `import-${base}-${Date.now()}`,
+    name: `${base} (D${formatMm(tube.od)} x ${formatMm(tube.wall)})`,
+    diameter: tube.od,
+    wall: tube.wall,
+    length: tube.length,
+    bendingProfile: tube.bends.length
+      ? tube.bends.map((b) => `${formatMm(b.angle)}°/R${formatMm(b.radius)}`).join(", ")
+      : "straight",
+    confidence: Math.round(tube.confidence * 100),
+    bendAngles: tube.bends.map((b) => b.angle),
+    bendRadii: tube.bends.map((b) => b.radius),
+    mesh: tube.mesh,
+  };
+}
+
 export const ImportDialog: React.FC<ImportDialogProps> = ({
   onImport,
   onCancel,
@@ -348,74 +380,49 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
     },
   });
 
-  // Simulate file selection and analysis
+  // Распознавание: файл уходит в сервис ядра (POST /v1/analyze), ответ — реальные параметры тела.
   const handleFileSelected = useCallback((file: File) => {
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith(".step") && !lower.endsWith(".stp")) {
+      setState((prev) => ({
+        ...prev,
+        step: "idle",
+        error: "Поддерживается импорт STEP (.step, .stp). IGES ядро пока не читает.",
+      }));
+      return;
+    }
     setState((prev) => ({
       ...prev,
       step: "analyzing",
       fileName: file.name,
       fileSize: file.size,
-      progress: 0,
+      progress: 10,
+      error: undefined,
     }));
 
-    // Simulate analysis progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 30;
-      if (progress >= 100) {
-        clearInterval(interval);
-        // Simulate tube detection results
-        const mockGroups: ImportGroup[] = [
-          {
-            rule: GroupingRule.RULE_1,
-            name: "By Diameter",
-            tubes: [
-              {
-                id: "tube-1",
-                name: "Tube_1 (D16)",
-                diameter: 16,
-                material: "Steel",
-                confidence: 92,
-                vertices: [[0, 0, 0], [100, 0, 0]],
-                bendAngles: [],
-              },
-              {
-                id: "tube-2",
-                name: "Tube_2 (D16)",
-                diameter: 16,
-                material: "Steel",
-                confidence: 89,
-                vertices: [[100, 0, 0], [100, 100, 0]],
-                bendAngles: [90],
-              },
-            ],
-          },
-          {
-            rule: GroupingRule.RULE_4,
-            name: "Contact Groups",
-            tubes: [
-              {
-                id: "tube-3",
-                name: "Group_1 (touching)",
-                diameter: 20,
-                confidence: 78,
-                vertices: [[0, 0, 0], [150, 0, 0]],
-                bendAngles: [],
-              },
-            ],
-          },
+    analyzeStep(file)
+      .then((tube: RecognizedTube) => {
+        const candidate = candidateFromRecognized(file.name, tube);
+        const groups: ImportGroup[] = [
+          { rule: GroupingRule.RULE_1, name: `By Diameter (D${formatMm(tube.od)})`, tubes: [candidate] },
         ];
         setState((prev) => ({
           ...prev,
           step: "reviewing",
-          groups: mockGroups,
-          selectedTubes: new Set(mockGroups.flatMap((g) => g.tubes.map((t) => t.id))),
+          groups,
+          selectedTubes: new Set(tube.valid ? [candidate.id] : []),
           progress: 100,
+          error: tube.valid ? undefined : `Низкая уверенность распознавания: ${tube.notes}`,
         }));
-      } else {
-        setState((prev) => ({ ...prev, progress }));
-      }
-    }, 500);
+      })
+      .catch((err: unknown) => {
+        setState((prev) => ({
+          ...prev,
+          step: "idle",
+          progress: undefined,
+          error: `Импорт не выполнен: ${err instanceof Error ? err.message : String(err)}`,
+        }));
+      });
   }, []);
 
   const handleSelectionChange = useCallback((tubeId: string, selected: boolean) => {

@@ -16,6 +16,9 @@ import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import PropertiesPanel, { SelectedObject } from './PropertiesPanel';
 import StatusBar, { StatusBarState } from './StatusBar';
 import { createTubePropertyGroup } from './PropertyGroups';
+import Viewport3D from './Viewport3D';
+import ImportDialog, { TubeCandidate } from './ImportDialog';
+import type { ViewportMesh } from './tubeService';
 import './styles.css';
 
 // Mark startup
@@ -79,6 +82,11 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
   const [selectedObject, setSelectedObject] = useState<SelectedObject | undefined>();
   const [propertiesPanelPinned, setPropertiesPanelPinned] = useState(false);
 
+  // Геометрия документа (сетки ядра) и импортированные трубы по id объекта сцены.
+  const [documentMeshes, setDocumentMeshes] = useState<ViewportMesh[]>([]);
+  const [importedTubes, setImportedTubes] = useState<Map<string, TubeCandidate>>(new Map());
+  const [importOpen, setImportOpen] = useState(false);
+
   // Status bar state
   const [statusState, setStatusState] = useState<StatusBarState>({
     stepHint: 'Ready',
@@ -96,6 +104,11 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
 
   const handleCommand = async (commandId: string, args?: Record<string, any>) => {
     console.log(`Command: ${commandId}`, args);
+
+    if (commandId === 'import-step') {
+      setImportOpen(true);
+      return;
+    }
 
     // Call IPC to C++ backend
     if (window.electron?.ipc) {
@@ -161,17 +174,31 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
     }
   };
 
-  const handleSelectObject = () => {
-    // Example: select a tube
+  const handleImport = (tubes: TubeCandidate[]) => {
+    setImportOpen(false);
+    if (tubes.length === 0) return;
+    setImportedTubes((prev) => {
+      const next = new Map(prev);
+      tubes.forEach((t) => next.set(t.id, t));
+      return next;
+    });
+    setDocumentMeshes((prev) => [...prev, ...tubes.map((t) => ({ id: t.id, name: t.name, mesh: t.mesh }))]);
+    setStatusState((prev) => ({ ...prev, stepHint: `Импортировано труб: ${tubes.length}` }));
+  };
+
+  // Выбор объекта в сцене: свойства — по реальным параметрам распознанной трубы.
+  const handleSelectObject = (objectId: string) => {
+    const tube = importedTubes.get(objectId);
+    if (!tube) return;
     setSelectedObject({
-      id: 'tube-1',
+      id: tube.id,
       type: 'tube',
-      name: 'Tube_1',
+      name: tube.name,
       groups: createTubePropertyGroup({
-        name: 'Tube_1',
-        od: 12.7,
-        wt: 1.6,
-        material: 'Steel',
+        name: tube.name,
+        od: tube.diameter,
+        wt: tube.wall,
+        material: tube.material ?? '',
       }),
     });
   };
@@ -185,14 +212,11 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
       <div className="flex flex-1 overflow-hidden">
         {/* Viewport area */}
         <div
-          className="flex-1 overflow-auto bg-white"
+          className="flex-1 overflow-hidden bg-white relative"
           onContextMenu={handleContextMenu}
           onMouseMove={handleViewportMouseMove}
-          onClick={handleSelectObject}
         >
-          <div className="p-4 text-gray-500">
-            3D Viewport (right-click for context menu, click to select)
-          </div>
+          <Viewport3D meshes={documentMeshes} onCommand={handleCommand} onObjectSelect={handleSelectObject} />
         </div>
 
         {/* Properties Panel */}
@@ -207,6 +231,12 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
           />
         )}
       </div>
+
+      {importOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <ImportDialog onImport={handleImport} onCancel={() => setImportOpen(false)} />
+        </div>
+      )}
 
       {/* Context Menu */}
       <ContextMenu
