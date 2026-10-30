@@ -1,212 +1,181 @@
-#pragma once
+#ifndef BENDCORE_PLUGINS_PLUGIN_LOADER_HPP
+#define BENDCORE_PLUGINS_PLUGIN_LOADER_HPP
 
 #include "plugin_api.hpp"
-#include <memory>
 #include <string>
 #include <vector>
 #include <map>
+#include <memory>
 #include <functional>
+#include <optional>
+#include <shared_mutex>
 
 namespace bendcore::plugins {
 
 /**
- * Plugin loading and lifecycle management
- * Handles loading, initialization, and unloading of plugins
+ * Plugin load strategy
  */
-class PluginLoader {
-public:
-    PluginLoader();
-    ~PluginLoader();
-
-    // Delete copy operations
-    PluginLoader(const PluginLoader&) = delete;
-    PluginLoader& operator=(const PluginLoader&) = delete;
-
-    /**
-     * Load a plugin from a shared library
-     * @param plugin_path: Path to plugin .so/.dll file
-     * @param auto_init: Automatically initialize plugin after loading
-     * @return: Plugin ID if successful, empty string on failure
-     */
-    std::string LoadPlugin(const std::string& plugin_path, bool auto_init = true);
-
-    /**
-     * Unload a plugin by ID
-     * @param plugin_id: Plugin identifier
-     * @return: true if successful
-     */
-    bool UnloadPlugin(const std::string& plugin_id);
-
-    /**
-     * Unload all plugins
-     */
-    bool UnloadAll();
-
-    /**
-     * Get loaded plugin by ID
-     */
-    std::shared_ptr<IPlugin> GetPlugin(const std::string& plugin_id) const;
-
-    /**
-     * Get all loaded plugins
-     */
-    std::vector<std::shared_ptr<IPlugin>> GetAllPlugins() const;
-
-    /**
-     * Get all plugin infos with status
-     */
-    std::vector<PluginInfo> GetLoadedPluginsInfo() const;
-
-    /**
-     * Check if plugin is loaded
-     */
-    bool IsPluginLoaded(const std::string& plugin_id) const;
-
-    /**
-     * Initialize a loaded plugin
-     */
-    bool InitializePlugin(const std::string& plugin_id);
-
-    /**
-     * Shutdown a loaded plugin
-     */
-    bool ShutdownPlugin(const std::string& plugin_id);
-
-    /**
-     * Enable/disable a plugin
-     */
-    bool SetPluginEnabled(const std::string& plugin_id, bool enabled);
-
-    /**
-     * Get plugin status
-     */
-    PluginStatus GetPluginStatus(const std::string& plugin_id) const;
-
-    /**
-     * Load plugins from directory
-     * @param directory: Directory containing plugin files
-     * @param pattern: File pattern to match (e.g., "*.so")
-     * @return: Number of plugins successfully loaded
-     */
-    int LoadPluginsFromDirectory(const std::string& directory, const std::string& pattern = "*.so");
-
-    /**
-     * Get directory containing plugins
-     */
-    const std::string& GetPluginDirectory() const;
-
-    /**
-     * Set plugin search directory
-     */
-    void SetPluginDirectory(const std::string& directory);
-
-    /**
-     * Validate plugin dependencies
-     * @return: true if all dependencies are satisfiable
-     */
-    bool ValidateDependencies();
-
-    /**
-     * Resolve plugin loading order based on dependencies
-     * @return: Ordered list of plugin IDs for initialization
-     */
-    std::vector<std::string> ResolveDependencyOrder();
-
-    /**
-     * Register pre-load callback
-     */
-    void RegisterPreLoadCallback(std::function<bool(const std::string&)> callback);
-
-    /**
-     * Register post-load callback
-     */
-    void RegisterPostLoadCallback(std::function<void(const std::string&, bool)> callback);
-
-    /**
-     * Get plugin load time
-     */
-    double GetPluginLoadTime(const std::string& plugin_id) const;
-
-    /**
-     * Get total number of loaded plugins
-     */
-    size_t GetPluginCount() const;
-
-    /**
-     * Get plugin by name
-     */
-    std::shared_ptr<IPlugin> GetPluginByName(const std::string& name) const;
-
-    /**
-     * Get plugins by type
-     */
-    std::vector<std::shared_ptr<IPlugin>> GetPluginsByType(PluginType type) const;
-
-    /**
-     * Clear all plugins and reset state
-     */
-    void Clear();
-
-    /**
-     * Get last error message
-     */
-    const std::string& GetLastError() const;
-
-    /**
-     * Check if plugin satisfies version requirement
-     */
-    bool VerifyPluginVersion(const std::string& plugin_id, const std::string& required_version) const;
-
-private:
-    struct PluginEntry {
-        std::shared_ptr<IPlugin> instance;
-        std::string path;
-        void* handle;  // DLL/SO handle
-        PluginMetadata metadata;
-        std::chrono::high_resolution_clock::time_point load_time;
-    };
-
-    std::map<std::string, PluginEntry> plugins_;
-    std::string plugin_directory_;
-    std::string last_error_;
-    std::vector<std::function<bool(const std::string&)>> pre_load_callbacks_;
-    std::vector<std::function<void(const std::string&, bool)>> post_load_callbacks_;
-
-    bool LoadPluginFromLibrary(const std::string& path);
-    std::string ExtractPluginId(const std::shared_ptr<IPlugin>& plugin) const;
-    bool CheckDependency(const std::string& plugin_id, const std::string& dependency);
+enum class LoadStrategy {
+  EAGER,      // Load immediately upon discovery
+  LAZY,       // Load on first use
+  MANUAL,     // Require explicit load call
+  CONDITIONAL // Load based on runtime conditions
 };
 
 /**
- * Plugin loader manager for handling multiple loader instances
+ * Plugin library metadata
  */
-class PluginLoaderManager {
-public:
-    static PluginLoaderManager& GetInstance();
+struct PluginLibrary {
+  std::string id;
+  std::string path;
+  std::string version;
+  long load_time_ms = 0;
+  bool is_loaded = false;
+  std::vector<std::string> provided_plugins;
+};
 
-    /**
-     * Create a new loader context
-     */
-    PluginLoader& CreateLoader(const std::string& context_name);
+/**
+ * Plugin load result
+ */
+struct LoadResult {
+  bool success;
+  std::string plugin_id;
+  std::string error_message;
+  long duration_ms;
+};
 
-    /**
-     * Get existing loader by context name
-     */
-    PluginLoader* GetLoader(const std::string& context_name);
+/**
+ * Plugin loader - Manages dynamic loading of plugins
+ * 
+ * Handles discovery, loading, and lifecycle management of plugins
+ * from various sources (files, packages, etc.)
+ */
+class PluginLoader {
+ public:
+  /**
+   * Create plugin loader instance
+   */
+  PluginLoader();
 
-    /**
-     * Remove loader by context name
-     */
-    bool RemoveLoader(const std::string& context_name);
+  /**
+   * Destructor
+   */
+  ~PluginLoader();
 
-    /**
-     * Get all active loaders
-     */
-    std::vector<std::string> GetAllContexts() const;
+  /**
+   * Discover plugins in directory
+   * @param directory Path to search for plugins
+   * @return Vector of discovered plugin libraries
+   */
+  std::vector<PluginLibrary> discover_plugins(const std::string& directory);
 
-private:
-    PluginLoaderManager();
-    std::map<std::string, std::unique_ptr<PluginLoader>> loaders_;
+  /**
+   * Load plugin from path
+   * @param library_path Path to plugin library
+   * @return LoadResult with success status
+   */
+  LoadResult load_plugin(const std::string& library_path);
+
+  /**
+   * Load plugin by ID
+   * @param plugin_id Plugin identifier to load
+   * @return LoadResult with success status
+   */
+  LoadResult load_plugin_by_id(const std::string& plugin_id);
+
+  /**
+   * Unload plugin
+   * @param plugin_id Plugin identifier to unload
+   * @return true if unload succeeded
+   */
+  bool unload_plugin(const std::string& plugin_id);
+
+  /**
+   * Get loaded plugin
+   * @param plugin_id Plugin identifier
+   * @return Shared pointer to plugin, or nullptr if not loaded
+   */
+  std::shared_ptr<IPlugin> get_loaded_plugin(const std::string& plugin_id) const;
+
+  /**
+   * Get all loaded plugins
+   * @return Vector of loaded plugins
+   */
+  std::vector<std::shared_ptr<IPlugin>> get_loaded_plugins() const;
+
+  /**
+   * Set plugin directory
+   * @param directory Directory path
+   */
+  void set_plugin_directory(const std::string& directory);
+
+  /**
+   * Get plugin directory
+   * @return Current plugin directory
+   */
+  std::string get_plugin_directory() const;
+
+  /**
+   * Load all discovered plugins
+   * @return Number of successfully loaded plugins
+   */
+  int load_all_discovered();
+
+  /**
+   * Reload plugin (unload and reload)
+   * @param plugin_id Plugin to reload
+   * @return true if reload succeeded
+   */
+  bool reload_plugin(const std::string& plugin_id);
+
+  /**
+   * Get load strategy for plugin
+   * @param plugin_id Plugin identifier
+   * @return Load strategy for the plugin
+   */
+  LoadStrategy get_load_strategy(const std::string& plugin_id) const;
+
+  /**
+   * Set load strategy for plugin
+   * @param plugin_id Plugin identifier
+   * @param strategy Load strategy
+   */
+  void set_load_strategy(const std::string& plugin_id, LoadStrategy strategy);
+
+  /**
+   * Get library info
+   * @param library_id Library identifier
+   * @return Library metadata if found
+   */
+  std::optional<PluginLibrary> get_library_info(const std::string& library_id) const;
+
+  /**
+   * Get load statistics
+   * @return Map of statistics
+   */
+  std::map<std::string, long> get_load_statistics() const;
+
+  /**
+   * Register load callback
+   * @param callback Function to call on load events
+   */
+  using LoadCallback = std::function<void(const LoadResult&)>;
+  void register_load_callback(LoadCallback callback);
+
+  /**
+   * Clear all loaded plugins
+   */
+  void clear();
+
+ private:
+  mutable std::shared_mutex loader_mutex_;
+  std::map<std::string, std::shared_ptr<IPlugin>> loaded_plugins_;
+  std::map<std::string, PluginLibrary> libraries_;
+  std::map<std::string, LoadStrategy> load_strategies_;
+  std::vector<LoadCallback> load_callbacks_;
+  std::string plugin_directory_;
 };
 
 } // namespace bendcore::plugins
+
+#endif // BENDCORE_PLUGINS_PLUGIN_LOADER_HPP
