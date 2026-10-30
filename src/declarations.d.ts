@@ -81,7 +81,7 @@ declare module 'three' {
     rotation: { x: number; y: number; z: number };
     scale: Vector3;
     children: Object3D[];
-    userData: Record<string, unknown>;
+    userData: Record<string, any>;
     add(...objects: Object3D[]): this;
     remove(...objects: Object3D[]): this;
     traverse(callback: (obj: Object3D) => void): void;
