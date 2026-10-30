@@ -1,6 +1,12 @@
 #include "bendcore/mobile/mobile_performance.hpp"
+#include <mutex>
+#include <stdexcept>
 
 namespace bendcore::mobile {
+
+namespace {
+    thread_local std::mutex g_perf_mutex;
+}
 
 MobilePerformanceOptimizer::MobilePerformanceOptimizer()
     : batteryModeEnabled(false),
@@ -9,7 +15,10 @@ MobilePerformanceOptimizer::MobilePerformanceOptimizer()
     metrics.cpuUsage = 0.0f;
     metrics.memoryUsage = 0.0f;
     metrics.batteryLevel = 100.0f;
+    metrics.batteryDrainRate = 0.5f;
+    metrics.thermalTemperature = 35;
     metrics.thermalState = ThermalState::NORMAL;
+    metrics.timestamp = 0;
 }
 
 MobilePerformanceOptimizer::~MobilePerformanceOptimizer() = default;
