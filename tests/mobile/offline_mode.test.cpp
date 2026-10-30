@@ -178,3 +178,8 @@ TEST_F(OfflineModeTest, GetSyncStatusForOperation) {
     EXPECT_TRUE(true);
 }
 
+TEST_F(OfflineModeTest, ResolveSyncConflict) {
+    DataConflict conflict{.dataId = "id1", .localVersion = "v1", .remoteVersion = "v2"};
+    EXPECT_TRUE(manager.resolveConflict(conflict));
+}
+

@@ -1,7 +1,13 @@
 #include "bendcore/mobile/offline_mode.hpp"
 #include <algorithm>
+#include <mutex>
+#include <stdexcept>
 
 namespace bendcore::mobile {
+
+namespace {
+    thread_local std::mutex g_offline_mutex;
+}
 
 OfflineModeManager::OfflineModeManager()
     : offlineModeEnabled(false),
