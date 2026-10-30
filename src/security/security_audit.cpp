@@ -1,5 +1,6 @@
 #include "bendcore/security/security_audit.hpp"
 #include <algorithm>
+#include <chrono>
 
 namespace bendcore::security {
 
@@ -42,7 +43,15 @@ std::vector<AuditEvent> SecurityAuditFramework::getAuditLogByUser(const std::str
 }
 
 std::vector<AuditEvent> SecurityAuditFramework::searchAuditLog(const std::string& query) {
-    return std::vector<AuditEvent>();
+    std::vector<AuditEvent> result;
+    for (const auto& event : auditLog) {
+        if (event.action.find(query) != std::string::npos ||
+            event.resource.find(query) != std::string::npos ||
+            event.userId.find(query) != std::string::npos) {
+            result.push_back(event);
+        }
+    }
+    return result;
 }
 
 std::vector<AuditEvent> SecurityAuditFramework::filterByLevel(AuditLevel level) {
@@ -98,7 +107,11 @@ VulnerabilityReport SecurityAuditFramework::getVulnerabilityDetails(const std::s
 
 SecurityAssessment SecurityAuditFramework::performSecurityAssessment() {
     SecurityAssessment assessment;
+    assessment.assessmentId = "assessment_" + std::to_string(assessments.size() + 1);
+    assessment.timestamp = std::chrono::system_clock::now().time_since_epoch().count();
     assessment.securityScore = 85.0f;
+    assessment.vulnerabilities = vulnerabilities;
+    assessments.push_back(assessment);
     return assessment;
 }
 
