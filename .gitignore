@@ -86,3 +86,11 @@ build_m20/
 # M18-M20 and M22-M25 build directories
 build_m18_m20/
 build_m22_m25/
+
+# Каталоги сборки любого вида (CMake, ручные сборки фаз) и их содержимое — не версионируются (AUD-009).
+/build*/
+build_*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake

@@ -1,1 +1,0 @@
-/usr/bin/c++ -Wall -Wextra -Werror -pedantic -O3 -DNDEBUG CMakeFiles/test_surfaces_m5.dir/tests/surfaces/test_surfaces_m5.cpp.o -o test_surfaces_m5  libbendcore_core.a /usr/lib/x86_64-linux-gnu/libssl.so /usr/lib/x86_64-linux-gnu/libcrypto.so /usr/lib/x86_64-linux-gnu/libz.so /usr/lib/gcc/x86_64-linux-gnu/13/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a 

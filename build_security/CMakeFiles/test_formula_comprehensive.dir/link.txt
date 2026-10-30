@@ -1,1 +1,0 @@
-/usr/bin/c++ -Wall -Wextra -Werror -pedantic -O3 -DNDEBUG CMakeFiles/test_formula_comprehensive.dir/tests/test_formula_comprehensive.cpp.o -o test_formula_comprehensive  libbendcore_formula.a 
