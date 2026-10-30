@@ -71,6 +71,7 @@ const ru = {
   'common.close': 'Закрыть',
   'common.cancel': 'Отмена',
   'common.error': 'Ошибка',
+  'common.save': 'Сохранить',
 } as const;
 
 export type Key = keyof typeof ru;
@@ -143,6 +144,7 @@ const en: Record<Key, string> = {
   'common.close': 'Close',
   'common.cancel': 'Cancel',
   'common.error': 'Error',
+  'common.save': 'Save',
 };
 
 let current: Lang = 'ru';

@@ -286,7 +286,7 @@ const VirtualizedTable: React.FC<VirtualizedTableProps> = ({ tubes, onSelectTube
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newSelected = e.target.checked ? new Set(tubes.map(t => t.id)) : new Set();
+    const newSelected: Set<string> = e.target.checked ? new Set(tubes.map(t => t.id)) : new Set<string>();
     setSelectedIds(newSelected);
 
     if (onSelectTubes) {

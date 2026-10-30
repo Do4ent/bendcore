@@ -77,6 +77,7 @@ declare module 'three' {
 
   export class Object3D {
     name: string;
+    visible: boolean;
     position: Vector3;
     rotation: { x: number; y: number; z: number };
     scale: Vector3;

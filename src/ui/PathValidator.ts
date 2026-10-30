@@ -213,7 +213,7 @@ export class PathValidator {
 
     // Check connectivity using BFS
     if (adjacency.size > 0) {
-      const start = adjacency.keys().next().value;
+      const start = adjacency.keys().next().value as string;
       const visited = new Set<string>();
       const queue: string[] = [start];
 

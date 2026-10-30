@@ -157,8 +157,9 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
           });
 
           // Check result before closing dialog
-          if (!result || (result.success === false)) {
-            console.error("Save failed:", result?.error || "Unknown error");
+          const res = result as { success?: boolean; error?: string } | null;
+          if (!res || (res.success === false)) {
+            console.error("Save failed:", res?.error || "Unknown error");
             // Could show error toast here
             return;
           }
