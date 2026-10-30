@@ -22,6 +22,7 @@ interface CalculationResult {
   confidence: number;
   warnings: string;
   is_valid: boolean;
+  offset_distance?: number;
 }
 
 interface ValidationError {

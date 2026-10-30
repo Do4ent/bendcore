@@ -120,8 +120,23 @@ declare module 'three' {
 
   export class PerspectiveCamera extends Camera {
     constructor(fov?: number, aspect?: number, near?: number, far?: number);
+    fov: number;
     aspect: number;
+    near: number;
+    far: number;
     updateProjectionMatrix(): void;
+    getWorldDirection(target: Vector3): Vector3;
+    updateMatrixWorld(force?: boolean): void;
+  }
+
+  export class Box3 {
+    min: Vector3;
+    max: Vector3;
+    constructor();
+    setFromObject(object: Object3D): this;
+    getCenter(target: Vector3): Vector3;
+    getSize(target: Vector3): Vector3;
+    isEmpty(): boolean;
   }
 
   export class WebGLRenderer {

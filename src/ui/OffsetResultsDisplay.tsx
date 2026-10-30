@@ -18,6 +18,7 @@ export interface OffsetResult {
   segment_2?: number;
   segment_3?: number;
   segment_4?: number;
+  offset_distance?: number;
 }
 
 interface OffsetResultsDisplayProps {
