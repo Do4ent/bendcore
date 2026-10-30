@@ -5,7 +5,7 @@
 
 import React, { useCallback } from 'react';
 
-interface OffsetResult {
+export interface OffsetResult {
   total_length: number;
   bend_angles?: [number, number];
   confidence: number;
@@ -75,24 +75,24 @@ export const OffsetResultsDisplay: React.FC<OffsetResultsDisplayProps> = ({
           <div className="results-grid">
             <div className="result-card">
               <label>Общая длина</label>
-              <value>{result.total_length?.toFixed(2)} мм</value>
+              <span className="result-value">{result.total_length?.toFixed(2)} мм</span>
             </div>
             {result.bend_1_length && (
               <div className="result-card">
                 <label>Длина гибки 1</label>
-                <value>{result.bend_1_length.toFixed(2)} мм</value>
+                <span className="result-value">{result.bend_1_length.toFixed(2)} мм</span>
               </div>
             )}
             {result.straight_section && (
               <div className="result-card">
                 <label>Прямой участок</label>
-                <value>{result.straight_section.toFixed(2)} мм</value>
+                <span className="result-value">{result.straight_section.toFixed(2)} мм</span>
               </div>
             )}
             {result.bend_2_length && (
               <div className="result-card">
                 <label>Длина гибки 2</label>
-                <value>{result.bend_2_length.toFixed(2)} мм</value>
+                <span className="result-value">{result.bend_2_length.toFixed(2)} мм</span>
               </div>
             )}
           </div>
@@ -106,31 +106,31 @@ export const OffsetResultsDisplay: React.FC<OffsetResultsDisplayProps> = ({
             {result.segment_1 && (
               <div className="segment-card">
                 <label>Сегмент 1</label>
-                <value>{result.segment_1.toFixed(2)} мм</value>
+                <span className="result-value">{result.segment_1.toFixed(2)} мм</span>
               </div>
             )}
             {result.segment_2 && (
               <div className="segment-card">
                 <label>Сегмент 2</label>
-                <value>{result.segment_2.toFixed(2)} мм</value>
+                <span className="result-value">{result.segment_2.toFixed(2)} мм</span>
               </div>
             )}
             {result.segment_3 && (
               <div className="segment-card">
                 <label>Сегмент 3</label>
-                <value>{result.segment_3.toFixed(2)} мм</value>
+                <span className="result-value">{result.segment_3.toFixed(2)} мм</span>
               </div>
             )}
             {result.segment_4 && (
               <div className="segment-card">
                 <label>Сегмент 4</label>
-                <value>{result.segment_4.toFixed(2)} мм</value>
+                <span className="result-value">{result.segment_4.toFixed(2)} мм</span>
               </div>
             )}
           </div>
           <div className="total-card">
             <label>Итоговая длина</label>
-            <value>{result.total_length.toFixed(2)} мм</value>
+            <span className="result-value">{result.total_length.toFixed(2)} мм</span>
           </div>
         </div>
       )}

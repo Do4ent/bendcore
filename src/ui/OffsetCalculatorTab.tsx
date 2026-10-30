@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { OffsetTypeSelector, OffsetType } from './OffsetTypeSelector';
-import { OffsetResultsDisplay } from './OffsetResultsDisplay';
+import { OffsetResultsDisplay, OffsetResult } from './OffsetResultsDisplay';
 import { OffsetVisualization } from './OffsetVisualization';
 import { ParallelOffsetCalculator } from './ParallelOffsetCalculator';
 import Combined3DOffsetCalculator from './Combined3DOffsetCalculator';
@@ -23,27 +23,13 @@ interface OffsetCalculatorTabProps {
   onResultSync?: (offsetData: any) => void;
 }
 
-interface CalculationResult {
-  total_length: number;
-  bend_1_length?: number;
-  straight_section?: number;
-  bend_2_length?: number;
-  segment_1?: number;
-  segment_2?: number;
-  segment_3?: number;
-  segment_4?: number;
-  bend_angles: [number, number];
-  confidence: number;
-  warnings?: string;
-  is_valid: boolean;
-}
 
 export const OffsetCalculatorTab: React.FC<OffsetCalculatorTabProps> = ({
   tubeParams,
   onResultSync,
 }) => {
   const [offsetType, setOffsetType] = useState<OffsetType>('parallel');
-  const [result, setResult] = useState<CalculationResult | null>(null);
+  const [result, setResult] = useState<OffsetResult | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Параметры для параллельного offset
@@ -69,7 +55,7 @@ export const OffsetCalculatorTab: React.FC<OffsetCalculatorTabProps> = ({
 
   // Обработчик синхронизации результатов
   const handleResultUpdate = useCallback(
-    (calcResult: CalculationResult) => {
+    (calcResult: OffsetResult) => {
       setResult(calcResult);
       if (onResultSync) {
         onResultSync({
@@ -85,7 +71,7 @@ export const OffsetCalculatorTab: React.FC<OffsetCalculatorTabProps> = ({
   );
 
   // Копирование результатов в параметры трубы
-  const handleCopyToParams = useCallback((calcResult: CalculationResult) => {
+  const handleCopyToParams = useCallback((calcResult: OffsetResult) => {
     // В реальном приложении здесь была бы интеграция с родительским компонентом
     console.log('Копирование результатов:', calcResult);
     alert(`Общая длина скопирована: ${calcResult.total_length.toFixed(2)} мм`);
@@ -133,7 +119,7 @@ export const OffsetCalculatorTab: React.FC<OffsetCalculatorTabProps> = ({
             result={result as any}
             onCalculate={async () => {
               // Mock calculation for 3D
-              const mockResult: CalculationResult = {
+              const mockResult: OffsetResult = {
                 total_length:
                   combined3DParams.bend_radius * 2 +
                   combined3DParams.offset_distance * 1.5,

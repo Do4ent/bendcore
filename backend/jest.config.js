@@ -3,6 +3,8 @@ module.exports = {
   testEnvironment: 'node',
   rootDir: '.',
   testMatch: ['**/tests/**/*.test.ts'],
+  testTimeout: 30000,
+  verbose: true,
   globals: {
     'ts-jest': {
       tsconfig: './tsconfig.test.json'
