@@ -32,6 +32,10 @@ declare module 'three' {
     divideScalar(s: number): this;
     project(camera: Camera): this;
     unproject(camera: Camera): this;
+    addScaledVector(v: Vector3, s: number): this;
+    negate(): this;
+    lerp(v: Vector3, alpha: number): this;
+    setFromMatrixColumn(matrix: Matrix4, index: number): this;
   }
 
   export class Matrix4 {
@@ -50,6 +54,7 @@ declare module 'three' {
     setFromPoints(points: Vector3[]): this;
     computeBoundingBox(): void;
     computeVertexNormals(): void;
+    clone(): BufferGeometry;
     dispose(): void;
   }
 
@@ -150,9 +155,18 @@ declare module 'three' {
     r: number;
     g: number;
     b: number;
+    setHex(hex: number): this;
+    set(color: number | string): this;
+    clone(): Color;
   }
 
-  export class Camera extends Object3D {}
+  export class Camera extends Object3D {
+    quaternion: Quaternion;
+    matrixWorld: Matrix4;
+    matrixWorldInverse: Matrix4;
+    projectionMatrix: Matrix4;
+    projectionMatrixInverse: Matrix4;
+  }
 
   export class PerspectiveCamera extends Camera {
     constructor(fov?: number, aspect?: number, near?: number, far?: number);

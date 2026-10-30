@@ -180,7 +180,7 @@ export const ThreeJsRenderer: React.FC<ThreeJsRendererProps> = ({
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -213,7 +213,7 @@ export const ThreeJsRenderer: React.FC<ThreeJsRendererProps> = ({
 
     // Selection Manager
     selectionManagerRef.current = new SelectionManager((object) => {
-      onGeometrySelect?.(object);
+      if (object) onGeometrySelect?.(object);
     });
 
     // Click handler for selection

@@ -203,7 +203,7 @@ export const TubePropertiesPanel: React.FC<TubePropertiesPanelProps> = ({
                 R {formatNumber(torus.major_radius)} mm
               </span>
               <span className="section-detail">
-                Sweep: {formatNumber(torus.sweep_angle * 180 / Math.PI, 1)}°
+                Sweep: {formatNumber((torus.end_angle - torus.start_angle) * 180 / Math.PI, 1)}°
               </span>
             </div>
           ))}

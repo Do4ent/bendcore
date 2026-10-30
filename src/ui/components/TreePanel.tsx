@@ -233,7 +233,7 @@ export const TreePanel: React.FC<TreePanelProps> = ({
             isSelected={selectedNode === node.id}
             isExpanded={expandedNodes.has(node.id)}
             isRenaming={renamingId === node.id}
-            renameValue={renamingValue}
+            renameValue={renameValue}
             isDragging={draggedNode === node.id}
             onSelect={handleSelect}
             onToggleVisibility={handleVisibilityToggle}
