@@ -1,6 +1,8 @@
 #include "bendcore/mobile/touch_gestures.hpp"
 #include <algorithm>
 #include <cmath>
+#include <mutex>
+#include <stdexcept>
 
 namespace bendcore::mobile {
 
@@ -117,7 +119,17 @@ float TouchGestureRecognizer::calculatePinchScale(const std::vector<TouchPoint>&
 
     float distance = std::sqrt(std::pow(points[1].x - points[0].x, 2) +
                                std::pow(points[1].y - points[0].y, 2));
-    return distance > 0 ? 1.0f : 1.0f;
+
+    // Calculate reference distance from previous touches if available
+    if (!previousTouches.empty() && previousTouches.size() >= 2) {
+        float prevDistance = std::sqrt(std::pow(previousTouches[1].x - previousTouches[0].x, 2) +
+                                       std::pow(previousTouches[1].y - previousTouches[0].y, 2));
+        if (prevDistance > 0.0f) {
+            return distance / prevDistance;
+        }
+    }
+
+    return distance > 0.0f ? distance / 100.0f : 1.0f;
 }
 
 bool TouchGestureRecognizer::isRotation(const std::vector<TouchPoint>& points, float& angle) {
@@ -127,6 +139,26 @@ bool TouchGestureRecognizer::isRotation(const std::vector<TouchPoint>& points, f
 
 float TouchGestureRecognizer::calculateRotationAngle(const std::vector<TouchPoint>& points) {
     if (points.size() < 2) return 0.0f;
+
+    // Calculate current angle
+    float dx = points[1].x - points[0].x;
+    float dy = points[1].y - points[0].y;
+    float currentAngle = std::atan2(dy, dx);
+
+    // If we have previous touches, calculate the difference
+    if (!previousTouches.empty() && previousTouches.size() >= 2) {
+        float prevDx = previousTouches[1].x - previousTouches[0].x;
+        float prevDy = previousTouches[1].y - previousTouches[0].y;
+        float previousAngle = std::atan2(prevDy, prevDx);
+
+        float angleDiff = currentAngle - previousAngle;
+        // Normalize to [-PI, PI]
+        while (angleDiff > 3.14159265f) angleDiff -= 6.28318531f;
+        while (angleDiff < -3.14159265f) angleDiff += 6.28318531f;
+
+        return angleDiff * (180.0f / 3.14159265f);  // Convert to degrees
+    }
+
     return 0.0f;
 }
 
