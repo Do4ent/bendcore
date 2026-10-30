@@ -2,7 +2,7 @@
 # Сборка (из корня репозитория), OCCT — установка в ~/occt-install (см. .github/workflows/wasm.yml):
 #   docker build --build-context occt="$HOME/occt-install" -f docker/Dockerfile -t bendcore-server .
 FROM ubuntu:24.04 AS build
-RUN apt-get update && apt-get install -y --no-install-recommends cmake ninja-build g++ libeigen3-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends cmake ninja-build g++ libeigen3-dev zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=occt . /opt/occt
 COPY CMakeLists.txt ./

@@ -1,4 +1,4 @@
-import { GrowthBook } from "@growthbook/sdk-js";
+import { GrowthBook } from "@growthbook/growthbook";
 
 /**
  * GrowthBook initialization and configuration
@@ -38,10 +38,8 @@ class GrowthBookManager {
       }
 
       this.instance = new GrowthBook({
-        apiHost: "https://api.growthbook.io",
-        apiKey: apiKey,
-        // Fetch features from API every 60 seconds
-        refreshIntervalMs: 60000,
+        apiHost: "https://cdn.growthbook.io",
+        clientKey: apiKey,
       });
 
       // Set attributes for experiment targeting
@@ -55,8 +53,8 @@ class GrowthBookManager {
 
       this.instance.setAttributes(this.attributes);
 
-      // Load features from the API
-      await this.instance.loadFeatures();
+      // Load features from the API; autoRefresh keeps them updated (SSE) while the app runs.
+      await this.instance.loadFeatures({ autoRefresh: true });
 
       console.log("GrowthBook initialized successfully");
     } catch (error) {

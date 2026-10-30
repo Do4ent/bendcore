@@ -127,20 +127,20 @@ int main() {
     // Test 36-37: Thread safety
     {
         ErrorHandler handler;
+        auto worker = [&handler]() {
+            for (int j = 0; j < 10; ++j) {
+                handler.reportError(ErrorCode::SUCCESS, ErrorLevel::INFO,
+                                  "Thread msg", __FILE__, __LINE__);
+            }
+        };
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+        // WebAssembly без pthreads: std::thread недоступен, та же работа выполняется последовательно.
+        for (int i = 0; i < 4; ++i) worker();
+#else
         std::vector<std::thread> threads;
-
-        for (int i = 0; i < 4; ++i) {
-            threads.emplace_back([&handler, i]() {
-                for (int j = 0; j < 10; ++j) {
-                    handler.reportError(ErrorCode::SUCCESS, ErrorLevel::INFO,
-                                      "Thread msg", __FILE__, __LINE__);
-                }
-            });
-        }
-
-        for (auto& t : threads) {
-            t.join();
-        }
+        for (int i = 0; i < 4; ++i) threads.emplace_back(worker);
+        for (auto& t : threads) t.join();
+#endif
 
         TEST("T36: All errors logged (thread-safe)", handler.getErrorCount() == 40);
         TEST("T37: No data corruption", handler.getLastError() != nullptr);
