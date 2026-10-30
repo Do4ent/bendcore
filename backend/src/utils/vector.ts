@@ -55,15 +55,18 @@ export class Vector {
   /**
    * Length/magnitude
    */
-  static length(v: Vector3): number {
+  static magnitude(v: Vector3): number {
     return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
   }
+
+  /** @deprecated use Vector.magnitude */
+  static len(v: Vector3): number { return Vector.magnitude(v); }
 
   /**
    * Normalize vector (unit vector in same direction)
    */
   static normalize(v: Vector3): Vector3 {
-    const len = this.length(v);
+    const len = this.magnitude(v);
     if (len < 1e-10) {
       return { x: 0, y: 0, z: 0 };
     }
@@ -74,7 +77,7 @@ export class Vector {
    * Distance between two points
    */
   static distance(a: Vector3, b: Vector3): number {
-    return this.length(this.subtract(a, b));
+    return this.magnitude(this.subtract(a, b));
   }
 
   /**
@@ -82,8 +85,8 @@ export class Vector {
    */
   static angle(a: Vector3, b: Vector3): number {
     const aDot = this.dot(a, b);
-    const lenA = this.length(a);
-    const lenB = this.length(b);
+    const lenA = this.magnitude(a);
+    const lenB = this.magnitude(b);
 
     if (lenA < 1e-10 || lenB < 1e-10) {
       return 0;
@@ -110,7 +113,7 @@ export class Vector {
    * Project vector a onto vector b
    */
   static project(a: Vector3, b: Vector3): Vector3 {
-    const bLen = this.length(b);
+    const bLen = this.magnitude(b);
     if (bLen < 1e-10) {
       return { x: 0, y: 0, z: 0 };
     }
@@ -123,7 +126,7 @@ export class Vector {
    */
   static isParallel(a: Vector3, b: Vector3, tolerance: number = 1e-6): boolean {
     const cross = this.cross(a, b);
-    return this.length(cross) < tolerance;
+    return this.magnitude(cross) < tolerance;
   }
 
   /**

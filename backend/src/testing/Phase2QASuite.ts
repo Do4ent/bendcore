@@ -344,7 +344,7 @@ export class Phase2QASuite {
         error: String(error)
       });
       this.failedTests++;
-      logger.warn('Phase2QASuite', `Test failed: ${name}`, {}, error as Error);
+      logger.warn('Phase2QASuite', `Test failed: ${name}`, { error: String(error) });
     }
   }
 

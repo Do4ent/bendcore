@@ -880,8 +880,8 @@ export class STEPConverter {
     let entityId = 1;
 
     // Export solids
-    if (geometry.solids) {
-      for (const solid of geometry.solids) {
+    if (Array.isArray(geometry.solids)) {
+      for (const solid of geometry.solids as any[]) {
         const shellId = entityId + 1;
         content += `#${entityId} = MANIFOLD_SOLID_BREP('${solid.name}',(#${shellId}));\n`;
         entityId++;

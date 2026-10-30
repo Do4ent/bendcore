@@ -202,7 +202,7 @@ export class GeometryOps {
     // Check radial distance
     const projected = Vector.scale(cylinder.axis, proj);
     const radial = Vector.subtract(relative, projected);
-    const distance = Vector.length(radial);
+    const distance = Vector.magnitude(radial);
 
     return distance <= cylinder.outer_radius && distance >= cylinder.inner_radius;
   }

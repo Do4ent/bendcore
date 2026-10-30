@@ -404,8 +404,12 @@ export class SketchSolver {
   /**
    * Compute norm of vector array
    */
-  private vectorNorm(vectors: number[]): number {
-    return Math.sqrt(vectors.reduce((sum, v) => sum + v * v, 0));
+  private vectorNorm(vectors: Vector3[] | number[]): number {
+    if (vectors.length === 0) return 0;
+    if (typeof vectors[0] === 'number') {
+      return Math.sqrt((vectors as number[]).reduce((sum, v) => sum + v * v, 0));
+    }
+    return Math.sqrt((vectors as Vector3[]).reduce((sum, v) => sum + v.x * v.x + v.y * v.y + v.z * v.z, 0));
   }
 
   /**

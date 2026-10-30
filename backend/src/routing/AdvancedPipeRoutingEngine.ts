@@ -365,7 +365,7 @@ export class AdvancedPipeRoutingEngine {
     const node: RRTNode = {
       id,
       position,
-      parent: parentId,
+      parent: parentId ?? undefined,
       children: [],
       cost,
     };
