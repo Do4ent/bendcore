@@ -76,6 +76,7 @@ declare module 'three' {
   }
 
   export class Object3D {
+    name: string;
     position: Vector3;
     rotation: { x: number; y: number; z: number };
     scale: Vector3;
@@ -148,10 +149,29 @@ declare module 'three' {
   export class WebGLRenderer {
     constructor(params?: { canvas?: HTMLCanvasElement; antialias?: boolean; alpha?: boolean });
     domElement: HTMLCanvasElement;
+    shadowMap: { enabled: boolean; type: number };
     setSize(width: number, height: number): void;
     setPixelRatio(ratio: number): void;
     render(scene: Scene, camera: Camera): void;
     dispose(): void;
+  }
+
+  export class GridHelper extends Object3D {
+    constructor(size?: number, divisions?: number, colorCenterLine?: number | string, colorGrid?: number | string);
+  }
+
+  export class AxesHelper extends Object3D {
+    constructor(size?: number);
+  }
+
+  export class Plane {
+    constructor(normal?: Vector3, constant?: number);
+  }
+
+  export class Ray {
+    origin: Vector3;
+    direction: Vector3;
+    intersectPlane(plane: Plane, target: Vector3): Vector3 | null;
   }
 
   export class BoxGeometry extends BufferGeometry {
@@ -176,10 +196,13 @@ declare module 'three' {
 
   export class DirectionalLight extends Object3D {
     constructor(color?: number | string, intensity?: number);
+    castShadow: boolean;
+    shadow: { mapSize: { width: number; height: number }; camera: { near: number; far: number } };
   }
 
   export class Raycaster {
     constructor();
+    ray: Ray;
     setFromCamera(coords: { x: number; y: number }, camera: Camera): void;
     intersectObjects(objects: Object3D[], recursive?: boolean): Array<{ object: Object3D; point: Vector3; distance: number }>;
   }
