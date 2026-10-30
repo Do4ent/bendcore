@@ -5,7 +5,6 @@ import {
   Tooltip,
   Badge,
   Spinner,
-  type RibbonTab,
 } from '../ui/components';
 import './PathSketchScreen.css';
 
@@ -18,7 +17,7 @@ type SketchView = 'front' | 'top' | 'isometric';
 
 export const PathSketchScreen: React.FC<PathSketchScreenProps> = ({ tubeId }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [activeTab, setActiveTab] = useState<RibbonTab>('sketch');
+  const [activeTab, setActiveTab] = useState<string>('sketch');
   const [selectedPlane, setSelectedPlane] = useState<SketchPlane>('xy');
   const [selectedView, setSelectedView] = useState<SketchView>('front');
   const [statusMessage, setStatusMessage] = useState('Sketch editor ready');
@@ -170,7 +169,7 @@ export const PathSketchScreen: React.FC<PathSketchScreenProps> = ({ tubeId }) =>
       {/* Status Bar */}
       <StatusBar
         message={statusMessage}
-        mode="Sketch"
+        mode="sketch"
         progress={isLoading ? 50 : undefined}
         isLoading={isLoading}
       />

@@ -9,6 +9,10 @@ import request from 'supertest';
 import express, { Express } from 'express';
 import { ProfileManager } from '../../src/core/profile-manager';
 import { Database } from '../../src/database/db';
+import profileRoutes from '../../src/api/routes/profiles';
+import tubeRoutes from '../../src/api/routes/tubes';
+import sketchRoutes from '../../src/api/routes/sketches';
+import importRoutes from '../../src/api/routes/import';
 
 describe('BendCore Backend API Integration Tests', () => {
   let app: Express;
@@ -23,6 +27,12 @@ describe('BendCore Backend API Integration Tests', () => {
     // Setup Express app with routes
     app = express();
     app.use(express.json());
+
+    // Mount routes
+    app.use('/api/profiles', profileRoutes);
+    app.use('/api/tubes', tubeRoutes);
+    app.use('/api/sketches', sketchRoutes);
+    app.use('/api/import', importRoutes);
 
     profileManager = ProfileManager.getInstance();
   });

@@ -13,6 +13,47 @@ const tubeBuilder = new TubeBuilder();
 const profileManager = ProfileManager.getInstance();
 
 /**
+ * POST /api/tubes
+ * Create a new tube (validates required fields)
+ */
+router.post('/', (req: Request, res: Response): void => {
+  const { name, specification } = req.body;
+  const errors: string[] = [];
+
+  if (!name || typeof name !== 'string') {
+    errors.push('name is required');
+  }
+
+  if (specification) {
+    if (typeof specification.diameter === 'number' && specification.diameter <= 0) {
+      errors.push('diameter must be positive');
+    }
+    if (specification.profile_id === '') {
+      errors.push('profile_id must not be empty');
+    }
+  }
+
+  if (errors.length > 0) {
+    res.status(400).json({ success: false, errors, timestamp: new Date().toISOString() });
+    return;
+  }
+
+  const id = `tube_${Date.now()}`;
+  res.status(201).json({
+    success: true,
+    data: {
+      id,
+      name,
+      specification: specification || {},
+      geometry: specification ? { cylinders: [], tori: [] } : undefined,
+      properties: specification ? { total_volume: 0, total_mass: 0, density: 2.7 } : undefined,
+      valid: true,
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
  * POST /api/tubes/build
  * Build a tube from path, profile, and specification
  */

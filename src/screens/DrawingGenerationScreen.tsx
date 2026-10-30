@@ -209,7 +209,7 @@ export const DrawingGenerationScreen: React.FC<DrawingGenerationScreenProps> = (
       {/* Status Bar */}
       <StatusBar
         message={statusMessage}
-        mode="Drawing"
+        mode="design"
         progress={isExporting ? exportProgress : undefined}
       />
     </div>

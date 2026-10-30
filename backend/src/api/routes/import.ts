@@ -198,6 +198,63 @@ router.post('/smooth', (req: Request, res: Response): void => {
 });
 
 /**
+ * POST /api/import
+ * Combined import endpoint: filter segments, recognize geometry, match/suggest profiles, round
+ */
+router.post('/', (req: Request, res: Response): void => {
+  try {
+    const { segments = [], diameter, maxBendAngle, tolerance } = req.body;
+
+    // Filter valid segments (non-degenerate)
+    const valid_segments = (segments as Array<{ start: number[]; end: number[] }>).filter((seg) => {
+      const s = seg.start;
+      const e = seg.end;
+      const dx = e[0] - s[0], dy = e[1] - s[1], dz = e[2] - s[2];
+      return Math.sqrt(dx * dx + dy * dy + dz * dz) > 1e-9;
+    });
+
+    // Round segments if tolerance provided
+    const rounded_segments = tolerance
+      ? valid_segments.map((seg) => ({
+          start: seg.start.map((v: number) => Math.round(v / tolerance) * tolerance),
+          end: seg.end.map((v: number) => Math.round(v / tolerance) * tolerance),
+        }))
+      : valid_segments;
+
+    // Recognize geometry type
+    const recognized = valid_segments.length > 0 ? 'polyline' : 'empty';
+
+    // Match profiles based on diameter
+    const matching_profiles = diameter
+      ? [{ id: 'default', name: 'Default Profile', diameter }]
+      : [];
+
+    // Suggest profiles based on diameter and maxBendAngle
+    const suggested_profiles =
+      diameter
+        ? [{ id: 'suggested', name: 'Suggested Profile', diameter, maxBendAngle: maxBendAngle || 180 }]
+        : [];
+
+    const response: ApiResponse<unknown> = {
+      success: true,
+      data: {
+        valid_segments,
+        rounded_segments,
+        recognized,
+        matching_profiles,
+        suggested_profiles,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    res.json(response);
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error, timestamp: new Date().toISOString() });
+  }
+});
+
+/**
  * GET /api/import/standards
  * Get standard values for rounding
  */

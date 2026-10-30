@@ -7,6 +7,9 @@
 
 import request from 'supertest';
 import express, { Express } from 'express';
+import profileRoutes from '../../src/api/routes/profiles';
+import tubeRoutes from '../../src/api/routes/tubes';
+import sketchRoutes from '../../src/api/routes/sketches';
 
 describe('BendCore API Performance Tests', () => {
   let app: Express;
@@ -14,7 +17,9 @@ describe('BendCore API Performance Tests', () => {
   beforeAll(() => {
     app = express();
     app.use(express.json());
-    // Routes would be set up here
+    app.use('/api/profiles', profileRoutes);
+    app.use('/api/tubes', tubeRoutes);
+    app.use('/api/sketches', sketchRoutes);
   });
 
   describe('Response Time Benchmarks (< 200ms acceptance)', () => {

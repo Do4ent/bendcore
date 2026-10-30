@@ -5,10 +5,12 @@ import {
   PropertiesPanel,
   StatusBar,
   ContextMenu,
-  type RibbonTab,
   type TreeNode,
   type PropertyField,
+  type PropertyValue,
 } from '../ui/components';
+
+type WorkspacePropertyData = Omit<PropertyField, 'onChange'>;
 import './WorkspaceScreen.css';
 
 interface WorkspaceScreenProps {
@@ -23,7 +25,7 @@ interface Coordinates {
 
 export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) => {
   // State
-  const [activeRibbonTab, setActiveRibbonTab] = useState<RibbonTab>('file');
+  const [activeRibbonTab, setActiveRibbonTab] = useState<string>('file');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [coordinates, setCoordinates] = useState<Coordinates>({ x: 0, y: 0, z: 0 });
@@ -110,13 +112,13 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
   ]);
 
   // Properties for selected node
-  const [propertyFields, setPropertyFields] = useState<PropertyField[]>([
+  const [propertyFields, setPropertyFields] = useState<WorkspacePropertyData[]>([
     {
       id: 'name',
       label: 'Name',
       type: 'text',
       value: 'Tube_1',
-      section: 'Basic',
+      category: 'Basic',
     },
     {
       id: 'type',
@@ -128,7 +130,7 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
         { label: 'Tube', value: 'tube' },
         { label: 'Wire', value: 'wire' },
       ],
-      section: 'Basic',
+      category: 'Basic',
     },
     {
       id: 'od',
@@ -137,7 +139,7 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
       value: 25.4,
       min: 1,
       max: 500,
-      section: 'Dimensions',
+      category: 'Dimensions',
     },
     {
       id: 'wall',
@@ -146,7 +148,7 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
       value: 2.0,
       min: 0.1,
       max: 10,
-      section: 'Dimensions',
+      category: 'Dimensions',
     },
     {
       id: 'length',
@@ -155,7 +157,7 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
       value: 500.0,
       min: 10,
       max: 5000,
-      section: 'Dimensions',
+      category: 'Dimensions',
     },
     {
       id: 'material',
@@ -168,14 +170,14 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
         { label: 'Copper', value: 'copper' },
         { label: 'Stainless Steel', value: 'stainless' },
       ],
-      section: 'Material',
+      category: 'Material',
     },
     {
       id: 'color',
       label: 'Color',
       type: 'color',
       value: '#c0c0c0',
-      section: 'Appearance',
+      category: 'Appearance',
     },
   ]);
 
@@ -228,7 +230,7 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
     setStatusMessage(`Deleted: ${nodeId}`);
   }, []);
 
-  const handlePropertyChange = useCallback((fieldId: string, value: any) => {
+  const handlePropertyChange = useCallback((fieldId: string, value: PropertyValue) => {
     setPropertyFields((prevFields) =>
       prevFields.map((field) =>
         field.id === fieldId ? { ...field, value } : field
@@ -315,10 +317,10 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
         {/* Right Panel: Properties */}
         <div className="workspace-right">
           <PropertiesPanel
-            title={selectedNodeId || 'Properties'}
-            fields={propertyFields}
-            onPropertyChange={handlePropertyChange}
-            onReset={() => setStatusMessage('Reset to defaults')}
+            properties={propertyFields.map((f) => ({
+              ...f,
+              onChange: (v: PropertyValue) => handlePropertyChange(f.id, v),
+            }))}
           />
         </div>
       </div>
@@ -327,7 +329,7 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
       <StatusBar
         message={statusMessage}
         coordinates={coordinates}
-        mode="Design"
+        mode="design"
         progress={undefined}
       />
 
