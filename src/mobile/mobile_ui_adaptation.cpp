@@ -64,11 +64,18 @@ bool MobileUIAdapter::registerBreakpoint(const ResponsiveLayoutConfig& config) {
 }
 
 ResponsiveLayoutConfig MobileUIAdapter::getBreakpointForWidth(int32_t width) const {
+    const ResponsiveLayoutConfig* best = nullptr;
+    int32_t bestRange = INT32_MAX;
     for (const auto& bp : breakpoints) {
         if (width >= bp.minWidth && width <= bp.maxWidth) {
-            return bp;
+            int32_t range = bp.maxWidth - bp.minWidth;
+            if (range < bestRange) {
+                bestRange = range;
+                best = &bp;
+            }
         }
     }
+    if (best) return *best;
     return breakpoints.back();
 }
 

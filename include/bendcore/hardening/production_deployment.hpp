@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-#include <map>
+#include <functional>
 #include <cstdint>
 
 namespace bendcore::hardening {
@@ -10,143 +10,147 @@ namespace bendcore::hardening {
 // ==============================================================================
 // PRODUCTION DEPLOYMENT - GAP-093
 // ==============================================================================
-// Deployment automation, rollback procedures, hotfixes, release management
 
 enum class DeploymentStatus {
     PENDING,
     IN_PROGRESS,
-    COMPLETED,
+    SUCCEEDED,
     FAILED,
     ROLLED_BACK
 };
 
-enum class ReleaseType {
-    MAJOR,
-    MINOR,
-    PATCH,
-    HOTFIX,
-    BETA
+enum class EnvironmentType {
+    DEVELOPMENT,
+    STAGING,
+    PRODUCTION
 };
 
 struct DeploymentConfig {
+    std::string app_name;
     std::string version;
-    ReleaseType releaseType;
-    std::string targetEnvironment;  // "staging", "production"
-    bool autoRollback;
-    int32_t healthCheckIntervalSeconds;
-    int32_t rollbackThreshold;
+    EnvironmentType environment;
+    bool auto_rollback = true;
 };
 
-struct Deployment {
-    std::string deploymentId;
-    std::string version;
-    DeploymentStatus status;
-    int64_t startTime;
-    int64_t endTime;
-    std::string deployedBy;
-    std::string targetEnvironment;
-    bool isRolledBack;
-    std::string rollbackReason;
+struct CanaryHealth {
+    double health_percentage;
+    int error_rate;
+    bool is_healthy;
 };
 
-struct Hotfix {
-    std::string hotfixId;
-    std::string version;
-    std::string description;
-    std::vector<std::string> affectedComponents;
-    int64_t createdAt;
-    bool isApplied;
+struct HealthResult {
+    bool is_healthy;
+    double health_percentage;
+    std::vector<std::string> failed_checks;
 };
 
-class ProductionDeploymentManager {
+struct DeploymentMetrics {
+    double deployment_time_seconds;
+    int services_updated;
+    bool zero_downtime;
+};
+
+class DeploymentOrchestrator {
 public:
-    ProductionDeploymentManager();
-    ~ProductionDeploymentManager();
-
-    // Deployment management
-    bool createDeployment(const DeploymentConfig& config, std::string& outDeploymentId);
-    bool executeDeployment(const std::string& deploymentId);
-    bool cancelDeployment(const std::string& deploymentId);
-    DeploymentStatus getDeploymentStatus(const std::string& deploymentId);
-
-    // Pre-deployment checks
-    bool performPreDeploymentValidation(const std::string& version);
-    bool checkDependencies(const std::string& version);
-    bool validateDeploymentPackage(const std::string& packagePath);
-    bool runSmokeTests();
-
-    // Deployment execution
-    bool deployToStaging(const std::string& version);
-    bool deployToProduction(const std::string& version);
-    bool deployWithCanaryRelease(const std::string& version, float canaryPercentage);
-    bool deployWithBlueGreenStrategy(const std::string& version);
-
-    // Health checks
-    bool runHealthCheck();
-    bool waitForHealthy(int32_t timeoutSeconds);
-    bool isApplicationHealthy() const;
-    std::vector<std::string> getHealthIssues();
-
-    // Rollback procedures
-    bool createRollbackPoint(const std::string& deploymentId);
-    bool rollback(const std::string& deploymentId);
-    bool rollbackToVersion(const std::string& version);
-    bool automatedRollback();
-    bool hasRollbackPoint(const std::string& deploymentId) const;
-
-    // Hotfix management
-    bool createHotfix(const std::string& version, const std::string& description, Hotfix& outHotfix);
-    bool applyHotfix(const std::string& hotfixId);
-    bool removeHotfix(const std::string& hotfixId);
-    std::vector<Hotfix> getPendingHotfixes();
-    std::vector<Hotfix> getAppliedHotfixes();
-
-    // Version management
-    bool setCurrentVersion(const std::string& version);
-    std::string getCurrentVersion() const;
-    std::vector<std::string> getAvailableVersions();
-    std::vector<std::string> getReleaseHistory();
-
-    // Deployment monitoring
-    std::vector<Deployment> getDeploymentHistory();
-    Deployment getDeployment(const std::string& deploymentId);
-    int32_t getSuccessfulDeploymentCount() const;
-    float getDeploymentSuccessRate() const;
-
-    // Configuration management
-    bool backupConfiguration();
-    bool restoreConfiguration(int64_t timestamp);
-    bool validateConfiguration();
-    bool synchronizeConfiguration();
-
-    // Release management
-    bool scheduleRelease(const std::string& version, int64_t releaseTime);
-    bool cancelRelease(const std::string& version);
-    bool isReleaseScheduled(const std::string& version) const;
-    std::vector<std::string> getScheduledReleases();
-
-    // Database migration
-    bool executeDatabaseMigration(const std::string& version);
-    bool validateDatabaseConsistency();
-    bool rollbackDatabaseMigration(const std::string& version);
-
-    // Feature flags
-    bool enableFeatureFlag(const std::string& featureName);
-    bool disableFeatureFlag(const std::string& featureName);
-    bool isFeatureFlagEnabled(const std::string& featureName) const;
-    std::vector<std::string> getActiveFeatureFlags();
-
-    // Deployment reporting
-    std::string generateDeploymentReport();
-    std::string generateReleaseNotes(const std::string& version);
-    bool exportDeploymentMetrics(const std::string& outputPath);
-
+    DeploymentOrchestrator();
+    void configure(const DeploymentConfig& config);
+    const DeploymentConfig& getConfig() const;
+    bool canDeploy() const;
+    DeploymentStatus getStatus() const;
+    bool deploy();
 private:
-    std::map<std::string, Deployment> deployments;
-    std::vector<Hotfix> hotfixes;
-    std::string currentVersion;
-    std::map<std::string, std::string> rollbackPoints;
-    std::map<std::string, bool> featureFlags;
+    DeploymentConfig config_;
+    DeploymentStatus status_;
+    bool configured_;
+};
+
+class BlueGreenDeployment {
+public:
+    BlueGreenDeployment();
+    void setupBlueEnvironment();
+    void setupGreenEnvironment();
+    std::string getActiveEnvironment() const;
+    bool deployToGreen();
+    bool validateGreen();
+    bool switchToGreen();
+    bool rollbackToBlue();
+private:
+    std::string active_env_;
+    bool blue_ready_;
+    bool green_ready_;
+    bool green_valid_;
+};
+
+class CanaryDeployment {
+public:
+    CanaryDeployment();
+    void setCanaryPercentage(int pct);
+    int getCanaryPercentage() const;
+    bool deployCanary(const std::string& version);
+    bool monitorCanary(int seconds);
+    CanaryHealth getCanaryHealth() const;
+    bool promoteCanaryToProduction();
+    bool rollbackCanary();
+private:
+    int canary_percentage_;
+    std::string canary_version_;
+    bool deployed_;
+};
+
+class RollbackManager {
+public:
+    RollbackManager();
+    void createCheckpoint(const std::string& version);
+    std::vector<std::string> getAvailableCheckpoints() const;
+    bool rollbackToCheckpoint(const std::string& version);
+    int getRollbackCount() const;
+private:
+    std::vector<std::string> checkpoints_;
+    int rollback_count_;
+};
+
+class HealthCheckManager {
+public:
+    HealthCheckManager();
+    void registerHealthCheck(const std::string& name, std::function<bool()> check);
+    HealthResult runAllChecks();
+    bool isSystemHealthy() const;
+private:
+    std::vector<std::pair<std::string, std::function<bool()>>> checks_;
+    bool last_healthy_;
+};
+
+class DeploymentAutomation {
+public:
+    DeploymentAutomation();
+    bool validatePrerequisites();
+    bool prepareDeployment();
+    bool executeDeployment();
+    bool verifyDeployment();
+};
+
+class DeploymentLogger {
+public:
+    DeploymentLogger();
+    void logDeploymentStart(const std::string& version);
+    void logDeploymentProgress(const std::string& message);
+    void logDeploymentSuccess(const DeploymentMetrics& metrics);
+    void logDeploymentFailure(const std::string& reason);
+    std::vector<std::string> getDeploymentLog() const;
+private:
+    std::vector<std::string> log_;
+};
+
+class DeploymentValidator {
+public:
+    DeploymentValidator();
+    bool validatePackage(const std::string& package_path);
+    bool validateDependencies();
+    bool validateConfiguration();
 };
 
 }  // namespace bendcore::hardening
+
+namespace bendcore {
+    namespace production = hardening;
+}

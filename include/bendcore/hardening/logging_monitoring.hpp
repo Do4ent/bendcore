@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <memory>
+#include <functional>
 #include <cstdint>
 
 namespace bendcore::hardening {
@@ -10,7 +12,6 @@ namespace bendcore::hardening {
 // ==============================================================================
 // LOGGING & MONITORING - GAP-090
 // ==============================================================================
-// Comprehensive logging system, real-time monitoring, alerting, metrics
 
 enum class LogLevel {
     TRACE,
@@ -21,114 +22,104 @@ enum class LogLevel {
     CRITICAL
 };
 
-enum class MetricType {
-    COUNTER,
-    GAUGE,
-    HISTOGRAM,
-    TIMER
+enum class LogSource {
+    CORE,
+    IO,
+    GEOMETRY,
+    NETWORK,
+    UI,
+    PLUGIN
 };
 
 struct LogEntry {
-    std::string logId;
+    uint64_t id;
     LogLevel level;
+    LogSource source;
+    std::string message;
     std::string component;
-    std::string message;
     int64_t timestamp;
-    std::string threadId;
-    std::map<std::string, std::string> contextData;
+    int sequence;
+    std::string extra;
 };
 
-struct Metric {
-    std::string metricId;
-    std::string metricName;
-    MetricType type;
-    double value;
-    int64_t timestamp;
-    std::map<std::string, std::string> tags;
-};
-
-struct Alert {
-    std::string alertId;
-    std::string condition;
-    std::string message;
-    LogLevel severity;
-    int64_t triggeredAt;
-    bool acknowledged;
-};
-
-class LoggingMonitoringSystem {
+class ILogFormatter {
 public:
-    LoggingMonitoringSystem();
-    ~LoggingMonitoringSystem();
+    virtual ~ILogFormatter() = default;
+    virtual std::string format(const LogEntry& entry) = 0;
+};
 
-    // Logging
-    bool log(LogLevel level, const std::string& component, const std::string& message);
-    bool logWithContext(const LogEntry& entry);
-    std::vector<LogEntry> getLogEntries();
-    std::vector<LogEntry> getLogsByLevel(LogLevel level);
-    std::vector<LogEntry> getLogsByComponent(const std::string& component);
-    std::vector<LogEntry> getLogsByTimeRange(int64_t startTime, int64_t endTime);
+class SimpleFormatter : public ILogFormatter {
+public:
+    std::string format(const LogEntry& entry) override;
+};
 
-    // Log configuration
-    void setMinimumLogLevel(LogLevel level);
-    LogLevel getMinimumLogLevel() const;
-    bool enableComponentLogging(const std::string& component, bool enable);
-    bool isComponentLoggingEnabled(const std::string& component) const;
+class JSONFormatter : public ILogFormatter {
+public:
+    std::string format(const LogEntry& entry) override;
+};
 
-    // Metric recording
-    bool recordMetric(const Metric& metric);
-    bool incrementCounter(const std::string& metricName, double delta);
-    bool setGaugeValue(const std::string& metricName, double value);
-    bool recordHistogram(const std::string& metricName, double value);
-    bool recordTimer(const std::string& metricName, int64_t durationMs);
-
-    // Metric retrieval
-    std::vector<Metric> getMetrics();
-    Metric getMetric(const std::string& metricName);
-    std::vector<Metric> getMetricsByType(MetricType type);
-    std::vector<Metric> getMetricsByTimeRange(int64_t startTime, int64_t endTime);
-
-    // Alert management
-    bool registerAlert(const std::string& condition, const std::string& message, LogLevel severity);
-    bool triggerAlert(const Alert& alert);
-    std::vector<Alert> getActiveAlerts();
-    std::vector<Alert> getAllAlerts();
-    bool acknowledgeAlert(const std::string& alertId);
-
-    // Real-time monitoring
-    bool enableRealTimeMonitoring(bool enable);
-    bool isRealTimeMonitoringEnabled() const;
-    std::vector<LogEntry> getRecentLogs(int32_t count);
-    std::vector<Metric> getRecentMetrics(int32_t count);
-
-    // Performance monitoring
-    float getCpuUsagePercentage();
-    float getMemoryUsagePercentage();
-    int32_t getThreadCount();
-    float getAverageResponseTime();
-
-    // Log export
-    bool exportLogs(const std::string& outputPath);
-    bool exportMetrics(const std::string& outputPath);
-    std::string generatePerformanceReport();
-
-    // Log analysis
-    std::vector<std::string> getErrorTrends();
-    std::map<std::string, int32_t> getErrorFrequency();
-    float getErrorRate();
-
-    // Retention policies
-    bool setLogRetentionPolicy(int32_t maxAgeDays);
-    bool enforceRetention();
-    bool archiveOldLogs();
-
+class StructuredLogger {
+public:
+    StructuredLogger();
+    void setLogLevel(LogLevel level);
+    void trace(const std::string& msg, const std::string& component = "");
+    void debug(const std::string& msg, const std::string& component = "");
+    void info(const std::string& msg, const std::string& component = "");
+    void warning(const std::string& msg, const std::string& component = "");
+    void error(const std::string& msg, const std::string& component = "");
+    void critical(const std::string& msg, const std::string& component = "");
+    int getLogCount() const;
+    const LogEntry* getLogEntry(int n) const;  // 1-based
+    const std::vector<LogEntry>& getLogHistory() const;
+    void setFormatter(std::unique_ptr<ILogFormatter> formatter);
 private:
-    std::vector<LogEntry> logs;
-    std::vector<Metric> metrics;
-    std::vector<Alert> alerts;
-    LogLevel minimumLogLevel;
-    bool realTimeMonitoringEnabled;
-    std::map<std::string, bool> componentLoggingStatus;
+    void addEntry(LogLevel level, const std::string& msg, const std::string& component);
+    LogLevel min_level_;
+    std::vector<LogEntry> logs_;
+    std::unique_ptr<ILogFormatter> formatter_;
+    uint64_t next_id_;
+};
+
+class MetricsAggregator {
+public:
+    MetricsAggregator();
+    void recordMetric(const std::string& name, double value);
+    std::map<std::string, std::vector<double>> getAllMetrics() const;
+    double getMetricAverage(const std::string& name) const;
+    double getMetricMax(const std::string& name) const;
+    double getMetricMin(const std::string& name) const;
+    void incrementCounter(const std::string& name, int64_t delta = 1);
+    int64_t getCounter(const std::string& name) const;
+private:
+    std::map<std::string, std::vector<double>> metrics_;
+    std::map<std::string, int64_t> counters_;
+};
+
+class LogAggregator {
+public:
+    LogAggregator();
+    void addLog(const LogEntry& entry);
+    std::vector<LogEntry> getLogsByLevel(LogLevel level) const;
+    int getLogCountByLevel(LogLevel level) const;
+    std::vector<LogEntry> getLogsBySource(LogSource source) const;
+private:
+    std::vector<LogEntry> logs_;
+};
+
+class MonitoringSystem {
+public:
+    MonitoringSystem();
+    void startMonitoring();
+    void stopMonitoring();
+    bool isMonitoring() const;
+    StructuredLogger& getLogger();
+private:
+    bool monitoring_;
+    StructuredLogger logger_;
 };
 
 }  // namespace bendcore::hardening
+
+namespace bendcore {
+    namespace production = hardening;
+}

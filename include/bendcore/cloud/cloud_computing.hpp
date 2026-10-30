@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <ostream>
 
 namespace bendcore::cloud {
 
@@ -39,6 +40,17 @@ struct ResourceAllocation {
 
     ResourceAllocation() : cpu_cores(1), memory_gb(1), gpu_count(0) {}
 };
+
+inline std::ostream& operator<<(std::ostream& os, JobStatus s) {
+    switch (s) {
+        case JobStatus::PENDING:   return os << "PENDING";
+        case JobStatus::RUNNING:   return os << "RUNNING";
+        case JobStatus::COMPLETED: return os << "COMPLETED";
+        case JobStatus::FAILED:    return os << "FAILED";
+        case JobStatus::CANCELLED: return os << "CANCELLED";
+        default:                   return os << "UNKNOWN";
+    }
+}
 
 class CloudComputing {
 public:

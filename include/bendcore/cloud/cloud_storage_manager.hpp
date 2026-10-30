@@ -54,11 +54,11 @@ struct BackupInfo {
     bool isRestored = false;
 };
 
-// Cloud storage manager
-class CloudStorageManager {
+// Cloud storage manager (project-level; distinct from ICloudStorage-based CloudStorageManager)
+class ProjectCloudStorageManager {
 public:
-    explicit CloudStorageManager(StorageType type = StorageType::Hybrid);
-    ~CloudStorageManager();
+    explicit ProjectCloudStorageManager(StorageType type = StorageType::Hybrid);
+    ~ProjectCloudStorageManager();
 
     // Project operations
     bool uploadProject(
@@ -150,7 +150,7 @@ public:
     StorageInfo getStorageInfo(const std::string& owner) const;
 
 private:
-    StorageType storageType;
+    StorageType storageType;  // NOLINT
     std::vector<ProjectMetadata> projects;
     std::vector<VersionInfo> versions;
     std::vector<BackupInfo> backups;

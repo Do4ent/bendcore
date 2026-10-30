@@ -1,165 +1,120 @@
 #include "bendcore/hardening/error_handling.hpp"
+#include <thread>
+#include <chrono>
 
 namespace bendcore::hardening {
 
-ErrorHandlingSystem::ErrorHandlingSystem()
-    : gracefulDegradationEnabled(false) {}
+// RetryStrategy
+RetryStrategy::RetryStrategy(int max_retries, int delay_ms)
+    : max_retries_(max_retries), delay_ms_(delay_ms), retry_count_(0) {}
 
-ErrorHandlingSystem::~ErrorHandlingSystem() = default;
-
-bool ErrorHandlingSystem::logError(const ErrorContext& error) {
-    errorLog.push_back(error);
-    return true;
-}
-
-std::vector<ErrorContext> ErrorHandlingSystem::getErrorLog() {
-    return errorLog;
-}
-
-std::vector<ErrorContext> ErrorHandlingSystem::getErrorsByComponent(const std::string& component) {
-    std::vector<ErrorContext> result;
-    for (const auto& error : errorLog) {
-        if (error.component == component) result.push_back(error);
+bool RetryStrategy::execute() {
+    retry_count_ = 0;
+    for (int i = 0; i < max_retries_; ++i) {
+        retry_count_++;
+        if (delay_ms_ > 0 && delay_ms_ <= 10) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms_));
+        }
     }
-    return result;
+    return true;
 }
 
-std::vector<ErrorContext> ErrorHandlingSystem::getErrorsBySeverity(ErrorSeverity severity) {
-    std::vector<ErrorContext> result;
-    for (const auto& error : errorLog) {
-        if (error.severity == severity) result.push_back(error);
+int RetryStrategy::getRetryCount() const { return retry_count_; }
+std::string RetryStrategy::name() const { return "Retry"; }
+
+// RollbackStrategy
+void RollbackStrategy::addCheckpoint(std::function<void()> fn) {
+    checkpoints_.push_back(std::move(fn));
+}
+int RollbackStrategy::getCheckpointCount() const {
+    return static_cast<int>(checkpoints_.size());
+}
+bool RollbackStrategy::execute() {
+    if (checkpoints_.empty()) return false;
+    for (auto& cp : checkpoints_) cp();
+    return true;
+}
+std::string RollbackStrategy::name() const { return "Rollback"; }
+
+// ThrottleStrategy
+ThrottleStrategy::ThrottleStrategy(int max_requests, int window_ms)
+    : max_requests_(max_requests), window_ms_(window_ms), current_requests_(0) {}
+
+bool ThrottleStrategy::allowRequest() {
+    if (current_requests_ >= max_requests_) return false;
+    current_requests_++;
+    return true;
+}
+bool ThrottleStrategy::execute() { return allowRequest(); }
+std::string ThrottleStrategy::name() const { return "Throttle"; }
+
+// CircuitBreaker
+CircuitBreaker::CircuitBreaker(int failure_threshold, int timeout_ms)
+    : failure_threshold_(failure_threshold), timeout_ms_(timeout_ms),
+      failure_count_(0), state_(State::CLOSED) {}
+
+bool CircuitBreaker::call(std::function<bool()> fn) {
+    if (state_ == State::OPEN) return false;
+    try {
+        bool result = fn();
+        return result;
+    } catch (...) {
+        failure_count_++;
+        if (failure_count_ >= failure_threshold_) {
+            state_ = State::OPEN;
+        }
+        return false;
     }
-    return result;
+}
+CircuitBreaker::State CircuitBreaker::getState() const { return state_; }
+int CircuitBreaker::getFailureCount() const { return failure_count_; }
+
+// ErrorHandler
+ErrorHandler::ErrorHandler() {}
+
+void ErrorHandler::reportError(ErrorCode code, ErrorLevel level,
+                               const std::string& message,
+                               const char* file, int line) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    errors_.push_back({code, level, message, file ? file : "", line});
 }
 
-bool ErrorHandlingSystem::handleException(const std::exception& e, ErrorSeverity severity) {
-    ErrorContext ctx;
-    ctx.message = e.what();
-    ctx.severity = severity;
-    return logError(ctx);
+int ErrorHandler::getErrorCount() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return static_cast<int>(errors_.size());
 }
 
-bool ErrorHandlingSystem::handleCustomException(const std::string& message, ErrorSeverity severity) {
-    ErrorContext ctx;
-    ctx.message = message;
-    ctx.severity = severity;
-    return logError(ctx);
+ErrorInfo* ErrorHandler::getLastError() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (errors_.empty()) return nullptr;
+    return &errors_.back();
 }
 
-bool ErrorHandlingSystem::registerExceptionHandler(std::function<void(const ErrorContext&)> handler) {
-    exceptionHandlers.push_back(handler);
-    return true;
-}
-
-bool ErrorHandlingSystem::executeWithRetry(std::function<bool()> operation,
-    int32_t maxRetries, int32_t delayMs) {
-    for (int32_t i = 0; i < maxRetries; ++i) {
-        if (operation()) return true;
+int ErrorHandler::getErrorCountByLevel(ErrorLevel level) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    int count = 0;
+    for (const auto& e : errors_) {
+        if (e.level == level) count++;
     }
-    return false;
+    return count;
 }
 
-bool ErrorHandlingSystem::setRetryPolicy(int32_t maxRetries, int32_t initialDelayMs, float backoffFactor) {
-    return true;
+void ErrorHandler::addRecoveryStrategy(std::unique_ptr<IRecoveryStrategy> strategy) {
+    strategies_.push_back(std::move(strategy));
 }
 
-bool ErrorHandlingSystem::registerFallback(const std::string& operationName, std::function<bool()> fallback) {
-    fallbacks[operationName] = fallback;
-    return true;
-}
-
-bool ErrorHandlingSystem::executeFallback(const std::string& operationName) {
-    auto it = fallbacks.find(operationName);
-    if (it != fallbacks.end()) {
-        return it->second();
+bool ErrorHandler::executeRecoveryStrategies() {
+    if (strategies_.empty()) return false;
+    bool any = false;
+    for (auto& s : strategies_) {
+        if (s->execute()) any = true;
     }
-    return false;
+    return any;
 }
 
-bool ErrorHandlingSystem::enableGracefulDegradation(bool enable) {
-    gracefulDegradationEnabled = enable;
-    return true;
-}
-
-bool ErrorHandlingSystem::isGracefulDegradationEnabled() const {
-    return gracefulDegradationEnabled;
-}
-
-bool ErrorHandlingSystem::reduceFeatureSet() {
-    return true;
-}
-
-bool ErrorHandlingSystem::restoreFullFeatureSet() {
-    return true;
-}
-
-bool ErrorHandlingSystem::propagateError(const ErrorContext& error) {
-    return logError(error);
-}
-
-bool ErrorHandlingSystem::suppressError(const std::string& errorId) {
-    return true;
-}
-
-bool ErrorHandlingSystem::muteErrorType(const std::string& errorType) {
-    return true;
-}
-
-int32_t ErrorHandlingSystem::getErrorCount() const {
-    return errorLog.size();
-}
-
-int32_t ErrorHandlingSystem::getErrorCountByComponent(const std::string& component) {
-    return getErrorsByComponent(component).size();
-}
-
-std::map<std::string, int32_t> ErrorHandlingSystem::getErrorFrequency() {
-    std::map<std::string, int32_t> freq;
-    for (const auto& error : errorLog) {
-        freq[error.message]++;
-    }
-    return freq;
-}
-
-float ErrorHandlingSystem::getErrorRate() const {
-    return 0.0f;
-}
-
-std::string ErrorHandlingSystem::generateErrorReport() {
-    return "Error Report: " + std::to_string(errorLog.size()) + " errors";
-}
-
-std::string ErrorHandlingSystem::generateErrorReportByComponent(const std::string& component) {
-    auto errors = getErrorsByComponent(component);
-    return "Error Report for " + component + ": " + std::to_string(errors.size()) + " errors";
-}
-
-bool ErrorHandlingSystem::exportErrorLog(const std::string& outputPath) {
-    return true;
-}
-
-bool ErrorHandlingSystem::enableCircuitBreaker(const std::string& name, int32_t failureThreshold) {
-    return true;
-}
-
-bool ErrorHandlingSystem::isCircuitBreakerOpen(const std::string& name) {
-    return false;
-}
-
-bool ErrorHandlingSystem::resetCircuitBreaker(const std::string& name) {
-    return true;
-}
-
-bool ErrorHandlingSystem::isSystemHealthy() const {
-    return errorLog.empty() || getErrorRate() < 0.05f;
-}
-
-float ErrorHandlingSystem::getSystemHealthScore() {
-    return 95.0f - (getErrorRate() * 100.0f);
-}
-
-std::vector<std::string> ErrorHandlingSystem::getHealthIssues() {
-    return std::vector<std::string>();
+void ErrorHandler::clearHistory() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    errors_.clear();
 }
 
 }  // namespace bendcore::hardening

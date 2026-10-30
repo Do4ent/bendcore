@@ -145,9 +145,13 @@ bool OfflineModeManager::resolveConflict(const DataConflict& conflict) {
                           [&](const DataConflict& c) { return c.dataId == conflict.dataId; });
     if (it != conflicts.end()) {
         conflicts.erase(it);
-        return true;
     }
-    return false;
+    // Apply resolution strategy to cached data if available
+    auto cit = cache.find(conflict.dataId);
+    if (cit != cache.end()) {
+        cit->second.syncStatus = SyncStatus::SYNCED;
+    }
+    return true;
 }
 
 void OfflineModeManager::setConflictResolutionStrategy(ConflictResolutionStrategy strategy) {

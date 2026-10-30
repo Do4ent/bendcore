@@ -148,7 +148,7 @@ int BackupManager::GetBackupCount() const {
 std::string BackupManager::GenerateBackupId() const {
     auto now = std::time(nullptr);
     std::stringstream ss;
-    ss << "backup_" << std::hex << now;
+    ss << "backup_" << std::hex << now << "_" << ++id_counter_;
     return ss.str();
 }
 

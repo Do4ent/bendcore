@@ -27,6 +27,7 @@ struct SyncChange {
     time_t timestamp;
     std::string hash;
 
+    SyncChange() : timestamp(0) {}
     SyncChange(const std::string& p, const std::string& t, time_t ts, const std::string& h)
         : path(p), type(t), timestamp(ts), hash(h) {}
 };

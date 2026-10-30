@@ -1,78 +1,162 @@
 #include "bendcore/hardening/logging_monitoring.hpp"
+#include <sstream>
+#include <numeric>
+#include <algorithm>
 
 namespace bendcore::hardening {
 
-LoggingMonitoringSystem::LoggingMonitoringSystem()
-    : minimumLogLevel(LogLevel::INFO), realTimeMonitoringEnabled(false) {}
-
-LoggingMonitoringSystem::~LoggingMonitoringSystem() = default;
-
-bool LoggingMonitoringSystem::log(LogLevel level, const std::string& component, const std::string& message) {
-    LogEntry entry;
-    entry.level = level;
-    entry.component = component;
-    entry.message = message;
-    logs.push_back(entry);
-    return true;
+// SimpleFormatter
+std::string SimpleFormatter::format(const LogEntry& entry) {
+    std::ostringstream oss;
+    oss << "[" << entry.component << "] " << entry.message;
+    return oss.str();
 }
 
-bool LoggingMonitoringSystem::logWithContext(const LogEntry& entry) { logs.push_back(entry); return true; }
-std::vector<LogEntry> LoggingMonitoringSystem::getLogEntries() { return logs; }
-std::vector<LogEntry> LoggingMonitoringSystem::getLogsByLevel(LogLevel level) { 
+// JSONFormatter
+std::string JSONFormatter::format(const LogEntry& entry) {
+    std::ostringstream oss;
+    oss << "{\"message\":\"" << entry.message
+        << "\",\"component\":\"" << entry.component << "\"}";
+    return oss.str();
+}
+
+// StructuredLogger
+StructuredLogger::StructuredLogger()
+    : min_level_(LogLevel::TRACE), next_id_(1),
+      formatter_(std::make_unique<SimpleFormatter>()) {}
+
+void StructuredLogger::setLogLevel(LogLevel level) { min_level_ = level; }
+
+void StructuredLogger::addEntry(LogLevel level, const std::string& msg,
+                                 const std::string& component) {
+    if (level < min_level_) return;
+    LogEntry e;
+    e.id = next_id_++;
+    e.level = level;
+    e.source = LogSource::CORE;
+    e.message = msg;
+    e.component = component;
+    e.timestamp = 0;
+    e.sequence = static_cast<int>(logs_.size()) + 1;
+    e.extra = "";
+    logs_.push_back(e);
+}
+
+void StructuredLogger::trace(const std::string& msg, const std::string& comp) {
+    addEntry(LogLevel::TRACE, msg, comp);
+}
+void StructuredLogger::debug(const std::string& msg, const std::string& comp) {
+    addEntry(LogLevel::DEBUG, msg, comp);
+}
+void StructuredLogger::info(const std::string& msg, const std::string& comp) {
+    addEntry(LogLevel::INFO, msg, comp);
+}
+void StructuredLogger::warning(const std::string& msg, const std::string& comp) {
+    addEntry(LogLevel::WARNING, msg, comp);
+}
+void StructuredLogger::error(const std::string& msg, const std::string& comp) {
+    addEntry(LogLevel::ERROR, msg, comp);
+}
+void StructuredLogger::critical(const std::string& msg, const std::string& comp) {
+    addEntry(LogLevel::CRITICAL, msg, comp);
+}
+
+int StructuredLogger::getLogCount() const {
+    return static_cast<int>(logs_.size());
+}
+
+const LogEntry* StructuredLogger::getLogEntry(int n) const {
+    // 1-based
+    if (n < 1 || n > static_cast<int>(logs_.size())) return nullptr;
+    return &logs_[n - 1];
+}
+
+const std::vector<LogEntry>& StructuredLogger::getLogHistory() const {
+    return logs_;
+}
+
+void StructuredLogger::setFormatter(std::unique_ptr<ILogFormatter> formatter) {
+    formatter_ = std::move(formatter);
+}
+
+// MetricsAggregator
+MetricsAggregator::MetricsAggregator() {}
+
+void MetricsAggregator::recordMetric(const std::string& name, double value) {
+    metrics_[name].push_back(value);
+}
+
+std::map<std::string, std::vector<double>> MetricsAggregator::getAllMetrics() const {
+    return metrics_;
+}
+
+double MetricsAggregator::getMetricAverage(const std::string& name) const {
+    auto it = metrics_.find(name);
+    if (it == metrics_.end() || it->second.empty()) return 0.0;
+    double sum = 0.0;
+    for (double v : it->second) sum += v;
+    return sum / static_cast<double>(it->second.size());
+}
+
+double MetricsAggregator::getMetricMax(const std::string& name) const {
+    auto it = metrics_.find(name);
+    if (it == metrics_.end() || it->second.empty()) return 0.0;
+    return *std::max_element(it->second.begin(), it->second.end());
+}
+
+double MetricsAggregator::getMetricMin(const std::string& name) const {
+    auto it = metrics_.find(name);
+    if (it == metrics_.end() || it->second.empty()) return 0.0;
+    return *std::min_element(it->second.begin(), it->second.end());
+}
+
+void MetricsAggregator::incrementCounter(const std::string& name, int64_t delta) {
+    counters_[name] += delta;
+}
+
+int64_t MetricsAggregator::getCounter(const std::string& name) const {
+    auto it = counters_.find(name);
+    if (it == counters_.end()) return 0;
+    return it->second;
+}
+
+// LogAggregator
+LogAggregator::LogAggregator() {}
+
+void LogAggregator::addLog(const LogEntry& entry) {
+    logs_.push_back(entry);
+}
+
+std::vector<LogEntry> LogAggregator::getLogsByLevel(LogLevel level) const {
     std::vector<LogEntry> result;
-    for (const auto& l : logs) { if (l.level == level) result.push_back(l); }
+    for (const auto& e : logs_) {
+        if (e.level == level) result.push_back(e);
+    }
     return result;
 }
-std::vector<LogEntry> LoggingMonitoringSystem::getLogsByComponent(const std::string& comp) {
+
+int LogAggregator::getLogCountByLevel(LogLevel level) const {
+    int count = 0;
+    for (const auto& e : logs_) {
+        if (e.level == level) count++;
+    }
+    return count;
+}
+
+std::vector<LogEntry> LogAggregator::getLogsBySource(LogSource source) const {
     std::vector<LogEntry> result;
-    for (const auto& l : logs) { if (l.component == comp) result.push_back(l); }
+    for (const auto& e : logs_) {
+        if (e.source == source) result.push_back(e);
+    }
     return result;
 }
-std::vector<LogEntry> LoggingMonitoringSystem::getLogsByTimeRange(int64_t s, int64_t e) {
-    std::vector<LogEntry> result;
-    for (const auto& l : logs) { if (l.timestamp >= s && l.timestamp <= e) result.push_back(l); }
-    return result;
-}
-void LoggingMonitoringSystem::setMinimumLogLevel(LogLevel level) { minimumLogLevel = level; }
-LogLevel LoggingMonitoringSystem::getMinimumLogLevel() const { return minimumLogLevel; }
-bool LoggingMonitoringSystem::enableComponentLogging(const std::string& comp, bool enable) { 
-    componentLoggingStatus[comp] = enable; return true; 
-}
-bool LoggingMonitoringSystem::isComponentLoggingEnabled(const std::string& comp) const {
-    auto it = componentLoggingStatus.find(comp);
-    if (it != componentLoggingStatus.end()) return it->second;
-    return true;
-}
-bool LoggingMonitoringSystem::recordMetric(const Metric& m) { metrics.push_back(m); return true; }
-bool LoggingMonitoringSystem::incrementCounter(const std::string& name, double delta) { return true; }
-bool LoggingMonitoringSystem::setGaugeValue(const std::string& name, double value) { return true; }
-bool LoggingMonitoringSystem::recordHistogram(const std::string& name, double value) { return true; }
-bool LoggingMonitoringSystem::recordTimer(const std::string& name, int64_t duration) { return true; }
-std::vector<Metric> LoggingMonitoringSystem::getMetrics() { return metrics; }
-Metric LoggingMonitoringSystem::getMetric(const std::string& name) { return Metric(); }
-std::vector<Metric> LoggingMonitoringSystem::getMetricsByType(MetricType type) { return std::vector<Metric>(); }
-std::vector<Metric> LoggingMonitoringSystem::getMetricsByTimeRange(int64_t s, int64_t e) { return std::vector<Metric>(); }
-bool LoggingMonitoringSystem::registerAlert(const std::string& cond, const std::string& msg, LogLevel sev) { return true; }
-bool LoggingMonitoringSystem::triggerAlert(const Alert& a) { alerts.push_back(a); return true; }
-std::vector<Alert> LoggingMonitoringSystem::getActiveAlerts() { return alerts; }
-std::vector<Alert> LoggingMonitoringSystem::getAllAlerts() { return alerts; }
-bool LoggingMonitoringSystem::acknowledgeAlert(const std::string& id) { return true; }
-bool LoggingMonitoringSystem::enableRealTimeMonitoring(bool enable) { realTimeMonitoringEnabled = enable; return true; }
-bool LoggingMonitoringSystem::isRealTimeMonitoringEnabled() const { return realTimeMonitoringEnabled; }
-std::vector<LogEntry> LoggingMonitoringSystem::getRecentLogs(int32_t count) { return logs; }
-std::vector<Metric> LoggingMonitoringSystem::getRecentMetrics(int32_t count) { return metrics; }
-float LoggingMonitoringSystem::getCpuUsagePercentage() { return 50.0f; }
-float LoggingMonitoringSystem::getMemoryUsagePercentage() { return 60.0f; }
-int32_t LoggingMonitoringSystem::getThreadCount() { return 4; }
-float LoggingMonitoringSystem::getAverageResponseTime() { return 50.0f; }
-bool LoggingMonitoringSystem::exportLogs(const std::string& path) { return true; }
-bool LoggingMonitoringSystem::exportMetrics(const std::string& path) { return true; }
-std::string LoggingMonitoringSystem::generatePerformanceReport() { return "Performance Report"; }
-std::vector<std::string> LoggingMonitoringSystem::getErrorTrends() { return std::vector<std::string>(); }
-std::map<std::string, int32_t> LoggingMonitoringSystem::getErrorFrequency() { return std::map<std::string, int32_t>(); }
-float LoggingMonitoringSystem::getErrorRate() { return 1.0f; }
-bool LoggingMonitoringSystem::setLogRetentionPolicy(int32_t days) { return true; }
-bool LoggingMonitoringSystem::enforceRetention() { return true; }
-bool LoggingMonitoringSystem::archiveOldLogs() { return true; }
+
+// MonitoringSystem
+MonitoringSystem::MonitoringSystem() : monitoring_(false) {}
+
+void MonitoringSystem::startMonitoring() { monitoring_ = true; }
+void MonitoringSystem::stopMonitoring() { monitoring_ = false; }
+bool MonitoringSystem::isMonitoring() const { return monitoring_; }
+StructuredLogger& MonitoringSystem::getLogger() { return logger_; }
 
 }  // namespace bendcore::hardening

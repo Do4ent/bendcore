@@ -2,9 +2,9 @@
 
 #include <string>
 #include <vector>
-#include <map>
 #include <memory>
 #include <functional>
+#include <mutex>
 #include <cstdint>
 
 namespace bendcore::hardening {
@@ -12,117 +12,106 @@ namespace bendcore::hardening {
 // ==============================================================================
 // ERROR HANDLING - GAP-088
 // ==============================================================================
-// Comprehensive exception handling, error recovery, graceful degradation
 
-enum class ErrorSeverity {
-    FATAL,
-    CRITICAL,
-    ERROR,
+enum class ErrorCode {
+    SUCCESS,
+    INFO,
+    INVALID_ARGUMENT,
+    UNKNOWN_ERROR,
+    RESOURCE_EXHAUSTED,
+    TIMEOUT,
+    NETWORK_ERROR
+};
+
+enum class ErrorLevel {
+    INFO,
     WARNING,
-    INFO
+    ERROR,
+    CRITICAL
 };
 
-enum class RecoveryStrategy {
-    RETRY,
-    ROLLBACK,
-    FALLBACK,
-    GRACEFUL_DEGRADATION,
-    ABORT
-};
-
-struct ErrorContext {
-    std::string errorId;
+struct ErrorInfo {
+    ErrorCode code;
+    ErrorLevel level;
     std::string message;
-    ErrorSeverity severity;
-    std::string component;
-    std::string functionName;
-    int32_t lineNumber;
-    std::string stackTrace;
-    int64_t timestamp;
-    std::map<std::string, std::string> contextData;
+    std::string file;
+    int line;
 };
 
-struct RecoveryAction {
-    std::string actionId;
-    RecoveryStrategy strategy;
-    std::string description;
-    std::function<bool()> action;
-    int32_t maxRetries;
-    int32_t retryCount;
-};
-
-class ErrorHandlingSystem {
+class IRecoveryStrategy {
 public:
-    ErrorHandlingSystem();
-    ~ErrorHandlingSystem();
+    virtual ~IRecoveryStrategy() = default;
+    virtual bool execute() = 0;
+    virtual std::string name() const = 0;
+};
 
-    // Error logging and reporting
-    bool logError(const ErrorContext& error);
-    std::vector<ErrorContext> getErrorLog();
-    std::vector<ErrorContext> getErrorsByComponent(const std::string& component);
-    std::vector<ErrorContext> getErrorsBySeverity(ErrorSeverity severity);
-
-    // Exception handling
-    bool handleException(const std::exception& e, ErrorSeverity severity);
-    bool handleCustomException(const std::string& message, ErrorSeverity severity);
-    bool registerExceptionHandler(std::function<void(const ErrorContext&)> handler);
-
-    // Error recovery
-    bool registerRecoveryAction(const std::string& errorType, const RecoveryAction& action);
-    bool attemptRecovery(const ErrorContext& error);
-    bool executeRecoveryAction(const RecoveryAction& action);
-    std::vector<RecoveryAction> getAvailableRecoveryActions();
-
-    // Retry logic
-    bool executeWithRetry(
-        std::function<bool()> operation,
-        int32_t maxRetries,
-        int32_t delayMs
-    );
-    bool setRetryPolicy(int32_t maxRetries, int32_t initialDelayMs, float backoffFactor);
-
-    // Fallback handling
-    bool registerFallback(const std::string& operationName, std::function<bool()> fallback);
-    bool executeFallback(const std::string& operationName);
-
-    // Graceful degradation
-    bool enableGracefulDegradation(bool enable);
-    bool isGracefulDegradationEnabled() const;
-    bool reduceFeatureSet();
-    bool restoreFullFeatureSet();
-
-    // Error propagation
-    bool propagateError(const ErrorContext& error);
-    bool suppressError(const std::string& errorId);
-    bool muteErrorType(const std::string& errorType);
-
-    // Error analytics
-    int32_t getErrorCount() const;
-    int32_t getErrorCountByComponent(const std::string& component);
-    std::map<std::string, int32_t> getErrorFrequency();
-    float getErrorRate() const;
-
-    // Error reporting
-    std::string generateErrorReport();
-    std::string generateErrorReportByComponent(const std::string& component);
-    bool exportErrorLog(const std::string& outputPath);
-
-    // Circuit breaker pattern
-    bool enableCircuitBreaker(const std::string& name, int32_t failureThreshold);
-    bool isCircuitBreakerOpen(const std::string& name);
-    bool resetCircuitBreaker(const std::string& name);
-
-    // Health monitoring
-    bool isSystemHealthy() const;
-    float getSystemHealthScore();
-    std::vector<std::string> getHealthIssues();
-
+class RetryStrategy : public IRecoveryStrategy {
+public:
+    RetryStrategy(int max_retries, int delay_ms);
+    bool execute() override;
+    int getRetryCount() const;
+    std::string name() const override;
 private:
-    std::vector<ErrorContext> errorLog;
-    std::map<std::string, RecoveryAction> recoveryActions;
-    std::map<std::string, std::function<bool()>> fallbacks;
-    std::vector<std::function<void(const ErrorContext&)>> exceptionHandlers;
-    bool gracefulDegradationEnabled;
+    int max_retries_;
+    int delay_ms_;
+    int retry_count_;
+};
+
+class RollbackStrategy : public IRecoveryStrategy {
+public:
+    void addCheckpoint(std::function<void()> fn);
+    int getCheckpointCount() const;
+    bool execute() override;
+    std::string name() const override;
+private:
+    std::vector<std::function<void()>> checkpoints_;
+};
+
+class ThrottleStrategy : public IRecoveryStrategy {
+public:
+    ThrottleStrategy(int max_requests, int window_ms);
+    bool allowRequest();
+    bool execute() override;
+    std::string name() const override;
+private:
+    int max_requests_;
+    int window_ms_;
+    int current_requests_;
+};
+
+class CircuitBreaker {
+public:
+    enum class State { CLOSED, OPEN, HALF_OPEN };
+    CircuitBreaker(int failure_threshold, int timeout_ms);
+    bool call(std::function<bool()> fn);
+    State getState() const;
+    int getFailureCount() const;
+private:
+    int failure_threshold_;
+    int timeout_ms_;
+    int failure_count_;
+    State state_;
+};
+
+class ErrorHandler {
+public:
+    ErrorHandler();
+    void reportError(ErrorCode code, ErrorLevel level, const std::string& message,
+                     const char* file = "", int line = 0);
+    int getErrorCount() const;
+    ErrorInfo* getLastError();
+    int getErrorCountByLevel(ErrorLevel level) const;
+    void addRecoveryStrategy(std::unique_ptr<IRecoveryStrategy> strategy);
+    bool executeRecoveryStrategies();
+    void clearHistory();
+private:
+    std::vector<ErrorInfo> errors_;
+    std::vector<std::unique_ptr<IRecoveryStrategy>> strategies_;
+    mutable std::mutex mutex_;
 };
 
 }  // namespace bendcore::hardening
+
+namespace bendcore {
+    namespace production = hardening;
+}

@@ -1,51 +1,125 @@
 #include "bendcore/hardening/crash_recovery.hpp"
+#include <chrono>
+#include <algorithm>
+#include <numeric>
 
 namespace bendcore::hardening {
 
-CrashRecoverySystem::CrashRecoverySystem()
-    : autoRecoveryEnabled(false), watchdogEnabled(false), watchdogTimeoutMs(0) {}
+// CheckpointManager
+CheckpointManager::CheckpointManager() : next_id_(1) {}
 
-CrashRecoverySystem::~CrashRecoverySystem() = default;
-
-bool CrashRecoverySystem::registerCrashHandler() { return true; }
-bool CrashRecoverySystem::handleCrash(const std::string& reason) { 
-    CrashDump d; d.crashReason = reason; crashDumps.push_back(d); return true; 
+uint64_t CheckpointManager::createCheckpoint(CheckpointType type,
+                                              const std::string& data,
+                                              const std::string& label) {
+    uint64_t id = next_id_++;
+    Checkpoint cp;
+    cp.checkpoint_id = id;
+    cp.type = type;
+    cp.data = data;
+    cp.label = label;
+    cp.is_valid = true;
+    // Simple checksum: sum of char values
+    uint64_t csum = 0;
+    for (unsigned char c : data) csum += c;
+    csum += id;
+    cp.checksum = csum ? csum : 1;
+    cp.timestamp = std::chrono::system_clock::now().time_since_epoch().count();
+    checkpoints_.push_back(cp);
+    return id;
 }
-bool CrashRecoverySystem::generateCrashDump(CrashDump& d) { return true; }
-bool CrashRecoverySystem::saveCrashDump(const CrashDump& d) { crashDumps.push_back(d); return true; }
-std::vector<CrashDump> CrashRecoverySystem::getCrashDumps() { return crashDumps; }
-CrashDump CrashRecoverySystem::getCrashDump(const std::string& id) { return CrashDump(); }
-std::string CrashRecoverySystem::analyzeCrashDump(const CrashDump& d) { return "Analysis"; }
-CrashSeverity CrashRecoverySystem::determineCrashSeverity(const CrashDump& d) { return CrashSeverity::CRITICAL; }
-bool CrashRecoverySystem::createSavePoint() { SavePoint s; savePoints.push_back(s); return true; }
-bool CrashRecoverySystem::restoreFromSavePoint(const std::string& id) { return true; }
-std::vector<SavePoint> CrashRecoverySystem::getAvailableSavePoints() { return savePoints; }
-SavePoint CrashRecoverySystem::getLatestSavePoint() { return SavePoint(); }
-bool CrashRecoverySystem::enableAutoRecovery(bool e) { autoRecoveryEnabled = e; return true; }
-bool CrashRecoverySystem::isAutoRecoveryEnabled() const { return autoRecoveryEnabled; }
-bool CrashRecoverySystem::attemptAutoRecovery() { return autoRecoveryEnabled; }
-bool CrashRecoverySystem::checkAndRecover() { return true; }
-bool CrashRecoverySystem::preserveApplicationData() { return true; }
-bool CrashRecoverySystem::preserveUserData() { return true; }
-bool CrashRecoverySystem::preserveTransactionState() { return true; }
-std::string CrashRecoverySystem::getPreservedData() { return "data"; }
-bool CrashRecoverySystem::scheduleRestart(int64_t d) { return true; }
-bool CrashRecoverySystem::initiateGracefulRestart() { return true; }
-bool CrashRecoverySystem::forcedRestart() { return true; }
-bool CrashRecoverySystem::isRestartScheduled() const { return false; }
-bool CrashRecoverySystem::verifyRecoverySuccess() { return true; }
-bool CrashRecoverySystem::validateRestoredState() { return true; }
-bool CrashRecoverySystem::checkDataIntegrity() { return true; }
-int32_t CrashRecoverySystem::getTotalCrashCount() const { return crashDumps.size(); }
-int32_t CrashRecoverySystem::getRecoverySuccessCount() const { return crashDumps.size() / 2; }
-float CrashRecoverySystem::getRecoverySuccessRate() const { return 50.0f; }
-std::map<std::string, int32_t> CrashRecoverySystem::getCrashFrequencyByReason() { return std::map<std::string, int32_t>(); }
-bool CrashRecoverySystem::enableWatchdog(int32_t t) { watchdogEnabled = true; watchdogTimeoutMs = t; return true; }
-bool CrashRecoverySystem::kickWatchdog() { return watchdogEnabled; }
-bool CrashRecoverySystem::disableWatchdog() { watchdogEnabled = false; return true; }
-bool CrashRecoverySystem::isWatchdogActive() const { return watchdogEnabled; }
-bool CrashRecoverySystem::performHealthCheck() { return true; }
-bool CrashRecoverySystem::isSystemRecovering() const { return false; }
-std::string CrashRecoverySystem::getRecoveryStatus() { return "Nominal"; }
+
+Checkpoint* CheckpointManager::getCheckpoint(uint64_t id) {
+    for (auto& cp : checkpoints_) {
+        if (cp.checkpoint_id == id) return &cp;
+    }
+    return nullptr;
+}
+
+Checkpoint* CheckpointManager::getLatestCheckpoint() {
+    if (checkpoints_.empty()) return nullptr;
+    return &checkpoints_.back();
+}
+
+int CheckpointManager::getCheckpointCount() const {
+    return static_cast<int>(checkpoints_.size());
+}
+
+bool CheckpointManager::validateCheckpoint(uint64_t id) {
+    auto* cp = getCheckpoint(id);
+    if (!cp) return false;
+    return cp->is_valid;
+}
+
+bool CheckpointManager::deleteCheckpoint(uint64_t id) {
+    for (auto it = checkpoints_.begin(); it != checkpoints_.end(); ++it) {
+        if (it->checkpoint_id == id) {
+            checkpoints_.erase(it);
+            return true;
+        }
+    }
+    return false;
+}
+
+// CrashRecoveryManager
+CrashRecoveryManager::CrashRecoveryManager()
+    : shutting_down_(false), recovery_attempts_(0), last_crash_time_(0) {
+    metadata_ = {0, 0, "", false};
+}
+
+bool CrashRecoveryManager::isShuttingDown() const { return shutting_down_; }
+
+void CrashRecoveryManager::initializeGracefulShutdown() {
+    shutting_down_ = true;
+}
+
+void CrashRecoveryManager::requestShutdown() {
+    shutting_down_ = true;
+}
+
+void CrashRecoveryManager::waitForShutdown(int timeout_ms) {
+    // Non-blocking stub
+    (void)timeout_ms;
+}
+
+int CrashRecoveryManager::getRecoveryAttempts() const { return recovery_attempts_; }
+
+CheckpointManager& CrashRecoveryManager::getCheckpointManager() {
+    return checkpoint_manager_;
+}
+
+RecoveryLevel CrashRecoveryManager::attemptRecovery() {
+    recovery_attempts_++;
+    last_crash_time_ = std::chrono::system_clock::now().time_since_epoch().count();
+    metadata_.recovery_attempts = recovery_attempts_;
+    metadata_.last_crash_time = last_crash_time_;
+    metadata_.recovery_successful = true;
+
+    if (checkpoint_manager_.getCheckpointCount() > 0) {
+        return RecoveryLevel::FULL_RECOVERY;
+    }
+    return RecoveryLevel::PARTIAL;
+}
+
+int64_t CrashRecoveryManager::getLastCrashTime() const { return last_crash_time_; }
+
+RecoveryMetadata* CrashRecoveryManager::getRecoveryMetadata() { return &metadata_; }
+
+// SnapshotManager
+SnapshotManager::SnapshotManager() {}
+
+int SnapshotManager::getSnapshotCount() const {
+    return static_cast<int>(snapshots_.size());
+}
+
+bool SnapshotManager::createSnapshot(const std::string& name) {
+    snapshots_.push_back(name);
+    return true;
+}
+
+void SnapshotManager::clearOldSnapshots(int keep_count) {
+    while (static_cast<int>(snapshots_.size()) > keep_count) {
+        snapshots_.erase(snapshots_.begin());
+    }
+}
 
 }  // namespace bendcore::hardening

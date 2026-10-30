@@ -5,6 +5,7 @@
 #include <memory>
 #include <functional>
 #include <cstdint>
+#include <ostream>
 
 namespace bendcore::mobile {
 
@@ -24,12 +25,36 @@ enum class GestureType {
     MULTI_TOUCH
 };
 
+inline std::ostream& operator<<(std::ostream& os, GestureType v) {
+    switch (v) {
+        case GestureType::TAP:         return os << "TAP";
+        case GestureType::DOUBLE_TAP:  return os << "DOUBLE_TAP";
+        case GestureType::LONG_PRESS:  return os << "LONG_PRESS";
+        case GestureType::SWIPE:       return os << "SWIPE";
+        case GestureType::PINCH:       return os << "PINCH";
+        case GestureType::ROTATE:      return os << "ROTATE";
+        case GestureType::PAN:         return os << "PAN";
+        case GestureType::MULTI_TOUCH: return os << "MULTI_TOUCH";
+    }
+    return os << static_cast<int>(v);
+}
+
 enum class SwipeDirection {
     UP,
     DOWN,
     LEFT,
     RIGHT
 };
+
+inline std::ostream& operator<<(std::ostream& os, SwipeDirection v) {
+    switch (v) {
+        case SwipeDirection::UP:    return os << "UP";
+        case SwipeDirection::DOWN:  return os << "DOWN";
+        case SwipeDirection::LEFT:  return os << "LEFT";
+        case SwipeDirection::RIGHT: return os << "RIGHT";
+    }
+    return os << static_cast<int>(v);
+}
 
 struct TouchPoint {
     float x;

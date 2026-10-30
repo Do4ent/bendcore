@@ -142,6 +142,11 @@ bool BiDirectionalSync::RollbackChanges(const std::string& path, time_t timestam
         return false;
     }
 
+    // Reject rollback to a future timestamp
+    if (timestamp > std::time(nullptr)) {
+        return false;
+    }
+
     auto it = change_history_.find(path);
     if (it == change_history_.end()) {
         return false;

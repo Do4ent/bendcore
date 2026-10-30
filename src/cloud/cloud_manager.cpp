@@ -6,7 +6,7 @@
 namespace bendcore::cloud {
 
 CloudManager::CloudManager()
-    : storageManager(std::make_unique<CloudStorageManager>()),
+    : storageManager(std::make_unique<ProjectCloudStorageManager>()),
       collaborationManager(std::make_unique<RealtimeCollaborationManager>()),
       apiHandler(std::make_unique<RestApiHandler>()),
       serializer(std::make_unique<DataSerializer>()),
@@ -43,7 +43,7 @@ bool CloudManager::loadConfiguration(const CloudConfiguration& config) {
     configuration = config;
 
     // Reinitialize storage manager with new type
-    storageManager = std::make_unique<CloudStorageManager>(
+    storageManager = std::make_unique<ProjectCloudStorageManager>(
         StorageType::Hybrid
     );
 

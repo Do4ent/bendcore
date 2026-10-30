@@ -71,6 +71,7 @@ private:
     std::map<std::string, BackupMetadata> backups_;
     std::map<std::string, BackupSchedule> schedules_;
     std::vector<time_t> restore_points_;
+    mutable int id_counter_ = 0;
 
     std::string GenerateBackupId() const;
     std::string ComputeChecksum(const std::string& path) const;

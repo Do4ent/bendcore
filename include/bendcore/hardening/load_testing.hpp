@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-#include <map>
+#include <functional>
 #include <cstdint>
 
 namespace bendcore::hardening {
@@ -10,116 +10,111 @@ namespace bendcore::hardening {
 // ==============================================================================
 // LOAD TESTING - GAP-092
 // ==============================================================================
-// Stress testing, capacity planning, load simulation, bottleneck detection
 
-enum class LoadTestType {
-    STRESS,
-    LOAD,
-    SPIKE,
-    ENDURANCE,
-    VOLUME
-};
-
-struct LoadProfile {
-    int32_t minConcurrentUsers;
-    int32_t maxConcurrentUsers;
-    int32_t rampUpTime;  // seconds
-    int32_t sustainTime; // seconds
-    int32_t rampDownTime; // seconds
+enum class LoadLevel {
+    LIGHT,
+    MODERATE,
+    HEAVY,
+    EXTREME
 };
 
 struct LoadTestResult {
-    std::string testId;
-    LoadTestType type;
-    int64_t startTime;
-    int64_t endTime;
-    int32_t totalRequests;
-    int32_t successfulRequests;
-    int32_t failedRequests;
-    double averageResponseTime;
-    double peakResponseTime;
-    double throughput;
-    int32_t maxConcurrentUsers;
+    int total_operations;
+    int successful_operations;
+    int failed_operations;
+    int error_count;
+    double average_response_time_ms;
+    double max_response_time_ms;
+    double min_response_time_ms;
+    double throughput_ops_per_sec;
 };
 
-struct BottleneckReport {
-    std::string bottleneckId;
-    std::string component;
-    std::string description;
-    double impactPercentage;
-    std::vector<std::string> recommendations;
+struct StressMetrics {
+    bool test_passed;
+    int peak_concurrent_users;
+    int timeout_count;
+    double average_response_time_ms;
 };
 
-class LoadTestingEngine {
+class LoadSimulator {
 public:
-    LoadTestingEngine();
-    ~LoadTestingEngine();
-
-    // Load test execution
-    bool startLoadTest(LoadTestType type, const LoadProfile& profile);
-    bool stopLoadTest();
-    bool pauseLoadTest();
-    bool resumeLoadTest();
-    LoadTestResult getLastTestResult();
-
-    // Load simulation
-    bool simulateLoad(int32_t concurrentUsers);
-    bool simulateGradualLoad(int32_t startUsers, int32_t endUsers, int32_t durationSeconds);
-    bool simulateSpikeLoad(int32_t users, int32_t durationSeconds);
-    bool simulateVariableLoad(const std::vector<int32_t>& userCounts);
-
-    // Stress testing
-    bool runStressTest();
-    bool runBreakingPointTest();
-    int32_t findMaxCapacity();
-
-    // Capacity planning
-    int32_t getMaxConcurrentUsers() const;
-    double getMaxThroughput() const;
-    std::map<std::string, double> getResourceLimits();
-    bool canHandle(int32_t concurrentUsers) const;
-
-    // Bottleneck detection
-    std::vector<BottleneckReport> detectBottlenecks();
-    BottleneckReport getBottleneck(const std::string& component);
-    bool analyzeBottleneck(const std::string& bottleneckId);
-
-    // Performance metrics during test
-    double getCurrentThroughput() const;
-    double getCurrentResponseTime() const;
-    int32_t getActiveConnections() const;
-    float getErrorRate() const;
-
-    // Resource monitoring
-    float getCpuUsageDuringTest() const;
-    float getMemoryUsageDuringTest() const;
-    float getDiskIODuringTest() const;
-    float getNetworkUtilization() const;
-
-    // Test reporting
-    LoadTestResult getTestResult(const std::string& testId);
-    std::string generateLoadTestReport();
-    std::string generateCapacityReport();
-    std::string compareTestResults(const std::string& testId1, const std::string& testId2);
-
-    // SLA compliance
-    bool setSLAThreshold(const std::string& metric, double threshold);
-    bool checkSLACompliance();
-    std::vector<std::string> getViolatedSLAs();
-
-    // Endurance testing
-    bool runEnduranceTest(int32_t concurrentUsers, int64_t durationMinutes);
-    bool checkMemoryLeaksUnderLoad();
-
-    // Volume testing
-    bool runVolumeTest(int64_t dataSize);
-    bool testLargeDatasetHandling();
-
+    LoadSimulator();
+    void setLoadLevel(LoadLevel level);
+    LoadLevel getLoadLevel() const;
+    bool isRunning() const;
+    void runLoadTest(std::function<bool()> operation, int duration_seconds);
+    LoadTestResult getLastResult() const;
 private:
-    std::vector<LoadTestResult> testResults;
-    std::vector<BottleneckReport> bottlenecks;
-    LoadProfile currentLoadProfile;
-    bool testRunning;
+    LoadLevel level_;
+    bool running_;
+    LoadTestResult last_result_;
+};
+
+class ConcurrentLoadTest {
+public:
+    explicit ConcurrentLoadTest(int concurrent_users);
+    int getConcurrentUsers() const;
+    void runTest(std::function<bool()> operation, int duration_seconds);
+    LoadTestResult getResult() const;
+    std::vector<double> getResponseTimes() const;
+private:
+    int concurrent_users_;
+    LoadTestResult result_;
+    std::vector<double> response_times_;
+};
+
+class StressTestRunner {
+public:
+    StressTestRunner();
+    void configureTest(int start_users, int step, int max_users);
+    StressMetrics runStressTest(std::function<bool()> operation);
+    StressMetrics getLastMetrics() const;
+private:
+    int start_users_;
+    int step_;
+    int max_users_;
+    StressMetrics last_metrics_;
+};
+
+class LatencyAnalyzer {
+public:
+    LatencyAnalyzer();
+    void recordLatency(double ms);
+    double getAverageLatency() const;
+    double getMedianLatency() const;
+    double getMaxLatency() const;
+    double getMinLatency() const;
+    double getStandardDeviation() const;
+    double getPercentile(double percentile) const;
+    int getOutlierCount(double threshold) const;
+    void clearData();
+private:
+    std::vector<double> latencies_;
+};
+
+class EnduranceTestRunner {
+public:
+    EnduranceTestRunner();
+    bool isRunning() const;
+    void start(std::function<bool()> op, int duration_minutes, int users);
+    void stop();
+private:
+    bool running_;
+};
+
+class SpikeTestRunner {
+public:
+    SpikeTestRunner();
+    void configureSpikeTest(int base_users, int spike_users, int spike_duration_ms);
+    bool runSpikeTest(std::function<bool()> operation, int duration_seconds);
+private:
+    int base_users_;
+    int spike_users_;
+    int spike_duration_ms_;
 };
 
 }  // namespace bendcore::hardening
+
+namespace bendcore {
+    namespace production = hardening;
+}

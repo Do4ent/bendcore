@@ -5,13 +5,13 @@
 
 namespace bendcore::cloud {
 
-CloudStorageManager::CloudStorageManager(StorageType type)
+ProjectCloudStorageManager::ProjectCloudStorageManager(StorageType type)
     : storageType(type) {
 }
 
-CloudStorageManager::~CloudStorageManager() = default;
+ProjectCloudStorageManager::~ProjectCloudStorageManager() = default;
 
-bool CloudStorageManager::uploadProject(
+bool ProjectCloudStorageManager::uploadProject(
     const std::string& projectId,
     const std::string& projectName,
     const std::string& filePath,
@@ -36,7 +36,7 @@ bool CloudStorageManager::uploadProject(
     return true;
 }
 
-bool CloudStorageManager::downloadProject(
+bool ProjectCloudStorageManager::downloadProject(
     const std::string& projectId,
     const std::string& outputPath
 ) {
@@ -46,7 +46,7 @@ bool CloudStorageManager::downloadProject(
     return it != projects.end();
 }
 
-bool CloudStorageManager::deleteProject(const std::string& projectId) {
+bool ProjectCloudStorageManager::deleteProject(const std::string& projectId) {
     auto it = std::find_if(projects.begin(), projects.end(),
         [&projectId](const ProjectMetadata& m) { return m.projectId == projectId; });
 
@@ -57,12 +57,12 @@ bool CloudStorageManager::deleteProject(const std::string& projectId) {
     return false;
 }
 
-bool CloudStorageManager::projectExists(const std::string& projectId) const {
+bool ProjectCloudStorageManager::projectExists(const std::string& projectId) const {
     return std::any_of(projects.begin(), projects.end(),
         [&projectId](const ProjectMetadata& m) { return m.projectId == projectId; });
 }
 
-bool CloudStorageManager::saveVersion(
+bool ProjectCloudStorageManager::saveVersion(
     const std::string& projectId,
     const std::string& filePath,
     const std::string& message,
@@ -91,7 +91,7 @@ bool CloudStorageManager::saveVersion(
     return true;
 }
 
-std::optional<VersionInfo> CloudStorageManager::getLatestVersion(
+std::optional<VersionInfo> ProjectCloudStorageManager::getLatestVersion(
     const std::string& projectId
 ) const {
     auto it = projectVersions.find(projectId);
@@ -105,7 +105,7 @@ std::optional<VersionInfo> CloudStorageManager::getLatestVersion(
     return std::nullopt;
 }
 
-std::vector<VersionInfo> CloudStorageManager::getVersionHistory(
+std::vector<VersionInfo> ProjectCloudStorageManager::getVersionHistory(
     const std::string& projectId,
     int limit
 ) const {
@@ -127,7 +127,7 @@ std::vector<VersionInfo> CloudStorageManager::getVersionHistory(
     return versions_copy;
 }
 
-bool CloudStorageManager::restoreVersion(
+bool ProjectCloudStorageManager::restoreVersion(
     const std::string& projectId,
     const std::string& versionId,
     const std::string& outputPath
@@ -143,7 +143,7 @@ bool CloudStorageManager::restoreVersion(
     return ver_it != it->second.end();
 }
 
-bool CloudStorageManager::createBackup(
+bool ProjectCloudStorageManager::createBackup(
     const std::string& projectId,
     const std::string& filePath,
     const std::string& backupType
@@ -165,7 +165,7 @@ bool CloudStorageManager::createBackup(
     return true;
 }
 
-std::optional<BackupInfo> CloudStorageManager::getLatestBackup(
+std::optional<BackupInfo> ProjectCloudStorageManager::getLatestBackup(
     const std::string& projectId
 ) const {
     auto it = projectBackups.find(projectId);
@@ -175,7 +175,7 @@ std::optional<BackupInfo> CloudStorageManager::getLatestBackup(
     return std::nullopt;
 }
 
-std::vector<BackupInfo> CloudStorageManager::getBackupHistory(
+std::vector<BackupInfo> ProjectCloudStorageManager::getBackupHistory(
     const std::string& projectId,
     int limit
 ) const {
@@ -197,7 +197,7 @@ std::vector<BackupInfo> CloudStorageManager::getBackupHistory(
     return backups_copy;
 }
 
-bool CloudStorageManager::restoreBackup(
+bool ProjectCloudStorageManager::restoreBackup(
     const std::string& projectId,
     const std::string& backupId,
     const std::string& outputPath
@@ -213,7 +213,7 @@ bool CloudStorageManager::restoreBackup(
     return bak_it != it->second.end();
 }
 
-std::optional<ProjectMetadata> CloudStorageManager::getProjectMetadata(
+std::optional<ProjectMetadata> ProjectCloudStorageManager::getProjectMetadata(
     const std::string& projectId
 ) const {
     auto it = std::find_if(projects.begin(), projects.end(),
@@ -225,7 +225,7 @@ std::optional<ProjectMetadata> CloudStorageManager::getProjectMetadata(
     return std::nullopt;
 }
 
-bool CloudStorageManager::updateProjectMetadata(
+bool ProjectCloudStorageManager::updateProjectMetadata(
     const std::string& projectId,
     const ProjectMetadata& metadata
 ) {
@@ -240,7 +240,7 @@ bool CloudStorageManager::updateProjectMetadata(
     return false;
 }
 
-std::vector<ProjectMetadata> CloudStorageManager::listProjects(
+std::vector<ProjectMetadata> ProjectCloudStorageManager::listProjects(
     const std::string& owner,
     std::optional<std::string> filterTag
 ) const {
@@ -269,7 +269,7 @@ std::vector<ProjectMetadata> CloudStorageManager::listProjects(
     return result;
 }
 
-std::vector<ProjectMetadata> CloudStorageManager::searchProjects(
+std::vector<ProjectMetadata> ProjectCloudStorageManager::searchProjects(
     const std::string& searchQuery,
     int limit
 ) const {
@@ -289,7 +289,7 @@ std::vector<ProjectMetadata> CloudStorageManager::searchProjects(
     return result;
 }
 
-CloudStorageManager::StorageInfo CloudStorageManager::getStorageInfo(
+ProjectCloudStorageManager::StorageInfo ProjectCloudStorageManager::getStorageInfo(
     const std::string& owner
 ) const {
     StorageInfo info;

@@ -24,7 +24,7 @@ public:
     );
 
     // Component accessors
-    CloudStorageManager& getStorageManager() { return *storageManager; }
+    ProjectCloudStorageManager& getStorageManager() { return *storageManager; }
     RealtimeCollaborationManager& getCollaborationManager() { return *collaborationManager; }
     RestApiHandler& getApiHandler() { return *apiHandler; }
     DataSerializer& getSerializer() { return *serializer; }
@@ -104,7 +104,7 @@ public:
     );
 
 private:
-    std::unique_ptr<CloudStorageManager> storageManager;
+    std::unique_ptr<ProjectCloudStorageManager> storageManager;
     std::unique_ptr<RealtimeCollaborationManager> collaborationManager;
     std::unique_ptr<RestApiHandler> apiHandler;
     std::unique_ptr<DataSerializer> serializer;

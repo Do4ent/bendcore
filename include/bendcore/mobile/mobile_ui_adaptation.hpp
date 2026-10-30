@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <cstdint>
+#include <ostream>
 
 namespace bendcore::mobile {
 
@@ -19,11 +20,29 @@ enum class ScreenOrientation {
     AUTO
 };
 
+inline std::ostream& operator<<(std::ostream& os, ScreenOrientation v) {
+    switch (v) {
+        case ScreenOrientation::PORTRAIT:  return os << "PORTRAIT";
+        case ScreenOrientation::LANDSCAPE: return os << "LANDSCAPE";
+        case ScreenOrientation::AUTO:      return os << "AUTO";
+    }
+    return os << static_cast<int>(v);
+}
+
 enum class DeviceType {
     PHONE,
     TABLET,
     DESKTOP
 };
+
+inline std::ostream& operator<<(std::ostream& os, DeviceType v) {
+    switch (v) {
+        case DeviceType::PHONE:   return os << "PHONE";
+        case DeviceType::TABLET:  return os << "TABLET";
+        case DeviceType::DESKTOP: return os << "DESKTOP";
+    }
+    return os << static_cast<int>(v);
+}
 
 struct ScreenDimensions {
     int32_t width;
