@@ -271,7 +271,7 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
 
         {/* Первая гибка */}
         <path
-          d={`M ${x1} ${y_center} A ${result.bend_1_length * scale} ${result.bend_1_length * scale} 0 0 1 ${x2} ${y_center - result.offset_distance * scale * 0.3}`}
+          d={`M ${x1} ${y_center} A ${result.bend_1_length * scale} ${result.bend_1_length * scale} 0 0 1 ${x2} ${y_center - (result.offset_distance ?? 0) * scale * 0.3}`}
           stroke={isDarkMode ? '#4da6ff' : '#0066cc'}
           strokeWidth="3"
           fill="none"
@@ -280,16 +280,16 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
         {/* Прямой участок */}
         <line
           x1={x2}
-          y1={y_center - result.offset_distance * scale * 0.3}
+          y1={y_center - (result.offset_distance ?? 0) * scale * 0.3}
           x2={x3}
-          y2={y_center - result.offset_distance * scale * 0.3}
+          y2={y_center - (result.offset_distance ?? 0) * scale * 0.3}
           stroke={isDarkMode ? '#66ff66' : '#00cc00'}
           strokeWidth="3"
         />
 
         {/* Вторая гибка */}
         <path
-          d={`M ${x3} ${y_center - result.offset_distance * scale * 0.3} A ${result.bend_2_length * scale} ${result.bend_2_length * scale} 0 0 1 ${x4} ${y_center}`}
+          d={`M ${x3} ${y_center - (result.offset_distance ?? 0) * scale * 0.3} A ${result.bend_2_length * scale} ${result.bend_2_length * scale} 0 0 1 ${x4} ${y_center}`}
           stroke={isDarkMode ? '#ff99ff' : '#cc00cc'}
           strokeWidth="3"
           fill="none"

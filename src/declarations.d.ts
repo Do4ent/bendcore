@@ -29,6 +29,7 @@ declare module 'three' {
     crossVectors(a: Vector3, b: Vector3): this;
     applyMatrix4(m: Matrix4): this;
     distanceTo(v: Vector3): number;
+    divideScalar(s: number): this;
   }
 
   export class Matrix4 {
@@ -79,13 +80,18 @@ declare module 'three' {
     rotation: { x: number; y: number; z: number };
     scale: Vector3;
     children: Object3D[];
+    userData: Record<string, unknown>;
     add(...objects: Object3D[]): this;
     remove(...objects: Object3D[]): this;
     traverse(callback: (obj: Object3D) => void): void;
     lookAt(vector: Vector3): void;
     lookAt(x: number, y: number, z: number): void;
+    rotateX(angle: number): this;
+    rotateY(angle: number): this;
+    rotateZ(angle: number): this;
     clone(): this;
     copy(source: Object3D): this;
+    clear(): this;
   }
 
   export class Group extends Object3D {
@@ -154,6 +160,14 @@ declare module 'three' {
 
   export class PlaneGeometry extends BufferGeometry {
     constructor(width?: number, height?: number);
+  }
+
+  export class SphereGeometry extends BufferGeometry {
+    constructor(radius?: number, widthSegments?: number, heightSegments?: number);
+  }
+
+  export class CylinderGeometry extends BufferGeometry {
+    constructor(radiusTop?: number, radiusBottom?: number, height?: number, radialSegments?: number);
   }
 
   export class AmbientLight extends Object3D {
