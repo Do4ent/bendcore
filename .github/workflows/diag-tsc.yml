@@ -1,0 +1,37 @@
+name: diag-tsc
+on:
+  push:
+    branches: [ 'diag/**' ]
+permissions:
+  contents: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+      - name: Run diagnostics
+        shell: bash
+        run: |
+          mkdir -p /tmp/diag
+          (npm install --no-audit --no-fund > /tmp/diag/fe-install.txt 2>&1; echo "exit $?" >> /tmp/diag/fe-install.txt)
+          (npx tsc --noEmit -p . > /tmp/diag/fe-tsc.txt 2>&1; echo "exit $?" >> /tmp/diag/fe-tsc.txt)
+          (npx jest --ci --passWithNoTests > /tmp/diag/fe-jest.txt 2>&1; echo "exit $?" >> /tmp/diag/fe-jest.txt)
+          (npx webpack --mode production > /tmp/diag/fe-webpack.txt 2>&1; echo "exit $?" >> /tmp/diag/fe-webpack.txt)
+          cd backend
+          (npm install --no-audit --no-fund > /tmp/diag/be-install.txt 2>&1; echo "exit $?" >> /tmp/diag/be-install.txt)
+          (npx tsc --noEmit -p . > /tmp/diag/be-tsc.txt 2>&1; echo "exit $?" >> /tmp/diag/be-tsc.txt)
+          (npx jest --ci > /tmp/diag/be-jest.txt 2>&1; echo "exit $?" >> /tmp/diag/be-jest.txt)
+          (npm ls --depth=0 > /tmp/diag/be-versions.txt 2>&1; cd .. && npm ls --depth=0 > /tmp/diag/fe-versions.txt 2>&1) || true
+      - name: Publish results to branch diag-results
+        shell: bash
+        run: |
+          git config user.name "diag-bot"; git config user.email "diag-bot@users.noreply.github.com"
+          git checkout --orphan diag-results
+          git rm -rf -q . ; rm -rf ./*  .github 2>/dev/null || true
+          cp /tmp/diag/*.txt .
+          git add *.txt
+          git commit -q -m "diag ${GITHUB_SHA::7}"
+          git push -f origin diag-results
