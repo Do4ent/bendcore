@@ -16,21 +16,30 @@ const profileManager = ProfileManager.getInstance();
  */
 router.get('/', (req: Request, res: Response): void => {
   try {
-    const profiles = profileManager.listProfiles();
+    const { category, manufacturer } = req.query;
+    let profiles = profileManager.listProfiles();
+
+    if (category) {
+      profiles = profiles.filter(p => p.category === String(category));
+    }
+    if (manufacturer) {
+      profiles = profiles.filter(p => p.manufacturer === String(manufacturer));
+    }
+
+    const data = profiles.map(p => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      manufacturer: p.manufacturer,
+      type: p.type,
+      description: p.description,
+      diameters: p.diameters,
+      diameter_count: p.diameters.length
+    }));
+
     const response: ApiResponse<unknown> = {
       success: true,
-      data: {
-        count: profiles.length,
-        profiles: profiles.map(p => ({
-          id: p.id,
-          name: p.name,
-          category: p.category,
-          manufacturer: p.manufacturer,
-          type: p.type,
-          description: p.description,
-          diameter_count: p.diameters.length
-        }))
-      },
+      data,
       timestamp: new Date().toISOString()
     };
     res.json(response);
@@ -159,6 +168,23 @@ router.get('/:profileId/diameters/:diameter', (req: Request, res: Response): voi
       timestamp: new Date().toISOString()
     });
   }
+});
+
+/**
+ * POST /api/profiles
+ * Create/validate a profile (stub - returns 400 for invalid data)
+ */
+router.post('/', (req: Request, res: Response): void => {
+  const { id, name, category, diameters } = req.body || {};
+  if (!id || !name || !category || !Array.isArray(diameters)) {
+    res.status(400).json({
+      success: false,
+      error: 'Missing or invalid required fields: id, name, category, diameters (array)',
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+  res.status(201).json({ success: true, data: req.body, timestamp: new Date().toISOString() });
 });
 
 /**

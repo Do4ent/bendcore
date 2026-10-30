@@ -285,4 +285,52 @@ export class ProfileManager {
     this.profiles = [];
     this.profilesLoaded = false;
   }
+
+  /**
+   * Seed test data (for unit/integration tests)
+   */
+  seedTestData(): void {
+    this.profiles = [
+      {
+        id: 'test-id',
+        name: 'Test ID Profile',
+        category: 'tube',
+        manufacturer: 'TEST',
+        type: 'rotary_draw',
+        description: 'Performance test profile',
+        capacity_max_OD: 2.0,
+        capacity_max_wall: 0.25,
+        diameters: [
+          { id: 'tid-d1', OD: 0.5, R: 1.5, S_min: 1.0, N: 1, B_min: 10, B_max: 180, discrete_type: 'continuous' }
+        ]
+      },
+      {
+        id: 'test-profile',
+        name: 'Test Profile',
+        category: 'tube',
+        manufacturer: 'TEST',
+        type: 'rotary_draw',
+        description: 'Test bending profile',
+        capacity_max_OD: 2.0,
+        capacity_max_wall: 0.25,
+        diameters: [
+          { id: 'tp-d1', OD: 0.5, R: 1.5, S_min: 1.0, N: 1, B_min: 10, B_max: 180, discrete_type: 'continuous' }
+        ]
+      },
+      {
+        id: 'tube-profile-1',
+        name: 'Tube Profile 1',
+        category: 'tube',
+        manufacturer: 'AMADA',
+        type: 'rotary_draw',
+        description: 'Standard tube profile',
+        capacity_max_OD: 3.0,
+        capacity_max_wall: 0.5,
+        diameters: [
+          { id: 'tp1-d1', OD: 1.0, R: 2.0, S_min: 1.5, N: 1, B_min: 15, B_max: 180, discrete_type: 'continuous' }
+        ]
+      }
+    ];
+    this.profilesLoaded = true;
+  }
 }

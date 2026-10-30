@@ -7,9 +7,11 @@
 
 import request from 'supertest';
 import express, { Express } from 'express';
+import { ProfileManager } from '../../src/core/profile-manager';
 import profileRoutes from '../../src/api/routes/profiles';
 import tubeRoutes from '../../src/api/routes/tubes';
 import sketchRoutes from '../../src/api/routes/sketches';
+import importRoutes from '../../src/api/routes/import';
 
 describe('BendCore API Performance Tests', () => {
   let app: Express;
@@ -20,6 +22,10 @@ describe('BendCore API Performance Tests', () => {
     app.use('/api/profiles', profileRoutes);
     app.use('/api/tubes', tubeRoutes);
     app.use('/api/sketches', sketchRoutes);
+    app.use('/api/import', importRoutes);
+
+    const profileManager = ProfileManager.getInstance();
+    profileManager.seedTestData();
   });
 
   describe('Response Time Benchmarks (< 200ms acceptance)', () => {

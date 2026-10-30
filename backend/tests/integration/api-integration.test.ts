@@ -35,6 +35,7 @@ describe('BendCore Backend API Integration Tests', () => {
     app.use('/api/import', importRoutes);
 
     profileManager = ProfileManager.getInstance();
+    profileManager.seedTestData();
   });
 
   afterAll(async () => {

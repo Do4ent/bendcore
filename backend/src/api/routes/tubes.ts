@@ -24,9 +24,16 @@ router.post('/', (req: Request, res: Response): void => {
     errors.push('name is required');
   }
 
-  if (specification) {
-    if (typeof specification.diameter === 'number' && specification.diameter <= 0) {
+  if (!specification || typeof specification !== 'object') {
+    errors.push('specification is required');
+  } else {
+    if (specification.diameter !== undefined && typeof specification.diameter !== 'number') {
+      errors.push('diameter must be a number');
+    } else if (typeof specification.diameter === 'number' && specification.diameter <= 0) {
       errors.push('diameter must be positive');
+    }
+    if (specification.wall_thickness !== undefined && typeof specification.wall_thickness === 'number' && specification.wall_thickness <= 0) {
+      errors.push('wall_thickness must be positive');
     }
     if (specification.profile_id === '') {
       errors.push('profile_id must not be empty');
@@ -44,9 +51,9 @@ router.post('/', (req: Request, res: Response): void => {
     data: {
       id,
       name,
-      specification: specification || {},
-      geometry: specification ? { cylinders: [], tori: [] } : undefined,
-      properties: specification ? { total_volume: 0, total_mass: 0, density: 2.7 } : undefined,
+      specification,
+      geometry: { cylinders: [], tori: [] },
+      properties: { total_volume: 0, total_mass: 0, density: 2.7 },
       valid: true,
     },
     timestamp: new Date().toISOString(),

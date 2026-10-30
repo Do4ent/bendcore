@@ -30,7 +30,6 @@ router.post('/solve', (req: Request, res: Response): void => {
 
     // Validate input
     if (
-      !sketch_id ||
       !vertices ||
       !Array.isArray(vertices) ||
       !segments ||
@@ -40,16 +39,29 @@ router.post('/solve', (req: Request, res: Response): void => {
     ) {
       res.status(400).json({
         success: false,
-        error: 'Missing required fields: sketch_id, vertices, segments, constraints',
+        error: 'Missing required fields: vertices, segments, constraints',
         timestamp: new Date().toISOString()
       });
       return;
     }
 
+    // Validate constraint types
+    const validConstraintTypes = ['DISTANCE', 'ANGLE', 'FIXED', 'COINCIDENT', 'PARALLEL', 'PERPENDICULAR', 'EQUALITY'];
+    for (const c of constraints as ConstraintDef[]) {
+      if (c.type && !validConstraintTypes.includes(String(c.type))) {
+        res.status(400).json({
+          success: false,
+          error: `Invalid constraint type: ${c.type}`,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+    }
+
     // Initialize solver
     const solver = new SketchSolver();
     solver.initialize(
-      sketch_id,
+      sketch_id || `sketch_${Date.now()}`,
       vertices as Vertex[],
       segments as Segment[],
       constraints as ConstraintDef[],

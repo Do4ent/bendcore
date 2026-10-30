@@ -203,10 +203,18 @@ router.post('/smooth', (req: Request, res: Response): void => {
  */
 router.post('/', (req: Request, res: Response): void => {
   try {
-    const { segments = [], diameter, maxBendAngle, tolerance } = req.body;
+    const { segments, diameter, maxBendAngle, tolerance } = req.body;
+
+    // Reject requests with no segments array (e.g. unsupported file types)
+    if (segments === undefined || !Array.isArray(segments)) {
+      res.status(400).json({ success: false, error: 'segments array is required', timestamp: new Date().toISOString() });
+      return;
+    }
+
+    const segmentsArr: Array<{ start: number[]; end: number[] }> = segments;
 
     // Filter valid segments (non-degenerate)
-    const valid_segments = (segments as Array<{ start: number[]; end: number[] }>).filter((seg) => {
+    const valid_segments = segmentsArr.filter((seg) => {
       const s = seg.start;
       const e = seg.end;
       const dx = e[0] - s[0], dy = e[1] - s[1], dz = e[2] - s[2];
