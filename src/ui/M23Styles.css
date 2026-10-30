@@ -1,0 +1,1077 @@
+/**
+ * M23 Sketch Editor Styles
+ * Complete styling for all 14 M23 sketch components
+ * Dark mode and light mode support
+ */
+
+/* ============================================================================
+   Overlay and Dialog Base Styles
+   ============================================================================ */
+
+.sketch-ui-overlay,
+.constraint-tools-overlay,
+.dimension-tools-overlay,
+.geometric-primitives-overlay,
+.diagnostics-overlay,
+.solver-overlay,
+.validation-overlay,
+.transform-overlay,
+.layer-panel-overlay,
+.snap-grid-overlay,
+.palette-overlay,
+.dynamic-input-overlay,
+.history-overlay,
+.export-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.sketch-ui-dialog,
+.constraint-tools-dialog,
+.dimension-tools-dialog,
+.geometric-primitives-dialog,
+.diagnostics-dialog,
+.solver-dialog,
+.validation-dialog,
+.transform-dialog,
+.layer-panel-dialog,
+.snap-grid-dialog,
+.palette-dialog,
+.dynamic-input-dialog,
+.history-dialog,
+.export-dialog {
+  background-color: #ffffff;
+  color: #000000;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================================================
+   Header Styles
+   ============================================================================ */
+
+.sketch-header,
+.constraint-header,
+.dimension-header,
+.gp-header,
+.diag-header,
+.solver-header,
+.val-header,
+.trans-header,
+.layer-header,
+.snap-header,
+.palette-header,
+.di-header,
+.hist-header,
+.export-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.sketch-header h2,
+.constraint-header h2,
+.dimension-header h2,
+.gp-header h2,
+.diag-header h2,
+.solver-header h2,
+.val-header h2,
+.trans-header h2,
+.layer-header h2,
+.snap-header h2,
+.palette-header h2,
+.di-header h2,
+.hist-header h2,
+.export-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.close-btn:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================================================
+   Body Styles
+   ============================================================================ */
+
+.sketch-body,
+.constraint-body,
+.dimension-body,
+.gp-body,
+.diag-body,
+.solver-body,
+.val-body,
+.trans-body,
+.layer-body,
+.snap-body,
+.palette-body,
+.di-body,
+.hist-body,
+.export-body {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+/* ============================================================================
+   Footer Styles
+   ============================================================================ */
+
+.sketch-footer,
+.constraint-footer,
+.dimension-footer,
+.gp-footer,
+.diag-footer,
+.solver-footer,
+.val-footer,
+.trans-footer,
+.layer-footer,
+.snap-footer,
+.palette-footer,
+.di-footer,
+.hist-footer,
+.export-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* ============================================================================
+   Button Styles
+   ============================================================================ */
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid #cccccc;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.btn:hover {
+  opacity: 0.8;
+}
+
+.btn-primary {
+  background-color: #2196f3;
+  color: white;
+  border-color: #2196f3;
+}
+
+.btn-primary:hover {
+  background-color: #1976d2;
+}
+
+.btn-cancel {
+  background-color: transparent;
+  color: #666;
+  border-color: #cccccc;
+}
+
+.btn-cancel:hover {
+  background-color: #f5f5f5;
+}
+
+.btn-danger {
+  background-color: #f44336;
+  color: white;
+  border-color: #f44336;
+}
+
+.btn-apply {
+  background-color: #4caf50;
+  color: white;
+  border-color: #4caf50;
+}
+
+.btn-create {
+  background-color: #ff9800;
+  color: white;
+  border-color: #ff9800;
+}
+
+.btn-add {
+  background-color: #4caf50;
+  color: white;
+  border-color: #4caf50;
+}
+
+/* ============================================================================
+   SketchUI Specific Styles
+   ============================================================================ */
+
+.sketch-tools {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  flex-wrap: wrap;
+}
+
+.tool-btn {
+  padding: 6px 12px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  background-color: white;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.tool-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.tool-btn.active {
+  background-color: #2196f3;
+  color: white;
+  border-color: #2196f3;
+}
+
+.tool-separator {
+  width: 1px;
+  background-color: #cccccc;
+  margin: 0 4px;
+}
+
+.sketch-canvas-container {
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  background-color: white;
+}
+
+.sketch-info {
+  font-size: 12px;
+  color: #666;
+  padding: 8px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+/* ============================================================================
+   Constraint Tools Styles
+   ============================================================================ */
+
+.constraint-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.constraint-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.constraint-btn {
+  padding: 10px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  background-color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.constraint-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.constraint-btn.active {
+  background-color: #4caf50;
+  color: white;
+  border-color: #4caf50;
+}
+
+.constraint-icon {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.constraint-name {
+  font-size: 14px;
+  flex: 1;
+  text-align: left;
+}
+
+.constraint-controls {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.constraint-description {
+  font-size: 12px;
+  color: #666;
+}
+
+.constraint-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.constraint-input-group label {
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 50px;
+}
+
+.constraint-input-group input {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.constraint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.constraint-item {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.constraint-item-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+}
+
+.constraint-item-icon {
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.constraint-item-name {
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.constraint-item-value {
+  font-size: 12px;
+  color: #666;
+  margin-left: auto;
+}
+
+.constraint-item-delete {
+  background: none;
+  border: none;
+  color: #f44336;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+}
+
+.constraint-feedback {
+  padding: 12px;
+  border-radius: 4px;
+  color: white;
+  text-align: center;
+  font-size: 12px;
+  background-color: #4caf50;
+}
+
+/* ============================================================================
+   Dimension Tools Styles
+   ============================================================================ */
+
+.dimension-types {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dimension-type {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dimension-btn {
+  padding: 10px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  background-color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.dimension-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.dimension-btn.active {
+  background-color: #2196f3;
+  color: white;
+  border-color: #2196f3;
+}
+
+.dimension-icon {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.dimension-name {
+  font-size: 14px;
+  flex: 1;
+  text-align: left;
+}
+
+.dimension-input-group {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dimension-input-group label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dimension-input-group input {
+  padding: 6px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.dimension-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dimension-item {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.dimension-delete {
+  background: none;
+  border: none;
+  color: #f44336;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+}
+
+/* ============================================================================
+   Geometric Primitives Styles
+   ============================================================================ */
+
+.gp-tools {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.gp-tool-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gp-tool-btn {
+  padding: 10px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  background-color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.gp-tool-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.gp-tool-btn.active {
+  background-color: #2196f3;
+  color: white;
+  border-color: #2196f3;
+}
+
+.gp-options {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.snap-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.snap-option input {
+  cursor: pointer;
+}
+
+.gp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gp-item {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* ============================================================================
+   Section Titles
+   ============================================================================ */
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+/* ============================================================================
+   Transform Tools Styles
+   ============================================================================ */
+
+.transform-types {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.trans-btn {
+  padding: 10px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.trans-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.trans-btn.active {
+  background-color: #2196f3;
+  color: white;
+  border-color: #2196f3;
+}
+
+.transform-params {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transform-params input {
+  padding: 6px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* ============================================================================
+   Layer Panel Styles
+   ============================================================================ */
+
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.layer-item {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.layer-item:hover {
+  background-color: #f0f0f0;
+}
+
+.layer-item input {
+  cursor: pointer;
+}
+
+/* ============================================================================
+   Snap & Grid Styles
+   ============================================================================ */
+
+.grid-size-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.grid-size-section label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.grid-size-section input {
+  padding: 6px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.snap-types-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.snap-type {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.snap-type input {
+  cursor: pointer;
+}
+
+/* ============================================================================
+   Palette Styles
+   ============================================================================ */
+
+.color-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.color-section label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.color-btn {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.color-btn:hover {
+  opacity: 0.8;
+}
+
+.color-btn.active {
+  border-color: #000;
+}
+
+.color-section input[type="color"] {
+  padding: 4px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  cursor: pointer;
+  height: 40px;
+}
+
+.line-width-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.line-width-section label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.line-width-section input {
+  cursor: pointer;
+}
+
+.line-width-section span {
+  font-size: 12px;
+  color: #666;
+}
+
+/* ============================================================================
+   Dynamic Input Styles
+   ============================================================================ */
+
+.di-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.di-input-group label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.di-input-group input {
+  padding: 6px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* ============================================================================
+   Export Styles
+   ============================================================================ */
+
+.format-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.format-section label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.format-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.format-btn {
+  padding: 10px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 12px;
+}
+
+.format-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.format-btn.active {
+  background-color: #2196f3;
+  color: white;
+  border-color: #2196f3;
+}
+
+.quality-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quality-section label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.quality-section input {
+  cursor: pointer;
+}
+
+.quality-section span {
+  font-size: 12px;
+  color: #666;
+}
+
+/* ============================================================================
+   Dark Mode Support
+   ============================================================================ */
+
+@media (prefers-color-scheme: dark) {
+  .sketch-ui-dialog,
+  .constraint-tools-dialog,
+  .dimension-tools-dialog,
+  .geometric-primitives-dialog,
+  .diagnostics-dialog,
+  .solver-dialog,
+  .validation-dialog,
+  .transform-dialog,
+  .layer-panel-dialog,
+  .snap-grid-dialog,
+  .palette-dialog,
+  .dynamic-input-dialog,
+  .history-dialog,
+  .export-dialog {
+    background-color: #2a2a2a;
+    color: #ffffff;
+  }
+
+  .sketch-header,
+  .constraint-header,
+  .dimension-header,
+  .gp-header,
+  .diag-header,
+  .solver-header,
+  .val-header,
+  .trans-header,
+  .layer-header,
+  .snap-header,
+  .palette-header,
+  .di-header,
+  .hist-header,
+  .export-header {
+    border-bottom-color: #444444;
+  }
+
+  .sketch-footer,
+  .constraint-footer,
+  .dimension-footer,
+  .gp-footer,
+  .diag-footer,
+  .solver-footer,
+  .val-footer,
+  .trans-footer,
+  .layer-footer,
+  .snap-footer,
+  .palette-footer,
+  .di-footer,
+  .hist-footer,
+  .export-footer {
+    border-top-color: #444444;
+  }
+
+  .tool-btn,
+  .constraint-btn,
+  .dimension-btn,
+  .gp-tool-btn,
+  .trans-btn,
+  .format-btn {
+    background-color: #333333;
+    color: #ffffff;
+    border-color: #444444;
+  }
+
+  .tool-btn:hover,
+  .constraint-btn:hover,
+  .dimension-btn:hover,
+  .gp-tool-btn:hover,
+  .trans-btn:hover,
+  .format-btn:hover {
+    background-color: #3a3a3a;
+  }
+
+  .sketch-tools,
+  .constraint-controls,
+  .dimension-input-group,
+  .gp-options,
+  .transform-params,
+  .diag-body,
+  .solver-status,
+  .val-body,
+  .snap-body,
+  .palette-body,
+  .di-body,
+  .hist-body,
+  .export-body {
+    background-color: #333333 !important;
+  }
+
+  .constraint-item,
+  .dimension-item,
+  .gp-item,
+  .layer-item,
+  .sketch-info {
+    background-color: #333333 !important;
+    border-color: #444444 !important;
+    color: #ffffff !important;
+  }
+
+  .section-title {
+    color: #aaaaaa;
+  }
+
+  .empty-state {
+    background-color: #333333;
+    color: #666666;
+  }
+
+  .btn-cancel {
+    color: #999;
+    border-color: #444444;
+  }
+
+  .btn-cancel:hover {
+    background-color: #3a3a3a;
+  }
+}
+
+/* ============================================================================
+   Responsive Design
+   ============================================================================ */
+
+@media (max-width: 600px) {
+  .sketch-ui-dialog,
+  .constraint-tools-dialog,
+  .dimension-tools-dialog,
+  .geometric-primitives-dialog,
+  .diagnostics-dialog,
+  .solver-dialog,
+  .validation-dialog,
+  .transform-dialog,
+  .layer-panel-dialog,
+  .snap-grid-dialog,
+  .palette-dialog,
+  .dynamic-input-dialog,
+  .history-dialog,
+  .export-dialog {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .constraint-grid,
+  .dimension-types,
+  .gp-tools,
+  .transform-types,
+  .format-options,
+  .color-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sketch-tools {
+    flex-direction: column;
+  }
+
+  .tool-btn {
+    width: 100%;
+  }
+
+  .sketch-footer,
+  .constraint-footer,
+  .dimension-footer,
+  .gp-footer,
+  .diag-footer,
+  .solver-footer,
+  .val-footer,
+  .trans-footer,
+  .layer-footer,
+  .snap-footer,
+  .palette-footer,
+  .di-footer,
+  .hist-footer,
+  .export-footer {
+    flex-direction: column-reverse;
+  }
+
+  .btn {
+    width: 100%;
+  }
+}
