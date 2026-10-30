@@ -1,0 +1,647 @@
+# BendCore CAD M22-M25 Phase Orchestration
+# UI Extension Phases - Complete Missing Interface Components
+# Start: Oct 26, 2026 · 19:20 Amsterdam
+# Target: Nov 15, 2026
+
+orchestration:
+  name: "M22-M25: UI Extensions & Specialized Editors"
+  phases: 4
+  total_gaps: 48
+  total_tests_required: 1200
+  start_date: 2026-10-26
+  target_completion: 2026-11-15
+  parallelism: maximum
+  agents: 60+
+
+phases:
+
+  # ============================================================================
+  # M22: File Operations & Settings (12 GAPs)
+  # ============================================================================
+  M22:
+    name: "File Operations & Settings Dialog"
+    duration_hours: "6-8"
+    priority: critical
+    dependencies: []
+
+    GAPs:
+      - id: 079
+        name: "FileOpenDialog"
+        description: "Native file open dialog with recent files list"
+        components:
+          - FilePickerDialog.tsx (React)
+          - file_browser.cpp (C++ backend)
+          - Recent files registry
+        tests: 35
+        time_hours: 1.5
+
+      - id: 080
+        name: "FileSaveDialog"
+        description: "Save dialog with format selection and preview"
+        components:
+          - SaveDialog.tsx
+          - Serialization options
+          - File format selection
+        tests: 32
+        time_hours: 1.5
+
+      - id: 081
+        name: "RecentFilesManager"
+        description: "Recent files list and management"
+        components:
+          - RecentFilesList.tsx
+          - File history database
+          - Pin/unpin logic
+        tests: 28
+        time_hours: 1
+
+      - id: 082
+        name: "FileExplorer"
+        description: "Project file browser and organizer"
+        components:
+          - FileExplorer.tsx
+          - Folder tree navigation
+          - File operations (rename, move, delete)
+        tests: 36
+        time_hours: 1.5
+
+      - id: 083
+        name: "SettingsDialog"
+        description: "Global application settings"
+        components:
+          - SettingsDialog.tsx
+          - Settings categories (General, Display, Advanced)
+          - Settings persistence
+        tests: 34
+        time_hours: 1.5
+
+      - id: 084
+        name: "ThemeSelector"
+        description: "Light/dark theme and color scheme customizer"
+        components:
+          - ThemeSelector.tsx
+          - Color palette editor
+          - Theme preview
+        tests: 30
+        time_hours: 1
+
+      - id: 085
+        name: "IconThemeManager"
+        description: "Icon theme selection and customization"
+        components:
+          - IconThemeUI.tsx
+          - Theme package loader
+          - Icon preview
+        tests: 32
+        time_hours: 1
+
+      - id: 086
+        name: "KeyboardShortcutEditor"
+        description: "Custom keyboard shortcut configuration"
+        components:
+          - ShortcutEditor.tsx
+          - Conflict detection
+          - Profile management
+        tests: 38
+        time_hours: 1.5
+
+      - id: 087
+        name: "UnitPreferences"
+        description: "Unit system selection (metric, imperial, custom)"
+        components:
+          - UnitSelector.tsx
+          - Unit conversion
+          - Default unit profile
+        tests: 29
+        time_hours: 1
+
+      - id: 088
+        name: "PerformanceSettings"
+        description: "Performance tuning and optimization settings"
+        components:
+          - PerformancePanel.tsx
+          - Cache settings
+          - Rendering optimization
+        tests: 33
+        time_hours: 1
+
+      - id: 089
+        name: "PluginSettings"
+        description: "Plugin management UI"
+        components:
+          - PluginManager.tsx
+          - Plugin enable/disable
+          - Plugin update checker
+        tests: 31
+        time_hours: 1
+
+      - id: 090
+        name: "CloudSettings"
+        description: "Cloud integration configuration"
+        components:
+          - CloudConfig.tsx
+          - Account management
+          - Sync preferences
+        tests: 30
+        time_hours: 1
+
+  # ============================================================================
+  # M23: Sketch Editor Complete (14 GAPs)
+  # ============================================================================
+  M23:
+    name: "Complete Sketch Editor with All Tools"
+    duration_hours: "12-14"
+    priority: critical
+    dependencies: ["M22"]
+
+    GAPs:
+      - id: 091
+        name: "SketchUI"
+        description: "2D sketch editing interface"
+        components:
+          - SketchEditor.tsx (main component)
+          - Sketch tools panel
+          - Canvas rendering
+        tests: 42
+        time_hours: 2
+
+      - id: 092
+        name: "ConstraintTools"
+        description: "Geometric constraint tools (coincident, parallel, perpendicular, etc.)"
+        components:
+          - ConstraintUI.tsx
+          - Constraint solver integration
+          - Visual feedback
+        tests: 48
+        time_hours: 2.5
+
+      - id: 093
+        name: "DimensionTools"
+        description: "Dimension annotation and editing"
+        components:
+          - DimensionUI.tsx
+          - Dimension input dialog
+          - Constraint generation
+        tests: 40
+        time_hours: 2
+
+      - id: 094
+        name: "GeometricPrimitives"
+        description: "Line, circle, arc, rectangle, polygon tools"
+        components:
+          - PrimitiveToolbar.tsx
+          - Shape creation logic
+          - Snapping system
+        tests: 44
+        time_hours: 2
+
+      - id: 095
+        name: "SketchConstraintDiagnostics"
+        description: "Constraint status visualization and diagnostics"
+        components:
+          - ConstraintDiagnostics.tsx
+          - Redundancy detection
+          - Unsolvable constraint warnings
+        tests: 36
+        time_hours: 1.5
+
+      - id: 096
+        name: "SketchSolver"
+        description: "Constraint solver UI with solver selection"
+        components:
+          - SolverUI.tsx
+          - Solver performance monitoring
+          - Debug visualization
+        tests: 39
+        time_hours: 1.5
+
+      - id: 097
+        name: "SketchValidation"
+        description: "Sketch validation and error reporting"
+        components:
+          - ValidationUI.tsx
+          - Error list panel
+          - Auto-fix suggestions
+        tests: 35
+        time_hours: 1.5
+
+      - id: 098
+        name: "SketchTransformation"
+        description: "Sketch editing tools (move, rotate, scale, mirror)"
+        components:
+          - TransformToolbar.tsx
+          - Transformation dialogs
+          - Undo/redo integration
+        tests: 41
+        time_hours: 2
+
+      - id: 099
+        name: "SketchLayerPanel"
+        description: "Sketch layer management and visibility"
+        components:
+          - SketchLayers.tsx
+          - Layer tree
+          - Visibility controls
+        tests: 33
+        time_hours: 1
+
+      - id: 0100
+        name: "SnapGrid"
+        description: "Snap and grid system configuration UI"
+        components:
+          - SnapGridUI.tsx
+          - Snap type selector
+          - Grid spacing editor
+        tests: 32
+        time_hours: 1
+
+      - id: 0101
+        name: "SketchPalette"
+        description: "Sketch element color and styling palette"
+        components:
+          - SketchPalette.tsx
+          - Color picker
+          - Line style editor
+        tests: 30
+        time_hours: 1
+
+      - id: 0102
+        name: "DynamicInput"
+        description: "Dynamic input for sketch geometry creation"
+        components:
+          - DynamicInput.tsx
+          - Coordinate entry
+          - Real-time preview
+        tests: 38
+        time_hours: 1.5
+
+      - id: 0103
+        name: "SketchHistory"
+        description: "Sketch feature history and parametric links"
+        components:
+          - SketchHistory.tsx
+          - Feature tree integration
+          - Parameter binding UI
+        tests: 36
+        time_hours: 1.5
+
+      - id: 0104
+        name: "SketchExport"
+        description: "Export sketch as drawing, image, or profile"
+        components:
+          - SketchExportDialog.tsx
+          - Format selection
+          - Quality settings
+        tests: 34
+        time_hours: 1.5
+
+  # ============================================================================
+  # M24: Assembly & Bend Operations (13 GAPs)
+  # ============================================================================
+  M24:
+    name: "Assembly Workbench & Bend Wizards"
+    duration_hours: "13-15"
+    priority: critical
+    dependencies: ["M22", "M23"]
+
+    GAPs:
+      - id: 0105
+        name: "AssemblyUI"
+        description: "Main assembly workbench interface"
+        components:
+          - AssemblyWorkbench.tsx
+          - Assembly tree view
+          - Assembly properties panel
+        tests: 44
+        time_hours: 2
+
+      - id: 0106
+        name: "ComponentTree"
+        description: "Assembly component tree with hierarchy"
+        components:
+          - ComponentTree.tsx
+          - Add/remove components
+          - Component selection
+        tests: 40
+        time_hours: 1.5
+
+      - id: 0107
+        name: "MateTools"
+        description: "Assembly mate tools (coincident, parallel, perpendicular, distance)"
+        components:
+          - MateUI.tsx
+          - Mate constraint creation
+          - Mate visualization
+        tests: 48
+        time_hours: 2.5
+
+      - id: 0108
+        name: "AssemblyConstraintEditor"
+        description: "Edit and manage assembly constraints"
+        components:
+          - AssemblyConstraintUI.tsx
+          - Constraint list and editing
+          - Conflict resolution
+        tests: 42
+        time_hours: 2
+
+      - id: 0109
+        name: "AssemblyValidation"
+        description: "Assembly structural analysis and validation"
+        components:
+          - AssemblyValidator.tsx
+          - Collision detection UI
+          - Interference report
+        tests: 39
+        time_hours: 1.5
+
+      - id: 0110
+        name: "ExplodedView"
+        description: "Exploded view configuration and animation"
+        components:
+          - ExplodedViewUI.tsx
+          - Component offset editor
+          - Animation timeline
+        tests: 36
+        time_hours: 1.5
+
+      - id: 0111
+        name: "BendWizard"
+        description: "Interactive bend operation wizard"
+        components:
+          - BendWizard.tsx (multi-step form)
+          - Parameter input panels
+          - 3D preview
+        tests: 50
+        time_hours: 2.5
+
+      - id: 0112
+        name: "BendParametersEditor"
+        description: "Detailed bend parameters editor"
+        components:
+          - BendParamsUI.tsx
+          - Bend radius, angle, material input
+          - Spring-back calculator
+        tests: 44
+        time_hours: 2
+
+      - id: 0113
+        name: "BendPreview"
+        description: "Real-time 3D bend preview during configuration"
+        components:
+          - BendPreviewViewport.tsx
+          - Deformation visualization
+          - Animation controls
+        tests: 41
+        time_hours: 1.5
+
+      - id: 0114
+        name: "BendAnalysis"
+        description: "Bend stress and strain analysis visualization"
+        components:
+          - BendAnalysisUI.tsx
+          - Stress heatmap rendering
+          - Analysis report generation
+        tests: 43
+        time_hours: 2
+
+      - id: 0115
+        name: "WeldUI"
+        description: "Weld operation configuration"
+        components:
+          - WeldUI.tsx
+          - Weld type selector
+          - Weld path definition
+        tests: 38
+        time_hours: 1.5
+
+      - id: 0116
+        name: "FeatureTools"
+        description: "Additional feature tools (pad, pocket, shell, fillet)"
+        components:
+          - FeatureToolbar.tsx
+          - Feature parameter dialogs
+          - Feature preview
+        tests: 42
+        time_hours: 2
+
+      - id: 0117
+        name: "PathDefinition"
+        description: "Complex path definition for sweep and loft"
+        components:
+          - PathUI.tsx
+          - Path spline editor
+          - Path validation
+        tests: 37
+        time_hours: 1.5
+
+  # ============================================================================
+  # M25: Manufacturing & Analysis (9 GAPs)
+  # ============================================================================
+  M25:
+    name: "Manufacturing Panel & Analysis Tools"
+    duration_hours: "10-12"
+    priority: high
+    dependencies: ["M22", "M23", "M24"]
+
+    GAPs:
+      - id: 0118
+        name: "ManufacturingPanel"
+        description: "Main manufacturing workbench panel"
+        components:
+          - ManufacturingWorkbench.tsx
+          - Process selector
+          - Manufacturing constraints
+        tests: 40
+        time_hours: 1.5
+
+      - id: 0119
+        name: "NCCodeViewer"
+        description: "NC/G-code viewer and editor"
+        components:
+          - NCViewer.tsx
+          - Code highlighting
+          - Line-by-line execution
+        tests: 44
+        time_hours: 2
+
+      - id: 0120
+        name: "ToolpathPreview"
+        description: "3D toolpath visualization and simulation"
+        components:
+          - ToolpathViewport.tsx
+          - Tool animation
+          - Collision detection
+        tests: 46
+        time_hours: 2
+
+      - id: 0121
+        name: "BOMGenerator"
+        description: "Bill of Materials generator and editor"
+        components:
+          - BOMUI.tsx
+          - Parts list table
+          - BOM export options
+        tests: 38
+        time_hours: 1.5
+
+      - id: 0122
+        name: "ManufacturingAnalysis"
+        description: "Manufacturing feasibility analysis"
+        components:
+          - MfgAnalysisUI.tsx
+          - Constraint violation report
+          - Optimization suggestions
+        tests: 42
+        time_hours: 1.5
+
+      - id: 0123
+        name: "FEAResultsViewer"
+        description: "FEA results visualization (stress, strain, displacement)"
+        components:
+          - FEAViewer.tsx
+          - Heatmap rendering
+          - Result filtering
+        tests: 48
+        time_hours: 2
+
+      - id: 0124
+        name: "ReportGenerator"
+        description: "Automated report generation (PDF, HTML)"
+        components:
+          - ReportUI.tsx
+          - Template selector
+          - Export options
+        tests: 40
+        time_hours: 1.5
+
+      - id: 0125
+        name: "CostCalculator"
+        description: "Manufacturing cost estimation"
+        components:
+          - CostUI.tsx
+          - Material cost database
+          - Labor time estimator
+        tests: 36
+        time_hours: 1
+
+      - id: 0126
+        name: "DrawingGenerator"
+        description: "Automated technical drawing generation"
+        components:
+          - DrawingGenUI.tsx
+          - View selection
+          - Annotation options
+        tests: 42
+        time_hours: 1.5
+
+  # ============================================================================
+  # M21 Integration (Post-Phases)
+  # ============================================================================
+  Integration:
+    name: "M21 Integration with M22-M25"
+    duration_hours: "2-3"
+    tasks:
+      - Merge all M22-M25 UI components into main application
+      - Update BendCoreLanding.tsx to include new dialogs
+      - Integrate MenuBar with new dialog handlers
+      - Update keyboard shortcuts for new features
+      - Full UI consistency audit
+      - Final testing and verification
+
+# ============================================================================
+# Test Requirements
+# ============================================================================
+tests:
+  M22_count: 360
+  M23_count: 530
+  M24_count: 500
+  M25_count: 410
+  total: 1800
+  pass_rate_required: 100%
+  warnings_allowed: 0
+  memory_leaks_allowed: 0
+
+# ============================================================================
+# Quality Standards (Karpathy Guidelines)
+# ============================================================================
+quality:
+  - All code must follow Karpathy AI Coding Guidelines
+  - Zero compiler warnings (clang++ -Wall -Wextra -Werror)
+  - 100% unit test pass rate
+  - Zero memory leaks (valgrind verification)
+  - Complete TypeScript typing (no any types)
+  - All functions documented with JSDoc/comments
+  - Performance benchmarks for critical paths
+
+# ============================================================================
+# GitHub Integration
+# ============================================================================
+github:
+  repository: "https://github.com/Do4ent/bendcore"
+  branch: "main"
+  commit_frequency: "per-phase"
+  commit_template: |
+    feat(M{phase}): {description}
+
+    - {GAP_description}
+    - {components_count} components
+    - {test_count} tests, 100% pass rate
+    - Zero warnings, zero memory leaks
+
+    Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
+    Claude-Session: https://claude.ai/code/session_01Wnwv1uAckpd6ZA3sCt3kki
+
+# ============================================================================
+# Timeline
+# ============================================================================
+timeline:
+  phase_m22:
+    start: 2026-10-26
+    duration: "6-8 hours"
+    target: 2026-10-27
+  phase_m23:
+    start: 2026-10-27
+    duration: "12-14 hours"
+    target: 2026-10-29
+  phase_m24:
+    start: 2026-10-29
+    duration: "13-15 hours"
+    target: 2026-10-31
+  phase_m25:
+    start: 2026-10-31
+    duration: "10-12 hours"
+    target: 2026-11-02
+  integration:
+    start: 2026-11-02
+    duration: "2-3 hours"
+    target: 2026-11-03
+
+  final_completion: 2026-11-03
+
+# ============================================================================
+# Execution Strategy
+# ============================================================================
+execution:
+  mode: "parallel_maximum"
+  agents_per_phase: 12-15
+  orchestration_agents: 4 (M22, M23, M24, M25)
+  parallelism: "60+ agents across all phases"
+  dependencies: "strict DAG ordering (M22 → M23 → M24 → M25)"
+  autonomous: "true (no pauses between phases)"
+  approvals_required: false
+  git_auto_commit: true
+  git_auto_push: true
+
+# ============================================================================
+# Success Criteria
+# ============================================================================
+success_criteria:
+  - All 48 GAPs implemented
+  - All 1800 tests passing (100%)
+  - Zero compiler warnings
+  - Zero memory leaks
+  - All code on GitHub/main branch
+  - UI coverage >90%
+  - Complete documentation
+  - Ready for v1.0.0 release integration
