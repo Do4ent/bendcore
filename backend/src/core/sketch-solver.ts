@@ -450,12 +450,26 @@ export class SketchSolver {
     // A sketch is over-constrained if:
     // 1. Number of constraints > 3*N - 3 (for 3D with N vertices)
     // 2. Or residuals cannot be driven to zero
+    // 3. Or same entities constrained by same type with different values
 
     const expectedDOF = Math.max(0, 3 * this.vertices.length - 3);
     if (this.constraints.length > expectedDOF) {
       overConstrained.push(
         `Sketch is over-constrained: ${this.constraints.length} constraints for ${expectedDOF} degrees of freedom`
       );
+    }
+
+    // Check for duplicate constraints with conflicting values
+    const constraintMap = new Map<string, number[]>();
+    for (const c of this.constraints) {
+      const key = `${c.type}:${[...c.entity_ids].sort().join(',')}`;
+      if (!constraintMap.has(key)) constraintMap.set(key, []);
+      constraintMap.get(key)!.push(c.value ?? 0);
+    }
+    for (const [key, values] of constraintMap) {
+      if (values.length > 1 && new Set(values).size > 1) {
+        overConstrained.push(`Conflicting constraints on ${key}: values ${values.join(', ')}`);
+      }
     }
 
     return overConstrained;
