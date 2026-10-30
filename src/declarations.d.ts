@@ -41,8 +41,11 @@ declare module 'three' {
 
   export class BufferGeometry {
     constructor();
+    attributes: Record<string, BufferAttribute>;
+    boundingBox: Box3 | null;
     setAttribute(name: string, attribute: BufferAttribute): this;
     setFromPoints(points: Vector3[]): this;
+    computeBoundingBox(): void;
     dispose(): void;
   }
 
@@ -101,6 +104,13 @@ declare module 'three' {
   }
 
   export class Mesh extends Object3D {
+    constructor(geometry?: BufferGeometry, material?: Material);
+    geometry: BufferGeometry;
+    material: Material;
+    matrixWorld: Matrix4;
+  }
+
+  export class LineSegments extends Object3D {
     constructor(geometry?: BufferGeometry, material?: Material);
     geometry: BufferGeometry;
     material: Material;

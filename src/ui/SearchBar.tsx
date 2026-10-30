@@ -66,9 +66,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onCommand }) => {
             }
           );
 
-          const res = result as { success?: boolean; data?: { results?: unknown[] } } | null;
+          const res = result as { success?: boolean; data?: { results?: CommandSearchResult[] } } | null;
           if (res?.success && Array.isArray(res?.data?.results)) {
-            setResults(res.data.results as string[]);
+            setResults(res.data.results);
           }
         } catch (error) {
           console.error("Search error:", error);
