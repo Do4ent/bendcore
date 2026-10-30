@@ -1,0 +1,977 @@
+FAIL tests/integration/api-integration.test.ts
+  ● Test suite failed to run
+
+    [96msrc/database/db.ts[0m:[93m111[0m:[93m7[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m111[0m       [id, name, description || null, now, now]
+    [7m   [0m [91m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m133[0m:[93m70[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m133[0m     const project = await get('SELECT * FROM projects WHERE id = ?', [id]);
+    [7m   [0m [91m                                                                     ~~~~[0m
+    [96msrc/database/db.ts[0m:[93m139[0m:[93m73[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m139[0m     const tubes = await all('SELECT * FROM tubes WHERE project_id = ?', [id]);
+    [7m   [0m [91m                                                                        ~~~~[0m
+    [96msrc/database/db.ts[0m:[93m142[0m:[93m19[0m - [91merror[0m[90m TS2339: [0mProperty 'id' does not exist on type '{}'.
+
+    [7m142[0m       id: project.id,
+    [7m   [0m [91m                  ~~[0m
+    [96msrc/database/db.ts[0m:[93m143[0m:[93m21[0m - [91merror[0m[90m TS2339: [0mProperty 'name' does not exist on type '{}'.
+
+    [7m143[0m       name: project.name,
+    [7m   [0m [91m                    ~~~~[0m
+    [96msrc/database/db.ts[0m:[93m144[0m:[93m28[0m - [91merror[0m[90m TS2339: [0mProperty 'description' does not exist on type '{}'.
+
+    [7m144[0m       description: project.description,
+    [7m   [0m [91m                           ~~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m145[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'created_at' does not exist on type '{}'.
+
+    [7m145[0m       created_at: project.created_at,
+    [7m   [0m [91m                          ~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m146[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'updated_at' does not exist on type '{}'.
+
+    [7m146[0m       updated_at: project.updated_at,
+    [7m   [0m [91m                          ~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m147[0m:[93m14[0m - [91merror[0m[90m TS18046: [0m'tubes' is of type 'unknown'.
+
+    [7m147[0m       tubes: tubes.map((t: Record<string, unknown>) => ({
+    [7m   [0m [91m             ~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m157[0m:[93m25[0m - [91merror[0m[90m TS2339: [0mProperty 'metadata' does not exist on type '{}'.
+
+    [7m157[0m       metadata: project.metadata ? JSON.parse(project.metadata) : undefined
+    [7m   [0m [91m                        ~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m157[0m:[93m55[0m - [91merror[0m[90m TS2339: [0mProperty 'metadata' does not exist on type '{}'.
+
+    [7m157[0m       metadata: project.metadata ? JSON.parse(project.metadata) : undefined
+    [7m   [0m [91m                                                      ~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m172[0m:[93m7[0m - [91merror[0m[90m TS18046: [0m'projects' is of type 'unknown'.
+
+    [7m172[0m       projects.map((p: Record<string, unknown>) =>
+    [7m   [0m [91m      ~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m174[0m:[93m17[0m - [91merror[0m[90m TS7006: [0mParameter 'p' implicitly has an 'any' type.
+
+    [7m174[0m       ).filter((p): p is Promise<Project> => p !== null)
+    [7m   [0m [91m                ~[0m
+    [96msrc/database/db.ts[0m:[93m193[0m:[93m7[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m193[0m       [name || null, description || null, now, id]
+    [7m   [0m [91m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m207[0m:[93m57[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m207[0m     await run('DELETE FROM tubes WHERE project_id = ?', [id]);
+    [7m   [0m [91m                                                        ~~~~[0m
+    [96msrc/database/db.ts[0m:[93m208[0m:[93m66[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m208[0m     await run('DELETE FROM project_shares WHERE project_id = ?', [id]);
+    [7m   [0m [91m                                                                 ~~~~[0m
+    [96msrc/database/db.ts[0m:[93m209[0m:[93m67[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m209[0m     const result = await run('DELETE FROM projects WHERE id = ?', [id]);
+    [7m   [0m [91m                                                                  ~~~~[0m
+    [96msrc/database/db.ts[0m:[93m226[0m:[93m7[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m226[0m       [id, projectId, name, JSON.stringify(spec), now, now]
+    [7m   [0m [91m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m246[0m:[93m64[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m246[0m     const tube = await get('SELECT * FROM tubes WHERE id = ?', [id]);
+    [7m   [0m [91m                                                               ~~~~[0m
+    [96msrc/database/db.ts[0m:[93m253[0m:[93m16[0m - [91merror[0m[90m TS2339: [0mProperty 'id' does not exist on type '{}'.
+
+    [7m253[0m       id: tube.id,
+    [7m   [0m [91m               ~~[0m
+    [96msrc/database/db.ts[0m:[93m254[0m:[93m18[0m - [91merror[0m[90m TS2339: [0mProperty 'name' does not exist on type '{}'.
+
+    [7m254[0m       name: tube.name,
+    [7m   [0m [91m                 ~~~~[0m
+    [96msrc/database/db.ts[0m:[93m255[0m:[93m45[0m - [91merror[0m[90m TS2339: [0mProperty 'specification' does not exist on type '{}'.
+
+    [7m255[0m       specification: JSON.parse(String(tube.specification)),
+    [7m   [0m [91m                                            ~~~~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m256[0m:[93m20[0m - [91merror[0m[90m TS2339: [0mProperty 'sketch' does not exist on type '{}'.
+
+    [7m256[0m       sketch: tube.sketch ? JSON.parse(String(tube.sketch)) : undefined,
+    [7m   [0m [91m                   ~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m256[0m:[93m52[0m - [91merror[0m[90m TS2339: [0mProperty 'sketch' does not exist on type '{}'.
+
+    [7m256[0m       sketch: tube.sketch ? JSON.parse(String(tube.sketch)) : undefined,
+    [7m   [0m [91m                                                   ~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m257[0m:[93m22[0m - [91merror[0m[90m TS2339: [0mProperty 'geometry' does not exist on type '{}'.
+
+    [7m257[0m       geometry: tube.geometry ? JSON.parse(String(tube.geometry)) : undefined,
+    [7m   [0m [91m                     ~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m257[0m:[93m56[0m - [91merror[0m[90m TS2339: [0mProperty 'geometry' does not exist on type '{}'.
+
+    [7m257[0m       geometry: tube.geometry ? JSON.parse(String(tube.geometry)) : undefined,
+    [7m   [0m [91m                                                       ~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m258[0m:[93m24[0m - [91merror[0m[90m TS2339: [0mProperty 'properties' does not exist on type '{}'.
+
+    [7m258[0m       properties: tube.properties ? JSON.parse(String(tube.properties)) : undefined,
+    [7m   [0m [91m                       ~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m258[0m:[93m60[0m - [91merror[0m[90m TS2339: [0mProperty 'properties' does not exist on type '{}'.
+
+    [7m258[0m       properties: tube.properties ? JSON.parse(String(tube.properties)) : undefined,
+    [7m   [0m [91m                                                           ~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m259[0m:[93m24[0m - [91merror[0m[90m TS2339: [0mProperty 'created_at' does not exist on type '{}'.
+
+    [7m259[0m       created_at: tube.created_at,
+    [7m   [0m [91m                       ~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m260[0m:[93m24[0m - [91merror[0m[90m TS2339: [0mProperty 'updated_at' does not exist on type '{}'.
+
+    [7m260[0m       updated_at: tube.updated_at
+    [7m   [0m [91m                       ~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m279[0m:[93m7[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m279[0m       [JSON.stringify(geometry), JSON.stringify(properties), now, id]
+    [7m   [0m [91m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    [96msrc/database/db.ts[0m:[93m292[0m:[93m64[0m - [91merror[0m[90m TS2554: [0mExpected 1 arguments, but got 2.
+
+    [7m292[0m     const result = await run('DELETE FROM tubes WHERE id = ?', [id]);
+    [7m   [0m [91m                                                               ~~~~[0m
+
+PASS tests/profile-manager.test.ts
+  ● Console
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.error
+      Failed to load bending profiles: Error: ENOENT: no such file or directory, open '/nonexistent/path/bending_profiles.json'
+          at open (node:internal/fs/promises:637:25)
+          at Object.readFile (node:internal/fs/promises:1249:14)
+          at ProfileManager.loadProfiles (/home/runner/work/bendcore/bendcore/backend/src/core/profile-manager.ts:43:20)
+          at Object.<anonymous> (/home/runner/work/bendcore/bendcore/backend/tests/profile-manager.test.ts:28:22) {
+        errno: -2,
+        code: 'ENOENT',
+        syscall: 'open',
+        path: '/nonexistent/path/bending_profiles.json'
+      }
+
+    [0m [90m 57 |[39m       [36mreturn[39m [36mtrue[39m[33m;[39m
+     [90m 58 |[39m     } [36mcatch[39m (err) {
+    [31m[1m>[22m[39m[90m 59 |[39m       console[33m.[39merror([32m'Failed to load bending profiles:'[39m[33m,[39m err)[33m;[39m
+     [90m    |[39m               [31m[1m^[22m[39m
+     [90m 60 |[39m       [36mreturn[39m [36mfalse[39m[33m;[39m
+     [90m 61 |[39m     }
+     [90m 62 |[39m   }[0m
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:59:15)
+      at Object.<anonymous> (tests/profile-manager.test.ts:28:22)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+    console.log
+      Loaded 15 bending profiles
+
+      at ProfileManager.loadProfiles (src/core/profile-manager.ts:56:15)
+
+FAIL tests/performance/api-performance.perf.test.ts
+  ● Console
+
+    console.log
+      Large sketch (20.5KB): 3ms
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:210:15)
+
+  ● BendCore API Performance Tests › Response Time Benchmarks (< 200ms acceptance) › should return profiles list in < 100ms
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 24 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m request(app)
+     [90m 25 |[39m         [33m.[39m[36mget[39m([32m'/api/profiles'[39m)
+    [31m[1m>[22m[39m[90m 26 |[39m         [33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 27 |[39m
+     [90m 28 |[39m       [36mconst[39m duration [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m startTime[33m;[39m
+     [90m 29 |[39m       console[33m.[39mlog([32m`GET /api/profiles: ${duration}ms`[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:26:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Response Time Benchmarks (< 200ms acceptance) › should retrieve single profile in < 50ms
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 38 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m request(app)
+     [90m 39 |[39m         [33m.[39m[36mget[39m([32m'/api/profiles/test-id'[39m)
+    [31m[1m>[22m[39m[90m 40 |[39m         [33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 41 |[39m
+     [90m 42 |[39m       [36mconst[39m duration [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m startTime[33m;[39m
+     [90m 43 |[39m       console[33m.[39mlog([32m`GET /api/profiles/:id: ${duration}ms`[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:40:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Response Time Benchmarks (< 200ms acceptance) › should solve sketch in < 200ms
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 75 |[39m         [33m.[39mpost([32m'/api/sketches/solve'[39m)
+     [90m 76 |[39m         [33m.[39msend(sketch)
+    [31m[1m>[22m[39m[90m 77 |[39m         [33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 78 |[39m
+     [90m 79 |[39m       [36mconst[39m duration [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m startTime[33m;[39m
+     [90m 80 |[39m       console[33m.[39mlog([32m`POST /api/sketches/solve: ${duration}ms`[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:77:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Response Time Benchmarks (< 200ms acceptance) › should create tube in < 150ms
+
+    expected 201 "Created", got 404 "Not Found"
+
+    [0m [90m 100 |[39m         [33m.[39mpost([32m'/api/tubes'[39m)
+     [90m 101 |[39m         [33m.[39msend(tubeData)
+    [31m[1m>[22m[39m[90m 102 |[39m         [33m.[39mexpect([35m201[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 103 |[39m
+     [90m 104 |[39m       [36mconst[39m duration [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m startTime[33m;[39m
+     [90m 105 |[39m       console[33m.[39mlog([32m`POST /api/tubes: ${duration}ms`[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:102:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Throughput & Concurrency › should handle 100 concurrent profile requests
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 114 |[39m
+     [90m 115 |[39m       [36mconst[39m promises [33m=[39m [33mArray[39m[33m.[39m[36mfrom[39m({ length[33m:[39m [35m100[39m }[33m,[39m () [33m=>[39m
+    [31m[1m>[22m[39m[90m 116 |[39m         request(app)[33m.[39m[36mget[39m([32m'/api/profiles'[39m)[33m.[39mexpect([35m200[39m)
+     [90m     |[39m                                           [31m[1m^[22m[39m
+     [90m 117 |[39m       )[33m;[39m
+     [90m 118 |[39m
+     [90m 119 |[39m       [36mconst[39m results [33m=[39m [36mawait[39m [33mPromise[39m[33m.[39mall(promises)[33m;[39m[0m
+
+      at tests/performance/api-performance.perf.test.ts:116:43
+          at Function.from (<anonymous>)
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:115:30)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Throughput & Concurrency › should handle 50 concurrent tube creations
+
+    expected 201 "Created", got 404 "Not Found"
+
+    [0m [90m 142 |[39m             }
+     [90m 143 |[39m           })
+    [31m[1m>[22m[39m[90m 144 |[39m           [33m.[39mexpect([35m201[39m)
+     [90m     |[39m            [31m[1m^[22m[39m
+     [90m 145 |[39m       )[33m;[39m
+     [90m 146 |[39m
+     [90m 147 |[39m       [36mconst[39m results [33m=[39m [36mawait[39m [33mPromise[39m[33m.[39mall(promises)[33m;[39m[0m
+
+      at tests/performance/api-performance.perf.test.ts:144:12
+          at Function.from (<anonymous>)
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:132:30)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Throughput & Concurrency › should maintain performance under sustained load
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 163 |[39m         [36mawait[39m request(app)
+     [90m 164 |[39m           [33m.[39m[36mget[39m([32m'/api/profiles'[39m)
+    [31m[1m>[22m[39m[90m 165 |[39m           [33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m            [31m[1m^[22m[39m
+     [90m 166 |[39m
+     [90m 167 |[39m         times[33m.[39mpush([33mDate[39m[33m.[39mnow() [33m-[39m startTime)[33m;[39m
+     [90m 168 |[39m       }[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:165:12)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Payload Size Impact › should process large batch imports efficiently
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 228 |[39m         [33m.[39mpost([32m'/api/import'[39m)
+     [90m 229 |[39m         [33m.[39msend(batchImport)
+    [31m[1m>[22m[39m[90m 230 |[39m         [33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 231 |[39m
+     [90m 232 |[39m       [36mconst[39m duration [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m startTime[33m;[39m
+     [90m 233 |[39m[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:230:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Database Query Performance › should filter profiles by category efficiently
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 244 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m request(app)
+     [90m 245 |[39m         [33m.[39m[36mget[39m([32m'/api/profiles?category=tube'[39m)
+    [31m[1m>[22m[39m[90m 246 |[39m         [33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 247 |[39m
+     [90m 248 |[39m       [36mconst[39m duration [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m startTime[33m;[39m
+     [90m 249 |[39m[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:246:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Database Query Performance › should retrieve paginated results efficiently
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 258 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m request(app)
+     [90m 259 |[39m         [33m.[39m[36mget[39m([32m'/api/profiles?limit=50&offset=0'[39m)
+    [31m[1m>[22m[39m[90m 260 |[39m         [33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 261 |[39m
+     [90m 262 |[39m       [36mconst[39m duration [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m startTime[33m;[39m
+     [90m 263 |[39m[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:260:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Cache Effectiveness › should improve response time on repeated requests
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 272 |[39m       [90m// First request (cache miss)[39m
+     [90m 273 |[39m       [36mconst[39m start1 [33m=[39m [33mDate[39m[33m.[39mnow()[33m;[39m
+    [31m[1m>[22m[39m[90m 274 |[39m       [36mawait[39m request(app)[33m.[39m[36mget[39m([32m'/api/profiles'[39m)[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m                                               [31m[1m^[22m[39m
+     [90m 275 |[39m       [36mconst[39m time1 [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m start1[33m;[39m
+     [90m 276 |[39m
+     [90m 277 |[39m       [90m// Second request (cache hit)[39m[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:274:47)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● BendCore API Performance Tests › Error Response Performance › should return error quickly for invalid requests
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 294 |[39m         [33m.[39mpost([32m'/api/tubes'[39m)
+     [90m 295 |[39m         [33m.[39msend({})
+    [31m[1m>[22m[39m[90m 296 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 297 |[39m
+     [90m 298 |[39m       [36mconst[39m duration [33m=[39m [33mDate[39m[33m.[39mnow() [33m-[39m startTime[33m;[39m
+     [90m 299 |[39m[0m
+
+      at Object.<anonymous> (tests/performance/api-performance.perf.test.ts:296:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+FAIL tests/vector.test.ts
+  ● Test suite failed to run
+
+    [96msrc/utils/vector.ts[0m:[93m58[0m:[93m10[0m - [91merror[0m[90m TS2699: [0mStatic property 'length' conflicts with built-in property 'Function.length' of constructor function 'Vector'.
+
+    [7m58[0m   static length(v: Vector3): number {
+    [7m  [0m [91m         ~~~~~~[0m
+
+FAIL tests/geometry-rounding.test.ts
+  ● GeometryRounder › roundLength › should round to nearest mm
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 1
+    Received: 0.984251968503937
+
+    Expected precision:    3
+    Expected difference: < 0.0005
+    Received difference:   0.015748031496062964
+
+    [0m [90m 57 |[39m       [36mconst[39m inchValue [33m=[39m [35m1.0[39m[33m;[39m [90m// approximately 25.4mm[39m
+     [90m 58 |[39m       [36mconst[39m result [33m=[39m [33mGeometryRounder[39m[33m.[39mroundLength(inchValue)[33m;[39m
+    [31m[1m>[22m[39m[90m 59 |[39m       expect(result)[33m.[39mtoBeCloseTo(inchValue[33m,[39m [35m3[39m)[33m;[39m
+     [90m    |[39m                      [31m[1m^[22m[39m
+     [90m 60 |[39m     })[33m;[39m
+     [90m 61 |[39m   })[33m;[39m
+     [90m 62 |[39m[0m
+
+      at Object.<anonymous> (tests/geometry-rounding.test.ts:59:22)
+
+FAIL tests/geometry-ops.test.ts
+  ● Test suite failed to run
+
+    [96msrc/utils/vector.ts[0m:[93m58[0m:[93m10[0m - [91merror[0m[90m TS2699: [0mStatic property 'length' conflicts with built-in property 'Function.length' of constructor function 'Vector'.
+
+    [7m58[0m   static length(v: Vector3): number {
+    [7m  [0m [91m         ~~~~~~[0m
+
+FAIL tests/security/input-validation.security.test.ts (5.651 s)
+  ● Security - Input Validation Tests › SQL Injection Prevention › should reject SQL injection in profile filter
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 24 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m request(app)
+     [90m 25 |[39m         [33m.[39m[36mget[39m([32m`/api/profiles?category=${encodeURIComponent(maliciousInput)}`[39m)
+    [31m[1m>[22m[39m[90m 26 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 27 |[39m
+     [90m 28 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 29 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:26:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › SQL Injection Prevention › should sanitize special characters in queries
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: undefined
+
+    [0m [90m 41 |[39m           [33m.[39m[36mget[39m([32m`/api/profiles?category=${encodeURIComponent(input)}`[39m)[33m;[39m
+     [90m 42 |[39m
+    [31m[1m>[22m[39m[90m 43 |[39m         expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m    |[39m                                  [31m[1m^[22m[39m
+     [90m 44 |[39m       }
+     [90m 45 |[39m     })[33m;[39m
+     [90m 46 |[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:43:34)
+
+  ● Security - Input Validation Tests › SQL Injection Prevention › should use parameterized queries
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 49 |[39m         [33m.[39m[36mget[39m([32m'/api/profiles'[39m)
+     [90m 50 |[39m         [33m.[39mquery({ id[33m:[39m [32m"1 UNION SELECT * FROM users--"[39m })
+    [31m[1m>[22m[39m[90m 51 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 52 |[39m
+     [90m 53 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 54 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:51:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › XSS (Cross-Site Scripting) Prevention › should reject script tags in input
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 69 |[39m         [33m.[39mpost([32m'/api/tubes'[39m)
+     [90m 70 |[39m         [33m.[39msend(xssPayload)
+    [31m[1m>[22m[39m[90m 71 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m    |[39m          [31m[1m^[22m[39m
+     [90m 72 |[39m
+     [90m 73 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 74 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:71:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › XSS (Cross-Site Scripting) Prevention › should escape HTML special characters
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: undefined
+
+    [0m [90m 90 |[39m           })[33m;[39m
+     [90m 91 |[39m
+    [31m[1m>[22m[39m[90m 92 |[39m         expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m    |[39m                                  [31m[1m^[22m[39m
+     [90m 93 |[39m       }
+     [90m 94 |[39m     })[33m;[39m
+     [90m 95 |[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:92:34)
+
+  ● Security - Input Validation Tests › XSS (Cross-Site Scripting) Prevention › should sanitize profile filter parameter
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: undefined
+
+    [0m [90m 104 |[39m         expect(res[33m.[39mbody[33m.[39mdata)[33m.[39mtoBeDefined()[33m;[39m
+     [90m 105 |[39m       } [36melse[39m {
+    [31m[1m>[22m[39m[90m 106 |[39m         expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m     |[39m                                  [31m[1m^[22m[39m
+     [90m 107 |[39m       }
+     [90m 108 |[39m     })[33m;[39m
+     [90m 109 |[39m   })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:106:34)
+
+  ● Security - Input Validation Tests › Buffer Overflow Prevention › should enforce size limits on arrays
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: undefined
+
+    [0m [90m 138 |[39m
+     [90m 139 |[39m       [36mif[39m (res[33m.[39mstatus [33m!==[39m [35m200[39m) {
+    [31m[1m>[22m[39m[90m 140 |[39m         expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m     |[39m                                  [31m[1m^[22m[39m
+     [90m 141 |[39m       }
+     [90m 142 |[39m     })[33m;[39m
+     [90m 143 |[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:140:34)
+
+  ● Security - Input Validation Tests › Buffer Overflow Prevention › should limit nested object depth
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected value: 404
+    Received array: [400, 413]
+
+    [0m [90m 152 |[39m         [33m.[39msend(nested)[33m;[39m
+     [90m 153 |[39m
+    [31m[1m>[22m[39m[90m 154 |[39m       expect([[35m400[39m[33m,[39m [35m413[39m])[33m.[39mtoContain(res[33m.[39mstatus)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 155 |[39m     })[33m;[39m
+     [90m 156 |[39m   })[33m;[39m
+     [90m 157 |[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:154:26)
+
+  ● Security - Input Validation Tests › Invalid File Format Handling › should reject invalid profile data
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 167 |[39m         [33m.[39mpost([32m'/api/profiles'[39m)
+     [90m 168 |[39m         [33m.[39msend(invalidProfile)
+    [31m[1m>[22m[39m[90m 169 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 170 |[39m
+     [90m 171 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 172 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:169:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Invalid File Format Handling › should validate sketch structure
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 182 |[39m         [33m.[39mpost([32m'/api/sketches/solve'[39m)
+     [90m 183 |[39m         [33m.[39msend(invalidSketch)
+    [31m[1m>[22m[39m[90m 184 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 185 |[39m
+     [90m 186 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 187 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:184:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Invalid File Format Handling › should reject unsupported file types
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 191 |[39m         [33m.[39mpost([32m'/api/import'[39m)
+     [90m 192 |[39m         [33m.[39msend({ filename[33m:[39m [32m'test.exe'[39m[33m,[39m content[33m:[39m [32m'binary'[39m })
+    [31m[1m>[22m[39m[90m 193 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 194 |[39m
+     [90m 195 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 196 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:193:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Invalid File Format Handling › should validate tube specification fields
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 208 |[39m         [33m.[39mpost([32m'/api/tubes'[39m)
+     [90m 209 |[39m         [33m.[39msend({ name[33m:[39m [32m'Invalid'[39m[33m,[39m specification[33m:[39m invalidSpec })
+    [31m[1m>[22m[39m[90m 210 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 211 |[39m
+     [90m 212 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 213 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:210:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Type Validation › should validate numeric types
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 226 |[39m           }
+     [90m 227 |[39m         })
+    [31m[1m>[22m[39m[90m 228 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 229 |[39m
+     [90m 230 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 231 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:228:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Type Validation › should validate boolean types
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 243 |[39m           }
+     [90m 244 |[39m         })
+    [31m[1m>[22m[39m[90m 245 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 246 |[39m
+     [90m 247 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 248 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:245:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Type Validation › should validate array types
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 256 |[39m           constraints[33m:[39m [36mnull[39m
+     [90m 257 |[39m         })
+    [31m[1m>[22m[39m[90m 258 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 259 |[39m
+     [90m 260 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 261 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:258:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Type Validation › should validate enum values
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 276 |[39m           ]
+     [90m 277 |[39m         })
+    [31m[1m>[22m[39m[90m 278 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 279 |[39m
+     [90m 280 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 281 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:278:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Range Validation › should validate wall thickness constraints
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 313 |[39m           }
+     [90m 314 |[39m         })
+    [31m[1m>[22m[39m[90m 315 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 316 |[39m
+     [90m 317 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 318 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:315:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Range Validation › should validate bend angle ranges
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 339 |[39m           constraints[33m:[39m []
+     [90m 340 |[39m         })
+    [31m[1m>[22m[39m[90m 341 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 342 |[39m
+     [90m 343 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 344 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:341:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Null/Undefined Handling › should handle null values gracefully
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 353 |[39m           specification[33m:[39m [36mnull[39m
+     [90m 354 |[39m         })
+    [31m[1m>[22m[39m[90m 355 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 356 |[39m
+     [90m 357 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 358 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:355:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Null/Undefined Handling › should require mandatory fields
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 362 |[39m         [33m.[39mpost([32m'/api/tubes'[39m)
+     [90m 363 |[39m         [33m.[39msend({ specification[33m:[39m { diameter[33m:[39m [35m0.5[39m } })
+    [31m[1m>[22m[39m[90m 364 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 365 |[39m
+     [90m 366 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m 367 |[39m     })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:364:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Null/Undefined Handling › should provide clear error messages for missing fields
+
+    expected 400 "Bad Request", got 404 "Not Found"
+
+    [0m [90m 371 |[39m         [33m.[39mpost([32m'/api/tubes'[39m)
+     [90m 372 |[39m         [33m.[39msend({})
+    [31m[1m>[22m[39m[90m 373 |[39m         [33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m          [31m[1m^[22m[39m
+     [90m 374 |[39m
+     [90m 375 |[39m       expect(res[33m.[39mbody[33m.[39merrors)[33m.[39mtoBeDefined()[33m;[39m
+     [90m 376 |[39m       expect([33mArray[39m[33m.[39misArray(res[33m.[39mbody[33m.[39merrors))[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:373:10)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:252:14)
+      at node_modules/supertest/lib/test.js:308:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:285:13)
+      at Test.assert (node_modules/supertest/lib/test.js:164:23)
+      at Server.localAssert (node_modules/supertest/lib/test.js:120:14)
+
+  ● Security - Input Validation Tests › Unicode & Encoding › should reject null bytes in strings
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: undefined
+
+    [0m [90m 409 |[39m         })[33m;[39m
+     [90m 410 |[39m
+    [31m[1m>[22m[39m[90m 411 |[39m       expect(res[33m.[39mbody[33m.[39msuccess)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m     |[39m                                [31m[1m^[22m[39m
+     [90m 412 |[39m     })[33m;[39m
+     [90m 413 |[39m   })[33m;[39m
+     [90m 414 |[39m })[33m;[39m[0m
+
+      at Object.<anonymous> (tests/security/input-validation.security.test.ts:411:32)
+
+Test Suites: 6 failed, 1 passed, 7 total
+Tests:       35 failed, 41 passed, 76 total
+Snapshots:   0 total
+Time:        6.264 s
+Ran all test suites.
+exit 1

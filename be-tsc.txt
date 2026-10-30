@@ -1,0 +1,128 @@
+src/QAManager.ts(180,30): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+src/api/routes/tubes.ts(73,11): error TS2322: Type '{ start: unknown; end: unknown; bend_angle: number; segment_id: string; is_straight: boolean; }[]' is not assignable to type 'PathSegment[]'.
+  Type '{ start: unknown; end: unknown; bend_angle: number; segment_id: string; is_straight: boolean; }' is not assignable to type 'PathSegment'.
+    Types of property 'start' are incompatible.
+      Type 'unknown' is not assignable to type 'Vector3'.
+src/assembly/HierarchyManager.ts(410,9): error TS2783: 'id' is specified more than once, so this usage will be overwritten.
+src/assembly/MultiLevelHierarchyManager.ts(651,39): error TS2345: Argument of type '{ x: number; y: number; z: number; }' is not assignable to parameter of type 'Vector3'.
+  Property 'normalize' is missing in type '{ x: number; y: number; z: number; }' but required in type 'Vector3'.
+src/assembly/MultiLevelHierarchyManager.ts(660,102): error TS2739: Type '{}' is missing the following properties from type 'Vector3': x, y, z, normalize
+src/assembly/MultiLevelHierarchyManager.ts(666,86): error TS2739: Type '{}' is missing the following properties from type 'Vector3': x, y, z, normalize
+src/assembly/index.ts(14,10): error TS2614: Module '"./HierarchyManager"' has no exported member 'HierarchyManager'. Did you mean to use 'import HierarchyManager from "./HierarchyManager"' instead?
+src/bom/BOMGenerator.ts(80,23): error TS2576: Property 'calculateTotalCost' does not exist on type 'BOMGenerator'. Did you mean to access the static member 'BOMGenerator.calculateTotalCost' instead?
+src/bom/BOMGenerator.ts(81,25): error TS2576: Property 'calculateTotalWeight' does not exist on type 'BOMGenerator'. Did you mean to access the static member 'BOMGenerator.calculateTotalWeight' instead?
+src/bom/BOMGenerator.ts(109,26): error TS2576: Property 'calculateTotalCost' does not exist on type 'BOMGenerator'. Did you mean to access the static member 'BOMGenerator.calculateTotalCost' instead?
+src/bom/BOMGenerator.ts(110,28): error TS2576: Property 'calculateTotalWeight' does not exist on type 'BOMGenerator'. Did you mean to access the static member 'BOMGenerator.calculateTotalWeight' instead?
+src/bom/BOMGenerator.ts(123,26): error TS2576: Property 'calculateTotalCost' does not exist on type 'BOMGenerator'. Did you mean to access the static member 'BOMGenerator.calculateTotalCost' instead?
+src/bom/BOMGenerator.ts(124,28): error TS2576: Property 'calculateTotalWeight' does not exist on type 'BOMGenerator'. Did you mean to access the static member 'BOMGenerator.calculateTotalWeight' instead?
+src/converters/IgesConverter.ts(389,27): error TS2488: Type '{}' must have a '[Symbol.iterator]()' method that returns an iterator.
+src/converters/IgesConverter.ts(410,27): error TS2488: Type '{}' must have a '[Symbol.iterator]()' method that returns an iterator.
+src/converters/Phase2ConverterManager.ts(113,37): error TS2339: Property 'parseAsync' does not exist on type 'typeof SATConverter'.
+src/converters/Phase2ConverterManager.ts(118,37): error TS2339: Property 'parseAsync' does not exist on type 'typeof DWFConverter'.
+src/converters/Phase2ConverterManager.ts(251,50): error TS2345: Argument of type 'CADData | undefined' is not assignable to parameter of type 'CADData'.
+  Type 'undefined' is not assignable to type 'CADData'.
+src/converters/SatConverter.ts(63,20): error TS2339: Property 'parseHeader' does not exist on type 'typeof SATConverter'.
+src/converters/StepConverter.ts(249,22): error TS2576: Property 'parseASCIISTEP' does not exist on type 'STEPConverter'. Did you mean to access the static member 'STEPConverter.parseASCIISTEP' instead?
+src/converters/StepConverter.ts(259,7): error TS2740: Type 'StepHeader' is missing the following properties from type '{ description: string[]; name: string; timestamp: Date; author: string[]; organization: string[]; preprocessor: string; originatingSystem: string; authorization: string; schemaIdentifier: string; }': description, name, timestamp, preprocessor, and 2 more.
+src/converters/StepConverter.ts(287,49): error TS2345: Argument of type 'Map<number, STEPEntity>' is not assignable to parameter of type 'Map<number, StepEntity>'.
+  Type 'STEPEntity' is missing the following properties from type 'StepEntity': attributes, references
+src/converters/StepConverter.ts(372,7): error TS2353: Object literal may only specify known properties, and 'attributes' does not exist in type 'STEPEntity'.
+src/converters/StepConverter.ts(476,14): error TS2339: Property 'attributes' does not exist on type 'STEPEntity'.
+src/converters/StepConverter.ts(488,34): error TS2345: Argument of type 'STEPEntity' is not assignable to parameter of type 'StepEntity'.
+  Type 'STEPEntity' is missing the following properties from type 'StepEntity': attributes, references
+src/converters/StepConverter.ts(489,48): error TS2345: Argument of type 'STEPEntity' is not assignable to parameter of type 'StepEntity'.
+  Type 'STEPEntity' is missing the following properties from type 'StepEntity': attributes, references
+src/converters/StepConverter.ts(522,9): error TS2322: Type 'Point3D | null' is not assignable to type 'Geometry3D | null'.
+  Property 'type' is missing in type 'Point3D' but required in type 'Geometry3D'.
+src/converters/StepConverter.ts(525,9): error TS2322: Type 'Direction3D | null' is not assignable to type 'Geometry3D | null'.
+  Property 'type' is missing in type 'Direction3D' but required in type 'Geometry3D'.
+src/converters/StepConverter.ts(528,9): error TS2322: Type 'Line3D | null' is not assignable to type 'Geometry3D | null'.
+  Type 'Line3D' is not assignable to type 'Geometry3D'.
+    Index signature for type 'string' is missing in type 'Line3D'.
+src/converters/StepConverter.ts(531,9): error TS2322: Type 'Circle3D | null' is not assignable to type 'Geometry3D | null'.
+  Type 'Circle3D' is not assignable to type 'Geometry3D'.
+    Index signature for type 'string' is missing in type 'Circle3D'.
+src/converters/StepConverter.ts(534,9): error TS2322: Type 'BSplineCurve | null' is not assignable to type 'Geometry3D | null'.
+  Type 'BSplineCurve' is not assignable to type 'Geometry3D'.
+    Index signature for type 'string' is missing in type 'BSplineCurve'.
+src/converters/StepConverter.ts(537,9): error TS2322: Type 'Plane3D | null' is not assignable to type 'Geometry3D | null'.
+  Type 'Plane3D' is not assignable to type 'Geometry3D'.
+    Index signature for type 'string' is missing in type 'Plane3D'.
+src/converters/StepConverter.ts(540,9): error TS2322: Type 'CylindricalSurface | null' is not assignable to type 'Geometry3D | null'.
+  Type 'CylindricalSurface' is not assignable to type 'Geometry3D'.
+    Index signature for type 'string' is missing in type 'CylindricalSurface'.
+src/converters/StepConverter.ts(544,9): error TS2322: Type 'BrepShape | null' is not assignable to type 'Geometry3D | null'.
+  Type 'BrepShape' is not assignable to type 'Geometry3D'.
+    Index signature for type 'string' is missing in type 'BrepShape'.
+src/converters/StepConverter.ts(582,30): error TS2322: Type 'Geometry3D | null' is not assignable to type 'Point3D'.
+  Type 'null' is not assignable to type 'Point3D'.
+src/converters/StepConverter.ts(582,37): error TS2322: Type 'Geometry3D | null' is not assignable to type 'Direction3D'.
+  Type 'null' is not assignable to type 'Direction3D'.
+src/converters/StepConverter.ts(591,32): error TS2322: Type 'Geometry3D | null' is not assignable to type 'Point3D | null'.
+  Type 'Geometry3D' is missing the following properties from type 'Point3D': x, y, z
+src/converters/StepConverter.ts(609,9): error TS2322: Type '(Geometry3D | null)[]' is not assignable to type 'Point3D[]'.
+  Type 'Geometry3D | null' is not assignable to type 'Point3D'.
+    Type 'null' is not assignable to type 'Point3D'.
+src/converters/StepConverter.ts(620,31): error TS2322: Type 'Geometry3D | null' is not assignable to type 'Point3D | null'.
+  Type 'Geometry3D' is missing the following properties from type 'Point3D': x, y, z
+src/converters/StepConverter.ts(629,45): error TS2322: Type 'Geometry3D | null' is not assignable to type 'Point3D | null'.
+  Type 'Geometry3D' is missing the following properties from type 'Point3D': x, y, z
+src/converters/StepConverter.ts(638,36): error TS2322: Type 'Geometry3D | null' is not assignable to type 'Point3D | null'.
+  Type 'Geometry3D' is missing the following properties from type 'Point3D': x, y, z
+src/converters/StepConverter.ts(677,11): error TS2322: Type 'string | number | true | StepReference | StepEnum | StepAttributeValue[]' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+src/converters/StepConverter.ts(782,7): error TS2322: Type 'string | number | true | StepReference | StepEnum | StepAttributeValue[]' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+src/converters/StepConverter.ts(784,31): error TS2322: Type 'string | number | true | StepReference | StepEnum | StepAttributeValue[]' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+src/converters/StepConverter.ts(785,37): error TS2322: Type 'string | number | true | StepReference | StepEnum | StepAttributeValue[]' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+src/converters/StepConverter.ts(786,21): error TS2322: Type 'string | number | true | StepReference | StepEnum | StepAttributeValue[]' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+src/converters/StepConverter.ts(787,21): error TS2322: Type 'string | number | true | StepReference | StepEnum | StepAttributeValue[]' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+src/converters/StepConverter.ts(871,31): error TS2339: Property 'reference' does not exist on type 'string | number | boolean | StepReference | StepEnum | StepAttributeValue[]'.
+  Property 'reference' does not exist on type 'string'.
+src/converters/StepConverter.ts(902,27): error TS2488: Type '{}' must have a '[Symbol.iterator]()' method that returns an iterator.
+src/core/sketch-solver.ts(100,44): error TS2345: Argument of type 'Vector3[]' is not assignable to parameter of type 'number[]'.
+  Type 'Vector3' is not assignable to type 'number'.
+src/database/db.ts(111,7): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(133,70): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(139,73): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(142,19): error TS2339: Property 'id' does not exist on type '{}'.
+src/database/db.ts(143,21): error TS2339: Property 'name' does not exist on type '{}'.
+src/database/db.ts(144,28): error TS2339: Property 'description' does not exist on type '{}'.
+src/database/db.ts(145,27): error TS2339: Property 'created_at' does not exist on type '{}'.
+src/database/db.ts(146,27): error TS2339: Property 'updated_at' does not exist on type '{}'.
+src/database/db.ts(147,14): error TS18046: 'tubes' is of type 'unknown'.
+src/database/db.ts(157,25): error TS2339: Property 'metadata' does not exist on type '{}'.
+src/database/db.ts(157,55): error TS2339: Property 'metadata' does not exist on type '{}'.
+src/database/db.ts(172,7): error TS18046: 'projects' is of type 'unknown'.
+src/database/db.ts(174,17): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/database/db.ts(193,7): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(207,57): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(208,66): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(209,67): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(226,7): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(246,64): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(253,16): error TS2339: Property 'id' does not exist on type '{}'.
+src/database/db.ts(254,18): error TS2339: Property 'name' does not exist on type '{}'.
+src/database/db.ts(255,45): error TS2339: Property 'specification' does not exist on type '{}'.
+src/database/db.ts(256,20): error TS2339: Property 'sketch' does not exist on type '{}'.
+src/database/db.ts(256,52): error TS2339: Property 'sketch' does not exist on type '{}'.
+src/database/db.ts(257,22): error TS2339: Property 'geometry' does not exist on type '{}'.
+src/database/db.ts(257,56): error TS2339: Property 'geometry' does not exist on type '{}'.
+src/database/db.ts(258,24): error TS2339: Property 'properties' does not exist on type '{}'.
+src/database/db.ts(258,60): error TS2339: Property 'properties' does not exist on type '{}'.
+src/database/db.ts(259,24): error TS2339: Property 'created_at' does not exist on type '{}'.
+src/database/db.ts(260,24): error TS2339: Property 'updated_at' does not exist on type '{}'.
+src/database/db.ts(279,7): error TS2554: Expected 1 arguments, but got 2.
+src/database/db.ts(292,64): error TS2554: Expected 1 arguments, but got 2.
+src/routing/AdvancedPipeRoutingEngine.ts(368,7): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/testing/Phase2QASuite.ts(89,24): error TS2339: Property 'fileName' does not exist on type '{ description: string[]; name: string; timestamp: Date; author: string[]; organization: string[]; preprocessor: string; originatingSystem: string; authorization: string; schemaIdentifier: string; }'.
+src/testing/Phase2QASuite.ts(203,48): error TS2739: Type '{}' is missing the following properties from type 'Vector3': x, y, z, normalize
+src/testing/Phase2QASuite.ts(216,58): error TS2739: Type '{}' is missing the following properties from type 'Vector3': x, y, z, normalize
+src/testing/Phase2QASuite.ts(347,64): error TS2554: Expected 2-3 arguments, but got 4.
+src/utils/vector.ts(58,10): error TS2699: Static property 'length' conflicts with built-in property 'Function.length' of constructor function 'Vector'.
+exit 2

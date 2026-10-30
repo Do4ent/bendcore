@@ -1,0 +1,28 @@
+[webpack-cli] [31mFailed to load '/home/runner/work/bendcore/bendcore/webpack.config.js' config[39m
+[webpack-cli] [31mError: Cannot find module 'mini-css-extract-plugin'
+Require stack:
+- /home/runner/work/bendcore/bendcore/webpack.config.js
+- /home/runner/work/bendcore/bendcore/node_modules/webpack-cli/lib/webpack-cli.js
+- /home/runner/work/bendcore/bendcore/node_modules/webpack-cli/lib/bootstrap.js
+- /home/runner/work/bendcore/bendcore/node_modules/webpack-cli/bin/cli.js
+- /home/runner/work/bendcore/bendcore/node_modules/webpack/bin/webpack.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1207:15)
+    at Module._load (node:internal/modules/cjs/loader:1038:27)
+    at Module.require (node:internal/modules/cjs/loader:1289:19)
+    at require (node:internal/modules/helpers:182:18)
+    at Object.<anonymous> (/home/runner/work/bendcore/bendcore/webpack.config.js:2:30)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Module.require (node:internal/modules/cjs/loader:1289:19) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/home/runner/work/bendcore/bendcore/webpack.config.js',
+    '/home/runner/work/bendcore/bendcore/node_modules/webpack-cli/lib/webpack-cli.js',
+    '/home/runner/work/bendcore/bendcore/node_modules/webpack-cli/lib/bootstrap.js',
+    '/home/runner/work/bendcore/bendcore/node_modules/webpack-cli/bin/cli.js',
+    '/home/runner/work/bendcore/bendcore/node_modules/webpack/bin/webpack.js'
+  ]
+}[39m
+exit 2

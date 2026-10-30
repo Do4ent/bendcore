@@ -1,0 +1,224 @@
+src/api/formula_routes.ts(7,66): error TS2307: Cannot find module 'express' or its corresponding type declarations.
+src/api/import_routes.ts(4,43): error TS2307: Cannot find module 'express' or its corresponding type declarations.
+src/api/import_routes.ts(5,20): error TS2307: Cannot find module 'multer' or its corresponding type declarations.
+src/api/routes/parallel-offset.ts(1,43): error TS2307: Cannot find module 'express' or its corresponding type declarations.
+src/api/template_marketplace_routes.ts(7,43): error TS2307: Cannot find module 'express' or its corresponding type declarations.
+src/api/template_marketplace_routes.ts(31,11): error TS7034: Variable 'templates' implicitly has type 'any[]' in some locations where its type cannot be determined.
+src/api/template_marketplace_routes.ts(54,18): error TS7005: Variable 'templates' implicitly has an 'any[]' type.
+src/api/template_marketplace_routes.ts(469,11): error TS7034: Variable 'pending' implicitly has type 'any[]' in some locations where its type cannot be determined.
+src/api/template_marketplace_routes.ts(473,18): error TS7005: Variable 'pending' implicitly has an 'any[]' type.
+src/api/template_routes.ts(7,43): error TS2307: Cannot find module 'express' or its corresponding type declarations.
+src/collaboration/CollaborationEngine.ts(1,23): error TS2307: Cannot find module 'ws' or its corresponding type declarations.
+src/collaboration/CollaborationEngine.ts(3,23): error TS2307: Cannot find module 'uuid' or its corresponding type declarations.
+src/collaboration/CollaborationEngine.ts(103,21): error TS7006: Parameter 'error' implicitly has an 'any' type.
+src/collaboration/CollaborationEngine.ts(272,7): error TS2322: Type '"CURSOR_UPDATE"' is not assignable to type '"JOIN" | "OPERATION" | "CURSOR_MOVE" | "SYNC" | "PRESENCE_UPDATE" | "OPERATION_UPDATE"'.
+src/features/sheetmetal/index.ts(9,16): error TS2304: Cannot find name 'SheetMetalDesign'.
+src/growthbook.ts(94,35): error TS2551: Property 'getFeature' does not exist on type 'GrowthBook<Record<string, any>>'. Did you mean 'getFeatures'?
+src/growthbook.ts(112,38): error TS2551: Property 'getExperiment' does not exist on type 'GrowthBook<Record<string, any>>'. Did you mean 'getExperiments'?
+src/growthbook.ts(117,34): error TS2551: Property 'getExperimentResult' does not exist on type 'GrowthBook<Record<string, any>>'. Did you mean 'getExperiments'?
+src/main.ts(24,7): error TS2353: Object literal may only specify known properties, and 'enableRemoteModule' does not exist in type 'WebPreferences'.
+src/screens/BendCreationScreen.tsx(28,57): error TS2345: Argument of type 'string' is not assignable to parameter of type 'RibbonTab | (() => RibbonTab)'.
+src/screens/BendCreationScreen.tsx(56,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/BendCreationScreen.tsx(65,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/BendCreationScreen.tsx(74,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/BendCreationScreen.tsx(83,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/BendCreationScreen.tsx(92,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/BendCreationScreen.tsx(146,9): error TS2322: Type 'RibbonTab' is not assignable to type 'string'.
+src/screens/BendCreationScreen.tsx(147,9): error TS2322: Type 'Dispatch<SetStateAction<RibbonTab>>' is not assignable to type '(tab: string) => void'.
+  Types of parameters 'value' and 'tab' are incompatible.
+    Type 'string' is not assignable to type 'SetStateAction<RibbonTab>'.
+src/screens/BendCreationScreen.tsx(252,15): error TS2322: Type '{ title: string; fields: PropertyField[]; onPropertyChange: (fieldId: string, value: any) => void; }' is not assignable to type 'IntrinsicAttributes & PropertiesPanelProps'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & PropertiesPanelProps'.
+src/screens/BendCreationScreen.tsx(266,42): error TS2322: Type '"Bend Design"' is not assignable to type '"sketch" | "error" | "design" | "idle" | "loading" | undefined'.
+src/screens/DrawingGenerationScreen.tsx(23,57): error TS2345: Argument of type 'string' is not assignable to parameter of type 'RibbonTab | (() => RibbonTab)'.
+src/screens/DrawingGenerationScreen.tsx(73,9): error TS2322: Type 'RibbonTab' is not assignable to type 'string'.
+src/screens/DrawingGenerationScreen.tsx(74,9): error TS2322: Type 'Dispatch<SetStateAction<RibbonTab>>' is not assignable to type '(tab: string) => void'.
+  Types of parameters 'value' and 'tab' are incompatible.
+    Type 'string' is not assignable to type 'SetStateAction<RibbonTab>'.
+src/screens/DrawingGenerationScreen.tsx(213,9): error TS2322: Type '"Drawing"' is not assignable to type '"sketch" | "error" | "design" | "idle" | "loading" | undefined'.
+src/screens/PathSketchScreen.tsx(21,57): error TS2345: Argument of type 'string' is not assignable to parameter of type 'RibbonTab | (() => RibbonTab)'.
+src/screens/PathSketchScreen.tsx(66,9): error TS2322: Type 'RibbonTab' is not assignable to type 'string'.
+src/screens/PathSketchScreen.tsx(67,9): error TS2322: Type 'Dispatch<SetStateAction<RibbonTab>>' is not assignable to type '(tab: string) => void'.
+  Types of parameters 'value' and 'tab' are incompatible.
+    Type 'string' is not assignable to type 'SetStateAction<RibbonTab>'.
+src/screens/PathSketchScreen.tsx(173,9): error TS2820: Type '"Sketch"' is not assignable to type '"sketch" | "error" | "design" | "idle" | "loading" | undefined'. Did you mean '"sketch"'?
+src/screens/WorkspaceScreen.tsx(26,69): error TS2345: Argument of type 'string' is not assignable to parameter of type 'RibbonTab | (() => RibbonTab)'.
+src/screens/WorkspaceScreen.tsx(119,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/WorkspaceScreen.tsx(131,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/WorkspaceScreen.tsx(140,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/WorkspaceScreen.tsx(149,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/WorkspaceScreen.tsx(158,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/WorkspaceScreen.tsx(171,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/WorkspaceScreen.tsx(178,7): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/screens/WorkspaceScreen.tsx(279,9): error TS2322: Type 'RibbonTab' is not assignable to type 'string'.
+src/screens/WorkspaceScreen.tsx(280,9): error TS2322: Type 'Dispatch<SetStateAction<RibbonTab>>' is not assignable to type '(tab: string) => void'.
+  Types of parameters 'value' and 'tab' are incompatible.
+    Type 'string' is not assignable to type 'SetStateAction<RibbonTab>'.
+src/screens/WorkspaceScreen.tsx(294,13): error TS2322: Type '(nodeId: string) => void' is not assignable to type '(nodeId: string | null) => void'.
+  Types of parameters 'nodeId' and 'nodeId' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+src/screens/WorkspaceScreen.tsx(318,13): error TS2322: Type '{ title: string; fields: PropertyField[]; onPropertyChange: (fieldId: string, value: any) => void; onReset: () => void; }' is not assignable to type 'IntrinsicAttributes & PropertiesPanelProps'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & PropertiesPanelProps'.
+src/screens/WorkspaceScreen.tsx(330,9): error TS2820: Type '"Design"' is not assignable to type '"sketch" | "error" | "design" | "idle" | "loading" | undefined'. Did you mean '"design"'?
+src/ui/AppDemo.tsx(95,5): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/ui/AppDemo.tsx(102,5): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/ui/AppDemo.tsx(114,5): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/ui/AppDemo.tsx(123,5): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/ui/AppDemo.tsx(132,5): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/ui/AppDemo.tsx(139,5): error TS2353: Object literal may only specify known properties, and 'section' does not exist in type 'PropertyField'.
+src/ui/AppDemo.tsx(355,13): error TS2322: Type '(nodeId: string) => void' is not assignable to type '(nodeId: string | null) => void'.
+  Types of parameters 'nodeId' and 'nodeId' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+src/ui/AppDemo.tsx(387,15): error TS2322: Type '{ title: string; fields: PropertyField[]; onPropertyChange: (fieldId: string, value: PropertyValue) => void; onReset: () => void; }' is not assignable to type 'IntrinsicAttributes & PropertiesPanelProps'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & PropertiesPanelProps'.
+src/ui/AppDemo.tsx(403,9): error TS2322: Type 'string' is not assignable to type '"sketch" | "error" | "design" | "idle" | "loading" | undefined'.
+src/ui/CommentBubble.tsx(104,13): error TS2322: Type '{ x: number; y: number; width: number; height: string; minHeight: string; rx: string; fill: string; stroke: string; strokeWidth: string; opacity: string; style: { filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))"; }; }' is not assignable to type 'SVGProps<SVGRectElement>'.
+  Property 'minHeight' does not exist on type 'SVGProps<SVGRectElement>'. Did you mean 'height'?
+src/ui/CommentBubble.tsx(132,15): error TS2322: Type '{ children: string; x: number; y: number; fontSize: string; fill: string; maxWidth: string; }' is not assignable to type 'SVGTextElementAttributes<SVGTextElement>'.
+  Property 'maxWidth' does not exist on type 'SVGTextElementAttributes<SVGTextElement>'.
+src/ui/ComponentOptimization.tsx(34,19): error TS2339: Property 'displayName' does not exist on type 'LazyExoticComponent<ComponentType<P>>'.
+src/ui/ComponentOptimization.tsx(100,5): error TS2322: Type 'MemoExoticComponent<ComponentType<P>>' is not assignable to type 'ComponentType<P>'.
+  Type 'MemoExoticComponent<ComponentType<P>>' is not assignable to type 'FunctionComponent<P>'.
+    Types of parameters 'props' and 'props' are incompatible.
+      Type 'P' is not assignable to type '(PropsWithoutRef<P> & RefAttributes<Component<P, any, any>>) | PropsWithRef<P>'.
+        Type 'object' is not assignable to type '(PropsWithoutRef<P> & RefAttributes<Component<P, any, any>>) | PropsWithRef<P>'.
+          Type 'P' is not assignable to type 'PropsWithoutRef<P> & RefAttributes<Component<P, any, any>>'.
+            Type 'object' is not assignable to type 'PropsWithoutRef<P> & RefAttributes<Component<P, any, any>>'.
+              Type 'object' is not assignable to type 'PropsWithoutRef<P>'.
+                Type 'P' is not assignable to type 'PropsWithoutRef<P>'.
+                  Type 'object' is not assignable to type 'PropsWithoutRef<P>'.
+src/ui/ContextMenu.tsx(292,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/ContextMenu.tsx(299,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/ContextMenu.tsx(312,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/ContextMenu.tsx(340,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/ContextMenu.tsx(347,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/ContextMenu.tsx(380,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/ContextMenu.tsx(449,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/ContextMenu.tsx(457,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/ContextMenu.tsx(476,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/ContextMenu.tsx(508,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/DatabaseOptimization.ts(356,7): error TS2722: Cannot invoke an object which is possibly 'undefined'.
+src/ui/DimensionRenderer.ts(12,24): error TS7016: Could not find a declaration file for module 'three'. '/home/runner/work/bendcore/bendcore/node_modules/three/build/three.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/three` if it exists or add a new declaration (.d.ts) file containing `declare module 'three';`
+src/ui/DrawingEditor.tsx(4,20): error TS2307: Cannot find module './DrawingEditor.module.css' or its corresponding type declarations.
+src/ui/DrawingWorkspace.tsx(274,33): error TS2341: Property 'call' is private and only accessible within class 'CoreClient'.
+src/ui/DrawingWorkspace.tsx(281,11): error TS18046: 'result' is of type 'unknown'.
+src/ui/DrawingWorkspace.tsx(281,24): error TS18046: 'result' is of type 'unknown'.
+src/ui/DrawingWorkspace.tsx(283,15): error TS18046: 'result' is of type 'unknown'.
+src/ui/DrawingWorkspace.tsx(423,18): error TS2345: Argument of type '"sketch.add"' is not assignable to parameter of type '"bend.lra" | "bend.xyz" | "check.run" | "bend.title" | "bend.format" | "bend.feed" | "bend.endA" | "bend.endB" | "bend.frame" | "bend.framePart" | "bend.delimiter" | "bend.precision" | ... 54 more ... | "common.error"'.
+src/ui/DrawingWorkspace.tsx(562,26): error TS2339: Property 'id' does not exist on type 'DrawingTube'.
+src/ui/FeatureTree.tsx(55,23): error TS2339: Property 'success' does not exist on type '{ status: "error" | "ok"; data?: unknown; message?: string | undefined; }'.
+src/ui/FeatureTree.tsx(55,48): error TS2339: Property 'root' does not exist on type '{}'.
+src/ui/FeatureTree.tsx(56,33): error TS2339: Property 'root' does not exist on type '{}'.
+src/ui/IconThemeSettings.tsx(194,15): error TS2345: Argument of type 'ThemeColors' is not assignable to parameter of type 'SetStateAction<Record<string, string>>'.
+  Type 'ThemeColors' is not assignable to type 'Record<string, string>'.
+    Index signature for type 'string' is missing in type 'ThemeColors'.
+src/ui/IconThemeSettings.tsx(196,5): error TS2322: Type 'ThemeColors' is not assignable to type 'Record<string, string>'.
+  Index signature for type 'string' is missing in type 'ThemeColors'.
+src/ui/IconThemeSystem.ts(173,15): error TS2741: Property 'preset' is missing in type '{ name: string; isDark: boolean; colors: ThemeColors; cssVariables: Record<string, string>; }' but required in type 'IconTheme'.
+src/ui/IconThemeSystem.ts(186,15): error TS2352: Conversion of type 'Record<string, string>' to type 'ThemeColors' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'Record<string, string>' is missing the following properties from type 'ThemeColors': tube, create, delete, import, and 9 more.
+src/ui/LayersPanel.tsx(93,20): error TS2341: Property 'call' is private and only accessible within class 'CoreClient'.
+src/ui/LayersPanel.tsx(112,18): error TS2341: Property 'call' is private and only accessible within class 'CoreClient'.
+src/ui/LayersPanel.tsx(124,18): error TS2341: Property 'call' is private and only accessible within class 'CoreClient'.
+src/ui/M23SketchUI.tsx(220,11): error TS2322: Type '{ x: number; y: number; } | null' is not assignable to type '{ x: number; y: number; } | undefined'.
+  Type 'null' is not assignable to type '{ x: number; y: number; } | undefined'.
+src/ui/MaterialsPanel.tsx(179,21): error TS17001: JSX elements cannot have multiple attributes with the same name.
+src/ui/MenuBar.tsx(27,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(30,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(32,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(40,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(44,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(47,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(57,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(62,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(74,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(78,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(86,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/MenuBar.tsx(94,5): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'MenuItem': id, label
+src/ui/OffsetCalculatorTab.tsx(161,13): error TS2322: Type '(calcResult: CalculationResult) => void' is not assignable to type '(result: OffsetResult) => void'.
+  Types of parameters 'calcResult' and 'result' are incompatible.
+    Type 'OffsetResult' is not assignable to type 'CalculationResult'.
+      Types of property 'bend_angles' are incompatible.
+        Type '[number, number] | undefined' is not assignable to type '[number, number]'.
+          Type 'undefined' is not assignable to type '[number, number]'.
+src/ui/OffsetResultsDisplay.tsx(78,15): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(78,58): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(83,17): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(83,60): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(89,17): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(89,63): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(95,17): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(95,60): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(109,17): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(109,56): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(115,17): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(115,56): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(121,17): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(121,56): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(127,17): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(127,56): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(133,13): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OffsetResultsDisplay.tsx(133,55): error TS2339: Property 'value' does not exist on type 'JSX.IntrinsicElements'.
+src/ui/OrbitCamera.ts(7,24): error TS7016: Could not find a declaration file for module 'three'. '/home/runner/work/bendcore/bendcore/node_modules/three/build/three.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/three` if it exists or add a new declaration (.d.ts) file containing `declare module 'three';`
+src/ui/ParallelOffsetCalculator.tsx(273,133): error TS2339: Property 'offset_distance' does not exist on type 'CalculationResult'.
+src/ui/ParallelOffsetCalculator.tsx(282,33): error TS2339: Property 'offset_distance' does not exist on type 'CalculationResult'.
+src/ui/ParallelOffsetCalculator.tsx(284,33): error TS2339: Property 'offset_distance' does not exist on type 'CalculationResult'.
+src/ui/ParallelOffsetCalculator.tsx(291,43): error TS2339: Property 'offset_distance' does not exist on type 'CalculationResult'.
+src/ui/PathSketch3D.tsx(22,24): error TS7016: Could not find a declaration file for module 'three'. '/home/runner/work/bendcore/bendcore/node_modules/three/build/three.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/three` if it exists or add a new declaration (.d.ts) file containing `declare module 'three';`
+src/ui/PathSketch3D.tsx(488,9): error TS2552: Cannot find name 'selectedSegmentId'. Did you mean 'deleteSegment'?
+src/ui/PathSketch3D.tsx(491,56): error TS2552: Cannot find name 'selectedSegmentId'. Did you mean 'deleteSegment'?
+src/ui/PathSketch3D.tsx(493,7): error TS2304: Cannot find name 'setSelectedSegmentId'.
+src/ui/PathSketch3D.tsx(494,16): error TS2552: Cannot find name 'selectedVertexId'. Did you mean 'selectVertex'?
+src/ui/PathSketch3D.tsx(497,56): error TS2552: Cannot find name 'selectedVertexId'. Did you mean 'selectVertex'?
+src/ui/PathSketch3D.tsx(499,36): error TS2552: Cannot find name 'selectedVertexId'. Did you mean 'selectVertex'?
+src/ui/PathSketch3D.tsx(499,72): error TS2304: Cannot find name 'selectedVertexId'.
+src/ui/PathSketch3D.tsx(502,7): error TS2304: Cannot find name 'setSelectedVertexId'.
+src/ui/PathSketch3D.tsx(504,7): error TS2552: Cannot find name 'selectedSegmentId'. Did you mean 'deleteSegment'?
+src/ui/PathSketch3D.tsx(504,26): error TS2552: Cannot find name 'selectedVertexId'. Did you mean 'selectVertex'?
+src/ui/PathSketch3D.tsx(624,23): error TS7006: Parameter 'obj' implicitly has an 'any' type.
+src/ui/PathSketch3D.tsx(691,23): error TS7006: Parameter 'obj' implicitly has an 'any' type.
+src/ui/PathSketch3D.tsx(769,23): error TS7006: Parameter 'obj' implicitly has an 'any' type.
+src/ui/PathValidator.ts(218,32): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/ui/RibbonBar.tsx(160,34): error TS2339: Property 'success' does not exist on type '{ status: "error" | "ok"; data?: unknown; message?: string | undefined; }'.
+src/ui/RibbonBar.tsx(161,51): error TS2339: Property 'error' does not exist on type '{ status: "error" | "ok"; data?: unknown; message?: string | undefined; }'.
+src/ui/SearchBar.tsx(69,23): error TS2339: Property 'success' does not exist on type '{ status: "error" | "ok"; data?: unknown; message?: string | undefined; }'.
+src/ui/SearchBar.tsx(69,62): error TS2339: Property 'results' does not exist on type '{}'.
+src/ui/SearchBar.tsx(70,36): error TS2339: Property 'results' does not exist on type '{}'.
+src/ui/SearchPanel.tsx(290,20): error TS2345: Argument of type 'Set<unknown>' is not assignable to parameter of type 'SetStateAction<Set<string>>'.
+  Type 'Set<unknown>' is not assignable to type 'Set<string>'.
+    Type 'unknown' is not assignable to type 'string'.
+src/ui/SearchPanel.tsx(293,21): error TS2345: Argument of type 'unknown[]' is not assignable to parameter of type 'string[]'.
+  Type 'unknown' is not assignable to type 'string'.
+src/ui/SketchEditor.tsx(610,14): error TS2345: Argument of type '"common.save"' is not assignable to parameter of type '"bend.lra" | "bend.xyz" | "check.run" | "bend.title" | "bend.format" | "bend.feed" | "bend.endA" | "bend.endB" | "bend.frame" | "bend.framePart" | "bend.delimiter" | "bend.precision" | ... 54 more ... | "common.error"'.
+src/ui/SnapConstraints.ts(6,24): error TS7016: Could not find a declaration file for module 'three'. '/home/runner/work/bendcore/bendcore/node_modules/three/build/three.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/three` if it exists or add a new declaration (.d.ts) file containing `declare module 'three';`
+src/ui/SnapConstraints.ts(287,21): error TS7006: Parameter 'object' implicitly has an 'any' type.
+src/ui/SnapConstraints.ts(319,21): error TS7006: Parameter 'object' implicitly has an 'any' type.
+src/ui/Viewport3D.tsx(7,24): error TS7016: Could not find a declaration file for module 'three'. '/home/runner/work/bendcore/bendcore/node_modules/three/build/three.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/three` if it exists or add a new declaration (.d.ts) file containing `declare module 'three';`
+src/ui/Viewport3D.tsx(48,21): error TS7006: Parameter 'm' implicitly has an 'any' type.
+src/ui/Viewport3D.tsx(234,27): error TS7006: Parameter 'obj' implicitly has an 'any' type.
+src/ui/Viewport3D.tsx(293,21): error TS7006: Parameter 'obj' implicitly has an 'any' type.
+src/ui/components/ParametricEditor.tsx(290,13): error TS2322: Type 'string | true | undefined' is not assignable to type 'boolean | undefined'.
+  Type 'string' is not assignable to type 'boolean | undefined'.
+src/ui/components/ParametricEditor.tsx(309,13): error TS2322: Type 'string | true | undefined' is not assignable to type 'boolean | undefined'.
+  Type 'string' is not assignable to type 'boolean | undefined'.
+src/ui/components/ParametricEditor.tsx(328,13): error TS2322: Type 'string | true | undefined' is not assignable to type 'boolean | undefined'.
+  Type 'string' is not assignable to type 'boolean | undefined'.
+src/ui/components/ParametricEditor.tsx(338,13): error TS2322: Type 'string | true | undefined' is not assignable to type 'boolean | undefined'.
+  Type 'string' is not assignable to type 'boolean | undefined'.
+src/ui/components/ThreeJsRenderer.tsx(2,24): error TS7016: Could not find a declaration file for module 'three'. '/home/runner/work/bendcore/bendcore/node_modules/three/build/three.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/three` if it exists or add a new declaration (.d.ts) file containing `declare module 'three';`
+src/ui/components/TreePanel.tsx(236,26): error TS2552: Cannot find name 'renamingValue'. Did you mean 'renameValue'?
+src/ui/components/TubePropertiesPanel.tsx(206,44): error TS2339: Property 'sweep_angle' does not exist on type 'Torus'.
+src/ui/components/ViewportControls.ts(1,24): error TS7016: Could not find a declaration file for module 'three'. '/home/runner/work/bendcore/bendcore/node_modules/three/build/three.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/three` if it exists or add a new declaration (.d.ts) file containing `declare module 'three';`
+src/ui/index.tsx(142,7): error TS2739: Type '{ divider: true; }' is missing the following properties from type 'ContextMenuAction': id, label
+src/ui/index.tsx(266,5): error TS2717: Subsequent property declarations must have the same type.  Property 'electron' must be of type '{ ipc: { invoke: (channel: string, data: unknown) => Promise<{ status: "error" | "ok"; data?: unknown; message?: string | undefined; }>; }; } | undefined', but here has type '{ ipc: { invoke: (channel: string, data: any) => Promise<any>; send: (channel: string, data: any) => void; on: (channel: string, callback: (data: any) => void) => void; }; } | undefined'.
+exit 2
