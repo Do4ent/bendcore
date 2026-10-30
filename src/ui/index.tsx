@@ -139,7 +139,7 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
     const actions: ContextMenuAction[] = [
       { id: 'new-tube', label: 'New Tube', icon: '➕', shortcut: 'Ctrl+T', action: () => handleCommand('new-tube') },
       { id: 'new-sketch', label: 'New Sketch', icon: '✏', shortcut: 'Ctrl+Shift+K', action: () => handleCommand('new-sketch') },
-      { divider: true },
+      { id: 'div-1', label: '', divider: true },
       { id: 'paste', label: 'Paste', icon: '📋', shortcut: 'Ctrl+V', disabled: true },
     ];
 
@@ -260,18 +260,7 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
   );
 };
 
-// Declare window.electron for IPC
-declare global {
-  interface Window {
-    electron?: {
-      ipc: {
-        invoke: (channel: string, data: any) => Promise<any>;
-        send: (channel: string, data: any) => void;
-        on: (channel: string, callback: (data: any) => void) => void;
-      };
-    };
-  }
-}
+// window.electron is declared in src/ui/core/coreClient.ts
 
 // Initialize React root with performance measurement
 const rootElement = document.getElementById('root');
