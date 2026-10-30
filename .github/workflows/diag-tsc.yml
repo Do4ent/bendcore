@@ -15,6 +15,7 @@ jobs:
       - name: Run diagnostics
         shell: bash
         run: |
+          set +e +o pipefail
           mkdir -p /tmp/diag
           (npm install --no-audit --no-fund > /tmp/diag/fe-install.txt 2>&1; echo "exit $?" >> /tmp/diag/fe-install.txt)
           (npx tsc --noEmit -p . > /tmp/diag/fe-tsc.txt 2>&1; echo "exit $?" >> /tmp/diag/fe-tsc.txt)
