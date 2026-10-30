@@ -377,7 +377,7 @@ export function createPortContextMenu(
       icon: '👁️',
       action: () => onCommand('hide-object'),
     },
-    { divider: true },
+    { id: 'div-p1', label: '', divider: true },
     {
       id: 'properties',
       label: 'Properties',
@@ -446,7 +446,7 @@ export function createTreeNodeContextMenu(
       shortcut: 'Delete',
       action: () => onCommand('delete'),
     },
-    { divider: true },
+    { id: 'div-t1', label: '', divider: true },
     {
       id: 'duplicate',
       label: 'Duplicate',
@@ -454,7 +454,7 @@ export function createTreeNodeContextMenu(
       shortcut: 'Ctrl+D',
       action: () => onCommand('duplicate'),
     },
-    { divider: true },
+    { id: 'div-t2', label: '', divider: true },
     {
       id: 'hide',
       label: 'Hide',
@@ -473,7 +473,7 @@ export function createTreeNodeContextMenu(
       icon: '⊙',
       action: () => onCommand('isolate'),
     },
-    { divider: true },
+    { id: 'div-t3', label: '', divider: true },
     {
       id: 'show-deps',
       label: 'Show Dependencies',
@@ -505,7 +505,7 @@ export function createCommandConfirmationMenu(
       shortcut: 'Esc',
       action: () => onCommand('cancel-command'),
     },
-    { divider: true },
+    { id: 'div-c1', label: '', divider: true },
     {
       id: 'repeat',
       label: '↻ Repeat',

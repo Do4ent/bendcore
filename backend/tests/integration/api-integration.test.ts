@@ -38,6 +38,11 @@ describe('BendCore Backend API Integration Tests', () => {
     profileManager.seedTestData();
   });
 
+  beforeEach(() => {
+    // Re-seed before each test to guard against singleton state pollution from other test files
+    ProfileManager.getInstance().seedTestData();
+  });
+
   afterAll(async () => {
     await db.close();
   });

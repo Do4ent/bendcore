@@ -351,9 +351,11 @@ export class ConnectionPool {
 
     if (this.waitQueue.length > 0) {
       const callback = this.waitQueue.shift();
-      connection.available = false;
-      this.activeConnections.add(connection);
-      callback(connection);
+      if (callback) {
+        connection.available = false;
+        this.activeConnections.add(connection);
+        callback(connection);
+      }
     }
   }
 

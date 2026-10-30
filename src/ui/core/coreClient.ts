@@ -82,7 +82,7 @@ export interface BendDataArgs {
 export class CoreClient {
   constructor(private readonly transport: CoreTransport = electronTransport) {}
 
-  private call<T>(command: string, args: object = {}): Promise<T> {
+  call<T>(command: string, args: object = {}): Promise<T> {
     return this.transport(command, args as Record<string, unknown>) as Promise<T>;
   }
 

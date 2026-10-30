@@ -294,7 +294,6 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
             onSelect={handleNodeSelect}
             onToggleVisibility={handleToggleVisibility}
             onDelete={handleNodeDelete}
-            onContextMenu={handleContextMenu}
           />
         </div>
 
