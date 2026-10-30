@@ -3,6 +3,9 @@
 #include <sstream>
 #include <algorithm>
 #include <iomanip>
+#include <mutex>
+#include <shared_mutex>
+#include <set>
 
 namespace bendcore::collaboration {
 

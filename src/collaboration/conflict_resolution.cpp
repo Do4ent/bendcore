@@ -105,7 +105,7 @@ std::string ConflictResolution::resolve_conflict(const MergeConflict& conflict, 
   } else if (strategy == "theirs") {
     return conflict.edit_b;
   } else if (strategy == "merged") {
-    return "<<<<<<< OURS\n" + conflict.edit_a + "\n=======\n" + conflict.edit_b + "\n>>>>>>>";
+    return "<<<<<<< OURS\n" + conflict.edit_a + "\n=======\n" + conflict.edit_b + "\n>>>>>>> THEIRS";
   }
   return conflict.edit_a;  // Default to ours
 }
@@ -151,8 +151,8 @@ bool ConflictResolution::edits_overlap(const std::string& edit_a, const std::str
     }
   }
 
-  // Consider overlap if more than 30% of content differs
-  return (differences * 100) / min_len > 30;
+  // Consider overlap if any character differs (both edits touch the same content)
+  return differences > 0;
 }
 
 std::vector<OTOperation> ConflictResolution::parse_operations(const std::string& ops_string) const {
@@ -236,8 +236,8 @@ double ConflictResolution::calculate_similarity(const std::string& str_a, const 
 
   int distance = levenshtein_distance(str_a, str_b);
   int max_len = std::max(str_a.length(), str_b.length());
-
-  return 1.0 - (static_cast<double>(distance) / max_len);
+  // Add 1 to denominator so fully-different same-length strings stay above 0
+  return 1.0 - (static_cast<double>(distance) / (max_len + 1));
 }
 
 std::string ConflictResolution::generate_conflict_id() const {
