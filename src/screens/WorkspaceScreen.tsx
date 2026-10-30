@@ -200,9 +200,9 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
     }
   }, []);
 
-  const handleNodeSelect = useCallback((nodeId: string) => {
-    setSelectedNodeId(nodeId);
-    setStatusMessage(`Selected: ${nodeId}`);
+  const handleNodeSelect = useCallback((nodeId: string | null) => {
+    setSelectedNodeId(nodeId || null);
+    setStatusMessage(nodeId ? `Selected: ${nodeId}` : 'Ready');
     setContextMenu(null);
   }, []);
 

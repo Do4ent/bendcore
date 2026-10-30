@@ -92,51 +92,57 @@ const DEMO_PROPERTIES: PropertyField[] = [
     label: 'Name',
     type: 'text',
     value: 'Tube_Main',
-    section: 'General',
+    category: 'General',
+    onChange: () => {},
   },
   {
     id: 'material',
     label: 'Material',
     type: 'select',
     value: 'steel',
-    section: 'General',
+    category: 'General',
     options: [
       { label: 'Steel', value: 'steel' },
       { label: 'Aluminum', value: 'aluminum' },
       { label: 'Stainless', value: 'stainless' },
     ],
+    onChange: () => {},
   },
   {
     id: 'od',
     label: 'Outer Diameter (mm)',
     type: 'number',
     value: 12.7,
-    section: 'Dimensions',
+    category: 'Dimensions',
     min: 1,
     max: 1000,
+    onChange: () => {},
   },
   {
     id: 'wt',
     label: 'Wall Thickness (mm)',
     type: 'number',
     value: 1.6,
-    section: 'Dimensions',
+    category: 'Dimensions',
     min: 0.1,
     max: 100,
+    onChange: () => {},
   },
   {
     id: 'color',
     label: 'Color',
     type: 'color',
     value: '#0066cc',
-    section: 'Appearance',
+    category: 'Appearance',
+    onChange: () => {},
   },
   {
     id: 'visible',
     label: 'Visible',
     type: 'checkbox',
     value: true,
-    section: 'Appearance',
+    category: 'Appearance',
+    onChange: () => {},
   },
 ];
 
@@ -290,7 +296,11 @@ export const AppDemo: React.FC = () => {
     setCoordinates({ x, y, z: 0 });
   }, []);
 
-  const handleSelectTreeNode = useCallback((nodeId: string) => {
+  const handleSelectTreeNode = useCallback((nodeId: string | null) => {
+    if (!nodeId) {
+      setSelectedObject(null);
+      return;
+    }
     const node = findNode(DEMO_TREE_NODES, nodeId);
     if (node) {
       setSelectedObject({
@@ -384,10 +394,10 @@ export const AppDemo: React.FC = () => {
         {selectedObject && (
           <div className={`w-80 border-l ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} overflow-auto`}>
             <PropertiesPanel
-              title={`Properties: ${selectedObject.name}`}
-              fields={DEMO_PROPERTIES}
-              onPropertyChange={handlePropertyChange}
-              onReset={() => setStatusMessage('Properties reset')}
+              properties={DEMO_PROPERTIES.map((f) => ({
+                ...f,
+                onChange: (v: PropertyValue) => handlePropertyChange(f.id, v),
+              }))}
             />
           </div>
         )}
@@ -400,7 +410,7 @@ export const AppDemo: React.FC = () => {
       <StatusBar
         message={statusMessage}
         coordinates={coordinates}
-        mode={activeTab.toUpperCase()}
+        mode="design"
         progress={isLoading ? 50 : undefined}
         isLoading={isLoading}
       />
