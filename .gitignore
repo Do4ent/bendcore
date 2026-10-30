@@ -82,3 +82,7 @@ build_m17/
 build_m18/
 build_m19/
 build_m20/
+
+# M18-M20 and M22-M25 build directories
+build_m18_m20/
+build_m22_m25/
