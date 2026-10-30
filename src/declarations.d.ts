@@ -36,6 +36,8 @@ declare module 'three' {
     negate(): this;
     lerp(v: Vector3, alpha: number): this;
     setFromMatrixColumn(matrix: Matrix4, index: number): this;
+    applyQuaternion(q: Quaternion): this;
+    angleTo(v: Vector3): number;
   }
 
   export class Matrix4 {
@@ -104,6 +106,7 @@ declare module 'three' {
     visible: boolean;
     position: Vector3;
     rotation: { x: number; y: number; z: number };
+    up: Vector3;
     scale: Vector3;
     children: Object3D[];
     userData: Record<string, any>;
@@ -270,8 +273,14 @@ declare module 'three' {
     w: number;
     constructor(x?: number, y?: number, z?: number, w?: number);
     setFromEuler(euler: { x: number; y: number; z: number }): this;
+    setFromAxisAngle(axis: Vector3, angle: number): this;
+    setFromRotationMatrix(m: Matrix4): this;
     multiply(q: Quaternion): this;
+    premultiply(q: Quaternion): this;
+    invert(): this;
+    normalize(): this;
     clone(): Quaternion;
+    copy(q: Quaternion): this;
   }
 
   export class LOD extends Object3D {
