@@ -1,293 +1,314 @@
-#pragma once
+#ifndef BENDCORE_PLUGINS_PLUGIN_API_HPP
+#define BENDCORE_PLUGINS_PLUGIN_API_HPP
 
 #include <string>
 #include <vector>
+#include <map>
 #include <memory>
 #include <functional>
-#include <map>
-#include <any>
+#include <optional>
+#include <atomic>
+#include <shared_mutex>
+#include <stdexcept>
 
 namespace bendcore::plugins {
 
 /**
- * Plugin API Version - Semantic versioning
- * MAJOR.MINOR.PATCH
- */
-constexpr const char* PLUGIN_API_VERSION = "1.0.0";
-
-/**
- * Plugin Status enumeration
- */
-enum class PluginStatus {
-    UNLOADED = 0,
-    LOADING = 1,
-    LOADED = 2,
-    INITIALIZING = 3,
-    ACTIVE = 4,
-    DISABLED = 5,
-    ERROR = 6,
-    UNLOADING = 7
-};
-
-/**
- * Plugin Type classification
- */
-enum class PluginType {
-    RENDERER = 0,
-    ANALYZER = 1,
-    EXPORTER = 2,
-    IMPORTER = 3,
-    UTILITY = 4,
-    EXTENSION = 5
-};
-
-/**
- * Plugin Priority for initialization order
- */
-enum class PluginPriority {
-    CRITICAL = 0,      // Must load before others
-    HIGH = 1,
-    NORMAL = 2,
-    LOW = 3
-};
-
-/**
- * Permission flag for plugins
- */
-enum class PluginPermission {
-    READ_DOCUMENTS = 1 << 0,
-    WRITE_DOCUMENTS = 1 << 1,
-    NETWORK_ACCESS = 1 << 2,
-    FILE_SYSTEM = 1 << 3,
-    RENDERING = 1 << 4,
-    GEOMETRY_ACCESS = 1 << 5,
-    USER_INPUT = 1 << 6,
-    ANALYTICS = 1 << 7,
-    ALL_PERMISSIONS = (1 << 8) - 1
-};
-
-/**
- * Plugin metadata information
+ * Plugin metadata and version information
  */
 struct PluginMetadata {
-    std::string id;                    // Unique plugin identifier
-    std::string name;                  // Human-readable name
-    std::string version;               // Semantic version
-    std::string author;                // Author/organization
-    std::string description;           // Plugin description
-    std::string license;               // License type (MIT, Apache, etc.)
-    std::vector<std::string> tags;     // Searchable tags
-    std::string documentation_url;     // URL to documentation
-    std::string repository_url;        // Source repository
-    uint32_t permissions;              // Required permissions (bitfield)
+  std::string id;                      // Unique plugin identifier
+  std::string name;                    // Display name
+  std::string version;                 // Semantic version
+  std::string description;             // Plugin description
+  std::string author;                  // Plugin author
+  std::string license;                 // License identifier
+  std::vector<std::string> keywords;   // Search keywords
+  std::string repository_url;          // Repository URL
+  bool requires_restart = false;       // Requires application restart
 };
 
 /**
- * Plugin Info structure with runtime information
+ * Plugin capability descriptor
  */
-struct PluginInfo {
-    PluginMetadata metadata;
-    PluginType type;
-    PluginPriority priority;
-    PluginStatus status;
-    std::string entry_point;           // Main entry point
-    std::vector<std::string> dependencies;  // Required plugins
-    std::vector<std::string> provides;      // Services provided
-    uint64_t memory_usage;             // Current memory usage
-    double load_time_ms;               // Load time in milliseconds
+struct CapabilityDescriptor {
+  std::string name;                    // Capability name
+  std::string type;                    // Type identifier
+  std::vector<std::string> features;   // Feature list
+  std::map<std::string, std::string> properties; // Additional properties
 };
 
 /**
- * Hook callback type
+ * Plugin state enumeration
  */
-using HookCallback = std::function<bool(const std::string&, const std::map<std::string, std::any>&)>;
+enum class PluginState {
+  UNINITIALIZED,      // Plugin not yet initialized
+  LOADING,            // Plugin is loading
+  LOADED,             // Plugin loaded successfully
+  ACTIVE,             // Plugin is active
+  SUSPENDED,          // Plugin is suspended
+  ERROR,              // Plugin encountered error
+  UNLOADING,          // Plugin is unloading
+  UNLOADED            // Plugin unloaded
+};
 
 /**
- * Plugin base interface
- * All plugins must implement this interface
+ * Plugin priority for execution order
+ */
+enum class PluginPriority {
+  CRITICAL = 0,       // Execute before all others
+  HIGH = 1,
+  NORMAL = 2,
+  LOW = 3,
+  DEFERRED = 4        // Execute after normal plugins
+};
+
+/**
+ * Plugin dependency specification
+ */
+struct PluginDependency {
+  std::string plugin_id;               // Required plugin ID
+  std::string min_version;             // Minimum required version
+  bool optional = false;               // Whether dependency is optional
+};
+
+/**
+ * Plugin configuration entry
+ */
+struct ConfigEntry {
+  std::string key;
+  std::string value;
+  std::string description;
+  bool is_secret = false;              // Indicates sensitive data
+};
+
+/**
+ * Plugin event data
+ */
+struct PluginEvent {
+  std::string event_type;              // Type of event
+  std::string plugin_id;               // Plugin that triggered event
+  std::map<std::string, std::string> data; // Event data
+  long timestamp_ms = 0;               // Timestamp in milliseconds
+};
+
+/**
+ * Callback type for plugin events
+ */
+using PluginEventCallback = std::function<void(const PluginEvent&)>;
+
+/**
+ * IPlugin interface - Base interface for all plugins
+ * 
+ * Plugins implement this interface to provide functionality
+ * and lifecycle management hooks.
  */
 class IPlugin {
-public:
-    virtual ~IPlugin() = default;
+ public:
+  virtual ~IPlugin() = default;
 
-    /**
-     * Get plugin metadata
-     */
-    virtual PluginMetadata GetMetadata() const = 0;
+  /**
+   * Get plugin metadata
+   * @return Plugin metadata
+   */
+  virtual PluginMetadata get_metadata() const = 0;
 
-    /**
-     * Initialize plugin
-     * Called when plugin is loaded
-     */
-    virtual bool Initialize() = 0;
+  /**
+   * Initialize the plugin
+   * @param context Plugin context (opaque pointer to host context)
+   * @return true if initialization succeeded
+   */
+  virtual bool initialize(void* context) = 0;
 
-    /**
-     * Shutdown plugin
-     * Called before plugin is unloaded
-     */
-    virtual bool Shutdown() = 0;
+  /**
+   * Activate the plugin
+   * @return true if activation succeeded
+   */
+  virtual bool activate() = 0;
 
-    /**
-     * Check if plugin is enabled
-     */
-    virtual bool IsEnabled() const = 0;
+  /**
+   * Deactivate the plugin
+   * @return true if deactivation succeeded
+   */
+  virtual bool deactivate() = 0;
 
-    /**
-     * Enable/disable plugin
-     */
-    virtual void SetEnabled(bool enabled) = 0;
+  /**
+   * Shutdown the plugin
+   * @return true if shutdown succeeded
+   */
+  virtual bool shutdown() = 0;
 
-    /**
-     * Get current status
-     */
-    virtual PluginStatus GetStatus() const = 0;
+  /**
+   * Get list of capabilities provided by this plugin
+   * @return Vector of capability descriptors
+   */
+  virtual std::vector<CapabilityDescriptor> get_capabilities() const = 0;
 
-    /**
-     * Register hook callback
-     * @param hook_name: Unique hook name
-     * @param callback: Function to execute
-     * @return: Hook registration ID
-     */
-    virtual std::string RegisterHook(const std::string& hook_name,
-                                     HookCallback callback) = 0;
+  /**
+   * Get plugin dependencies
+   * @return Vector of plugin dependencies
+   */
+  virtual std::vector<PluginDependency> get_dependencies() const = 0;
 
-    /**
-     * Unregister hook by ID
-     */
-    virtual bool UnregisterHook(const std::string& hook_id) = 0;
+  /**
+   * Get current plugin state
+   * @return Current PluginState
+   */
+  virtual PluginState get_state() const = 0;
 
-    /**
-     * Get list of registered hooks
-     */
-    virtual std::vector<std::string> GetRegisteredHooks() const = 0;
+  /**
+   * Configure plugin with configuration entries
+   * @param config Vector of configuration entries
+   * @return true if configuration succeeded
+   */
+  virtual bool configure(const std::vector<ConfigEntry>& config) = 0;
 
-    /**
-     * Execute a command
-     * @param command: Command name
-     * @param args: Command arguments
-     * @return: Command result
-     */
-    virtual std::string ExecuteCommand(const std::string& command,
-                                      const std::map<std::string, std::string>& args) = 0;
+  /**
+   * Get plugin configuration
+   * @return Current configuration
+   */
+  virtual std::vector<ConfigEntry> get_configuration() const = 0;
 
-    /**
-     * Get plugin configuration
-     */
-    virtual std::map<std::string, std::any> GetConfiguration() const = 0;
+  /**
+   * Check if plugin is compatible with given version
+   * @param api_version API version to check
+   * @return true if compatible
+   */
+  virtual bool is_compatible(const std::string& api_version) const = 0;
 
-    /**
-     * Set plugin configuration
-     */
-    virtual bool SetConfiguration(const std::map<std::string, std::any>& config) = 0;
+  /**
+   * Execute plugin command
+   * @param command Command name
+   * @param parameters Command parameters
+   * @return Command result as string
+   */
+  virtual std::string execute_command(const std::string& command,
+                                      const std::map<std::string, std::string>& parameters) = 0;
 
-    /**
-     * Get version
-     */
-    virtual std::string GetVersion() const = 0;
-
-    /**
-     * Get required API version
-     */
-    virtual std::string GetRequiredAPIVersion() const = 0;
-
-    /**
-     * Validate plugin integrity
-     */
-    virtual bool Validate() const = 0;
+  /**
+   * Get plugin diagnostics
+   * @return Diagnostic information
+   */
+  virtual std::map<std::string, std::string> get_diagnostics() const = 0;
 };
 
 /**
- * Plugin interface factory
- * Used to create plugin instances
+ * Plugin registry - Manages plugin registration and lifecycle
+ * 
+ * Thread-safe singleton that manages all plugins in the system.
+ * Provides methods for registering, loading, activating, and
+ * querying plugin information.
  */
-typedef IPlugin* (*PluginFactory)();
+class PluginRegistry {
+ public:
+  /**
+   * Get singleton instance
+   * @return Reference to PluginRegistry instance
+   */
+  static PluginRegistry& instance();
 
-/**
- * Plugin version compatibility check
- */
-class VersionValidator {
-public:
-    /**
-     * Check if two versions are compatible
-     * @param required: Required version (e.g., "1.0.0")
-     * @param actual: Actual version (e.g., "1.0.1")
-     * @return: true if versions are compatible
-     */
-    static bool IsCompatible(const std::string& required, const std::string& actual);
+  /**
+   * Register a plugin with the registry
+   * @param plugin Shared pointer to plugin implementation
+   * @return true if registration succeeded
+   */
+  bool register_plugin(std::shared_ptr<IPlugin> plugin);
 
-    /**
-     * Parse version string into major, minor, patch
-     */
-    static bool ParseVersion(const std::string& version,
-                            int& major, int& minor, int& patch);
+  /**
+   * Unregister a plugin
+   * @param plugin_id Plugin identifier to unregister
+   * @return true if unregistration succeeded
+   */
+  bool unregister_plugin(const std::string& plugin_id);
 
-    /**
-     * Compare two versions
-     * @return: -1 if v1 < v2, 0 if equal, 1 if v1 > v2
-     */
-    static int CompareVersions(const std::string& v1, const std::string& v2);
+  /**
+   * Get registered plugin by ID
+   * @param plugin_id Plugin identifier
+   * @return Shared pointer to plugin, or nullptr if not found
+   */
+  std::shared_ptr<IPlugin> get_plugin(const std::string& plugin_id) const;
+
+  /**
+   * Get all registered plugins
+   * @return Vector of all registered plugins
+   */
+  std::vector<std::shared_ptr<IPlugin>> get_all_plugins() const;
+
+  /**
+   * Get plugins by capability
+   * @param capability_name Capability name to search for
+   * @return Vector of plugins providing the capability
+   */
+  std::vector<std::shared_ptr<IPlugin>> get_plugins_by_capability(
+      const std::string& capability_name) const;
+
+  /**
+   * Get plugin count
+   * @return Number of registered plugins
+   */
+  size_t get_plugin_count() const;
+
+  /**
+   * Check if plugin is registered
+   * @param plugin_id Plugin identifier
+   * @return true if plugin is registered
+   */
+  bool has_plugin(const std::string& plugin_id) const;
+
+  /**
+   * Get plugins by state
+   * @param state Plugin state to filter by
+   * @return Vector of plugins in specified state
+   */
+  std::vector<std::shared_ptr<IPlugin>> get_plugins_by_state(PluginState state) const;
+
+  /**
+   * Activate all registered plugins
+   * @return Number of successfully activated plugins
+   */
+  int activate_all();
+
+  /**
+   * Deactivate all registered plugins
+   * @return Number of successfully deactivated plugins
+   */
+  int deactivate_all();
+
+  /**
+   * Register event callback for plugin events
+   * @param callback Function to call on events
+   */
+  void register_event_callback(PluginEventCallback callback);
+
+  /**
+   * Emit a plugin event
+   * @param event Event to emit
+   */
+  void emit_event(const PluginEvent& event);
+
+  /**
+   * Clear all plugins
+   */
+  void clear();
+
+ private:
+  PluginRegistry() = default;
+  ~PluginRegistry() = default;
+
+  mutable std::shared_mutex registry_mutex_;
+  std::map<std::string, std::shared_ptr<IPlugin>> plugins_;
+  std::vector<PluginEventCallback> event_callbacks_;
 };
 
 /**
- * Plugin API context
- * Provides access to BendCore functionality from plugins
+ * Plugin exception - Thrown for plugin-related errors
  */
-class PluginContext {
-public:
-    /**
-     * Get application version
-     */
-    virtual std::string GetApplicationVersion() const = 0;
-
-    /**
-     * Get application data directory
-     */
-    virtual std::string GetApplicationDataDir() const = 0;
-
-    /**
-     * Get plugin data directory
-     */
-    virtual std::string GetPluginDataDir(const std::string& plugin_id) const = 0;
-
-    /**
-     * Log message from plugin
-     */
-    virtual void Log(const std::string& message, const std::string& level = "INFO") = 0;
-
-    /**
-     * Check if another plugin is available
-     */
-    virtual bool IsPluginAvailable(const std::string& plugin_id) const = 0;
-
-    /**
-     * Request interface from another plugin
-     */
-    virtual void* GetPluginInterface(const std::string& plugin_id,
-                                    const std::string& interface_name) = 0;
-
-    virtual ~PluginContext() = default;
-};
-
-/**
- * Global hook executor for inter-plugin communication
- */
-class HookExecutor {
-public:
-    /**
-     * Execute all registered hooks for a given name
-     */
-    static bool ExecuteHooks(const std::string& hook_name,
-                            const std::map<std::string, std::any>& data);
-
-    /**
-     * Register global hook
-     */
-    static void RegisterGlobalHook(const std::string& hook_name, HookCallback callback);
-
-    /**
-     * Unregister global hook
-     */
-    static void UnregisterGlobalHook(const std::string& hook_name);
+class PluginException : public std::runtime_error {
+ public:
+  explicit PluginException(const std::string& message)
+      : std::runtime_error(message) {}
 };
 
 } // namespace bendcore::plugins
+
+#endif // BENDCORE_PLUGINS_PLUGIN_API_HPP

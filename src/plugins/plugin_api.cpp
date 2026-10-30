@@ -1,116 +1,171 @@
 #include "bendcore/plugins/plugin_api.hpp"
-#include <sstream>
 #include <algorithm>
-#include <regex>
+#include <chrono>
+#include <mutex>
 
 namespace bendcore::plugins {
 
-namespace {
-    std::map<std::string, std::vector<HookCallback>> g_global_hooks;
+// PluginRegistry implementation
+PluginRegistry& PluginRegistry::instance() {
+  static PluginRegistry registry;
+  return registry;
 }
 
-// VersionValidator implementation
-bool VersionValidator::IsCompatible(const std::string& required, const std::string& actual) {
-    int req_major, req_minor, req_patch;
-    int act_major, act_minor, act_patch;
-
-    if (!ParseVersion(required, req_major, req_minor, req_patch)) {
-        return false;
-    }
-    if (!ParseVersion(actual, act_major, act_minor, act_patch)) {
-        return false;
-    }
-
-    // Check major version - must be same
-    if (req_major != act_major) {
-        return false;
-    }
-
-    // Check minor version - actual should be >= required
-    if (act_minor < req_minor) {
-        return false;
-    }
-
-    // If minor versions are same, patch should be >=
-    if (act_minor == req_minor && act_patch < req_patch) {
-        return false;
-    }
-
-    return true;
+bool PluginRegistry::register_plugin(std::shared_ptr<IPlugin> plugin) {
+  if (!plugin) return false;
+  
+  auto metadata = plugin->get_metadata();
+  if (metadata.id.empty()) return false;
+  
+  std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+  
+  if (plugins_.find(metadata.id) != plugins_.end()) {
+    return false; // Plugin already registered
+  }
+  
+  plugins_[metadata.id] = plugin;
+  
+  // Emit registration event
+  PluginEvent event{
+    "plugin.registered",
+    metadata.id,
+    {{"name", metadata.name}, {"version", metadata.version}},
+    std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count()
+  };
+  
+  for (auto& callback : event_callbacks_) {
+    callback(event);
+  }
+  
+  return true;
 }
 
-bool VersionValidator::ParseVersion(const std::string& version,
-                                   int& major, int& minor, int& patch) {
-    std::regex version_regex(R"((\d+)\.(\d+)\.(\d+))");
-    std::smatch match;
-
-    if (!std::regex_match(version, match, version_regex)) {
-        return false;
-    }
-
-    try {
-        major = std::stoi(match[1].str());
-        minor = std::stoi(match[2].str());
-        patch = std::stoi(match[3].str());
-        return true;
-    } catch (const std::exception&) {
-        return false;
-    }
+bool PluginRegistry::unregister_plugin(const std::string& plugin_id) {
+  std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+  
+  auto it = plugins_.find(plugin_id);
+  if (it == plugins_.end()) {
+    return false;
+  }
+  
+  plugins_.erase(it);
+  
+  // Emit unregistration event
+  PluginEvent event{
+    "plugin.unregistered",
+    plugin_id,
+    {},
+    std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count()
+  };
+  
+  for (auto& callback : event_callbacks_) {
+    callback(event);
+  }
+  
+  return true;
 }
 
-int VersionValidator::CompareVersions(const std::string& v1, const std::string& v2) {
-    int v1_major, v1_minor, v1_patch;
-    int v2_major, v2_minor, v2_patch;
-
-    if (!ParseVersion(v1, v1_major, v1_minor, v1_patch) ||
-        !ParseVersion(v2, v2_major, v2_minor, v2_patch)) {
-        return 0;
-    }
-
-    if (v1_major != v2_major) {
-        return v1_major < v2_major ? -1 : 1;
-    }
-    if (v1_minor != v2_minor) {
-        return v1_minor < v2_minor ? -1 : 1;
-    }
-    if (v1_patch != v2_patch) {
-        return v1_patch < v2_patch ? -1 : 1;
-    }
-
-    return 0;
+std::shared_ptr<IPlugin> PluginRegistry::get_plugin(const std::string& plugin_id) const {
+  std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+  
+  auto it = plugins_.find(plugin_id);
+  if (it != plugins_.end()) {
+    return it->second;
+  }
+  return nullptr;
 }
 
-// HookExecutor implementation
-bool HookExecutor::ExecuteHooks(const std::string& hook_name,
-                               const std::map<std::string, std::any>& data) {
-    auto it = g_global_hooks.find(hook_name);
-    if (it == g_global_hooks.end()) {
-        return true;  // No hooks registered is not an error
-    }
-
-    bool all_success = true;
-    for (const auto& callback : it->second) {
-        try {
-            if (!callback(hook_name, data)) {
-                all_success = false;
-            }
-        } catch (const std::exception& e) {
-            all_success = false;
-        }
-    }
-
-    return all_success;
+std::vector<std::shared_ptr<IPlugin>> PluginRegistry::get_all_plugins() const {
+  std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+  
+  std::vector<std::shared_ptr<IPlugin>> result;
+  for (const auto& pair : plugins_) {
+    result.push_back(pair.second);
+  }
+  return result;
 }
 
-void HookExecutor::RegisterGlobalHook(const std::string& hook_name, HookCallback callback) {
-    g_global_hooks[hook_name].push_back(callback);
+std::vector<std::shared_ptr<IPlugin>> PluginRegistry::get_plugins_by_capability(
+    const std::string& capability_name) const {
+  std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+  
+  std::vector<std::shared_ptr<IPlugin>> result;
+  for (const auto& pair : plugins_) {
+    auto capabilities = pair.second->get_capabilities();
+    for (const auto& cap : capabilities) {
+      if (cap.name == capability_name) {
+        result.push_back(pair.second);
+        break;
+      }
+    }
+  }
+  return result;
 }
 
-void HookExecutor::UnregisterGlobalHook(const std::string& hook_name) {
-    auto it = g_global_hooks.find(hook_name);
-    if (it != g_global_hooks.end()) {
-        g_global_hooks.erase(it);
+size_t PluginRegistry::get_plugin_count() const {
+  std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+  return plugins_.size();
+}
+
+bool PluginRegistry::has_plugin(const std::string& plugin_id) const {
+  std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+  return plugins_.find(plugin_id) != plugins_.end();
+}
+
+std::vector<std::shared_ptr<IPlugin>> PluginRegistry::get_plugins_by_state(PluginState state) const {
+  std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+  
+  std::vector<std::shared_ptr<IPlugin>> result;
+  for (const auto& pair : plugins_) {
+    if (pair.second->get_state() == state) {
+      result.push_back(pair.second);
     }
+  }
+  return result;
+}
+
+int PluginRegistry::activate_all() {
+  std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+  
+  int activated = 0;
+  for (auto& pair : plugins_) {
+    if (pair.second->activate()) {
+      activated++;
+    }
+  }
+  return activated;
+}
+
+int PluginRegistry::deactivate_all() {
+  std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+  
+  int deactivated = 0;
+  for (auto& pair : plugins_) {
+    if (pair.second->deactivate()) {
+      deactivated++;
+    }
+  }
+  return deactivated;
+}
+
+void PluginRegistry::register_event_callback(PluginEventCallback callback) {
+  std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+  event_callbacks_.push_back(callback);
+}
+
+void PluginRegistry::emit_event(const PluginEvent& event) {
+  std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+  for (auto& callback : event_callbacks_) {
+    callback(event);
+  }
+}
+
+void PluginRegistry::clear() {
+  std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+  plugins_.clear();
+  event_callbacks_.clear();
 }
 
 } // namespace bendcore::plugins
