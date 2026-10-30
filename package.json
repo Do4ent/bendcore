@@ -1,6 +1,6 @@
 {
   "name": "bendcore-ui",
-  "version": "2.1.0-unified",
+  "version": "1.0.0-PRODUCTION",
   "description": "BendCore CAD - Professional 3D CAD system for tube bending design and manufacturing",
   "main": "dist/main.js",
   "homepage": "https://github.com/Do4ent/bendcore",

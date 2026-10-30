@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import './styles.css';
 import './BendCoreLanding.css';
 import M22Integration from './M22Integration';
+import M23Integration from './M23Integration';
+import M24Integration from './M24Integration';
+import M25Integration from './M25Integration';
 
 /**
  * BendCore Main Application Interface
@@ -32,6 +35,7 @@ interface TreeNode {
 const BendCoreLanding: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<string>('tube-assembly');
   const [viewMode, setViewMode] = useState<'shaded' | 'wireframe' | 'hiddenline' | 'render'>('shaded');
+  const [openMenus, setOpenMenus] = useState<{ [key: string]: boolean }>({});
 
   // Project tree structure from INTERFACE_OVERVIEW.md
   const treeData: TreeNode = {
@@ -80,9 +84,51 @@ const BendCoreLanding: React.FC = () => {
     );
   };
 
-  // Keyboard shortcuts from KEYBOARD_SHORTCUTS.md
+  /**
+   * Handle command execution
+   * Routes commands to appropriate dialog or action
+   */
   const handleCommand = (command: string) => {
     console.log(`Command: ${command}`);
+
+    // Get M22 integration API
+    const m22api = (window as any).__bendcore_m22;
+
+    switch (command) {
+      // File operations
+      case 'open-document':
+        m22api?.openDialog('file-open');
+        break;
+      case 'save-document':
+        m22api?.openDialog('file-save');
+        break;
+      case 'recent-files':
+        m22api?.openDialog('recent-files');
+        break;
+      // Settings
+      case 'menu-file':
+      case 'menu-edit':
+      case 'menu-view':
+      case 'menu-tools':
+      case 'menu-window':
+      case 'menu-help':
+        // These would show submenus - for now just log
+        break;
+      // Sketch operations
+      case 'new-sketch':
+        console.log('Opening sketch editor...');
+        break;
+      // Assembly operations
+      case 'new-assembly':
+        console.log('Opening assembly dialog...');
+        break;
+      // Manufacturing
+      case 'generate-bom':
+        console.log('Generating BOM...');
+        break;
+      default:
+        console.log(`Command not yet implemented: ${command}`);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -344,6 +390,29 @@ const BendCoreLanding: React.FC = () => {
           console.log(`M22 Command: ${command}`, data);
           // Handle M22 dialog actions here
         }}
+      />
+
+      {/* M23 Integration - Sketch Editor Components */}
+      <M23Integration
+        isDarkMode={false}
+        onSketchSaved={(sketchData) => {
+          console.log('M23 Sketch Saved:', sketchData);
+          // Handle sketch save here
+        }}
+      />
+
+      {/* M24 Integration - Assembly & Bend Components */}
+      <M24Integration
+        isDarkMode={false}
+        onOperationComplete={(data) => {
+          console.log('M24 Operation Complete:', data);
+          // Handle operation complete here
+        }}
+      />
+
+      {/* M25 Integration - Manufacturing & Analysis Components */}
+      <M25Integration
+        isDarkMode={false}
       />
     </div>
   );
