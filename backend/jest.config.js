@@ -2,8 +2,12 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   rootDir: '.',
-  runInBand: true,
   testMatch: ['**/tests/**/*.test.ts'],
+  globals: {
+    'ts-jest': {
+      tsconfig: './tsconfig.test.json'
+    }
+  },
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',
