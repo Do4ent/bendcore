@@ -5,7 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { TubeBuilder, PathSegment, BendingProfile as TubeProfile } from '../../core/tube-builder';
-import { TubeSpecification, ApiResponse } from '../../models/types';
+import { TubeSpecification, ApiResponse, Vector3 } from '../../models/types';
 import { ProfileManager } from '../../core/profile-manager';
 
 const router = Router();
@@ -71,8 +71,8 @@ router.post('/build', (req: Request, res: Response): void => {
 
     // Prepare path segments
     const pathSegments: PathSegment[] = path.map((p: Record<string, unknown>) => ({
-      start: p.start,
-      end: p.end,
+      start: p.start as Vector3,
+      end: p.end as Vector3,
       bend_angle: Number(p.bend_angle || 90),
       segment_id: String(p.segment_id || `seg_${Math.random()}`),
       is_straight: Boolean(p.is_straight || false)

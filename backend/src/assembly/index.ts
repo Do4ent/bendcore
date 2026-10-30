@@ -11,7 +11,7 @@
  */
 
 export { MultiLevelHierarchyManager } from './MultiLevelHierarchyManager';
-export { HierarchyManager, AssemblyHierarchyManager } from './HierarchyManager';
+export { AssemblyHierarchyManager } from './HierarchyManager';
 export { AssociativeSyncEngine } from './AssociativeSyncEngine';
 export { LargeAssemblyOptimizer } from './LargeAssemblyOptimizer';
 

@@ -405,9 +405,8 @@ export class AssemblyHierarchyManager {
   exportAsFlat(): any[] {
     const items = [];
 
-    for (const [id, node] of this.nodes) {
+    for (const [, node] of this.nodes) {
       items.push({
-        id,
         ...node,
         metadata: Object.fromEntries(node.metadata)
       });

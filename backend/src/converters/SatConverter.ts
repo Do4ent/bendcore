@@ -99,6 +99,23 @@ export class SATConverter {
   }
 
   /**
+   * Parse SAT header (first line contains version and flags)
+   */
+  private static parseHeader(lines: string[]): SATData['header'] {
+    const firstLine = lines[0] || '';
+    const parts = firstLine.trim().split(/\s+/);
+    const version = parts[0] || '700';
+
+    return {
+      version,
+      appId: 'BendCore CAD',
+      fileType: 'SAT',
+      timestamp: new Date(),
+      author: ''
+    };
+  }
+
+  /**
    * Parse SAT entity
    */
   private static parseSATEntity(line: string, id: number, version: string): SATEntity | null {

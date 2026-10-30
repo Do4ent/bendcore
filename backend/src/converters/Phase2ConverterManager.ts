@@ -13,14 +13,14 @@
 import { STEPConverter, STEPData } from './StepConverter';
 import { IGESConverter, IGESData } from './IgesConverter';
 import { SATConverter, SATData } from './SatConverter';
-import { DWFConverter } from './DwfConverter';
+import { DWFConverter, DWFData } from './DwfConverter';
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/Logger';
 
 export type SupportedFormat = 'step' | 'iges' | 'sat' | 'dwg' | 'dwf';
 
-export type CADData = STEPData | IGESData | SATData | Record<string, unknown>;
+export type CADData = STEPData | IGESData | SATData | DWFData | Record<string, unknown>;
 
 export interface ConversionResult {
   success: boolean;

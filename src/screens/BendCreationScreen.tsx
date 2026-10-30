@@ -25,7 +25,7 @@ interface Bend {
 }
 
 export const BendCreationScreen: React.FC<BendCreationScreenProps> = ({ tubeId }) => {
-  const [activeTab, setActiveTab] = useState<RibbonTab>('insert');
+  const [activeTab, setActiveTab] = useState<string>('insert');
   const [selectedBendId, setSelectedBendId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('Bend creation ready');
   const [bends, setBends] = useState<Bend[]>([

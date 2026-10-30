@@ -226,10 +226,8 @@ export class STEPConverter {
   private static parseBinarySTEP(content: string): STEPData {
     // Binary STEP заголовок:
     // BINARY;VERSION;TIMESTAMP;...
-    const converter = new STEPConverter();
-
     // Стандартный парсинг (binary часть обычно convertible в ASCII)
-    return converter.parseASCIISTEP(content);
+    return STEPConverter.parseASCIISTEP(content);
   }
 
   /**
@@ -502,16 +500,16 @@ export class STEPConverter {
   private entityToGeometry(entity: STEPEntity, entities: Map<number, STEPEntity>): Geometry3D | null {
     switch (entity.type) {
       case 'CARTESIAN_POINT':
-        return this.parseCartesianPoint(entity.attributes);
+        return this.parseCartesianPoint(entity.attributes) as Geometry3D | null;
 
       case 'DIRECTION':
-        return this.parseDirection(entity.attributes);
+        return this.parseDirection(entity.attributes) as Geometry3D | null;
 
       case 'LINE':
-        return this.parseLine(entity.attributes, entities);
+        return this.parseLine(entity.attributes, entities) as Geometry3D | null;
 
       case 'CIRCLE':
-        return this.parseCircle(entity.attributes, entities);
+        return this.parseCircle(entity.attributes, entities) as Geometry3D | null;
 
       case 'B_SPLINE_CURVE_WITH_KNOTS':
         return this.parseBSplineCurve(entity.attributes, entities);

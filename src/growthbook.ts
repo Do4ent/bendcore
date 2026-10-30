@@ -91,11 +91,6 @@ class GrowthBookManager {
       return false;
     }
 
-    const feature = this.instance.getFeature(featureName);
-    if (!feature) {
-      return false;
-    }
-
     // Check if the current user is in the experiment
     const result = this.instance.evalFeature(featureName);
     return result.on === true;
@@ -109,13 +104,13 @@ class GrowthBookManager {
       return null;
     }
 
-    const experiment = this.instance.getExperiment(experimentId);
-    if (!experiment) {
+    const allResults = this.instance.getAllResults();
+    const entry = allResults[experimentId];
+    if (!entry) {
       return null;
     }
 
-    const result = this.instance.getExperimentResult(experimentId);
-    return result?.variationId || null;
+    return String(entry.result.variationId ?? '') || null;
   }
 
   /**
