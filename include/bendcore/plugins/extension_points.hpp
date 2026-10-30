@@ -1,229 +1,78 @@
-#pragma once
+#ifndef BENDCORE_PLUGINS_EXTENSION_POINTS_HPP
+#define BENDCORE_PLUGINS_EXTENSION_POINTS_HPP
 
-#include "plugin_api.hpp"
-#include <map>
-#include <set>
+#include <string>
 #include <vector>
-#include <functional>
+#include <map>
 #include <memory>
+#include <functional>
+#include <optional>
+#include <shared_mutex>
 
 namespace bendcore::plugins {
 
 /**
- * Extension point definition
- * Defines a place where plugins can hook into application functionality
+ * Extension point interface
  */
 struct ExtensionPoint {
-    std::string id;                    // Unique identifier
-    std::string name;                  // Human-readable name
-    std::string description;           // What this extension point does
-    std::string category;              // Category (e.g., "rendering", "analysis")
-    int priority;                      // Priority for execution order
-    std::vector<std::string> required_params;  // Required parameters
-    std::vector<std::string> optional_params;  // Optional parameters
-    std::string version;               // API version
-    bool is_active;                    // Whether this extension point is active
+  std::string id;                      // Unique extension point ID
+  std::string name;                    // Display name
+  std::string description;             // Description
+  std::string version;                 // API version
+  std::vector<std::string> capabilities; // Supported capabilities
+  bool is_experimental = false;        // Experimental API flag
 };
 
 /**
- * Extension implementation by a plugin
+ * Extension data
  */
 struct Extension {
-    std::string id;                    // Extension ID
-    std::string plugin_id;             // ID of plugin providing this extension
-    std::string extension_point;       // Extension point ID
-    std::string name;                  // Extension name
-    std::function<bool(const std::map<std::string, std::any>&)> callback;
-    int priority;                      // Execution priority
-    bool enabled;                      // Whether this extension is enabled
+  std::string id;
+  std::string extension_point_id;
+  std::string name;
+  std::string plugin_id;
+  std::string version;
+  std::map<std::string, std::string> properties;
+  int priority = 0;
+  bool is_enabled = true;
 };
 
 /**
- * Extension point registry
- * Manages extension points and their implementations
+ * Extension registry and management
  */
-class ExtensionPointRegistry {
-public:
-    static ExtensionPointRegistry& GetInstance();
+class ExtensionRegistry {
+ public:
+  static ExtensionRegistry& instance();
 
-    /**
-     * Register an extension point
-     */
-    bool RegisterExtensionPoint(const ExtensionPoint& point);
+  bool register_extension_point(const ExtensionPoint& point);
+  bool unregister_extension_point(const std::string& point_id);
+  std::optional<ExtensionPoint> get_extension_point(const std::string& point_id) const;
+  std::vector<ExtensionPoint> get_all_extension_points() const;
+  bool has_extension_point(const std::string& point_id) const;
 
-    /**
-     * Unregister an extension point
-     */
-    bool UnregisterExtensionPoint(const std::string& point_id);
+  bool register_extension(const Extension& extension);
+  bool unregister_extension(const std::string& extension_id);
+  std::optional<Extension> get_extension(const std::string& extension_id) const;
+  std::vector<Extension> get_extensions_for_point(const std::string& point_id) const;
+  std::vector<Extension> get_extensions_by_plugin(const std::string& plugin_id) const;
+  
+  int get_extension_count(const std::string& point_id) const;
+  void enable_extension(const std::string& extension_id);
+  void disable_extension(const std::string& extension_id);
+  bool is_extension_enabled(const std::string& extension_id) const;
+  
+  std::vector<Extension> get_sorted_extensions(const std::string& point_id) const;
+  void clear();
 
-    /**
-     * Get extension point by ID
-     */
-    const ExtensionPoint* GetExtensionPoint(const std::string& point_id) const;
+ private:
+  ExtensionRegistry() = default;
+  ~ExtensionRegistry() = default;
 
-    /**
-     * Get all extension points
-     */
-    std::vector<ExtensionPoint> GetAllExtensionPoints() const;
-
-    /**
-     * Register an extension implementation
-     */
-    bool RegisterExtension(const Extension& extension);
-
-    /**
-     * Unregister an extension
-     */
-    bool UnregisterExtension(const std::string& extension_id);
-
-    /**
-     * Get extensions for a specific extension point
-     */
-    std::vector<Extension> GetExtensionsForPoint(const std::string& point_id) const;
-
-    /**
-     * Execute all extensions for a point
-     */
-    bool ExecuteExtensions(const std::string& point_id,
-                          const std::map<std::string, std::any>& params);
-
-    /**
-     * Check if an extension point exists
-     */
-    bool HasExtensionPoint(const std::string& point_id) const;
-
-    /**
-     * Check if an extension exists
-     */
-    bool HasExtension(const std::string& extension_id) const;
-
-    /**
-     * Enable/disable extension
-     */
-    bool SetExtensionEnabled(const std::string& extension_id, bool enabled);
-
-    /**
-     * Get extension by ID
-     */
-    const Extension* GetExtension(const std::string& extension_id) const;
-
-    /**
-     * Get extensions by plugin
-     */
-    std::vector<Extension> GetExtensionsByPlugin(const std::string& plugin_id) const;
-
-    /**
-     * Remove all extensions from a plugin
-     */
-    bool RemovePluginExtensions(const std::string& plugin_id);
-
-    /**
-     * Clear all extensions and extension points
-     */
-    void Clear();
-
-    /**
-     * Get extension count
-     */
-    size_t GetExtensionCount() const;
-
-    /**
-     * Get extension point count
-     */
-    size_t GetExtensionPointCount() const;
-
-private:
-    ExtensionPointRegistry();
-    std::map<std::string, ExtensionPoint> extension_points_;
-    std::map<std::string, Extension> extensions_;
-};
-
-/**
- * Extension point categories
- */
-namespace ExtensionCategories {
-    constexpr const char* RENDERING = "rendering";
-    constexpr const char* ANALYSIS = "analysis";
-    constexpr const char* FILE_FORMAT = "file_format";
-    constexpr const char* GEOMETRY = "geometry";
-    constexpr const char* SIMULATION = "simulation";
-    constexpr const char* EXPORT = "export";
-    constexpr const char* IMPORT = "import";
-    constexpr const char* TOOL = "tool";
-    constexpr const char* UI = "ui";
-    constexpr const char* DOCUMENT = "document";
-}
-
-/**
- * Built-in extension points
- */
-namespace BuiltInExtensionPoints {
-    constexpr const char* ON_DOCUMENT_OPEN = "on.document.open";
-    constexpr const char* ON_DOCUMENT_SAVE = "on.document.save";
-    constexpr const char* ON_DOCUMENT_CLOSE = "on.document.close";
-    constexpr const char* ON_GEOMETRY_CREATED = "on.geometry.created";
-    constexpr const char* ON_GEOMETRY_MODIFIED = "on.geometry.modified";
-    constexpr const char* ON_RENDER_START = "on.render.start";
-    constexpr const char* ON_RENDER_COMPLETE = "on.render.complete";
-    constexpr const char* GET_EXPORT_FORMATS = "get.export.formats";
-    constexpr const char* GET_IMPORT_FORMATS = "get.import.formats";
-    constexpr const char* PERFORM_ANALYSIS = "perform.analysis";
-    constexpr const char* CUSTOMIZE_UI = "customize.ui";
-}
-
-/**
- * Extension manager for plugin-provided extensions
- */
-class ExtensionManager {
-public:
-    ExtensionManager();
-
-    /**
-     * Register all extension points
-     */
-    void RegisterAllExtensionPoints();
-
-    /**
-     * Register a custom extension point
-     */
-    bool RegisterCustomExtensionPoint(const ExtensionPoint& point);
-
-    /**
-     * Register extension from plugin
-     */
-    bool RegisterPluginExtension(const std::string& plugin_id,
-                                const std::string& extension_point,
-                                const std::string& extension_name,
-                                std::function<bool(const std::map<std::string, std::any>&)> callback);
-
-    /**
-     * Unregister plugin extensions
-     */
-    bool UnregisterPluginExtensions(const std::string& plugin_id);
-
-    /**
-     * Execute extensions
-     */
-    bool ExecuteExtensions(const std::string& extension_point,
-                          const std::map<std::string, std::any>& params = {});
-
-    /**
-     * Get available extension points
-     */
-    std::vector<std::string> GetAvailableExtensionPoints() const;
-
-    /**
-     * Get registered extensions for a point
-     */
-    int GetExtensionCountForPoint(const std::string& point_id) const;
-
-    /**
-     * Get summary of all extensions
-     */
-    std::map<std::string, int> GetExtensionSummary() const;
-
-private:
-    ExtensionPointRegistry& registry_;
+  mutable std::shared_mutex registry_mutex_;
+  std::map<std::string, ExtensionPoint> extension_points_;
+  std::map<std::string, Extension> extensions_;
 };
 
 } // namespace bendcore::plugins
+
+#endif // BENDCORE_PLUGINS_EXTENSION_POINTS_HPP
