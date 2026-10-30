@@ -1,11 +1,8 @@
 name: Production Deployment Pipeline
 
+# Деплой в Kubernetes (нужны секреты KUBE_CONFIG, DATABASE_URL, REDIS_URL, JWT_SECRET и кластер).
+# Только ручной запуск: проверка сборки и тестов на каждый push — в build-test.yml и wasm.yml.
 on:
-  push:
-    branches: [main, production]
-    tags: ['v*']
-  pull_request:
-    branches: [main, production]
   workflow_dispatch:
 
 env:

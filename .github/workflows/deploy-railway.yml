@@ -1,23 +1,43 @@
 name: Deploy Backend to Railway
 
+# Деплой выполняется, только если заданы секреты RAILWAY_TOKEN и RAILWAY_PROJECT_ID.
+# Без них задача deploy пропускается (не «падает»): деплой не настроен.
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  deploy:
+  config:
     runs-on: ubuntu-latest
-
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - id: check
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+        run: |
+          if [ -n "$RAILWAY_TOKEN" ] && [ -n "$RAILWAY_PROJECT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Railway::Секреты RAILWAY_TOKEN / RAILWAY_PROJECT_ID не заданы — деплой пропущен"
+          fi
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
+  deploy:
+    needs: config
+    if: needs.config.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
 
       - name: Install dependencies
-        run: cd backend && npm ci
+        run: cd backend && npm install --no-audit --no-fund
 
       - name: Build backend
         run: cd backend && npm run build
@@ -26,44 +46,6 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_ENVIRONMENT_NAME: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
         run: |
-          railway up \
-            --service bendcore-backend \
-            --environment $RAILWAY_ENVIRONMENT_NAME \
-            --token $RAILWAY_TOKEN \
-            --project $RAILWAY_PROJECT_ID \
-            --detach
-        continue-on-error: true
-
-      - name: Run health check
-        run: |
-          # Wait for deployment to be ready
-          sleep 30
-
-          # Try to reach health endpoint
-          for i in {1..10}; do
-            if curl -f http://localhost:3001/health 2>/dev/null; then
-              echo "✅ Health check passed"
-              exit 0
-            fi
-            echo "Attempt $i: Health check failed, retrying..."
-            sleep 5
-          done
-
-          echo "❌ Health check failed after 10 attempts"
-          exit 1
-        continue-on-error: true
-
-      - name: Notify deployment status
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const status = '${{ job.status }}';
-            const env = '${{ github.ref }}' === 'refs/heads/main' ? 'production' : 'staging';
-
-            let message = `Railway ${env} deployment `;
-            message += status === 'success' ? '✅ successful' : '❌ failed';
-
-            console.log(message);
+          npx --yes @railway/cli up --service bendcore-backend --environment production \
+            --project "$RAILWAY_PROJECT_ID" --detach

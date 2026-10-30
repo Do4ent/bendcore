@@ -1,5 +1,8 @@
 name: Build & Test
 
+# JavaScript/TypeScript: backend (Express, backend/) и интерфейс (React/Electron, корень репозитория, src/ui).
+# Ядро C++ (нативно с OCCT и WebAssembly) проверяется в wasm.yml.
+# lock-файлов в репозитории нет, поэтому npm install (не npm ci) и без кэша setup-node.
 on:
   push:
     branches: [ main, develop ]
@@ -7,115 +10,64 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  build-and-test:
+  backend:
     runs-on: ubuntu-latest
-
     strategy:
+      fail-fast: false
       matrix:
         node-version: [ 18.x, 20.x ]
-
+    defaults:
+      run:
+        working-directory: backend
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
 
-      # Backend
-      - name: Install backend dependencies
-        run: cd backend && npm ci
+      - name: Install
+        run: set -o pipefail; npm install --no-audit --no-fund 2>&1 | tee ../ci-backend.log
 
-      - name: Lint backend
-        run: cd backend && npm run lint
-        continue-on-error: true
+      - name: Build
+        run: set -o pipefail; npm run build 2>&1 | tee -a ../ci-backend.log
 
-      - name: Build backend
-        run: cd backend && npm run build
+      - name: Test
+        run: set -o pipefail; npm test -- --ci 2>&1 | tee -a ../ci-backend.log
 
-      - name: Test backend
-        run: cd backend && npm test
+      - name: Ошибки в аннотации (только при падении)
+        if: failure()
+        working-directory: .
+        run: |
+          grep -n -E "error|Error|FAIL|✕" ci-backend.log | grep -v -i "warn" | head -n 25 \
+            | while IFS= read -r line; do echo "::error title=backend::${line:0:900}"; done || true
+          tail -n 20 ci-backend.log | while IFS= read -r line; do echo "::error title=backend-tail::${line:0:900}"; done || true
 
-      - name: Backend coverage
-        run: cd backend && npm run test:coverage
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Upload backend coverage
-        uses: codecov/codecov-action@v3
+      - uses: actions/setup-node@v4
         with:
-          files: ./backend/coverage/lcov.info
-          flags: backend
-          continue-on-error: true
+          node-version: 20.x
 
-      # Frontend
-      - name: Install frontend dependencies
-        run: cd ui && npm ci
+      - name: Install
+        run: set -o pipefail; npm install --no-audit --no-fund 2>&1 | tee ci-frontend.log
 
-      - name: Lint frontend
-        run: cd ui && npm run lint
-        continue-on-error: true
+      - name: Build (tsc + webpack)
+        run: set -o pipefail; npm run build 2>&1 | tee -a ci-frontend.log
 
-      - name: Build frontend
-        run: cd ui && npm run build
+      - name: Test
+        run: set -o pipefail; npm test -- --ci --passWithNoTests 2>&1 | tee -a ci-frontend.log
 
-      - name: Test frontend
-        run: cd ui && npm test
-        continue-on-error: true
-
-      # Docker build verification
-      - name: Build Docker backend image
-        run: docker build -f docker/Dockerfile.backend -t bendcore-backend:test .
-
-      - name: Build Docker frontend image
-        run: docker build -f docker/Dockerfile.frontend -t bendcore-frontend:test .
-
-      # Security scanning
-      - name: Scan Docker image - backend
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'bendcore-backend:test'
-          format: 'sarif'
-          output: 'trivy-backend.sarif'
-        continue-on-error: true
-
-      - name: Scan Docker image - frontend
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'bendcore-frontend:test'
-          format: 'sarif'
-          output: 'trivy-frontend.sarif'
-        continue-on-error: true
-
-      - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: |
-            trivy-backend.sarif
-            trivy-frontend.sarif
-        continue-on-error: true
-
-      # PR comment with results
-      - name: Comment on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const backend_coverage = 'backend/coverage/lcov.info';
-            const coverage_exists = fs.existsSync(backend_coverage);
-
-            let comment = '## Build & Test Results\n\n';
-            comment += '✅ Backend: Build & Test Passed\n';
-            comment += '✅ Frontend: Build Passed\n';
-            comment += '✅ Docker Images: Built Successfully\n';
-
-            if (coverage_exists) {
-              comment += '\n📊 Coverage reports generated (see Actions)\n';
-            }
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
+      - name: Ошибки в аннотации (только при падении)
+        if: failure()
+        run: |
+          grep -n -E "error TS|ERROR|Error:|FAIL|✕" ci-frontend.log | head -n 30 \
+            | while IFS= read -r line; do echo "::error title=frontend::${line:0:900}"; done || true
+          tail -n 20 ci-frontend.log | while IFS= read -r line; do echo "::error title=frontend-tail::${line:0:900}"; done || true

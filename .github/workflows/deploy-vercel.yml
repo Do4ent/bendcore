@@ -1,83 +1,47 @@
 name: Deploy Frontend to Vercel
 
+# Деплой выполняется, только если в настройках репозитория задан секрет VERCEL_TOKEN.
+# Без него задача deploy пропускается (не «падает»): деплой не настроен.
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  config:
     runs-on: ubuntu-latest
-
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - id: check
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -n "$VERCEL_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Vercel::Секрет VERCEL_TOKEN не задан — деплой пропущен"
+          fi
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+  deploy:
+    needs: config
+    if: needs.config.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
 
       - name: Install dependencies
-        run: cd ui && npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build frontend
-        run: cd ui && npm run build
+        run: npm run build
 
-      - name: Deploy to Vercel (Preview)
-        if: github.event_name == 'pull_request'
-        id: deploy_preview
-        run: |
-          VERCEL_OUTPUT=$(vercel deploy --prod=false --token=${{ secrets.VERCEL_TOKEN }} --cwd=ui 2>&1)
-          echo "$VERCEL_OUTPUT"
-          PREVIEW_URL=$(echo "$VERCEL_OUTPUT" | grep -oP 'https://[^ ]+' | head -1)
-          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
-        continue-on-error: true
-
-      - name: Deploy to Vercel (Production)
-        if: github.ref == 'refs/heads/main'
-        id: deploy_prod
-        run: |
-          VERCEL_OUTPUT=$(vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd=ui 2>&1)
-          echo "$VERCEL_OUTPUT"
-          PROD_URL=$(echo "$VERCEL_OUTPUT" | grep -oP 'https://[^ ]+' | head -1)
-          echo "prod_url=$PROD_URL" >> $GITHUB_OUTPUT
-        continue-on-error: true
-
-      - name: Comment PR with preview URL
-        if: github.event_name == 'pull_request' && steps.deploy_preview.outputs.preview_url
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const previewUrl = '${{ steps.deploy_preview.outputs.preview_url }}';
-            const comment = `✅ Vercel Preview Deployment Ready\n\n[View Preview](${previewUrl})`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-      - name: Set deployment status (Preview)
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const previewUrl = '${{ steps.deploy_preview.outputs.preview_url }}';
-            github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: context.payload.pull_request.head.sha,
-              state: 'success',
-              environment_url: previewUrl,
-              description: 'Preview deployment successful'
-            });
-        continue-on-error: true
-
-      - name: Notify production deployment
-        if: github.ref == 'refs/heads/main' && steps.deploy_prod.outputs.prod_url
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prodUrl = '${{ steps.deploy_prod.outputs.prod_url }}';
-            console.log(`✅ Production deployment successful: ${prodUrl}`);
+      - name: Deploy to Vercel (production)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN"

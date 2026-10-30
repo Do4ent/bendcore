@@ -12,7 +12,27 @@ env:
   FRONTEND_IMAGE: ${{ secrets.DOCKER_USERNAME }}/bendcore-frontend
 
 jobs:
+  # Публикация выполняется, только если заданы секреты DOCKER_USERNAME и DOCKER_PASSWORD.
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          if [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKER_PASSWORD" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Docker Hub::Секреты DOCKER_USERNAME / DOCKER_PASSWORD не заданы — публикация пропущена"
+          fi
+
   build-and-push:
+    needs: config
+    if: needs.config.outputs.configured == 'true'
     runs-on: ubuntu-latest
 
     permissions:
