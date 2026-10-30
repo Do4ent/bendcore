@@ -62,9 +62,6 @@ export class Vector {
   /** @deprecated use Vector.magnitude */
   static len(v: Vector3): number { return Vector.magnitude(v); }
 
-  /** Alias for magnitude - returns vector length */
-  static length(v: Vector3): number { return Vector.magnitude(v); }
-
   /**
    * Normalize vector (unit vector in same direction)
    */

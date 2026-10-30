@@ -289,14 +289,14 @@ export function createTubeContextMenu(
       shortcut: 'Ctrl+E',
       action: () => onCommand('edit-tube'),
     },
-    { divider: true },
+    { id: 'div-1', label: '', divider: true },
     {
       id: 'show-deps',
       label: 'Show Dependencies',
       icon: '🔗',
       action: () => onCommand('show-dependencies'),
     },
-    { divider: true },
+    { id: 'div-2', label: '', divider: true },
     {
       id: 'hide',
       label: 'Hide',
@@ -309,7 +309,7 @@ export function createTubeContextMenu(
       icon: '⊙',
       action: () => onCommand('isolate-object'),
     },
-    { divider: true },
+    { id: 'div-3', label: '', divider: true },
     {
       id: 'properties',
       label: 'Properties',
@@ -337,14 +337,14 @@ export function createVertexContextMenu(
       shortcut: 'Delete',
       action: () => onCommand('delete-vertex'),
     },
-    { divider: true },
+    { id: 'div-v1', label: '', divider: true },
     {
       id: 'show-deps',
       label: 'Show Dependencies',
       icon: '🔗',
       action: () => onCommand('show-dependencies'),
     },
-    { divider: true },
+    { id: 'div-v2', label: '', divider: true },
     {
       id: 'properties',
       label: 'Properties',

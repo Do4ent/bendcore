@@ -31,7 +31,8 @@ export function lazyLoad<P extends object>(
 ): React.LazyExoticComponent<ComponentType<P>> {
   const LazyComponent = lazy(importFunc);
   if (displayName) {
-    LazyComponent.displayName = `Lazy(${displayName})`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (LazyComponent as any).displayName = `Lazy(${displayName})`;
   }
   return LazyComponent;
 }
@@ -97,7 +98,8 @@ export function withPerformanceOptimization<P extends object>(
   let OptimizedComponent: React.ComponentType<P> = Component;
 
   if (shouldMemo) {
-    OptimizedComponent = React.memo(OptimizedComponent);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    OptimizedComponent = React.memo(OptimizedComponent) as any as React.ComponentType<P>;
   }
 
   if (shouldLazy) {

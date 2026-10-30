@@ -92,13 +92,13 @@ describe('Vector', () => {
   describe('length', () => {
     it('should calculate vector length', () => {
       const v = Vector.create(3, 4, 0);
-      const result = Vector.length(v);
+      const result = Vector.magnitude(v);
       expect(result).toBe(5);
     });
 
     it('should handle zero vector', () => {
       const v = Vector.create(0, 0, 0);
-      const result = Vector.length(v);
+      const result = Vector.magnitude(v);
       expect(result).toBe(0);
     });
   });
@@ -107,7 +107,7 @@ describe('Vector', () => {
     it('should normalize vector to unit length', () => {
       const v = Vector.create(3, 4, 0);
       const result = Vector.normalize(v);
-      const length = Vector.length(result);
+      const length = Vector.magnitude(result);
       expect(length).toBeCloseTo(1, 5);
     });
 

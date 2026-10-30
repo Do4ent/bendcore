@@ -100,9 +100,8 @@ export const CommentBubble: React.FC<CommentBubbleProps> = ({
             x={x + BUBBLE_RADIUS + 8}
             y={y - 30}
             width={180}
-            height="auto"
-            minHeight="40"
-            rx="4"
+            height={60}
+            rx={4}
             fill="white"
             stroke={bubbleColor}
             strokeWidth="1"
@@ -129,7 +128,6 @@ export const CommentBubble: React.FC<CommentBubbleProps> = ({
               y={y - 8}
               fontSize="11"
               fill="#333"
-              maxWidth="170"
             >
               {comment.text.substring(0, 30)}
             </text>

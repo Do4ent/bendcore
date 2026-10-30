@@ -289,10 +289,8 @@ export const WorkspaceScreen: React.FC<WorkspaceScreenProps> = ({ projectId }) =
         {/* Left Panel: Tree */}
         <div className="workspace-left">
           <TreePanel
-            nodes={treeNodes.map((node) => ({
-              ...node,
-              selected: node.id === selectedNodeId,
-            }))}
+            nodes={treeNodes}
+            selectedNode={selectedNodeId}
             onSelect={handleNodeSelect}
             onToggleVisibility={handleToggleVisibility}
             onDelete={handleNodeDelete}
