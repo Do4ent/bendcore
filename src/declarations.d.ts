@@ -30,6 +30,8 @@ declare module 'three' {
     applyMatrix4(m: Matrix4): this;
     distanceTo(v: Vector3): number;
     divideScalar(s: number): this;
+    project(camera: Camera): this;
+    unproject(camera: Camera): this;
   }
 
   export class Matrix4 {
@@ -44,13 +46,25 @@ declare module 'three' {
     attributes: Record<string, BufferAttribute>;
     boundingBox: Box3 | null;
     setAttribute(name: string, attribute: BufferAttribute): this;
+    setIndex(index: number[] | BufferAttribute): this;
     setFromPoints(points: Vector3[]): this;
     computeBoundingBox(): void;
+    computeVertexNormals(): void;
     dispose(): void;
   }
 
   export class BufferAttribute {
+    array: ArrayLike<number>;
+    itemSize: number;
+    count: number;
     constructor(array: ArrayLike<number>, itemSize: number);
+    getX(index: number): number;
+    getY(index: number): number;
+    getZ(index: number): number;
+  }
+
+  export class Float32BufferAttribute extends BufferAttribute {
+    constructor(array: ArrayLike<number> | number, itemSize: number);
   }
 
   export class Material {
@@ -62,7 +76,7 @@ declare module 'three' {
   }
 
   export class MeshPhongMaterial extends Material {
-    constructor(params?: { color?: number | string; transparent?: boolean; opacity?: number });
+    constructor(params?: { color?: number | string; transparent?: boolean; opacity?: number; side?: number });
   }
 
   export class MeshBasicMaterial extends Material {
@@ -108,6 +122,8 @@ declare module 'three' {
     geometry: BufferGeometry;
     material: Material;
     matrixWorld: Matrix4;
+    castShadow: boolean;
+    receiveShadow: boolean;
   }
 
   export class LineSegments extends Object3D {
@@ -155,6 +171,8 @@ declare module 'three' {
     getCenter(target: Vector3): Vector3;
     getSize(target: Vector3): Vector3;
     isEmpty(): boolean;
+    union(box: Box3): this;
+    expandByObject(object: Object3D): this;
   }
 
   export class WebGLRenderer {
@@ -223,4 +241,9 @@ declare module 'three' {
     y: number;
     constructor(x?: number, y?: number);
   }
+
+  export const FrontSide: number;
+  export const BackSide: number;
+  export const DoubleSide: number;
+  export const PCFSoftShadowMap: number;
 }
