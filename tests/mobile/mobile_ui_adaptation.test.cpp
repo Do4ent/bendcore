@@ -226,3 +226,25 @@ TEST_F(MobileUIAdapterTest, MultipleResponsiveImages) {
     EXPECT_FALSE(logo_res.empty());
 }
 
+TEST_F(MobileUIAdapterTest, LargeScreenDeviceDetection) {
+    ScreenDimensions ultrawide{.width = 2560, .height = 1440};
+    adapter.detectDevice(ultrawide);
+    EXPECT_EQ(adapter.getDeviceType(), DeviceType::DESKTOP);
+}
+
+TEST_F(MobileUIAdapterTest, TabletPortraitOrientation) {
+    ScreenDimensions tablet_portrait{.width = 768, .height = 1024, .dpi = 264.0f};
+    adapter.detectDevice(tablet_portrait);
+    adapter.adjustLayoutForOrientation(ScreenOrientation::PORTRAIT);
+    auto dims = adapter.getCurrentScreenDimensions();
+    EXPECT_EQ(dims.orientation, ScreenOrientation::PORTRAIT);
+}
+
+TEST_F(MobileUIAdapterTest, ResponsiveBreakpointSelection) {
+    auto bp_small = adapter.getBreakpointForWidth(350);
+    EXPECT_EQ(bp_small.breakpointName, "mobile");
+
+    auto bp_large = adapter.getBreakpointForWidth(900);
+    EXPECT_EQ(bp_large.breakpointName, "desktop");
+}
+
