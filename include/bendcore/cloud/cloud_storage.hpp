@@ -1,122 +1,95 @@
-#pragma once
+#ifndef BENDCORE_CLOUD_CLOUD_STORAGE_HPP
+#define BENDCORE_CLOUD_CLOUD_STORAGE_HPP
 
 #include <string>
 #include <vector>
-#include <memory>
 #include <map>
-#include <functional>
+#include <memory>
+#include <optional>
+#include <shared_mutex>
+#include <cstdint>
 
 namespace bendcore::cloud {
 
 /**
- * Cloud storage abstraction for multiple providers (S3, Azure, Google Cloud)
+ * Storage provider type
  */
-class CloudStorage {
-public:
-    virtual ~CloudStorage() = default;
+enum class StorageProvider { AWS_S3, AZURE_BLOB, GOOGLE_CLOUD, LOCAL };
 
-    /**
-     * Upload file to cloud storage
-     */
-    virtual bool UploadFile(const std::string& local_path, const std::string& remote_path) = 0;
-
-    /**
-     * Download file from cloud storage
-     */
-    virtual bool DownloadFile(const std::string& remote_path, const std::string& local_path) = 0;
-
-    /**
-     * Delete file from cloud storage
-     */
-    virtual bool DeleteFile(const std::string& remote_path) = 0;
-
-    /**
-     * List files in directory
-     */
-    virtual std::vector<std::string> ListFiles(const std::string& directory) = 0;
-
-    /**
-     * Check if file exists
-     */
-    virtual bool FileExists(const std::string& remote_path) = 0;
-
-    /**
-     * Get file size
-     */
-    virtual size_t GetFileSize(const std::string& remote_path) = 0;
-
-    /**
-     * Get file metadata
-     */
-    virtual std::map<std::string, std::string> GetFileMetadata(const std::string& remote_path) = 0;
-
-    /**
-     * Create directory in cloud storage
-     */
-    virtual bool CreateDirectory(const std::string& directory) = 0;
+/**
+ * File metadata
+ */
+struct FileMetadata {
+  std::string name;
+  std::string path;
+  int64_t size;
+  std::string content_type;
+  long modified_time;
+  std::string etag;
 };
 
 /**
- * AWS S3 implementation
+ * Upload result
  */
-class S3CloudStorage : public CloudStorage {
-public:
-    S3CloudStorage(const std::string& bucket, const std::string& region = "us-east-1");
-
-    bool UploadFile(const std::string& local_path, const std::string& remote_path) override;
-    bool DownloadFile(const std::string& remote_path, const std::string& local_path) override;
-    bool DeleteFile(const std::string& remote_path) override;
-    std::vector<std::string> ListFiles(const std::string& directory) override;
-    bool FileExists(const std::string& remote_path) override;
-    size_t GetFileSize(const std::string& remote_path) override;
-    std::map<std::string, std::string> GetFileMetadata(const std::string& remote_path) override;
-    bool CreateDirectory(const std::string& directory) override;
-
-private:
-    std::string bucket_;
-    std::string region_;
+struct UploadResult {
+  bool success;
+  std::string file_path;
+  int64_t bytes_uploaded;
+  std::string error_message;
 };
 
 /**
- * Azure Blob Storage implementation
+ * Cloud storage interface
  */
-class AzureCloudStorage : public CloudStorage {
-public:
-    AzureCloudStorage(const std::string& connection_string, const std::string& container);
-
-    bool UploadFile(const std::string& local_path, const std::string& remote_path) override;
-    bool DownloadFile(const std::string& remote_path, const std::string& local_path) override;
-    bool DeleteFile(const std::string& remote_path) override;
-    std::vector<std::string> ListFiles(const std::string& directory) override;
-    bool FileExists(const std::string& remote_path) override;
-    size_t GetFileSize(const std::string& remote_path) override;
-    std::map<std::string, std::string> GetFileMetadata(const std::string& remote_path) override;
-    bool CreateDirectory(const std::string& directory) override;
-
-private:
-    std::string connection_string_;
-    std::string container_;
+class ICloudStorage {
+ public:
+  virtual ~ICloudStorage() = default;
+  virtual bool connect(const std::map<std::string, std::string>& credentials) = 0;
+  virtual bool disconnect() = 0;
+  virtual bool is_connected() const = 0;
+  virtual UploadResult upload_file(const std::string& local_path, const std::string& cloud_path) = 0;
+  virtual bool download_file(const std::string& cloud_path, const std::string& local_path) = 0;
+  virtual bool delete_file(const std::string& cloud_path) = 0;
+  virtual std::optional<FileMetadata> get_file_metadata(const std::string& cloud_path) const = 0;
+  virtual std::vector<FileMetadata> list_files(const std::string& directory) const = 0;
+  virtual bool create_directory(const std::string& path) = 0;
 };
 
 /**
- * Google Cloud Storage implementation
+ * Cloud storage manager
  */
-class GCSCloudStorage : public CloudStorage {
-public:
-    GCSCloudStorage(const std::string& project_id, const std::string& bucket);
+class CloudStorageManager {
+ public:
+  CloudStorageManager();
+  ~CloudStorageManager();
 
-    bool UploadFile(const std::string& local_path, const std::string& remote_path) override;
-    bool DownloadFile(const std::string& remote_path, const std::string& local_path) override;
-    bool DeleteFile(const std::string& remote_path) override;
-    std::vector<std::string> ListFiles(const std::string& directory) override;
-    bool FileExists(const std::string& remote_path) override;
-    size_t GetFileSize(const std::string& remote_path) override;
-    std::map<std::string, std::string> GetFileMetadata(const std::string& remote_path) override;
-    bool CreateDirectory(const std::string& directory) override;
+  bool register_provider(StorageProvider provider, std::shared_ptr<ICloudStorage> storage);
+  bool set_active_provider(StorageProvider provider);
+  std::shared_ptr<ICloudStorage> get_active_provider() const;
+  bool connect_to_provider(const std::map<std::string, std::string>& credentials);
+  bool disconnect_provider();
 
-private:
-    std::string project_id_;
-    std::string bucket_;
+  UploadResult upload_file(const std::string& local_path, const std::string& cloud_path);
+  bool download_file(const std::string& cloud_path, const std::string& local_path);
+  bool delete_file(const std::string& cloud_path);
+  std::optional<FileMetadata> get_file_metadata(const std::string& cloud_path) const;
+  std::vector<FileMetadata> list_files(const std::string& directory) const;
+  bool create_directory(const std::string& path);
+
+  int get_upload_count() const;
+  int get_download_count() const;
+  long get_total_bytes_transferred() const;
+  void clear_statistics();
+
+ private:
+  mutable std::shared_mutex manager_mutex_;
+  std::map<StorageProvider, std::shared_ptr<ICloudStorage>> providers_;
+  StorageProvider active_provider_;
+  int upload_count_;
+  int download_count_;
+  long total_bytes_;
 };
 
 } // namespace bendcore::cloud
+
+#endif // BENDCORE_CLOUD_CLOUD_STORAGE_HPP
