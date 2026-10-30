@@ -40,6 +40,9 @@ declare global {
     electron?: {
       ipc: {
         invoke: (channel: string, data: unknown) => Promise<{ status: 'ok' | 'error'; data?: unknown; message?: string }>;
+        send?: (channel: string, data: unknown) => void;
+        on?: (channel: string, callback: (data: unknown) => void) => void;
+        off?: (channel: string, callback: (data: unknown) => void) => void;
       };
     };
   }

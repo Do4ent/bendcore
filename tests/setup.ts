@@ -6,7 +6,7 @@ import '@testing-library/jest-dom';
  */
 
 // Mock Electron IPC
-global.window.electron = {
+(global.window as any).electron = {
   ipc: {
     invoke: jest.fn(),
     send: jest.fn(),

@@ -70,7 +70,9 @@
     "eslint": "^8.42.0",
     "eslint-plugin-react": "^7.32.0",
     "@playwright/test": "^1.40.0",
-    "mini-css-extract-plugin": "^2.9.0"
+    "mini-css-extract-plugin": "^2.9.0",
+    "jest-environment-jsdom": "^29.5.0",
+    "identity-obj-proxy": "^3.0.0"
   },
   "engines": {
     "node": ">=16.0.0",
