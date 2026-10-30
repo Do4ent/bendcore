@@ -310,7 +310,7 @@ export const SheetMetalDesign: React.FC<SheetMetalDesignProps> = ({ onApply }) =
             <div className={`check-item ${bendRadius >= minRadius ? 'pass' : 'fail'}`}>
               <span className="status">{bendRadius >= minRadius ? '✅' : '❌'}</span>
               <span className="text">
-                Радиус изгиба >= минимального ({bendRadius} >= {minRadius.toFixed(2)})
+                Радиус изгиба ≥ минимального ({bendRadius} ≥ {minRadius.toFixed(2)})
               </span>
             </div>
 
@@ -326,7 +326,7 @@ export const SheetMetalDesign: React.FC<SheetMetalDesignProps> = ({ onApply }) =
 
             <div className={`check-item ${bendRadius >= thickness ? 'pass' : 'warn'}`}>
               <span className="status">{bendRadius >= thickness ? '✅' : '⚠️'}</span>
-              <span className="text">Радиус >= толщины материала</span>
+              <span className="text">Радиус ≥ толщины материала</span>
             </div>
 
             <div className="check-item pass">

@@ -458,7 +458,7 @@ const TreeContextMenu: React.FC<TreeContextMenuProps> = ({
     >
       <button
         className="tree-context-menu__item"
-        onClick={() => handleClick(() => onRename?.(nodeId, ''))},
+        onClick={() => handleClick(() => onRename?.(nodeId, ''))}
         role="menuitem"
       >
         Переименовать
