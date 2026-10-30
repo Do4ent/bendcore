@@ -191,7 +191,7 @@ const IconThemeSettings: React.FC<IconThemeSettingsProps> = ({
     // Apply preset color values
     themeManager.setPreset(presetId);
     const newColors = themeManager.getAllColors();
-    setColors(newColors);
+    setColors(newColors as Record<string, string>);
 
     newTheme.colors = newColors;
     onThemeChange(newTheme);

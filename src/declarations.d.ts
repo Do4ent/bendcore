@@ -82,6 +82,10 @@ declare module 'three' {
     add(...objects: Object3D[]): this;
     remove(...objects: Object3D[]): this;
     traverse(callback: (obj: Object3D) => void): void;
+    lookAt(vector: Vector3): void;
+    lookAt(x: number, y: number, z: number): void;
+    clone(): this;
+    copy(source: Object3D): this;
   }
 
   export class Group extends Object3D {

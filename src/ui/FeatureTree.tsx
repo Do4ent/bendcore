@@ -52,8 +52,9 @@ const FeatureTree: React.FC<FeatureTreeProps> = ({
               args: {},
             }
           );
-          if (result?.success && result?.data?.root) {
-            setRoot(result.data.root);
+          const featureResult = result as { success?: boolean; data?: { root?: unknown } } | undefined;
+          if (featureResult?.success && featureResult?.data?.root) {
+            setRoot(featureResult.data.root as FeatureNode);
           } else {
             // Create default empty document
             setRoot({

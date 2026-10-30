@@ -21,6 +21,7 @@ import CommentBubble from './CommentBubble';
 import './panels.css';
 
 export interface DrawingTube {
+  id?: string;
   path: PathItem[];
   od: number;
   wall?: number;
@@ -277,7 +278,7 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
         y,
         text,
         author: user || 'anonymous',
-      });
+      }) as { ok?: boolean; data?: { id?: string } };
       if (result.ok && result.data?.id) {
         const newComment: Comment = {
           id: result.data.id,
@@ -420,7 +421,7 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
         </div>
         {!readOnly && (
           <button className="bc-btn" onClick={handleAddSketch} disabled={!sheet}>
-            + {t('sketch.add') ?? 'Add Sketch'}
+            + {(t as (key: string) => string | undefined)('sketch.add') ?? 'Add Sketch'}
           </button>
         )}
         {readOnly ? (
