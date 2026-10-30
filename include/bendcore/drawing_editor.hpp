@@ -48,8 +48,16 @@ public:
     DrawingParameterEditor();
     ~DrawingParameterEditor() = default;
 
-    // Загрузить чертёж со всеми параметрами
+    // Каталог хранилища чертежей: <dir>/<drawing_id>.json. Пусто — хранение только в памяти.
+    void set_storage_dir(const std::string& dir);
+    std::string storage_dir() const { return storage_dir_; }
+
+    // Загрузить чертёж со всеми параметрами из хранилища. Если файла нет — новый пустой чертёж.
+    // Повреждённый файл: std::runtime_error, текущее состояние не меняется.
     void load_drawing(const std::string& drawing_id);
+
+    // Переменные формул ($OD, $Wall, $Length, …) для вычисления параметров-формул.
+    void set_variable(const std::string& name, double value);
 
     // Получить текущее состояние чертежа
     DrawingState get_current_state() const;
@@ -66,7 +74,8 @@ public:
     // Валидировать параметр (проверка min/max, формула и т.д.)
     ValidationResult validate_parameter(const EditableParameter& param);
 
-    // Применить изменения (сохранить)
+    // Применить изменения: сохранить в хранилище (атомарно, через временный файл) и запомнить
+    // как последнее сохранённое состояние. Ошибка записи: std::runtime_error.
     void apply_changes();
 
     // Отменить изменения (вернуться к последнему сохранённому состоянию)
@@ -91,6 +100,10 @@ private:
     DrawingState current_state_;
     DrawingState last_saved_state_;
     std::string current_user_;
+    std::string storage_dir_;
+    std::map<std::string, double> variables_;
+
+    std::string storage_path(const std::string& drawing_id) const;
 
     // Применить валидацию значения к параметру
     bool validate_range(double value, double min_val, double max_val);

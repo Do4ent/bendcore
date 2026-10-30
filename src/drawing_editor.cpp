@@ -1,5 +1,11 @@
 // Реализация редактора параметров чертежа
 #include "bendcore/drawing_editor.hpp"
+#include "bendcore/formula.hpp"
+
+#include <nlohmann/json.hpp>
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
 
 #include <algorithm>
 #include <cmath>
@@ -33,16 +39,94 @@ DrawingParameterEditor::DrawingParameterEditor() : current_user_("unknown") {
     current_state_.modified_by = "";
 }
 
-void DrawingParameterEditor::load_drawing(const std::string& drawing_id) {
-    current_state_.drawing_id = drawing_id;
-    current_state_.parameters.clear();
-    current_state_.metadata.clear();
-    last_saved_state_ = current_state_;
+namespace {
 
-    // В реальной реализации здесь будет загрузка из БД
-    // Для сейчас инициализируем примерные параметры
-    current_state_.last_modified_at = "";
-    current_state_.modified_by = "";
+using nlohmann::json;
+using Param = DrawingParameterEditor::EditableParameter;
+using State = DrawingParameterEditor::DrawingState;
+
+json to_json(const State& st) {
+    json params = json::array();
+    for (const auto& p : st.parameters) {
+        params.push_back({{"id", p.id}, {"name", p.name}, {"value", p.current_value},
+                          {"min", p.min_value}, {"max", p.max_value}, {"unit", p.unit},
+                          {"is_formula", p.is_formula}, {"formula", p.formula_text},
+                          {"description", p.description}});
+    }
+    return {{"format", "bendcore-drawing-params"}, {"version", 1}, {"drawing_id", st.drawing_id},
+            {"last_modified_at", st.last_modified_at}, {"modified_by", st.modified_by},
+            {"metadata", st.metadata}, {"parameters", params}};
+}
+
+State from_json(const json& j, const std::string& expected_id) {
+    if (!j.is_object() || j.value("format", "") != "bendcore-drawing-params") {
+        throw std::runtime_error("не файл параметров чертежа BendCore");
+    }
+    State st;
+    st.drawing_id = j.at("drawing_id").get<std::string>();
+    if (st.drawing_id != expected_id) {
+        throw std::runtime_error("файл принадлежит другому чертежу: " + st.drawing_id);
+    }
+    st.last_modified_at = j.value("last_modified_at", "");
+    st.modified_by = j.value("modified_by", "");
+    if (j.contains("metadata")) st.metadata = j.at("metadata").get<std::map<std::string, std::string>>();
+    for (const auto& jp : j.at("parameters")) {
+        Param p{};
+        p.id = jp.at("id").get<std::string>();
+        p.name = jp.value("name", "");
+        p.current_value = jp.at("value").get<double>();
+        p.min_value = jp.value("min", 0.0);
+        p.max_value = jp.value("max", 0.0);
+        p.unit = jp.value("unit", "");
+        p.is_formula = jp.value("is_formula", false);
+        p.formula_text = jp.value("formula", "");
+        p.description = jp.value("description", "");
+        st.parameters.push_back(std::move(p));
+    }
+    return st;
+}
+
+}  // namespace
+
+void DrawingParameterEditor::set_storage_dir(const std::string& dir) { storage_dir_ = dir; }
+
+void DrawingParameterEditor::set_variable(const std::string& name, double value) {
+    variables_[name] = value;
+}
+
+std::string DrawingParameterEditor::storage_path(const std::string& drawing_id) const {
+    // Идентификатор становится именем файла: запрещаем разделители путей и «..».
+    if (drawing_id.empty() || drawing_id.find_first_of("/\\") != std::string::npos ||
+        drawing_id.find("..") != std::string::npos) {
+        throw std::invalid_argument("недопустимый идентификатор чертежа: " + drawing_id);
+    }
+    return (std::filesystem::path(storage_dir_) / (drawing_id + ".json")).string();
+}
+
+void DrawingParameterEditor::load_drawing(const std::string& drawing_id) {
+    State loaded;
+    loaded.drawing_id = drawing_id;
+
+    if (!storage_dir_.empty()) {
+        const std::string path = storage_path(drawing_id);
+        std::ifstream in(path, std::ios::binary);
+        if (in) {
+            json j;
+            try {
+                in >> j;
+            } catch (const json::exception& e) {
+                throw std::runtime_error("повреждён файл чертежа " + path + ": " + e.what());
+            }
+            try {
+                loaded = from_json(j, drawing_id);
+            } catch (const json::exception& e) {
+                throw std::runtime_error("неверная структура файла " + path + ": " + e.what());
+            }
+        }
+    }
+
+    current_state_ = loaded;
+    last_saved_state_ = loaded;
 }
 
 DrawingParameterEditor::DrawingState DrawingParameterEditor::get_current_state() const {
@@ -118,6 +202,25 @@ DrawingParameterEditor::ValidationResult DrawingParameterEditor::validate_parame
 }
 
 void DrawingParameterEditor::apply_changes() {
+    if (!storage_dir_.empty() && !current_state_.drawing_id.empty()) {
+        namespace fs = std::filesystem;
+        const std::string path = storage_path(current_state_.drawing_id);
+        std::error_code ec;
+        fs::create_directories(storage_dir_, ec);
+        const std::string tmp = path + ".tmp";
+        {
+            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+            if (!out) throw std::runtime_error("не удалось открыть для записи: " + tmp);
+            out << to_json(current_state_).dump(2);
+            out.flush();
+            if (!out) throw std::runtime_error("ошибка записи: " + tmp);
+        }
+        fs::rename(tmp, path, ec);
+        if (ec) {
+            fs::remove(tmp, ec);
+            throw std::runtime_error("не удалось сохранить " + path);
+        }
+    }
     last_saved_state_ = current_state_;
 }
 
@@ -155,37 +258,16 @@ bool DrawingParameterEditor::validate_range(double value, double min_val, double
 }
 
 std::optional<double> DrawingParameterEditor::evaluate_formula(const std::string& formula) {
-    // Простая реализация вычисления формул
-    // Поддерживаются переменные: $OD (outer diameter), $Wall (стенка)
-    // и простые математические операции
-
-    if (formula.empty()) {
-        return std::nullopt;
-    }
-
-    // Пример простого парсера формул
-    // В реальной системе это должно быть более сложным
-    if (formula.find("$OD") != std::string::npos) {
-        // Для тестирования вернём фиксированное значение
-        return 50.0;
-    }
-
-    if (formula.find("$Wall") != std::string::npos) {
-        return 2.0;
-    }
-
-    // Попытка парсить как число
+    if (formula.empty()) return std::nullopt;
+    formula::EvaluationContext ctx;
+    ctx.variables = variables_;
     try {
-        size_t idx;
-        double value = std::stod(formula, &idx);
-        if (idx == formula.length()) {
-            return value;
-        }
-    } catch (...) {
-        return std::nullopt;
+        const double v = formula::FormulaEvaluator::evaluate_formula(formula, ctx);
+        if (!std::isfinite(v)) return std::nullopt;
+        return v;
+    } catch (const std::exception&) {
+        return std::nullopt;  // синтаксическая ошибка или неизвестная переменная
     }
-
-    return std::nullopt;
 }
 
 } // namespace bendcore::drawing

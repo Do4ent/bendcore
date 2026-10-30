@@ -3,6 +3,9 @@
 
 #include <cassert>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
 #include <string>
 
 using namespace bendcore::drawing;
@@ -155,9 +158,92 @@ static void test_formula_validation() {
     param.is_formula = true;
     param.formula_text = "$OD * 2";
 
-    auto result = editor.validate_parameter(param);
-    // Формула должна быть валидной (или невалидной в зависимости от парсера)
-    // Это демонстрирует, что валидация формул работает
+    // Без значения $OD формула не вычисляется.
+    CHECK(!editor.validate_parameter(param).valid, "Формула с неизвестной переменной отклонена");
+
+    editor.set_variable("$OD", 25.0);
+    CHECK(editor.validate_parameter(param).valid, "Формула $OD * 2 валидна при $OD = 25");
+
+    param.formula_text = "$OD * (";
+    CHECK(!editor.validate_parameter(param).valid, "Синтаксическая ошибка формулы отклонена");
+}
+
+static std::string temp_storage(const char* name) {
+    auto dir = std::filesystem::temp_directory_path() / (std::string("bendcore_drawing_editor_") + name);
+    std::filesystem::remove_all(dir);
+    return dir.string();
+}
+
+static void test_storage_round_trip() {
+    TEST("Сохранение и загрузка чертежа из хранилища");
+    const std::string dir = temp_storage("roundtrip");
+
+    {
+        DrawingParameterEditor editor;
+        editor.set_storage_dir(dir);
+        editor.set_editor_info("engineer");
+        editor.load_drawing("tube_42");
+        CHECK(editor.get_all_parameters().empty(), "Новый чертёж пуст");
+
+        DrawingParameterEditor::EditableParameter p{};
+        p.id = "length_1"; p.name = "Длина 1"; p.current_value = 120.5;
+        p.min_value = 10; p.max_value = 500; p.unit = "mm";
+        editor.update_parameter(p);
+        DrawingParameterEditor::EditableParameter f{};
+        f.id = "angle_1"; f.name = "Угол 1"; f.current_value = 90; f.max_value = 180;
+        f.unit = "deg"; f.is_formula = true; f.formula_text = "$BendAngle"; f.description = "гиб";
+        editor.update_parameter(f);
+        editor.apply_changes();
+        CHECK(!editor.has_unsaved_changes(), "После сохранения нет несохранённых изменений");
+    }
+
+    DrawingParameterEditor reloaded;
+    reloaded.set_storage_dir(dir);
+    reloaded.load_drawing("tube_42");
+    auto params = reloaded.get_all_parameters();
+    CHECK(params.size() == 2, "Загружены оба параметра");
+    auto len = reloaded.get_parameter("length_1");
+    CHECK(len && len->current_value == 120.5 && len->unit == "mm" && len->max_value == 500,
+          "Значение и диапазон длины восстановлены");
+    auto ang = reloaded.get_parameter("angle_1");
+    CHECK(ang && ang->is_formula && ang->formula_text == "$BendAngle" && ang->description == "гиб",
+          "Формула восстановлена");
+    CHECK(reloaded.get_modified_by() == "engineer", "Автор изменения восстановлен");
+    CHECK(!reloaded.has_unsaved_changes(), "Загруженный чертёж без несохранённых изменений");
+    CHECK(!std::filesystem::exists(dir + "/tube_42.json.tmp"), "Временный файл удалён");
+
+    std::filesystem::remove_all(dir);
+}
+
+static void test_storage_errors() {
+    TEST("Ошибки хранилища: повреждённый файл, чужой ID, недопустимый ID");
+    const std::string dir = temp_storage("errors");
+    std::filesystem::create_directories(dir);
+    { std::ofstream(dir + "/broken.json") << "{ not json"; }
+
+    DrawingParameterEditor editor;
+    editor.set_storage_dir(dir);
+    editor.load_drawing("ok");
+    DrawingParameterEditor::EditableParameter p{};
+    p.id = "x"; p.name = "X"; p.current_value = 1; p.max_value = 2;
+    editor.update_parameter(p);
+
+    bool threw = false;
+    try { editor.load_drawing("broken"); } catch (const std::runtime_error&) { threw = true; }
+    CHECK(threw, "Повреждённый файл вызывает ошибку");
+    CHECK(editor.get_current_state().drawing_id == "ok" && editor.get_parameter("x"),
+          "Состояние не потеряно после ошибки загрузки");
+
+    { std::ofstream(dir + "/other.json") << R"({"format":"bendcore-drawing-params","version":1,"drawing_id":"someone_else","parameters":[]})"; }
+    threw = false;
+    try { editor.load_drawing("other"); } catch (const std::runtime_error&) { threw = true; }
+    CHECK(threw, "Файл другого чертежа отклонён");
+
+    threw = false;
+    try { editor.load_drawing("../escape"); } catch (const std::invalid_argument&) { threw = true; }
+    CHECK(threw, "Идентификатор с путём отклонён");
+
+    std::filesystem::remove_all(dir);
 }
 
 static void test_unsaved_changes() {
@@ -284,6 +370,8 @@ int main() {
     test_get_all_parameters();
     test_parameter_validation_range();
     test_formula_validation();
+    test_storage_round_trip();
+    test_storage_errors();
     test_unsaved_changes();
     test_revert_changes();
     test_editor_info();
