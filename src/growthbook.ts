@@ -105,7 +105,7 @@ class GrowthBookManager {
     }
 
     const allResults = this.instance.getAllResults();
-    const entry = allResults[experimentId];
+    const entry = allResults.get(experimentId);
     if (!entry) {
       return null;
     }

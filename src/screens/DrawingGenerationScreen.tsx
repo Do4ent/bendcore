@@ -6,7 +6,6 @@ import {
   Badge,
   Spinner,
   Icon,
-  type RibbonTab,
 } from '../ui/components';
 import './DrawingGenerationScreen.css';
 
@@ -20,7 +19,7 @@ type ExportFormat = 'pdf' | 'dwg' | 'png' | 'svg';
 export const DrawingGenerationScreen: React.FC<DrawingGenerationScreenProps> = ({
   tubeId,
 }) => {
-  const [activeTab, setActiveTab] = useState<RibbonTab>('view');
+  const [activeTab, setActiveTab] = useState<string>('view');
   const [selectedView, setSelectedView] = useState<DrawingView>('3d');
   const [showDimensions, setShowDimensions] = useState(true);
   const [showNotes, setShowNotes] = useState(true);

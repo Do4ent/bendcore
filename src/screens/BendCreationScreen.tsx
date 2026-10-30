@@ -6,8 +6,8 @@ import {
   Badge,
   Icon,
   Divider,
-  type RibbonTab,
   type PropertyField,
+  type PropertyValue,
 } from '../ui/components';
 import './BendCreationScreen.css';
 
@@ -23,6 +23,8 @@ interface Bend {
   position: number;
   radiusRatio?: number;
 }
+
+type BendPropertyData = Omit<PropertyField, 'onChange'>;
 
 export const BendCreationScreen: React.FC<BendCreationScreenProps> = ({ tubeId }) => {
   const [activeTab, setActiveTab] = useState<string>('insert');
@@ -47,50 +49,12 @@ export const BendCreationScreen: React.FC<BendCreationScreenProps> = ({ tubeId }
     },
   ]);
 
-  const [bendProperties, setBendProperties] = useState<PropertyField[]>([
-    {
-      id: 'name',
-      label: 'Name',
-      type: 'text',
-      value: 'Bend_1',
-      section: 'Basic',
-    },
-    {
-      id: 'angle',
-      label: 'Angle (°)',
-      type: 'number',
-      value: 90,
-      min: 5,
-      max: 180,
-      section: 'Geometry',
-    },
-    {
-      id: 'radius',
-      label: 'Radius (mm)',
-      type: 'number',
-      value: 50,
-      min: 10,
-      max: 500,
-      section: 'Geometry',
-    },
-    {
-      id: 'radius-ratio',
-      label: 'Radius Ratio (R/D)',
-      type: 'number',
-      value: 2.0,
-      min: 1.0,
-      max: 5.0,
-      section: 'Geometry',
-    },
-    {
-      id: 'position',
-      label: 'Position (mm)',
-      type: 'number',
-      value: 100,
-      min: 0,
-      max: 5000,
-      section: 'Position',
-    },
+  const [bendPropertyData, setBendPropertyData] = useState<BendPropertyData[]>([
+    { id: 'name', label: 'Name', type: 'text', value: 'Bend_1', category: 'Basic' },
+    { id: 'angle', label: 'Angle (°)', type: 'number', value: 90, min: 5, max: 180, category: 'Geometry' },
+    { id: 'radius', label: 'Radius (mm)', type: 'number', value: 50, min: 10, max: 500, category: 'Geometry' },
+    { id: 'radius-ratio', label: 'Radius Ratio (R/D)', type: 'number', value: 2.0, min: 1.0, max: 5.0, category: 'Geometry' },
+    { id: 'position', label: 'Position (mm)', type: 'number', value: 100, min: 0, max: 5000, category: 'Position' },
   ]);
 
   const predefinedAngles = [30, 45, 90, 135, 180];
@@ -117,7 +81,7 @@ export const BendCreationScreen: React.FC<BendCreationScreenProps> = ({ tubeId }
   };
 
   const handlePropertyChange = (fieldId: string, value: any) => {
-    setBendProperties((prev) =>
+    setBendPropertyData((prev) =>
       prev.map((field) =>
         field.id === fieldId ? { ...field, value } : field
       )
@@ -249,8 +213,10 @@ export const BendCreationScreen: React.FC<BendCreationScreenProps> = ({ tubeId }
         <div className="bend-properties">
           {selectedBendId ? (
             <PropertiesPanel
-              title={selectedBendId}
-              fields={bendProperties}
+              properties={bendPropertyData.map((f) => ({
+                ...f,
+                onChange: (v: PropertyValue) => handlePropertyChange(f.id, v),
+              }))}
               onPropertyChange={handlePropertyChange}
             />
           ) : (
@@ -263,7 +229,7 @@ export const BendCreationScreen: React.FC<BendCreationScreenProps> = ({ tubeId }
       </div>
 
       {/* Status Bar */}
-      <StatusBar message={statusMessage} mode="Bend Design" />
+      <StatusBar message={statusMessage} mode="design" />
     </div>
   );
 };

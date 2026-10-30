@@ -512,17 +512,17 @@ export class STEPConverter {
         return this.parseCircle(entity.attributes, entities) as Geometry3D | null;
 
       case 'B_SPLINE_CURVE_WITH_KNOTS':
-        return this.parseBSplineCurve(entity.attributes, entities);
+        return this.parseBSplineCurve(entity.attributes, entities) as Geometry3D | null;
 
       case 'PLANE':
-        return this.parsePlane(entity.attributes, entities);
+        return this.parsePlane(entity.attributes, entities) as Geometry3D | null;
 
       case 'CYLINDRICAL_SURFACE':
-        return this.parseCylindricalSurface(entity.attributes, entities);
+        return this.parseCylindricalSurface(entity.attributes, entities) as Geometry3D | null;
 
       case 'MANIFOLD_SOLID_BREP':
       case 'ADVANCED_BREP_SHAPE_REPRESENTATION':
-        return this.parseBrep(entity.attributes, entities);
+        return this.parseBrep(entity.attributes, entities) as Geometry3D | null;
 
       default:
         return null;
@@ -558,8 +558,9 @@ export class STEPConverter {
   private parseLine(attrs: any[], entities: Map<number, STEPEntity>): Line3D | null {
     // LINE('name', point, direction)
     if (attrs.length >= 3) {
-      const point = this.resolveReference(attrs[1], entities);
-      const direction = this.resolveReference(attrs[2], entities);
+      const point = this.resolveReference(attrs[1], entities) as Point3D | null;
+      const direction = this.resolveReference(attrs[2], entities) as Direction3D | null;
+      if (!point || !direction) return null;
       return { type: 'LINE', point, direction };
     }
     return null;
@@ -567,7 +568,7 @@ export class STEPConverter {
 
   private parseCircle(attrs: any[], entities: Map<number, STEPEntity>): Circle3D | null {
     if (attrs.length >= 3) {
-      const placement = this.resolveReference(attrs[1], entities);
+      const placement = this.resolveReference(attrs[1], entities) as Point3D | null;
       const radius = attrs[2];
       return { type: 'CIRCLE', placement, radius };
     }
@@ -579,8 +580,8 @@ export class STEPConverter {
       const degree = attrs[1];
       const controlPointRefs = (attrs[2] as any[]) || [];
       const controlPoints = controlPointRefs.map(ref =>
-        this.resolveReference(ref, entities)
-      ).filter(p => p);
+        this.resolveReference(ref, entities) as Point3D | null
+      ).filter((p): p is Point3D => p !== null);
       const knotMultiplicities = attrs[3] || [];
       const knots = attrs[4] || [];
 
@@ -597,7 +598,7 @@ export class STEPConverter {
 
   private parsePlane(attrs: any[], entities: Map<number, STEPEntity>): Plane3D | null {
     if (attrs.length >= 2) {
-      const placement = this.resolveReference(attrs[1], entities);
+      const placement = this.resolveReference(attrs[1], entities) as Point3D | null;
       return { type: 'PLANE', placement };
     }
     return null;
@@ -605,7 +606,7 @@ export class STEPConverter {
 
   private parseCylindricalSurface(attrs: any[], entities: Map<number, STEPEntity>): CylindricalSurface | null {
     if (attrs.length >= 3) {
-      const placement = this.resolveReference(attrs[1], entities);
+      const placement = this.resolveReference(attrs[1], entities) as Point3D | null;
       const radius = attrs[2];
       return { type: 'CYLINDRICAL_SURFACE', placement, radius };
     }
@@ -615,7 +616,7 @@ export class STEPConverter {
   private parseBrep(attrs: any[], entities: Map<number, STEPEntity>): BrepShape | null {
     if (attrs.length >= 2) {
       const name = attrs[0];
-      const shell = this.resolveReference(attrs[1], entities);
+      const shell = this.resolveReference(attrs[1], entities) as Point3D | null;
       return { type: 'BREP', name, shell };
     }
     return null;
