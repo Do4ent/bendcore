@@ -1,5 +1,6 @@
 #include "bendcore/security/encryption_support.hpp"
 #include <algorithm>
+#include <chrono>
 
 namespace bendcore::security {
 
@@ -9,9 +10,13 @@ EncryptionManager::~EncryptionManager() = default;
 
 bool EncryptionManager::generateEncryptionKey(EncryptionAlgorithm algorithm, std::string& outKeyId) {
     EncryptionKey key;
+    key.keyId = "key_" + std::to_string(keyStore.size());
     key.algorithm = algorithm;
     key.isActive = true;
-    outKeyId = "key_" + std::to_string(keyStore.size());
+    key.keyData = std::vector<uint8_t>(32, 0xAB);
+    key.createdAt = std::chrono::system_clock::now().time_since_epoch().count();
+    key.expiresAt = key.createdAt + (365 * 24 * 60 * 60 * 1000LL);
+    outKeyId = key.keyId;
     keyStore[outKeyId] = key;
     return true;
 }
