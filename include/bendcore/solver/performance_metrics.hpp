@@ -87,6 +87,7 @@ public:
 private:
     std::string name_;
     std::chrono::steady_clock::time_point start_time_;
+    std::chrono::steady_clock::time_point stop_time_;  // момент stop(): после остановки elapsed() не растёт
     bool stopped_ = false;
 };
 

@@ -37,11 +37,85 @@ else()
   target_link_libraries(bendcore_eigen INTERFACE Eigen3::Eigen)
 endif()
 
-# OpenSSL (для SHA256 хэширования в ассоциативных чертежах)
-find_package(OpenSSL REQUIRED)
+# OpenSSL: ядру не нужен (SHA-256 чертежей — своя реализация в drawing.cpp). Ищется для модулей вне ядра.
+find_package(OpenSSL QUIET)
 
-# zlib (для Deflate-декомпрессии ZIP в DWFx парсере)
-find_package(ZLIB REQUIRED)
+# zlib (сжатие истории и сериализации документа). Под Emscripten — встроенный порт USE_ZLIB.
+if(EMSCRIPTEN)
+  add_compile_options(-sUSE_ZLIB=1)
+  add_link_options(-sUSE_ZLIB=1)
+  add_library(bendcore_zlib INTERFACE)
+else()
+  find_package(ZLIB REQUIRED)
+  add_library(bendcore_zlib INTERFACE)
+  target_link_libraries(bendcore_zlib INTERFACE ZLIB::ZLIB)
+endif()
+
+# Модули, добавленные без проверки сборки (их цели не компилируются: отсутствующие заголовки и
+# пространства имён, нет реализаций, нужен GTest). По умолчанию выключены, чтобы сборка и ctest
+# отражали реально работающий код; список — BENDCORE_UNVERIFIED_TARGETS ниже.
+option(BENDCORE_BUILD_UNVERIFIED "Собирать непроверенные (не компилирующиеся) модули" OFF)
+# Не компилируются (заголовки/пространства имён, которых нет; нет реализаций; нужен GTest), кроме двух:
+# test_multi_physics_coupling — тесты ожидают неверные значения; test_m5_optimization — бенчмарк
+# возвращает зашитые числа вместо измерений. Цель убирается из списка, когда она собирается и проходит.
+set(BENDCORE_UNVERIFIED_TARGETS
+  e2e_analytics
+  phase_f_test_suite
+  test_ab_testing
+  test_analytics_event
+  test_brep_builder
+  test_cad_core_037_fea
+  test_cad_core_038_gcode
+  test_cad_core_039_bom
+  test_cad_core_040_workflow
+  test_cad_core_041_production_build
+  test_cad_core_042_installers
+  test_cad_core_043_license
+  test_cad_core_044_cloud
+  test_cad_document
+  test_cloud_collaboration
+  test_command_executor
+  test_comments
+  test_cross_platform_validation
+  test_curve_operations
+  test_dependency_graph
+  test_document_event_bus
+  test_drawing_layers_manager
+  test_drawing_undo_redo
+  test_e2e_workflows
+  test_entity_id
+  test_event_batch_sender
+  test_gap025_fea_comprehensive
+  test_gap026_generative_comprehensive
+  test_gap027_parametric_ai_comprehensive
+  test_gap083_security_audit
+  test_gap084_encryption_support
+  test_gap085_compliance_standards
+  test_gap086_access_logging
+  test_gap087_data_privacy
+  test_geometry_kernel
+  test_growthbook_client
+  test_hierarchy_extended
+  test_history_stack
+  test_integration_e2e
+  test_layers
+  test_m2_feature_operations
+  test_m5_optimization
+  test_manufacturing_constraints
+  test_multi_phase_integration
+  test_multi_physics_coupling
+  test_parameter_store
+  test_phase_c_integration
+  test_phase_d_integration
+  test_regression_suite
+  test_search
+  test_stress
+  test_stress_tests
+  test_surface_operations
+  test_surfaces_m5
+  test_topology_optimization_m8
+  test_transaction_manager
+)
 
 # BC-015: LibDWG для экспорта в формат DWG
 find_package(LibDWG QUIET)
@@ -53,9 +127,10 @@ if(NOT LibDWG_FOUND)
   endif()
 endif()
 
-# OpenMP (Phase H: Advanced Optimization)
-# Required for parallel geometry computations and performance optimization
-find_package(OpenMP REQUIRED)
+# OpenMP: только для parallel_geometry (вне ядра); необязателен.
+if(NOT EMSCRIPTEN)
+  find_package(OpenMP QUIET)
+endif()
 
 # OCCT (Open Cascade Technology) для импорта STEP файлов (Q3 2027, Task 1)
 # Windows-only integration with OCCT 7.7+
@@ -71,6 +146,32 @@ endif()
 
 # M1 Core Components (CAD Foundation)
 set(BENDCORE_SOURCES
+  # Ядро трубы и API (возвращено: выпало из сборки при слиянии b169ccb)
+  src/analysis.cpp
+  src/axis.cpp
+  src/batch_check.cpp
+  src/bend_output.cpp
+  src/bendcore/profile_manager.cpp
+  src/blank.cpp
+  src/calib.cpp
+  src/compensation.cpp
+  src/core_api.cpp
+  src/drawing.cpp
+  src/ipc_bridge.cpp
+  src/performance.cpp
+  src/ports.cpp
+  src/refs.cpp
+  src/reporting.cpp
+  src/reporting_ui.cpp
+  src/sketch.cpp
+  src/spiral.cpp
+  src/standards.cpp
+  src/tube_model.cpp
+  src/tubegeom.cpp
+  src/visualization.cpp
+  src/dwg_export.cpp
+  src/drawing_editor.cpp
+  src/geometry_analyzer.cpp
   # Core architecture
   src/entity_id.cpp
   src/cad_document.cpp
@@ -265,7 +366,7 @@ add_library(bendcore_core STATIC
   ${BENDCORE_SOURCES}
 )
 target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
-target_link_libraries(bendcore_core PRIVATE bendcore_eigen OpenSSL::Crypto OpenSSL::SSL ZLIB::ZLIB OpenMP::OpenMP_CXX)
+target_link_libraries(bendcore_core PRIVATE bendcore_eigen bendcore_zlib)
 
 # BC-015: Link LibDWG if available
 if(LibDWG_FOUND)
@@ -290,6 +391,15 @@ enable_testing()
 # Тест: нативно — запуск исполняемого файла; WebAssembly — запуск через node (код возврата = результат теста).
 find_program(BENDCORE_NODE node)
 function(bendcore_add_test name target)
+  if(NOT BENDCORE_BUILD_UNVERIFIED AND target IN_LIST BENDCORE_UNVERIFIED_TARGETS)
+    return()
+  endif()
+  # Тесты проверяют через assert(): в Release (NDEBUG) они бы молча отключались.
+  if(MSVC)
+    target_compile_options(${target} PRIVATE /UNDEBUG)
+  else()
+    target_compile_options(${target} PRIVATE -UNDEBUG)
+  endif()
   if(EMSCRIPTEN)
 
     if(NOT BENDCORE_NODE)
@@ -617,6 +727,11 @@ target_link_libraries(test_search PRIVATE bendcore_core)
 bendcore_add_test(search test_search)
 
 # OCCT initialization test (Q3 2027, Task 1, Subtask 1)
+# Анализ формы трубы по B-rep (бэкенд OCCT подключается в bendcore_occt; ядро от OCCT не зависит).
+add_executable(test_geometry_analyzer tests/test_geometry_analyzer.cpp)
+target_link_libraries(test_geometry_analyzer PRIVATE bendcore_core)
+bendcore_add_test(geometry_analyzer test_geometry_analyzer)
+
 if(WIN32 OR OpenCASCADE_FOUND)
   add_executable(test_occt_init tests/test_occt_init.cpp)
   target_include_directories(test_occt_init PRIVATE include)
@@ -640,11 +755,6 @@ if(WIN32 OR OpenCASCADE_FOUND)
   endif()
   bendcore_add_test(step_reader test_step_reader)
 
-  # Geometry Analyzer test (Q3 2027, Task 1, Subtask 3)
-  add_executable(test_geometry_analyzer tests/test_geometry_analyzer.cpp)
-  target_include_directories(test_geometry_analyzer PRIVATE include)
-  target_link_libraries(test_geometry_analyzer PRIVATE bendcore_core)
-  bendcore_add_test(geometry_analyzer test_geometry_analyzer)
 
   # Parametric Builder test (Q3 2027, Task 1, Subtask 4)
   add_executable(test_parametric_builder tests/test_parametric_builder.cpp)
@@ -700,7 +810,7 @@ bendcore_add_test(event_batch_sender test_event_batch_sender)
 
 # Q4 Task 1: Advanced Drawing Features
 add_executable(test_drawing_editor tests/test_drawing_editor.cpp)
-target_link_libraries(test_drawing_editor PRIVATE bendcore_core)
+target_link_libraries(test_drawing_editor PRIVATE bendcore_core bendcore_formula)
 bendcore_add_test(drawing_editor test_drawing_editor)
 
 add_executable(test_drawing_layers_manager tests/test_drawing_layers_manager.cpp)
@@ -748,13 +858,16 @@ if(BENDCORE_WITH_OCCT)
   if(NOT BENDCORE_OCCT_LIBS)
     message(FATAL_ERROR "В ${BENDCORE_OCCT_DIR}/lib нет libTK*.a (только статическая сборка поддержана)")
   endif()
-  add_library(bendcore_occt STATIC src/occt/tube_body_occt.cpp)
+  add_library(bendcore_occt STATIC src/occt/tube_body_occt.cpp src/occt/geometry_backend_occt.cpp)
   target_include_directories(bendcore_occt SYSTEM PRIVATE "${BENDCORE_OCCT_DIR}/include/opencascade")
   target_link_libraries(bendcore_occt PUBLIC bendcore_core
     -Wl,--start-group ${BENDCORE_OCCT_LIBS} -Wl,--end-group pthread dl m)
   add_executable(test_tube_occt tests/test_tube_occt.cpp)
   target_link_libraries(test_tube_occt PRIVATE bendcore_occt)
   bendcore_add_test(tube_occt test_tube_occt)
+  add_executable(test_geometry_analyzer_occt tests/test_geometry_analyzer_occt.cpp)
+  target_link_libraries(test_geometry_analyzer_occt PRIVATE bendcore_occt)
+  bendcore_add_test(geometry_analyzer_occt test_geometry_analyzer_occt)
 
   # Сервис тела трубы и HTTP-сервер bendcore_server (без внешних библиотек).
   add_library(bendcore_server_core STATIC src/server/tube_service.cpp)
@@ -1135,4 +1248,13 @@ if(EMSCRIPTEN)
     -sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 -sNO_EXIT_RUNTIME=1)
   # Страница и JS-обёртка копируются рядом с модулем (открывать через http-сервер, не file://).
   file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/web/ DESTINATION ${CMAKE_BINARY_DIR}/web)
+endif()
+
+# Непроверенные цели не входят в сборку по умолчанию (см. BENDCORE_UNVERIFIED_TARGETS).
+if(NOT BENDCORE_BUILD_UNVERIFIED)
+  foreach(t IN LISTS BENDCORE_UNVERIFIED_TARGETS)
+    if(TARGET ${t})
+      set_target_properties(${t} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    endif()
+  endforeach()
 endif()

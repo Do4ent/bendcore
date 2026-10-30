@@ -190,14 +190,30 @@ void test_thermal_stress_computation() {
         stiffness[i] = {210e9, 210e9, 210e9};  // Steel modulus
     }
 
+    // Нагрев на 100 K относительно опорной температуры: σ = E · α · ΔT.
+    ScalarField temperature(5);
+    for (size_t i = 0; i < temperature.size(); ++i) temperature[i] = cfg.reference_temperature + 100.0;
+    tc.compute_thermal_strain(temperature);
     tc.compute_thermal_stress(stiffness);
     const auto& stress = tc.get_thermal_stress();
 
-    // Verify stress values are computed
+    const double expected = 210e9 * cfg.alpha_linear * 100.0;
+    assert(expected != 0.0);
     for (size_t i = 0; i < stress.size(); ++i) {
         for (int j = 0; j < 3; ++j) {
-            assert(stress[i][j] != 0.0 || stiffness[i][j] == 0.0);
+            assert(std::abs(stress[i][j] - expected) <= 1e-9 * std::abs(expected));
         }
+    }
+
+    // Без изменения температуры напряжений нет.
+    ThermalStructuralCoupling cold(cfg);
+    ScalarField ambient(5);
+    for (size_t i = 0; i < ambient.size(); ++i) ambient[i] = cfg.reference_temperature;
+    cold.compute_thermal_strain(ambient);
+    cold.compute_thermal_stress(stiffness);
+    const auto& cold_stress = cold.get_thermal_stress();
+    for (size_t i = 0; i < cold_stress.size(); ++i) {
+        assert(cold_stress[i][0] == 0.0 && cold_stress[i][1] == 0.0 && cold_stress[i][2] == 0.0);
     }
     std::cout << "PASS\n";
 }
@@ -299,11 +315,10 @@ void test_lorentz_force_computation() {
     emtc.compute_electromagnetic_force(magnetic_field, current_density);
     const auto& force = emtc.get_electromagnetic_force();
 
-    // F = J × B
-    // [1e6, 0, 0] × [0, 0, 1] = [0, 1e6, 0]
+    // F = J × B; x̂ × ẑ = −ŷ, поэтому [1e6, 0, 0] × [0, 0, 1] = [0, −1e6, 0]
     for (size_t i = 0; i < force.size(); ++i) {
         assert(almost_equal(force[i][0], 0.0, 1.0));
-        assert(almost_equal(force[i][1], 1e6, 1e3));
+        assert(almost_equal(force[i][1], -1e6, 1e3));
         assert(almost_equal(force[i][2], 0.0, 1.0));
     }
     std::cout << "PASS\n";

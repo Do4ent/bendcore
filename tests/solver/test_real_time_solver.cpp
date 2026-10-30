@@ -497,8 +497,10 @@ void test_performance_timer() {
     assert(elapsed.count() >= 0);
 
     timer.stop();
-    auto elapsed2 = timer.elapsed();
-    assert(elapsed2.count() == elapsed.count());
+    auto stopped = timer.elapsed();
+    assert(stopped.count() >= elapsed.count());  // время шло до stop()
+    auto stopped_again = timer.elapsed();
+    assert(stopped_again.count() == stopped.count());  // после stop() значение заморожено
 
     print_test_result("PerformanceTimer::timing", true);
 }

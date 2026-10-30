@@ -9,6 +9,7 @@ DocumentAPI::DocumentAPI(CadDocument& doc)
     , serializer_(std::make_unique<DocumentSerializer>(DocumentSerializer::Format::BINARY))
     , last_saved_revision_(doc.getRevision())
     , dirty_status_(DirtyStatus::CLEAN)
+    , dirty_description_("Document saved")
 {}
 
 DocumentAPI::~DocumentAPI() = default;
@@ -16,7 +17,7 @@ DocumentAPI::~DocumentAPI() = default;
 void DocumentAPI::clearDirtyStatus() noexcept {
     last_saved_revision_ = document_.getRevision();
     dirty_status_ = DirtyStatus::CLEAN;
-    dirty_description_.clear();
+    dirty_description_ = "Document saved";  // то же описание, что и в updateDirtyStatus() для чистого документа
 }
 
 bool DocumentAPI::undo() {

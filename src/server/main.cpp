@@ -1,6 +1,7 @@
-// HTTP-сервис bendcore: POST /v1/tube, GET /v1/health. Без внешних библиотек, один поток, Connection: close.
+// HTTP-сервис bendcore: POST /v1/tube, POST /v1/analyze, GET /v1/health. Без внешних библиотек, один поток, Connection: close.
 // Использование: bendcore_server [порт], по умолчанию 8080. Слушает 0.0.0.0.
 //   POST /v1/tube?format=csv|json&od=20&wall=0&deflection=0.01   тело запроса — текст файла.
+//   POST /v1/analyze?format=step&deflection=0.1                     тело запроса — файл STEP; распознавание трубы.
 #include "bendcore/tube_service.hpp"
 
 #include <arpa/inet.h>
@@ -180,6 +181,18 @@ void handle(int fd, const Request& req) {
             return respond(fd, 400, "application/json", "{\"ok\":false,\"error\":\"параметр od, wall или deflection не число\"}");
         }
         const Response res = bendcore::server::tube_response(format, req.body, od, wall, deflection);
+        respond(fd, res.status, res.contentType, res.body);
+        return;
+    }
+    if (req.path == "/v1/analyze") {
+        if (req.method != "POST") return respond(fd, 405, "application/json", "{\"ok\":false,\"error\":\"нужен POST\"}");
+        const auto fmt = req.query.find("format");
+        double deflection = 0.0;
+        if (!number_param(req, "deflection", 0.1, deflection)) {
+            return respond(fd, 400, "application/json", "{\"ok\":false,\"error\":\"параметр deflection не число\"}");
+        }
+        const Response res = bendcore::server::analyze_response(fmt == req.query.end() ? "step" : fmt->second,
+                                                                req.body, deflection);
         respond(fd, res.status, res.contentType, res.body);
         return;
     }

@@ -19,11 +19,8 @@ PerformanceTimer::PerformanceTimer(const std::string& name)
 PerformanceTimer::~PerformanceTimer() = default;
 
 std::chrono::nanoseconds PerformanceTimer::elapsed() const {
-    if (stopped_) {
-        return std::chrono::nanoseconds(0);
-    }
-    auto now = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(now - start_time_);
+    const auto end = stopped_ ? stop_time_ : std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start_time_);
 }
 
 void PerformanceTimer::reset() {
@@ -32,6 +29,8 @@ void PerformanceTimer::reset() {
 }
 
 void PerformanceTimer::stop() {
+    if (stopped_) return;  // повторный stop() не сдвигает момент остановки
+    stop_time_ = std::chrono::steady_clock::now();
     stopped_ = true;
 }
 

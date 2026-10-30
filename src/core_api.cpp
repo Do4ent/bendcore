@@ -906,7 +906,7 @@ Core::Core() : state_(new State) {
 
         // Создать пример листа для валидации (в реальной системе это должен быть реальный лист)
         drawing::DrawingSheet dummy_sheet;
-        dummy_sheet.frame.drawable = {{0, 0}, {420, 297}};  // A3 формат
+        dummy_sheet.frame.drawable = {0, 0, 420, 297};  // A3 формат
 
         drawing::ManualDimensionTable table;
 

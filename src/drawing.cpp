@@ -1,5 +1,7 @@
 #include "bendcore/drawing.hpp"
 
+#include <cstdint>
+
 #include <algorithm>
 #include <cmath>
 #include <chrono>
@@ -14,9 +16,6 @@
 
 #include "bendcore/compensation.hpp"
 
-// OpenSSL для SHA256 (OpenSSL 3.0)
-#include <openssl/sha.h>
-#include <openssl/evp.h>
 
 namespace bendcore::drawing {
 namespace {
@@ -864,35 +863,54 @@ const char* associativity_name(DrawingAssociativity a) {
     return "unknown";
 }
 
-// SHA256 хэш строки (OpenSSL 3.0 EVP API)
+// SHA-256 строки (FIPS 180-4), шестнадцатеричная строка из 64 символов. Собственная реализация:
+// ядро не зависит от OpenSSL и собирается под WebAssembly.
 static std::string sha256_string(const std::string& input) {
-    unsigned char hash[EVP_MAX_MD_SIZE];
-    unsigned int hash_len = 0;
+    static const uint32_t K[64] = {
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+    uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+    auto rotr = [](uint32_t x, int n) { return (x >> n) | (x << (32 - n)); };
 
-    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
-    if (!mdctx) throw std::runtime_error("EVP_MD_CTX_new failed");
+    std::vector<uint8_t> msg(input.begin(), input.end());
+    const uint64_t bit_len = static_cast<uint64_t>(msg.size()) * 8;
+    msg.push_back(0x80);
+    while (msg.size() % 64 != 56) msg.push_back(0);
+    for (int i = 7; i >= 0; --i) msg.push_back(static_cast<uint8_t>(bit_len >> (8 * i)));
 
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr) != 1) {
-        EVP_MD_CTX_free(mdctx);
-        throw std::runtime_error("EVP_DigestInit_ex failed");
+    for (size_t off = 0; off < msg.size(); off += 64) {
+        uint32_t w[64];
+        for (int i = 0; i < 16; ++i) {
+            w[i] = (uint32_t(msg[off + 4 * i]) << 24) | (uint32_t(msg[off + 4 * i + 1]) << 16) |
+                   (uint32_t(msg[off + 4 * i + 2]) << 8) | uint32_t(msg[off + 4 * i + 3]);
+        }
+        for (int i = 16; i < 64; ++i) {
+            const uint32_t s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
+            const uint32_t s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
+            w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+        }
+        uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+        for (int i = 0; i < 64; ++i) {
+            const uint32_t S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+            const uint32_t ch = (e & f) ^ (~e & g);
+            const uint32_t t1 = hh + S1 + ch + K[i] + w[i];
+            const uint32_t S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+            const uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+            const uint32_t t2 = S0 + maj;
+            hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+        }
+        h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
     }
-
-    if (EVP_DigestUpdate(mdctx, input.c_str(), input.length()) != 1) {
-        EVP_MD_CTX_free(mdctx);
-        throw std::runtime_error("EVP_DigestUpdate failed");
-    }
-
-    if (EVP_DigestFinal_ex(mdctx, hash, &hash_len) != 1) {
-        EVP_MD_CTX_free(mdctx);
-        throw std::runtime_error("EVP_DigestFinal_ex failed");
-    }
-
-    EVP_MD_CTX_free(mdctx);
 
     std::ostringstream ss;
-    for (unsigned int i = 0; i < hash_len; i++) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
-    }
+    for (uint32_t v : h) ss << std::hex << std::setw(8) << std::setfill('0') << v;
     return ss.str();
 }
 
@@ -1243,27 +1261,32 @@ PDFExportData prepare_pdf_export(
     result.subject = opts.subject;
     result.page_count = static_cast<int>(sheets.size());
 
-    // В реальной реализации здесь происходил бы рендеринг в SVG
-    // с добавлением водяной метки, если нужна
-    // Для теста просто возвращаем пустой результат
+    // Страница SVG на лист: размеры листа в мм, ручные размеры листа текстом
+    // (справочные — со «*», пунктирная выноска, как требует Subtask 2.7).
     for (const auto& sheet : sheets) {
-        std::string svg = "<svg width=\"800\" height=\"600\" xmlns=\"http://www.w3.org/2000/svg\">\n";
+        const double w = sheet.frame.format.w > 0 ? sheet.frame.format.w : 420.0;
+        const double h = sheet.frame.format.h > 0 ? sheet.frame.format.h : 297.0;
+        std::string svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + std::to_string(w) +
+                          "mm\" height=\"" + std::to_string(h) + "mm\" viewBox=\"0 0 " +
+                          std::to_string(w) + " " + std::to_string(h) + "\">\n";
         svg += "  <!-- Sheet " + std::to_string(sheet.number) + " -->\n";
-
-        // Render manual dimensions if available
-        if (!manual_dims.empty()) {
-            svg += "  <!-- Manual Dimensions -->\n";
-            for (size_t i = 0; i < manual_dims.size(); ++i) {
-                const auto& dim = manual_dims[i];
-                // Dimension line
-                svg += "    <line x1=\"" + std::to_string((int)dim.x1) + "\" y1=\"" + std::to_string((int)dim.y1) + "\" ";
-                svg += "x2=\"" + std::to_string((int)dim.x2) + "\" y2=\"" + std::to_string((int)dim.y2) + "\" ";
-                svg += "stroke=\"black\" stroke-width=\"1\"/>\n";
-                // Dimension text
-                double mid_x = (dim.x1 + dim.x2) / 2.0;
-                double mid_y = (dim.y1 + dim.y2) / 2.0;
-                svg += "    <text x=\"" + std::to_string((int)mid_x) + "\" y=\"" + std::to_string((int)mid_y) + "\" ";
-                svg += "font-size=\"12\" fill=\"black\">" + dim.text + "</text>\n";
+        if (opts.include_watermark && !opts.watermark_text.empty()) {
+            svg += "  <text x=\"" + std::to_string(w / 2) + "\" y=\"" + std::to_string(h / 2) +
+                   "\" font-size=\"20\" fill=\"#c00\" opacity=\"0.3\" text-anchor=\"middle\">" +
+                   opts.watermark_text + "</text>\n";
+        }
+        auto it = opts.manual_dimensions.find(sheet.number);
+        if (it != opts.manual_dimensions.end()) {
+            for (const auto& dim : it->second.dimensions) {
+                // Ось Y листа вверх, в SVG — вниз.
+                const double x = dim.position[0];
+                const double y = h - dim.position[1];
+                const std::string label = dim.reference ? dim.text + "*" : dim.text;
+                svg += "  <line x1=\"" + std::to_string(x) + "\" y1=\"" + std::to_string(y) + "\" x2=\"" +
+                       std::to_string(x + 8) + "\" y2=\"" + std::to_string(y) +
+                       "\" stroke=\"#c00\" stroke-width=\"0.25\" stroke-dasharray=\"1,1\"/>\n";
+                svg += "  <text x=\"" + std::to_string(x) + "\" y=\"" + std::to_string(y - 1) +
+                       "\" font-size=\"3.5\" fill=\"#c00\">" + label + "</text>\n";
             }
         }
         svg += "</svg>";
@@ -1795,36 +1818,6 @@ std::vector<Comment> filter_comments_by_sheet(
         }
     }
     return result;
-}
-
-// Рендеринг размеров в чертёж
-void renderDimensions(const Drawing& drawing, const std::vector<Dimension>& dimensions) {
-    // Для каждого размера нарисовать:
-    // 1. Линию размера (от точки A к точке B)
-    // 2. Стрелки на концах
-    // 3. Текст размера в центре
-
-    for (const auto& dim : dimensions) {
-        // Получить 2D проекции точек
-        Vec2 p1_2d = {static_cast<float>(dim.point1.x), static_cast<float>(dim.point1.y)};
-        Vec2 p2_2d = {static_cast<float>(dim.point2.x), static_cast<float>(dim.point2.y)};
-
-        // Рассчитать позицию текста (центр между точками + смещение вверх)
-        double mid_x = (p1_2d[0] + p2_2d[0]) / 2.0;
-        double mid_y = (p1_2d[1] + p2_2d[1]) / 2.0;
-        Vec2 text_pos = {mid_x + 10.0, mid_y + 10.0};
-
-        // Форматировать текст размера (число + единица)
-        std::string label = std::to_string(dim.value);
-        if (!dim.unit.empty()) {
-            label += " " + dim.unit;
-        }
-
-        // Рисование выполняется через Drawing API
-        // В реальной реализации: drawing.drawLine(p1_2d, p2_2d, ...)
-        //                        drawing.drawArrow(p1_2d, ...)
-        //                        drawing.drawText(label, text_pos, ...)
-    }
 }
 
 }  // namespace bendcore::drawing

@@ -283,6 +283,10 @@ struct LayerVisibility {
     }
 };
 
+// Слои листа по умолчанию (все типы LayerType, видимы) и соответствующая карта видимости.
+std::vector<Layer> make_default_layers();
+LayerVisibility make_layer_visibility();
+
 struct DrawingSheet {
     int number = 1;           // номер листа
     int count = 1;            // листов в чертеже
@@ -597,6 +601,8 @@ struct PDFExportOptions {
     std::string watermark_text;  // "Выпущено", "НЕ для производства", etc
     int dpi = 300;
     bool landscape = true;
+    // Ручные размеры по номерам листов (DrawingVersion::manual_dimensions); выводятся в SVG листа.
+    std::map<int, ManualDimensionTable> manual_dimensions;
 };
 
 // Подготовить SVG с метаданными для PDF экспорта

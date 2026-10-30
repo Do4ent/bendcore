@@ -52,7 +52,11 @@ double SparseMatrix::get_value(int32_t i, int32_t j) const {
     }
 
     if (!finalized_) {
-        throw std::runtime_error("Matrix must be finalized before reading");
+        // До finalize() значения лежат в построчном буфере сборки.
+        for (const auto& [col, val] : temp_rows_[i]) {
+            if (col == j) return val;
+        }
+        return 0.0;
     }
 
     for (int32_t idx = row_ptrs_[i]; idx < row_ptrs_[i + 1]; ++idx) {
