@@ -76,7 +76,9 @@ declare module 'three' {
   }
 
   export class MeshPhongMaterial extends Material {
-    constructor(params?: { color?: number | string; transparent?: boolean; opacity?: number; side?: number });
+    emissive: Color;
+    shininess: number;
+    constructor(params?: { color?: number | string; transparent?: boolean; opacity?: number; side?: number; emissive?: number | string; shininess?: number });
   }
 
   export class MeshBasicMaterial extends Material {
@@ -246,4 +248,21 @@ declare module 'three' {
   export const BackSide: number;
   export const DoubleSide: number;
   export const PCFSoftShadowMap: number;
+
+  export class Quaternion {
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+    constructor(x?: number, y?: number, z?: number, w?: number);
+    setFromEuler(euler: { x: number; y: number; z: number }): this;
+    multiply(q: Quaternion): this;
+    clone(): Quaternion;
+  }
+
+  export class LOD extends Object3D {
+    constructor();
+    addLevel(object: Object3D, distance: number): this;
+    update(camera: Camera): void;
+  }
 }

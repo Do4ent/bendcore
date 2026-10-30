@@ -275,7 +275,7 @@ export const ParametricEditor: React.FC<ParametricEditorProps> = ({
    */
   const renderParameter = (param: ParameterDefinition) => {
     const value = values[param.id];
-    const isReadOnly = param.readOnly || param.expression; // Calculated params are read-only
+    const isReadOnly = !!(param.readOnly || param.expression); // Calculated params are read-only
 
     switch (param.type) {
       case 'number':
