@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './styles.css';
 import './BendCoreLanding.css';
+import M22Integration from './M22Integration';
 
 /**
  * BendCore Main Application Interface
@@ -336,6 +337,14 @@ const BendCoreLanding: React.FC = () => {
       <div className="shortcuts-hint">
         Press F1 for Help | F3 to Toggle Snap | Ctrl+/ for Commands
       </div>
+
+      {/* M22 Integration - File Operations & Settings Dialogs */}
+      <M22Integration
+        onCommandExecuted={(command, data) => {
+          console.log(`M22 Command: ${command}`, data);
+          // Handle M22 dialog actions here
+        }}
+      />
     </div>
   );
 };

@@ -1,0 +1,809 @@
+/* M22 Integration Styles */
+/* File Operations & Settings Components (GAPs 079-090) */
+
+:root {
+  --dialog-bg: #ffffff;
+  --dialog-bg-dark: #2d2d2d;
+  --dialog-border: #cccccc;
+  --dialog-border-dark: #444444;
+  --dialog-text: #000000;
+  --dialog-text-dark: #ffffff;
+  --dialog-accent: #1F6FC5;
+  --dialog-success: #2E9E5B;
+  --dialog-danger: #D93A3A;
+}
+
+/* Overlay Styles */
+.file-picker-dialog-overlay,
+.save-dialog-overlay,
+.settings-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* Dialog Base Styles */
+.file-picker-dialog,
+.save-dialog,
+.settings-dialog,
+.recent-files-manager,
+.file-explorer,
+.theme-selector,
+.icon-theme-manager,
+.keyboard-shortcut-editor,
+.unit-preferences,
+.performance-settings,
+.plugin-settings,
+.cloud-settings {
+  background-color: var(--dialog-bg);
+  border: 1px solid var(--dialog-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  width: 500px;
+  max-height: 80vh;
+  min-height: 300px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .file-picker-dialog,
+  .save-dialog,
+  .settings-dialog,
+  .recent-files-manager,
+  .file-explorer,
+  .theme-selector,
+  .icon-theme-manager,
+  .keyboard-shortcut-editor,
+  .unit-preferences,
+  .performance-settings,
+  .plugin-settings,
+  .cloud-settings {
+    background-color: var(--dialog-bg-dark);
+    border-color: var(--dialog-border-dark);
+    color: var(--dialog-text-dark);
+  }
+}
+
+/* Dialog Header */
+.dialog-header,
+.manager-header,
+.explorer-header,
+.selector-header,
+.editor-header,
+.preferences-header,
+.settings-header,
+.selector-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--dialog-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  .dialog-header,
+  .manager-header,
+  .explorer-header,
+  .selector-header,
+  .editor-header,
+  .preferences-header,
+  .settings-header {
+    border-bottom-color: var(--dialog-border-dark);
+  }
+}
+
+.dialog-header h2,
+.manager-header h3,
+.explorer-header h3,
+.selector-header h3,
+.editor-header h3,
+.preferences-header h3,
+.settings-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--dialog-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  .dialog-header h2,
+  .manager-header h3,
+  .explorer-header h3,
+  .selector-header h3,
+  .editor-header h3,
+  .preferences-header h3,
+  .settings-header h3 {
+    color: var(--dialog-text-dark);
+  }
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  color: inherit;
+}
+
+.close-btn:hover {
+  opacity: 0.7;
+}
+
+/* Dialog Content */
+.dialog-content,
+.dialog-tabs,
+.manager-content,
+.explorer-toolbar,
+.explorer-path,
+.theme-selector-content,
+.customization-section,
+.preview-section,
+.editor-content,
+.preferences-content,
+.settings-content,
+.file-tree,
+.plugins-list,
+.settings-container {
+  padding: 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Dialog Footer */
+.dialog-footer,
+.manager-footer,
+.explorer-footer,
+.selector-footer,
+.editor-footer,
+.preferences-footer,
+.settings-footer {
+  padding: 16px;
+  border-top: 1px solid var(--dialog-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .dialog-footer,
+  .manager-footer,
+  .explorer-footer,
+  .selector-footer,
+  .editor-footer,
+  .preferences-footer,
+  .settings-footer {
+    border-top-color: var(--dialog-border-dark);
+  }
+}
+
+/* Button Styles */
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--dialog-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  background-color: #f0f0f0;
+  color: var(--dialog-text);
+  transition: all 0.2s;
+}
+
+.btn:hover:not(:disabled) {
+  background-color: #e0e0e0;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--dialog-accent);
+  color: white;
+  border-color: var(--dialog-accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #1a5aa8;
+}
+
+.btn-cancel {
+  background-color: transparent;
+  color: var(--dialog-text);
+}
+
+.btn-danger {
+  background-color: var(--dialog-danger);
+  color: white;
+  border-color: var(--dialog-danger);
+}
+
+.btn-small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .btn {
+    background-color: #3a3a3a;
+    color: var(--dialog-text-dark);
+    border-color: var(--dialog-border-dark);
+  }
+
+  .btn:hover:not(:disabled) {
+    background-color: #4a4a4a;
+  }
+}
+
+/* Tabs */
+.dialog-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--dialog-border);
+}
+
+.tab {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--dialog-text);
+}
+
+.tab:hover {
+  background-color: #f5f5f5;
+}
+
+.tab.active {
+  border-bottom-color: var(--dialog-accent);
+  color: var(--dialog-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .tab:hover {
+    background-color: #3a3a3a;
+  }
+}
+
+/* Files List */
+.file-item,
+.file-entry,
+.tree-item {
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  transition: background-color 0.2s;
+}
+
+.file-item:hover,
+.file-entry:hover,
+.tree-item:hover {
+  background-color: #f0f0f0;
+}
+
+.file-item.selected,
+.file-entry.selected,
+.tree-item.selected {
+  background-color: #e3f2fd;
+  color: var(--dialog-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .file-item:hover,
+  .file-entry:hover,
+  .tree-item:hover {
+    background-color: #3a3a3a;
+  }
+
+  .file-item.selected,
+  .file-entry.selected,
+  .tree-item.selected {
+    background-color: #1a3a5a;
+  }
+}
+
+.file-icon {
+  font-size: 20px;
+  min-width: 24px;
+}
+
+.file-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.file-path,
+.file-modified {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.file-size {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-left: auto;
+}
+
+.recent-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.no-recent-files,
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  opacity: 0.5;
+  font-style: italic;
+}
+
+/* File Entry Controls */
+.pin-btn,
+.remove-btn,
+.expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.pin-btn:hover,
+.remove-btn:hover,
+.expand-btn:hover {
+  opacity: 1;
+}
+
+.pin-btn.pinned {
+  opacity: 1;
+  color: var(--dialog-accent);
+}
+
+/* Input Fields */
+input[type="text"],
+input[type="email"],
+input[type="number"],
+input[type="color"],
+select,
+textarea {
+  padding: 8px;
+  border: 1px solid var(--dialog-border);
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--dialog-text);
+  background-color: var(--dialog-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="color"],
+  select,
+  textarea {
+    background-color: #3a3a3a;
+    color: var(--dialog-text-dark);
+    border-color: var(--dialog-border-dark);
+  }
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--dialog-accent);
+  box-shadow: 0 0 0 2px rgba(31, 111, 197, 0.1);
+}
+
+/* Labels & Sections */
+label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: var(--dialog-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  label {
+    color: var(--dialog-text-dark);
+  }
+}
+
+.setting-item,
+.dialog-section,
+.custom-item,
+.unit-section,
+.theme-section {
+  margin-bottom: 16px;
+}
+
+.setting-item label {
+  margin-bottom: 8px;
+}
+
+/* Checkboxes & Radios */
+input[type="checkbox"],
+input[type="radio"] {
+  margin-right: 8px;
+  cursor: pointer;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Color Picker */
+.color-input-group,
+.path-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.color-input-group input[type="color"] {
+  width: 50px;
+  height: 40px;
+}
+
+/* File Preview */
+.file-preview,
+.preview-section,
+.icon-preview,
+.theme-preview {
+  background-color: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .file-preview,
+  .preview-section,
+  .icon-preview,
+  .theme-preview {
+    background-color: #3a3a3a;
+  }
+}
+
+.preview-item,
+.preview-box,
+.preview-icon {
+  padding: 8px;
+  margin: 4px 0;
+  display: flex;
+  gap: 8px;
+}
+
+.preview-label {
+  font-weight: 500;
+  min-width: 80px;
+}
+
+.preview-value,
+.preview-content {
+  flex: 1;
+}
+
+.preview-box {
+  width: 60px;
+  height: 60px;
+  border-radius: 4px;
+  border: 1px solid var(--dialog-border);
+}
+
+.preview-icon {
+  width: 80px;
+  height: 80px;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid var(--dialog-border);
+  border-radius: 4px;
+}
+
+/* Search & Filter */
+.search-input,
+.sort-select,
+.path-input,
+.browser-path input {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.path-input {
+  flex: 1;
+}
+
+.browser-path {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.browse-btn {
+  padding: 8px 12px;
+  background-color: #f0f0f0;
+  border: 1px solid var(--dialog-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .browse-btn {
+    background-color: #3a3a3a;
+    border-color: var(--dialog-border-dark);
+  }
+}
+
+/* Settings Specific */
+.settings-sidebar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.settings-category {
+  padding: 12px;
+  border: 1px solid var(--dialog-border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.settings-category:hover {
+  background-color: #f5f5f5;
+}
+
+.settings-category.active {
+  background-color: var(--dialog-accent);
+  color: white;
+  border-color: var(--dialog-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-category:hover {
+    background-color: #3a3a3a;
+  }
+}
+
+.category-icon {
+  font-size: 24px;
+}
+
+.category-name {
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Keyboard Shortcut Editor */
+.shortcut-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+.shortcut-action {
+  min-width: 120px;
+  text-transform: capitalize;
+}
+
+.shortcut-input {
+  flex: 1;
+}
+
+.shortcut-help {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* File List */
+.file-list,
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.file-tree {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Plugin List */
+.plugin-item {
+  padding: 12px;
+  border: 1px solid var(--dialog-border);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .plugin-item {
+    border-color: var(--dialog-border-dark);
+  }
+}
+
+.plugin-checkbox {
+  display: flex;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.plugin-info {
+  flex: 1;
+}
+
+.plugin-name {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.plugin-description {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* Error Message */
+.error-message {
+  color: var(--dialog-danger);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Invalid Input */
+.invalid {
+  border-color: var(--dialog-danger) !important;
+  background-color: rgba(217, 58, 58, 0.05);
+}
+
+/* Storage Info */
+.storage-info {
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  .storage-info {
+    background-color: #3a3a3a;
+  }
+}
+
+.storage-info .label {
+  margin: 0;
+  font-weight: 500;
+}
+
+.storage-info .value {
+  font-weight: bold;
+}
+
+/* Theme Buttons */
+.theme-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.theme-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--dialog-border);
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.theme-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.theme-btn.active {
+  background-color: var(--dialog-accent);
+  color: white;
+  border-color: var(--dialog-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-btn {
+    background-color: #3a3a3a;
+  }
+
+  .theme-btn:hover {
+    background-color: #4a4a4a;
+  }
+}
+
+/* Manager Controls */
+.manager-controls {
+  display: flex;
+  gap: 8px;
+}
+
+/* File Entry Specific */
+.file-content {
+  flex: 1;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  padding: 0;
+}
+
+.file-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Range Input */
+input[type="range"] {
+  width: 100%;
+  cursor: pointer;
+}
+
+/* Responsiveness */
+@media (max-width: 600px) {
+  .file-picker-dialog,
+  .save-dialog,
+  .settings-dialog,
+  .recent-files-manager,
+  .file-explorer,
+  .theme-selector,
+  .icon-theme-manager,
+  .keyboard-shortcut-editor,
+  .unit-preferences,
+  .performance-settings,
+  .plugin-settings,
+  .cloud-settings {
+    width: 90%;
+    max-height: 90vh;
+  }
+
+  .settings-sidebar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .shortcut-row {
+    flex-direction: column;
+  }
+
+  .color-input-group,
+  .path-input-group {
+    flex-direction: column;
+  }
+}
