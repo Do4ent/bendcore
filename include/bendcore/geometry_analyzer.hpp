@@ -5,8 +5,28 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include <functional>
 
 namespace bendcore::geometry {
+
+// Признаки трубы, извлечённые из B-rep (заполняет геометрический бэкенд, например OCCT).
+struct BRepTubeFeatures {
+    bool ok = false;
+    std::string error;                              // причина, если ok == false
+    double bbox_size[3] = {0, 0, 0};                // габариты по X, Y, Z (мм)
+    double outer_radius = 0.0;                      // наибольший радиус цилиндрических/тороидальных граней
+    double inner_radius = 0.0;                      // 0 — внутренней поверхности нет (пруток)
+    std::vector<double> straight_lengths;           // длины прямых участков по оси (мм)
+    std::vector<std::pair<double, double>> bends;   // (угол, °; радиус гиба по оси, мм)
+};
+
+// Бэкенд: B-rep в текстовом формате BRepTools (то, что пишет BRepTools::Write) -> признаки трубы.
+using GeometryBackend = std::function<BRepTubeFeatures(const std::string& brep_text)>;
+
+// Установить бэкенд для всех GeometryAnalyzer (nullptr — снять). OCCT-сборка ставит его через
+// bendcore::occt::install_geometry_backend(). Без бэкенда analyze() возвращает confidence = 0.
+void set_geometry_backend(GeometryBackend backend);
+bool has_geometry_backend();
 
 // Extracted parameters from geometric analysis
 struct ExtractedParams {
@@ -41,14 +61,17 @@ public:
     GeometryAnalyzer();
     ~GeometryAnalyzer();
 
-    // Analyze geometry and extract parameters
-    // geometry_data: serialized shape data from STEP reader
+    // Анализ формы трубы. geometry_data — B-rep в текстовом формате BRepTools.
+    // Без геометрического бэкенда или при ошибке разбора: confidence = 0, причина в analysis_notes.
     ExtractedParams analyze(const std::string& geometry_data);
+
+    // Перевод признаков B-rep в параметры трубы (не зависит от бэкенда; открыт для тестов).
+    static ExtractedParams params_from_features(const BRepTubeFeatures& features);
 
     // Fit cylinder to geometry for OD/ID detection
     double fit_cylinder(const std::vector<std::pair<double, double>>& points);
 
-    // Detect bends in geometry
+    // Углы гибов (°) по B-rep; пусто, если бэкенда нет или гибов нет.
     std::vector<double> detect_bends(const std::string& geometry_data);
 
     // Calculate bend angles from curvature data
@@ -67,13 +90,6 @@ private:
 
     // Minimum confidence to accept analysis results
     static constexpr double MIN_CONFIDENCE = 0.50;
-
-    // Extract bounding box dimensions
-    void extract_bounding_box(const std::string& geometry_data,
-                             double& width, double& height, double& length);
-
-    // Extract edge points for cylinder fitting
-    std::vector<std::pair<double, double>> extract_edge_points(const std::string& geometry_data);
 
     // Calculate curvature at points along geometry
     std::vector<double> calculate_curvature(const std::vector<std::pair<double, double>>& points);

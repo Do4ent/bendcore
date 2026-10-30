@@ -8,6 +8,8 @@
 #include <STEPControl_Writer.hxx>
 
 #include <BRepAdaptor_Curve.hxx>
+#include <BRepTools.hxx>
+#include <sstream>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
@@ -35,12 +37,14 @@
 #include <Geom_BSplineCurve.hxx>
 #include <Geom_TrimmedCurve.hxx>
 #include <Standard_Handle.hxx>
-#include <TColgp_Array1OfPnt.hxx>
+#include <NCollection_Array1.hxx>
+#include <gp_Pnt.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
-#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
-#include <TopTools_ListOfShape.hxx>
+#include <NCollection_IndexedDataMap.hxx>
+#include <NCollection_List.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
@@ -64,6 +68,11 @@
 namespace bendcore::geom {
 namespace {
 
+// Типы карт OCCT без устаревших заголовков TopTools_* (в OCCT 8 вынесены в модуль Deprecated);
+// это те же типы, что TopTools_ListOfShape и TopTools_IndexedDataMapOfShapeListOfShape в OCCT 7.x.
+using ShapeList = NCollection_List<TopoDS_Shape>;
+using EdgeFaceMap = NCollection_IndexedDataMap<TopoDS_Shape, ShapeList, TopTools_ShapeMapHasher>;
+
 gp_Pnt to_pnt(const Vec3& v) { return gp_Pnt(v[0], v[1], v[2]); }
 gp_Dir to_dir(const Vec3& v) { return gp_Dir(v[0], v[1], v[2]); }
 
@@ -79,9 +88,9 @@ TopoDS_Edge make_edge(const AxisPiece& p) {
     }
     case AxisPiece::Kind::Spiral: {
         // Отсчёты центральной линии аппроксимируются B-сплайном (степень до 8, C2, допуск 1e-4 мм).
-        TColgp_Array1OfPnt points(1, static_cast<Standard_Integer>(p.pts.size()));
+        NCollection_Array1<gp_Pnt> points(1, static_cast<int>(p.pts.size()));
         for (std::size_t k = 0; k < p.pts.size(); ++k) {
-            points.SetValue(static_cast<Standard_Integer>(k) + 1, to_pnt(p.pts[k]));
+            points.SetValue(static_cast<int>(k) + 1, to_pnt(p.pts[k]));
         }
         GeomAPI_PointsToBSpline fit(points, 3, 8, GeomAbs_C2, 1e-4);
         if (!fit.IsDone()) throw std::invalid_argument("не строится сплайн спирали");
@@ -182,9 +191,9 @@ TubeSolidResult make_solid_tube(const Path& path, double od_mm) {
     return make_tube(path, od_mm, 0.0);
 }
 
-TubeMesh make_mesh(const Path& path, double od_mm, double wall_mm, double deflection_mm) {
+// Треугольная сетка поверхности любого тела (общая для make_mesh и step_mesh).
+static TubeMesh mesh_of(const TopoDS_Shape& body, double deflection_mm) {
     if (!(deflection_mm > 0.0)) throw std::invalid_argument("отклонение сетки должно быть больше нуля");
-    const TopoDS_Shape body = build_body(path, od_mm, wall_mm);
     // Угловой допуск 0.5 рад, относительный режим выключен: линейное отклонение задано в мм.
     BRepMesh_IncrementalMesh mesher(body, deflection_mm, false, 0.5, true);
     TubeMesh mesh;
@@ -216,6 +225,11 @@ TubeMesh make_mesh(const Path& path, double od_mm, double wall_mm, double deflec
     return mesh;
 }
 
+TubeMesh make_mesh(const Path& path, double od_mm, double wall_mm, double deflection_mm) {
+    if (!(deflection_mm > 0.0)) throw std::invalid_argument("отклонение сетки должно быть больше нуля");
+    return mesh_of(build_body(path, od_mm, wall_mm), deflection_mm);
+}
+
 // Порты по кромкам торцов готового тела. taken — имена, которые уже заняты (авто-имена их обходят).
 // circles (если задан) получает все окружности торцов до объединения: наружные и внутренние кольца.
 static std::vector<Port> ports_of_body(const TopoDS_Shape& body, const std::vector<std::string>& taken,
@@ -226,7 +240,7 @@ static std::vector<Port> ports_of_body(const TopoDS_Shape& body, const std::vect
 
     // Кромки концов: окружности, у которых одна из граней — плоская (торец). Стыки участков — окружности
     // между двумя цилиндрическими гранями, их пропускаем. У трубы со стенкой торец — кольцо (две окружности).
-    TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+    EdgeFaceMap edgeFaces;
     TopExp::MapShapesAndAncestors(body, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
     std::vector<Port> ports;
@@ -367,6 +381,33 @@ TubeModel load_step(const std::string& file, const std::string& id) {
     }
     m.wall = (consistent && wall > 0.0) ? wall : 0.0;
     return m;
+}
+
+std::string body_brep(const Path& path, double od_mm, double wall_mm) {
+    std::ostringstream out;
+    BRepTools::Write(build_body(path, od_mm, wall_mm), out);
+    return out.str();
+}
+
+static TopoDS_Shape read_step_shape(const std::string& file) {
+    STEPControl_Reader reader;
+    if (reader.ReadFile(file.c_str()) != IFSelect_RetDone) {
+        throw std::invalid_argument("не удалось прочитать STEP: " + file);
+    }
+    reader.TransferRoots();
+    const TopoDS_Shape shape = reader.OneShape();
+    if (shape.IsNull()) throw std::invalid_argument("в STEP нет тела: " + file);
+    return shape;
+}
+
+std::string step_brep(const std::string& file) {
+    std::ostringstream out;
+    BRepTools::Write(read_step_shape(file), out);
+    return out.str();
+}
+
+TubeMesh step_mesh(const std::string& file, double deflection_mm) {
+    return mesh_of(read_step_shape(file), deflection_mm);
 }
 
 void export_step(const Path& path, double od_mm, double wall_mm, const std::string& file) {

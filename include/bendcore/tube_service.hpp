@@ -16,4 +16,9 @@ struct Response {
 // Файл без пути (только порты) — ошибка 400: тело не строится. Ошибки данных — 400, прочие — 500.
 Response tube_response(const std::string& format, const std::string& text, double od, double wall, double deflection);
 
+// Распознавание трубы в импортированном теле. format — "step"; text — содержимое файла STEP.
+// Ответ: {"ok":true,"tube":{od, wall, inner_diameter, length, bends:[{angle, radius}], shape_type,
+// confidence, notes, valid}, "mesh":{vertices, indices}}. Не труба / не читается — 400.
+Response analyze_response(const std::string& format, const std::string& text, double deflection);
+
 }  // namespace bendcore::server

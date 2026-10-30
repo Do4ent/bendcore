@@ -1,9 +1,15 @@
 #include "bendcore/tube_service.hpp"
 
+#include "bendcore/geometry_analyzer.hpp"
+#include "bendcore/occt/geometry_backend.hpp"
 #include "bendcore/tube_body.hpp"
 #include "bendcore/tube_model.hpp"
 
 #include <cmath>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <unistd.h>
 #include <cstdio>
 #include <exception>
 #include <sstream>
@@ -49,7 +55,74 @@ std::string error_body(const std::string& message) {
     return "{\"ok\":false,\"error\":" + quote(message) + "}";
 }
 
+std::string mesh_json(const geom::TubeMesh& mesh) {
+    std::string out = "{\"vertices\":[";
+    for (std::size_t i = 0; i < mesh.vertices.size(); ++i) {
+        if (i) out += ",";
+        out += num(mesh.vertices[i]);
+    }
+    out += "],\"indices\":[";
+    for (std::size_t i = 0; i < mesh.indices.size(); ++i) {
+        if (i) out += ",";
+        out += std::to_string(mesh.indices[i]);
+    }
+    return out + "]}";
+}
+
+// Временный файл для читателя STEP (OCCT читает по имени файла); удаляется деструктором.
+struct TempFile {
+    std::string path;
+    explicit TempFile(const std::string& content) {
+        std::string tmpl = (std::filesystem::temp_directory_path() / "bendcore_import_XXXXXX").string();
+        const int fd = mkstemp(tmpl.data());
+        if (fd < 0) throw std::runtime_error("не удалось создать временный файл");
+        close(fd);
+        path = tmpl;
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out << content;
+        if (!out) throw std::runtime_error("не удалось записать временный файл");
+    }
+    ~TempFile() {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+    }
+};
+
 }  // namespace
+
+Response analyze_response(const std::string& format, const std::string& text, double deflection) {
+    Response res;
+    try {
+        if (format != "step") throw std::invalid_argument("формат анализа: только step");
+        if (text.empty()) throw std::invalid_argument("пустое тело запроса");
+        if (!(deflection > 0.0 && deflection <= 10.0)) throw std::invalid_argument("deflection вне (0, 10]");
+        const TempFile file(text);
+        const geometry::BRepTubeFeatures features = occt::analyze_brep(geom::step_brep(file.path));
+        if (!features.ok) throw std::invalid_argument("не распознано как труба: " + features.error);
+        const geometry::ExtractedParams p = geometry::GeometryAnalyzer::params_from_features(features);
+        const geom::TubeMesh mesh = geom::step_mesh(file.path, deflection);
+
+        std::ostringstream out;
+        out << "{\"ok\":true,\"tube\":{\"od\":" << num(p.outer_diameter) << ",\"wall\":" << num(p.wall_thickness)
+            << ",\"inner_diameter\":" << num(p.inner_diameter) << ",\"length\":" << num(p.total_length)
+            << ",\"bends\":[";
+        for (std::size_t i = 0; i < p.bend_angles.size(); ++i) {
+            if (i) out << ",";
+            out << "{\"angle\":" << num(p.bend_angles[i]) << ",\"radius\":" << num(p.bend_radii[i]) << "}";
+        }
+        out << "],\"shape_type\":" << quote(p.shape_type) << ",\"confidence\":" << num(p.confidence)
+            << ",\"notes\":" << quote(p.analysis_notes) << ",\"valid\":" << (p.is_valid() ? "true" : "false")
+            << "},\"mesh\":" << mesh_json(mesh) << "}";
+        res.body = out.str();
+    } catch (const std::invalid_argument& e) {
+        res.status = 400;
+        res.body = error_body(e.what());
+    } catch (const std::exception& e) {
+        res.status = 500;
+        res.body = error_body(e.what());
+    }
+    return res;
+}
 
 Response tube_response(const std::string& format, const std::string& text, double od, double wall, double deflection) {
     Response res;

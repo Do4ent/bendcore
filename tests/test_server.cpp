@@ -1,5 +1,10 @@
 // Сервис тела трубы (tube_response): успешный ответ на примере, ошибки формата и данных.
 #include "bendcore/tube_service.hpp"
+#include "bendcore/tube_body.hpp"
+#include "bendcore/tubegeom.hpp"
+
+#include <cstdlib>
+#include <filesystem>
 
 #include <cstdio>
 #include <fstream>
@@ -66,6 +71,29 @@ int main() {
     check(badCsv.status == 400 && badCsv.body.find("строка 2") != std::string::npos, "ошибка CSV указывает строку");
     const Response badWall = tube_response("csv", csv, 16.0, 16.0, 0.05);
     check(badWall.status == 400, "стенка не меньше радиуса — 400");
+
+    // Распознавание трубы из STEP: тело 20 x 2 с гибом 90° (R 50) экспортируется и анализируется.
+    {
+        using namespace bendcore;
+        const std::string stepFile = (std::filesystem::temp_directory_path() / "bendcore_test_analyze.step").string();
+        geom::export_step(Path{Straight{100}, Bend{50, 90}, Straight{60}}, 20.0, 2.0, stepFile);
+        std::ifstream in(stepFile, std::ios::binary);
+        std::stringstream buf;
+        buf << in.rdbuf();
+        std::filesystem::remove(stepFile);
+
+        const auto an = bendcore::server::analyze_response("step", buf.str(), 0.5);
+        check(an.status == 200 && an.body.find("\"ok\":true") != std::string::npos, "analyze STEP: 200");
+        check(an.body.find("\"od\":20,") != std::string::npos, "analyze STEP: od = 20");
+        check(an.body.find("\"wall\":2,") != std::string::npos, "analyze STEP: wall = 2");
+        check(an.body.find("\"angle\":90") != std::string::npos, "analyze STEP: гиб 90°");
+        check(an.body.find("\"radius\":50") != std::string::npos, "analyze STEP: R гиба 50");
+        check(an.body.find("\"mesh\":{\"vertices\":[") != std::string::npos, "analyze STEP: есть сетка");
+
+        const auto junk = bendcore::server::analyze_response("step", "not a step file", 0.5);
+        check(junk.status == 400 && junk.body.find("\"ok\":false") != std::string::npos, "analyze: мусор — 400");
+        check(bendcore::server::analyze_response("iges", buf.str(), 0.5).status == 400, "analyze: формат iges — 400");
+    }
 
     if (failures == 0) std::printf("OK server\n");
     return failures == 0 ? 0 : 1;

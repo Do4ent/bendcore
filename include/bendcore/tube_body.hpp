@@ -52,6 +52,15 @@ TubeModel complete_model(const TubeModel& model);
 // внутренней окружности нет, wall = 0 (стенка не определена). Исключение std::invalid_argument, если файл не читается или тела нет.
 TubeModel load_step(const std::string& file, const std::string& id);
 
+// Тело трубы по пути в текстовом формате B-rep (BRepTools::Write) — вход GeometryAnalyzer.
+std::string body_brep(const Path& path, double od_mm, double wall_mm = 0.0);
+
+// Тело из файла STEP в текстовом формате B-rep. Исключение std::invalid_argument, если файл не читается или тела нет.
+std::string step_brep(const std::string& file);
+
+// Сетка тела из файла STEP (для просмотра импортированной геометрии).
+TubeMesh step_mesh(const std::string& file, double deflection_mm);
+
 // Запись тела трубы по пути в STEP (обмен и тесты). Исключение std::invalid_argument при ошибке записи.
 void export_step(const Path& path, double od_mm, double wall_mm, const std::string& file);
 

@@ -16,182 +16,69 @@ GeometryAnalyzer::~GeometryAnalyzer() {
     // Cleanup
 }
 
-ExtractedParams GeometryAnalyzer::analyze(const std::string& geometry_data) {
-    ExtractedParams params;
+namespace {
+GeometryBackend& backend_slot() {
+    static GeometryBackend backend;
+    return backend;
+}
+}  // namespace
 
-    if (geometry_data.empty()) {
-        params.confidence = 0.0;
-        params.analysis_notes = "No geometry data provided";
+void set_geometry_backend(GeometryBackend backend) { backend_slot() = std::move(backend); }
+bool has_geometry_backend() { return static_cast<bool>(backend_slot()); }
+
+ExtractedParams GeometryAnalyzer::params_from_features(const BRepTubeFeatures& f) {
+    ExtractedParams params;
+    if (!f.ok) {
+        params.analysis_notes = "Geometry backend error: " + f.error;
         return params;
     }
-
-    try {
-        // Extract bounding box
-        double width = 0.0, height = 0.0, length = 0.0;
-        extract_bounding_box(geometry_data, width, height, length);
-
-        // Estimate OD from bounding box (largest circular dimension)
-        double estimated_od = std::max(width, height);
-
-        // Extract edge points for more precise fitting
-        auto edge_points = extract_edge_points(geometry_data);
-
-        if (edge_points.size() >= 3) {
-            // Fit cylinder to get precise OD
-            params.outer_diameter = fit_cylinder(edge_points);
-
-            // If fitting failed, use bounding box estimate
-            if (params.outer_diameter < 0.001) {
-                params.outer_diameter = estimated_od;
-            }
-        } else {
-            // Not enough points, use bounding box
-            params.outer_diameter = estimated_od;
-        }
-
-        // 3D-003: FIXED — Determine real wall thickness from B-rep geometry
-        // Do NOT use approximation formula (OD * 0.10)
-        params.wall_thickness = -1.0;  // Invalid marker
-
-        // Real approach: determine inner and outer surfaces through B-rep
-        // 1. Find outer cylindrical face (largest radius)
-        // 2. Find inner cylindrical face (if present)
-        // 3. Calculate actual wall thickness = (OD - ID) / 2
-        // If inner surface cannot be determined, mark as undefined (-1.0)
-
-        if (params.wall_thickness < 0) {
-            // Wall thickness could not be determined from actual geometry
-            // Set to 0 to indicate "unknown" rather than using placeholder
-            params.wall_thickness = 0.0;
-            params.inner_diameter = 0.0;  // Mark as undefined
-        } else {
-            // Calculate inner diameter from real geometry
-            params.inner_diameter = params.outer_diameter - 2.0 * params.wall_thickness;
-        }
-
-        // Set total length
-        params.total_length = length;
-
-        // Detect bends
-        params.bend_angles = detect_bends(geometry_data);
-
-        // 3D-004: FIXED — Recover real bend radii from arc geometry
-        // Do NOT use approximation formula (OD * 2.0)
-        for (size_t i = 0; i < params.bend_angles.size(); i++) {
-            // Real approach: for each bend arc
-            // 1. Extract arc curve from B-rep using BRepAdaptor_Curve
-            // 2. Get curve center and radius
-            // 3. Extract arc angle and convert to degrees
-            // 4. Store actual bend_radius from arc geometry, not formula
-
-            // For now, mark as undefined (-1.0) if actual geometry not available
-            double bend_radius = -1.0;  // Invalid marker
-
-            if (bend_radius < 0) {
-                // Could not determine bend radius from actual geometry
-                // Do not substitute formula-based estimate
-                bend_radius = 0.0;  // Mark as undefined
-            }
-
-            params.bend_radii.push_back(bend_radius);
-        }
-
-        // Calculate arc length for bends
-        params.bend_arc_length = 0.0;
-        for (size_t i = 0; i < params.bend_angles.size(); i++) {
-            double angle_rad = params.bend_angles[i] * M_PI / 180.0;
-            double arc_len = params.bend_radii[i] * angle_rad;
-            params.bend_arc_length += arc_len;
-        }
-
-        // Determine shape type
-        if (params.bend_angles.size() == 0) {
-            params.shape_type = "TUBE";
-        } else if (params.bend_angles.size() == 1) {
-            params.shape_type = "BEND";
-        } else {
-            params.shape_type = "COMPLEX";
-        }
-
-        // Estimate confidence
-        params.confidence = estimate_confidence(params);
-
-        // Add analysis notes
-        std::ostringstream notes;
-        notes << "Analyzed " << edge_points.size() << " edge points; "
-              << "detected " << params.bend_angles.size() << " bends";
-        params.analysis_notes = notes.str();
-
-    } catch (const std::exception& e) {
-        params.confidence = 0.0;
-        params.analysis_notes = std::string("Analysis error: ") + e.what();
+    params.outer_diameter = 2.0 * f.outer_radius;
+    if (f.inner_radius > 0.0 && f.inner_radius < f.outer_radius) {
+        params.inner_diameter = 2.0 * f.inner_radius;
+        params.wall_thickness = f.outer_radius - f.inner_radius;
+    } else {
+        params.inner_diameter = 0.0;
+        params.wall_thickness = f.outer_radius;  // сплошной пруток: стенка = радиус
     }
 
+    double straight = 0.0;
+    for (double l : f.straight_lengths) straight += l;
+    for (const auto& [angle_deg, radius] : f.bends) {
+        params.bend_angles.push_back(angle_deg);
+        params.bend_radii.push_back(radius);
+        params.bend_arc_length += radius * angle_deg * M_PI / 180.0;
+    }
+    params.total_length = straight + params.bend_arc_length;  // длина по оси
+
+    params.shape_type = params.bend_angles.empty() ? "TUBE"
+                        : params.bend_angles.size() == 1 ? "BEND" : "COMPLEX";
+    params.confidence = estimate_confidence(params);
+
+    std::ostringstream notes;
+    notes << "B-rep: " << f.straight_lengths.size() << " straight segment(s), " << f.bends.size()
+          << " bend(s); bbox " << f.bbox_size[0] << " x " << f.bbox_size[1] << " x " << f.bbox_size[2];
+    params.analysis_notes = notes.str();
     return params;
 }
 
-void GeometryAnalyzer::extract_bounding_box(const std::string& geometry_data,
-                                           double& width, double& height, double& length) {
-    // 3D-001: FIXED — Extract real dimensions from OCCT B-rep instead of fixed values
-    // Initialize with invalid values to detect if actual bounds are computed
-    width = -1.0;
-    height = -1.0;
-    length = -1.0;
-
-    try {
-        // In production, parse geometry_data as OCCT TopoDS_Shape
-        // For now, provide structured approach:
-
-        // OCCT approach:
-        // 1. STEPControl_Reader reader;
-        // 2. reader.ReadFile(geometry_data.c_str());
-        // 3. TopoDS_Shape shape = reader.OneShape();
-        // 4. Bnd_Box bbox;
-        // 5. BRepBndLib::Add(shape, bbox);
-        // 6. double xmin, ymin, zmin, xmax, ymax, zmax;
-        // 7. bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
-        // 8. width = ymax - ymin; height = zmax - zmin; length = xmax - xmin;
-
-        // Fallback: if no real geometry data available, log warning
-        if (width < 0 || height < 0 || length < 0) {
-            // Return invalid bounds to signal that real geometry analysis failed
-            // DO NOT use placeholder 25.4mm, 150mm
-            width = 0.0;
-            height = 0.0;
-            length = 0.0;
-        }
-    } catch (...) {
-        // Error in geometry processing
-        width = 0.0;
-        height = 0.0;
-        length = 0.0;
+ExtractedParams GeometryAnalyzer::analyze(const std::string& geometry_data) {
+    ExtractedParams params;
+    if (geometry_data.empty()) {
+        params.analysis_notes = "No geometry data provided";
+        return params;
     }
-}
-
-std::vector<std::pair<double, double>> GeometryAnalyzer::extract_edge_points(
-    const std::string& geometry_data) {
-    std::vector<std::pair<double, double>> points;
-
-    // 3D-002: FIXED — Extract real edge points from OCCT topology
-    // instead of generating synthetic circular points
-
+    const GeometryBackend& backend = backend_slot();
+    if (!backend) {
+        params.analysis_notes =
+            "Geometry backend not available: build with BENDCORE_WITH_OCCT=ON and call "
+            "bendcore::occt::install_geometry_backend()";
+        return params;
+    }
     try {
-        // OCCT approach for real geometry:
-        // 1. Parse geometry_data as OCCT TopoDS_Shape
-        // 2. TopExp_Explorer explorer(shape, TopAbs_EDGE);
-        // 3. For each edge:
-        //    - Handle_Geom_Curve curve = BRep_Tool::Curve(edge, param_start, param_end);
-        //    - Sample points along the curve: curve->D0(param, point);
-        //    - Project to 2D (distance from axis z)
-        // 4. Convert 3D curve points to 2D radial coordinates
-
-        // Return empty vector if no real geometry data available
-        // This signals that geometry analysis failed and should NOT use defaults
-        return points;  // Empty = no real edge data available
-
-    } catch (...) {
-        // Error processing real geometry
-        return points;  // Return empty instead of synthetic data
+        return params_from_features(backend(geometry_data));
+    } catch (const std::exception& e) {
+        params.analysis_notes = std::string("Analysis error: ") + e.what();
+        return params;
     }
 }
 
@@ -263,18 +150,7 @@ double GeometryAnalyzer::fit_cylinder(const std::vector<std::pair<double, double
 }
 
 std::vector<double> GeometryAnalyzer::detect_bends(const std::string& geometry_data) {
-    std::vector<double> bend_angles;
-
-    // In production, this would:
-    // 1. Sample points along the centerline
-    // 2. Calculate curvature at each point
-    // 3. Find curvature peaks (bends)
-    // 4. Calculate angle from curvature
-
-    // Placeholder: return one 90-degree bend if geometry suggests it
-    // This would be detected from actual geometry analysis
-
-    return bend_angles;  // No bends detected in simplified version
+    return analyze(geometry_data).bend_angles;
 }
 
 std::vector<double> GeometryAnalyzer::calculate_bend_angles(
@@ -301,7 +177,9 @@ std::vector<double> GeometryAnalyzer::calculate_bend_angles(
 double GeometryAnalyzer::estimate_confidence(const ExtractedParams& params) {
     // Confidence scoring based on parameter validity
 
-    if (!params.is_valid()) {
+    // Геометрическая полнота без учёта самого confidence (is_valid() требует confidence >= 0.5,
+    // а здесь он ещё не вычислен).
+    if (!(params.outer_diameter > 0.001 && params.wall_thickness >= 0.001 && params.total_length > 0.1)) {
         return 0.0;
     }
 
@@ -320,9 +198,9 @@ double GeometryAnalyzer::estimate_confidence(const ExtractedParams& params) {
         confidence *= 0.7;  // Unusual length
     }
 
-    // More bends increase confidence in complex geometry detection
+    // Гибы по B-rep распознаются по тороидальным граням; сложнее формы — чуть ниже уверенность.
     if (params.bend_angles.size() > 0) {
-        confidence *= 0.9;  // Slight boost for bend detection
+        confidence *= 0.9;
     }
 
     // Ensure within bounds
