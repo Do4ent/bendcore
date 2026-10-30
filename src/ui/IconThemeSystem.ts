@@ -170,9 +170,11 @@ export class IconThemeManager {
   private customTheme: ThemeConfig | null = null;
   private root: HTMLElement;
 
-  constructor(initialTheme: IconTheme = { ...LIGHT_THEME }) {
+  constructor(initialTheme?: IconTheme) {
     this.root = document.documentElement;
-    this.currentTheme = this.createThemeConfig(initialTheme);
+    this.currentTheme = initialTheme
+      ? this.createThemeConfig(initialTheme)
+      : { ...LIGHT_THEME };
     this.applyTheme();
   }
 
@@ -183,7 +185,7 @@ export class IconThemeManager {
     const config: ThemeConfig = {
       name: theme.name,
       isDark: theme.preset === "dark",
-      colors: theme.colors as ThemeColors,
+      colors: theme.colors as unknown as ThemeColors,
       cssVariables: {},
     };
     initializeCssVariables(config);

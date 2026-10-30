@@ -191,9 +191,9 @@ const IconThemeSettings: React.FC<IconThemeSettingsProps> = ({
     // Apply preset color values
     themeManager.setPreset(presetId);
     const newColors = themeManager.getAllColors();
-    setColors(newColors as Record<string, string>);
+    setColors(newColors as unknown as Record<string, string>);
 
-    newTheme.colors = newColors;
+    newTheme.colors = newColors as unknown as Record<string, string>;
     onThemeChange(newTheme);
     setSaveState({ type: "success", message: `Preset "${newTheme.name}" applied` });
     setTimeout(() => setSaveState({ type: null, message: "" }), 3000);

@@ -175,8 +175,8 @@ export const MaterialsPanel: React.FC<MaterialsPanelProps> = ({
                       : {})
                   }}
                 >
-                  <div style={styles.materialItemColor}
-                    style={{
+                  <div style={{
+                      ...styles.materialItemColor,
                       backgroundColor: material.color,
                       ...styles.materialItemColorInner
                     }}

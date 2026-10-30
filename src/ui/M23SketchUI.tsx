@@ -217,7 +217,7 @@ const SketchUI: React.FC<SketchUIProps> = ({
         const newElement: SketchElement = {
           id: `elem_${Date.now()}`,
           type: 'circle',
-          center: startPoint,
+          center: startPoint ?? undefined,
           radius,
           color: toolColor
         };
