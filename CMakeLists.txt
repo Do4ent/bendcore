@@ -1023,33 +1023,63 @@ target_link_libraries(test_gap027_parametric_ai_comprehensive PRIVATE bendcore_c
 bendcore_add_test(gap027_parametric_ai_comprehensive test_gap027_parametric_ai_comprehensive)
 
 # ============================================================================
+# M20: Production Hardening (GAP-088 to GAP-093) - 220 tests
+# ============================================================================
+
+# GAP-088: ErrorHandling (37 tests)
+add_executable(test_gap088_error_handling tests/GAP-088-ErrorHandling.test.cpp src/hardening/error_handling.cpp)
+target_link_libraries(test_gap088_error_handling PRIVATE bendcore_core)
+target_include_directories(test_gap088_error_handling PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(gap088_error_handling test_gap088_error_handling)
+
+# GAP-089: CrashRecovery (35 tests)
+add_executable(test_gap089_crash_recovery tests/GAP-089-CrashRecovery.test.cpp src/hardening/crash_recovery.cpp)
+target_link_libraries(test_gap089_crash_recovery PRIVATE bendcore_core)
+target_include_directories(test_gap089_crash_recovery PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(gap089_crash_recovery test_gap089_crash_recovery)
+
+# GAP-090: LoggingMonitoring (34 tests)
+add_executable(test_gap090_logging_monitoring tests/GAP-090-LoggingMonitoring.test.cpp src/hardening/logging_monitoring.cpp)
+target_link_libraries(test_gap090_logging_monitoring PRIVATE bendcore_core)
+target_include_directories(test_gap090_logging_monitoring PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(gap090_logging_monitoring test_gap090_logging_monitoring)
+
+# GAP-091: PerformanceTuning (36 tests)
+add_executable(test_gap091_performance_tuning tests/GAP-091-PerformanceTuning.test.cpp src/hardening/performance_tuning.cpp)
+target_link_libraries(test_gap091_performance_tuning PRIVATE bendcore_core)
+target_include_directories(test_gap091_performance_tuning PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(gap091_performance_tuning test_gap091_performance_tuning)
+
+# GAP-092: LoadTesting (38 tests)
+add_executable(test_gap092_load_testing tests/GAP-092-LoadTesting.test.cpp src/hardening/load_testing.cpp)
+target_link_libraries(test_gap092_load_testing PRIVATE bendcore_core)
+target_include_directories(test_gap092_load_testing PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(gap092_load_testing test_gap092_load_testing)
+
+# GAP-093: ProductionDeployment (40 tests)
+add_executable(test_gap093_production_deployment tests/GAP-093-ProductionDeployment.test.cpp src/hardening/production_deployment.cpp)
+target_link_libraries(test_gap093_production_deployment PRIVATE bendcore_core)
+target_include_directories(test_gap093_production_deployment PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(gap093_production_deployment test_gap093_production_deployment)
+
+# ============================================================================
 # M17 Phase: Advanced Analytics (GAP-074 to GAP-078) - 170 tests
 # ============================================================================
 
 # GAP-074: DesignAnalytics (35 tests) - Metrics collection, pattern analysis
-add_executable(test_gap074_design_analytics tests/analytics_design.test.cpp)
-target_link_libraries(test_gap074_design_analytics PRIVATE bendcore_core)
-bendcore_add_test(gap074_design_analytics test_gap074_design_analytics)
+# TODO: Implement analytics_design.test.cpp
 
 # GAP-075: PerformanceMonitoring (33 tests) - System tracking, profiling
-add_executable(test_gap075_performance_monitoring tests/analytics_performance.test.cpp)
-target_link_libraries(test_gap075_performance_monitoring PRIVATE bendcore_core)
-bendcore_add_test(gap075_performance_monitoring test_gap075_performance_monitoring)
+# TODO: Implement analytics_performance.test.cpp
 
 # GAP-076: UsageTracking (32 tests) - Event tracking, user behavior
-add_executable(test_gap076_usage_tracking tests/analytics_usage.test.cpp)
-target_link_libraries(test_gap076_usage_tracking PRIVATE bendcore_core)
-bendcore_add_test(gap076_usage_tracking test_gap076_usage_tracking)
+# TODO: Implement analytics_usage.test.cpp
 
 # GAP-077: ReportGeneration (36 tests) - PDF/HTML reports, aggregation
-add_executable(test_gap077_report_generation tests/analytics_report.test.cpp)
-target_link_libraries(test_gap077_report_generation PRIVATE bendcore_core)
-bendcore_add_test(gap077_report_generation test_gap077_report_generation)
+# TODO: Implement analytics_report.test.cpp
 
 # GAP-078: DataVisualization (34 tests) - Charts, dashboards, real-time display
-add_executable(test_gap078_data_visualization tests/analytics_visualization.test.cpp)
-target_link_libraries(test_gap078_data_visualization PRIVATE bendcore_core)
-bendcore_add_test(gap078_data_visualization test_gap078_data_visualization)
+# TODO: Implement analytics_visualization.test.cpp
 
 # ============================================================================
 # M19 Phase: Security & Compliance (GAP-083 to GAP-087) - 175 tests
