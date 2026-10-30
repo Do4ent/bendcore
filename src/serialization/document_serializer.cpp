@@ -45,7 +45,7 @@ SerializationResult DocumentSerializer::serialize(
             return SerializationResult(false, "Serialization produced empty result");
         }
 
-        uint32_t crc = calculateCRC32(serialized);
+        [[maybe_unused]] uint32_t crc = calculateCRC32(serialized);
 
         return SerializationResult(true);
     } catch (const std::exception& e) {
@@ -309,7 +309,7 @@ std::vector<uint8_t> DocumentSerializer::serializeToBinary(
 }
 
 bool DocumentSerializer::deserializeFromBinary(
-    CadDocument& doc,
+    CadDocument& /*doc*/,
     const std::vector<uint8_t>& data)
 {
     try {
@@ -320,7 +320,7 @@ bool DocumentSerializer::deserializeFromBinary(
         size_t pos = 0;
 
         // Read version
-        uint64_t version = *reinterpret_cast<const uint64_t*>(data.data() + pos);
+        [[maybe_unused]] uint64_t version = *reinterpret_cast<const uint64_t*>(data.data() + pos);
         pos += sizeof(uint64_t);
 
         // TODO: Version migration logic here
@@ -383,7 +383,7 @@ std::vector<uint8_t> DocumentSerializer::serializeToJSON(
 }
 
 bool DocumentSerializer::deserializeFromJSON(
-    CadDocument& doc,
+    CadDocument& /*doc*/,
     const std::vector<uint8_t>& data)
 {
     try {

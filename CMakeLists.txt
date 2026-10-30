@@ -256,6 +256,9 @@ set(BENDCORE_SOURCES
   src/analytics/usage_tracking.cpp
   src/analytics/report_generator.cpp
   src/analytics/data_visualization.cpp
+
+  # P1-02: Security & Reliability
+  src/security.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -1109,6 +1112,17 @@ bendcore_add_test(gap086_access_logging test_gap086_access_logging)
 add_executable(test_gap087_data_privacy tests/GAP-087-DataPrivacy.test.cpp)
 target_link_libraries(test_gap087_data_privacy PRIVATE bendcore_core)
 bendcore_add_test(gap087_data_privacy test_gap087_data_privacy)
+
+# ============================================================================
+# P1-02: Security & Reliability (80+ tests)
+# ============================================================================
+# Comprehensive security hardening: input validation, serialization, memory safety,
+# network security, vulnerability assessment, secret management, crash recovery, fuzz testing
+
+add_executable(test_security tests/test_security.cpp)
+target_link_libraries(test_security PRIVATE bendcore_core)
+target_include_directories(test_security PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(security test_security)
 
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.

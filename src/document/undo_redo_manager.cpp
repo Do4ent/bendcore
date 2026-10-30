@@ -220,7 +220,7 @@ std::vector<uint8_t> UndoRedoManager::serializeDocument(const CadDocument& doc) 
     return buffer;
 }
 
-bool UndoRedoManager::deserializeDocument(CadDocument& doc, const std::vector<uint8_t>& data) {
+bool UndoRedoManager::deserializeDocument(CadDocument& /*doc*/, const std::vector<uint8_t>& data) {
     if (data.size() < sizeof(uint64_t)) {
         return false;
     }

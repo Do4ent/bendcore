@@ -1,16 +1,31 @@
 /**
  * BendCore UI Entry Point
  * React root component for CommandManager Ribbon UI
+ *
+ * PERF-001: Application Startup Profiling
+ * Optimized with lazy loading, code splitting, and performance monitoring
  */
 
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
+import { perfMonitor } from './PerformanceMonitoring';
+import { memoryManager } from './MemoryManagement';
+import { withMemo, SuspenseBoundary } from './ComponentOptimization';
 import RibbonBar from './RibbonBar';
 import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import PropertiesPanel, { SelectedObject } from './PropertiesPanel';
 import StatusBar, { StatusBarState } from './StatusBar';
 import { createTubePropertyGroup } from './PropertyGroups';
 import './styles.css';
+
+// Mark startup
+perfMonitor.mark('app-startup');
+
+// Lazy load non-critical components
+const M22Integration = lazy(() => import('./M22Integration'));
+const M23Integration = lazy(() => import('./M23Integration'));
+const M24Integration = lazy(() => import('./M24Integration'));
+const M25Integration = lazy(() => import('./M25Integration'));
 
 // Export BendCore Landing UI component
 export { default as BendCoreLanding } from './BendCoreLanding';
@@ -30,6 +45,31 @@ interface AppProps {
 }
 
 const App: React.FC<AppProps> = ({ onCommand }) => {
+  // Performance monitoring
+  React.useEffect(() => {
+    perfMonitor.mark('app-render-start');
+    return () => {
+      const renderTime = perfMonitor.measure('app-render', 'app-render-start');
+      perfMonitor.recordMetric('app-render', renderTime, 'render');
+      console.log(`[PERF] App render time: ${renderTime.toFixed(2)}ms`);
+    };
+  }, []);
+
+  // Memory monitoring
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      const memory = memoryManager.getMemoryUsageMB();
+      console.log(`[PERF] Current memory: ${memory.toFixed(1)}MB`);
+
+      if (memoryManager.isMemoryCritical()) {
+        console.warn('[PERF] Memory critical, performing GC');
+        memoryManager.performGarbageCollection();
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Context menu state
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
@@ -203,6 +243,38 @@ declare global {
   }
 }
 
-// Initialize React root
-const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<App />);
+// Initialize React root with performance measurement
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  perfMonitor.mark('react-root-creation');
+  const root = ReactDOM.createRoot(rootElement);
+
+  perfMonitor.mark('react-render-start');
+  root.render(<App />);
+  perfMonitor.mark('react-render-end');
+
+  // Measure key startup times
+  const renderTime = perfMonitor.measure('react-render', 'react-render-start', 'react-render-end');
+  const totalStartupTime = perfMonitor.measure('total-startup', 'app-startup', 'react-render-end');
+
+  // Wait for component mount before recording final metrics
+  setTimeout(() => {
+    const memory = memoryManager.getMemoryUsageMB();
+    const report = perfMonitor.generateReport();
+
+    console.log('[PERF] ===== Application Startup Report =====');
+    console.log(`Total startup time: ${totalStartupTime.toFixed(2)}ms`);
+    console.log(`React render time: ${renderTime.toFixed(2)}ms`);
+    console.log(`Current memory: ${memory.toFixed(1)}MB`);
+    console.log(report);
+    console.log('[PERF] =========================================');
+
+    // Store metrics for analysis
+    (window as any).__bendcore_perf = {
+      startupTime: totalStartupTime,
+      renderTime,
+      memory,
+      report,
+    };
+  }, 100);
+}

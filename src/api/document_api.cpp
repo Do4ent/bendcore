@@ -30,7 +30,9 @@ bool DocumentAPI::undo() {
         DocumentEvent event{
             DocumentEvent::Type::UNDO,
             document_.getRevision(),
-            "Undo operation"
+            "Undo operation",
+            {},  // affected_entities
+            ""   // error_message
         };
         emitEvent(event);
 
@@ -51,7 +53,9 @@ bool DocumentAPI::redo() {
         DocumentEvent event{
             DocumentEvent::Type::REDO,
             document_.getRevision(),
-            "Redo operation"
+            "Redo operation",
+            {},  // affected_entities
+            ""   // error_message
         };
         emitEvent(event);
 
@@ -82,7 +86,9 @@ SerializationResult DocumentAPI::save(const std::string& filepath) {
         DocumentEvent event{
             DocumentEvent::Type::SAVED,
             document_.getRevision(),
-            "Document saved to " + filepath
+            "Document saved to " + filepath,
+            {},  // affected_entities
+            ""   // error_message
         };
         emitEvent(event);
     } else {
@@ -104,7 +110,9 @@ SerializationResult DocumentAPI::load(const std::string& filepath) {
         DocumentEvent event{
             DocumentEvent::Type::LOADED,
             document_.getRevision(),
-            "Document loaded from " + filepath
+            "Document loaded from " + filepath,
+            {},  // affected_entities
+            ""   // error_message
         };
         emitEvent(event);
     } else {
@@ -166,7 +174,8 @@ std::vector<EntityId> DocumentAPI::createEntities(
         DocumentEvent::Type::MODIFIED,
         document_.getRevision(),
         description,
-        created_ids
+        created_ids,
+        ""   // error_message
     };
     emitEvent(event);
 
@@ -207,7 +216,8 @@ bool DocumentAPI::updateEntities(
         DocumentEvent::Type::MODIFIED,
         document_.getRevision(),
         description,
-        affected_ids
+        affected_ids,
+        ""   // error_message
     };
     emitEvent(event);
 
@@ -247,7 +257,8 @@ bool DocumentAPI::deleteEntities(
         DocumentEvent::Type::MODIFIED,
         document_.getRevision(),
         description,
-        deleted_ids
+        deleted_ids,
+        ""   // error_message
     };
     emitEvent(event);
 

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libbendcore_formula.a CMakeFiles/bendcore_formula.dir/src/formula.cpp.o
+/usr/bin/ranlib libbendcore_formula.a
