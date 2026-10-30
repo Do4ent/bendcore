@@ -1,7 +1,13 @@
 #include "bendcore/mobile/mobile_ui_adaptation.hpp"
 #include <algorithm>
+#include <mutex>
+#include <stdexcept>
 
 namespace bendcore::mobile {
+
+namespace {
+    thread_local std::mutex g_adapter_mutex;
+}
 
 MobileUIAdapter::MobileUIAdapter()
     : uiScaleFactor(1.0f) {
