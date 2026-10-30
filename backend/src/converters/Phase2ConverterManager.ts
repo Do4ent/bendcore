@@ -110,12 +110,12 @@ export class Phase2ConverterManager {
           break;
 
         case 'sat':
-          data = await SATConverter.parseAsync(filePath);
+          data = SATConverter.parse(filePath);
           break;
 
         case 'dwg':
         case 'dwf':
-          data = await DWFConverter.parseAsync(filePath);
+          data = DWFConverter.parse(filePath);
           break;
 
         default:
@@ -248,7 +248,7 @@ export class Phase2ConverterManager {
       const format = targetFormat || this.detectFormat(outputPath);
 
       // Export to target format
-      const exportResult = await this.exportFile(importResult.data, format, outputPath);
+      const exportResult = await this.exportFile(importResult.data!, format, outputPath);
 
       const duration = Date.now() - startTime;
 

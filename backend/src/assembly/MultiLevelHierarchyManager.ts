@@ -31,7 +31,6 @@ export interface Vector3 {
   x: number;
   y: number;
   z: number;
-  normalize(): Vector3;
 }
 
 export interface Plane {
@@ -648,7 +647,6 @@ export class MultiLevelHierarchyManager {
       x: a.x - b.x,
       y: a.y - b.y,
       z: a.z - b.z,
-      normalize: () => this.normalize({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z })
     };
   }
 
@@ -657,14 +655,8 @@ export class MultiLevelHierarchyManager {
    */
   private normalize(v: Vector3): Vector3 {
     const mag = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-    if (mag === 0) return { x: 0, y: 0, z: 0, normalize: () => ({ x: 0, y: 0, z: 0, normalize: () => ({}) }) };
-
-    return {
-      x: v.x / mag,
-      y: v.y / mag,
-      z: v.z / mag,
-      normalize: () => ({ x: v.x / mag, y: v.y / mag, z: v.z / mag, normalize: () => ({}) })
-    };
+    if (mag === 0) return { x: 0, y: 0, z: 0 };
+    return { x: v.x / mag, y: v.y / mag, z: v.z / mag };
   }
 
   /**

@@ -386,7 +386,7 @@ export class IGESConverter {
 
     // Add solids as manifold entities
     if (geometry.solids) {
-      for (const solid of geometry.solids) {
+      for (const solid of geometry.solids as unknown[]) {
         const typeNumber = 186; // Manifold Solid
         const line = String(typeNumber).padStart(8);
         section += (line + ' '.repeat(56)).padEnd(72) + String(entityNum).padStart(8) + 'D' + String(entityNum).padStart(7) + '\n';
@@ -407,7 +407,7 @@ export class IGESConverter {
     let paramNum = 1;
 
     if (geometry.solids) {
-      for (const solid of geometry.solids) {
+      for (const solid of geometry.solids as unknown[]) {
         // Simplified parameter data
         const paramData = `${paramNum}${paramNum},`.padEnd(64);
         section += paramData.padEnd(72) + String(paramNum).padStart(8) + 'P' + String(paramNum).padStart(7) + '\n';

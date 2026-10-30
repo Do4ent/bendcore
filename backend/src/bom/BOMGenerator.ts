@@ -77,8 +77,8 @@ export class BOMGenerator {
       name,
       revision: '1.0',
       items,
-      totalCost: this.calculateTotalCost(items),
-      totalWeight: this.calculateTotalWeight(items),
+      totalCost: BOMGenerator.calculateTotalCost(items),
+      totalWeight: BOMGenerator.calculateTotalWeight(items),
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -106,8 +106,8 @@ export class BOMGenerator {
       bom.items.push(item);
     }
 
-    bom.totalCost = this.calculateTotalCost(bom.items);
-    bom.totalWeight = this.calculateTotalWeight(bom.items);
+    bom.totalCost = BOMGenerator.calculateTotalCost(bom.items);
+    bom.totalWeight = BOMGenerator.calculateTotalWeight(bom.items);
     bom.updatedAt = new Date();
   }
 
@@ -120,8 +120,8 @@ export class BOMGenerator {
 
     bom.items = bom.items.filter(i => i.partNumber !== partNumber);
 
-    bom.totalCost = this.calculateTotalCost(bom.items);
-    bom.totalWeight = this.calculateTotalWeight(bom.items);
+    bom.totalCost = BOMGenerator.calculateTotalCost(bom.items);
+    bom.totalWeight = BOMGenerator.calculateTotalWeight(bom.items);
     bom.updatedAt = new Date();
   }
 

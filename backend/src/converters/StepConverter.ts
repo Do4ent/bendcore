@@ -31,13 +31,6 @@ interface StepEnum {
 
 type StepAttributeValue = string | number | boolean | StepReference | StepEnum | StepAttributeValue[] | null;
 
-export interface StepEntity {
-  id: number;
-  type: string;
-  attributes: StepAttributeValue[];
-  references: Set<number>;
-}
-
 export interface StepHeader {
   fileDescription: string[];
   fileName: string;
@@ -153,22 +146,12 @@ export interface BendCoreModel {
 export interface STEPEntity {
   id: number;
   type: string;
-  params: StepAttributeValue[];
-  line: string;
+  attributes: StepAttributeValue[];
+  references: Set<number>;
 }
 
 export interface STEPData {
-  header: {
-    description: string[];
-    name: string;
-    timestamp: Date;
-    author: string[];
-    organization: string[];
-    preprocessor: string;
-    originatingSystem: string;
-    authorization: string;
-    schemaIdentifier: string;
-  };
+  header: StepHeader;
   entities: Map<number, STEPEntity>;
   geometry: Geometry3D[];
   assembly: AssemblyNode | null;
@@ -180,7 +163,7 @@ export class STEPConverter {
   private static readonly MAX_LINE_LENGTH = 72;
 
   // Phase 2 новые свойства
-  private entities: Map<number, StepEntity> = new Map();
+  private entities: Map<number, STEPEntity> = new Map();
   private header: StepHeader | null = null;
   private referenceTree: Map<number, number[]> = new Map();
   private geometryCache: Map<number, any> = new Map();
@@ -500,7 +483,7 @@ export class STEPConverter {
   /**
    * Проверка является ли entity геометрическим объектом
    */
-  private isGeometricEntity(entity: StepEntity): boolean {
+  private isGeometricEntity(entity: STEPEntity): boolean {
     const geometricTypes = [
       'POINT', 'DIRECTION', 'CARTESIAN_POINT', 'VECTOR',
       'LINE', 'CIRCLE', 'ELLIPSE', 'PARABOLA', 'HYPERBOLA',
@@ -516,7 +499,7 @@ export class STEPConverter {
   /**
    * Конвертация STEP entity в BendCore geometry
    */
-  private entityToGeometry(entity: StepEntity, entities: Map<number, StepEntity>): Geometry3D | null {
+  private entityToGeometry(entity: STEPEntity, entities: Map<number, STEPEntity>): Geometry3D | null {
     switch (entity.type) {
       case 'CARTESIAN_POINT':
         return this.parseCartesianPoint(entity.attributes);
@@ -574,7 +557,7 @@ export class STEPConverter {
     return null;
   }
 
-  private parseLine(attrs: any[], entities: Map<number, StepEntity>): Line3D | null {
+  private parseLine(attrs: any[], entities: Map<number, STEPEntity>): Line3D | null {
     // LINE('name', point, direction)
     if (attrs.length >= 3) {
       const point = this.resolveReference(attrs[1], entities);
@@ -584,7 +567,7 @@ export class STEPConverter {
     return null;
   }
 
-  private parseCircle(attrs: any[], entities: Map<number, StepEntity>): Circle3D | null {
+  private parseCircle(attrs: any[], entities: Map<number, STEPEntity>): Circle3D | null {
     if (attrs.length >= 3) {
       const placement = this.resolveReference(attrs[1], entities);
       const radius = attrs[2];
@@ -593,7 +576,7 @@ export class STEPConverter {
     return null;
   }
 
-  private parseBSplineCurve(attrs: any[], entities: Map<number, StepEntity>): BSplineCurve | null {
+  private parseBSplineCurve(attrs: any[], entities: Map<number, STEPEntity>): BSplineCurve | null {
     if (attrs.length >= 5) {
       const degree = attrs[1];
       const controlPointRefs = (attrs[2] as any[]) || [];
@@ -614,7 +597,7 @@ export class STEPConverter {
     return null;
   }
 
-  private parsePlane(attrs: any[], entities: Map<number, StepEntity>): Plane3D | null {
+  private parsePlane(attrs: any[], entities: Map<number, STEPEntity>): Plane3D | null {
     if (attrs.length >= 2) {
       const placement = this.resolveReference(attrs[1], entities);
       return { type: 'PLANE', placement };
@@ -622,7 +605,7 @@ export class STEPConverter {
     return null;
   }
 
-  private parseCylindricalSurface(attrs: any[], entities: Map<number, StepEntity>): CylindricalSurface | null {
+  private parseCylindricalSurface(attrs: any[], entities: Map<number, STEPEntity>): CylindricalSurface | null {
     if (attrs.length >= 3) {
       const placement = this.resolveReference(attrs[1], entities);
       const radius = attrs[2];
@@ -631,7 +614,7 @@ export class STEPConverter {
     return null;
   }
 
-  private parseBrep(attrs: any[], entities: Map<number, StepEntity>): BrepShape | null {
+  private parseBrep(attrs: any[], entities: Map<number, STEPEntity>): BrepShape | null {
     if (attrs.length >= 2) {
       const name = attrs[0];
       const shell = this.resolveReference(attrs[1], entities);
@@ -643,7 +626,7 @@ export class STEPConverter {
   /**
    * Resolve reference к actual entity
    */
-  private resolveReference(ref: StepAttributeValue, entities: Map<number, StepEntity>): Geometry3D | null {
+  private resolveReference(ref: StepAttributeValue, entities: Map<number, STEPEntity>): Geometry3D | null {
     if (ref && typeof ref === 'object' && '$ref' in ref) {
       const reference = ref as StepReference;
       if (this.geometryCache.has(reference.$ref)) {
@@ -661,7 +644,7 @@ export class STEPConverter {
   /**
    * Build assembly hierarchy из STEP product entities
    */
-  private buildAssemblyTree(entities: Map<number, StepEntity>): AssemblyNode | null {
+  private buildAssemblyTree(entities: Map<number, STEPEntity>): AssemblyNode | null {
     const root: AssemblyNode = {
       id: 'root',
       name: 'Assembly',
@@ -674,7 +657,7 @@ export class STEPConverter {
       if (entity.type === 'PRODUCT') {
         const component: Component = {
           id: String(id),
-          name: entity.attributes[0] || `Component_${id}`,
+          name: String(entity.attributes[0] ?? `Component_${id}`),
           geometry: this.geometryCache.get(id) || null,
           transform: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }
         };
@@ -763,7 +746,7 @@ export class STEPConverter {
     if (descMatch) {
       const descStr = descMatch[1];
       const parts = this.parseAttributes(descStr);
-      fileDescription.push(...parts.filter(p => typeof p === 'string'));
+      fileDescription.push(...parts.filter((p): p is string => typeof p === 'string'));
     }
 
     // FILE_NAME
@@ -779,12 +762,12 @@ export class STEPConverter {
     if (nameMatch) {
       const nameStr = nameMatch[1];
       const parts = this.parseAttributes(nameStr);
-      fileName = parts[0] || 'model.stp';
+      fileName = String(parts[0] ?? 'model.stp');
       // parts[1] - timestamp
-      if (parts[2]) author = [parts[2]];
-      if (parts[3]) organization = [parts[3]];
-      if (parts[4]) preprocessorVersion = parts[4];
-      if (parts[5]) originatingSystem = parts[5];
+      if (parts[2] != null) author = [String(parts[2])];
+      if (parts[3] != null) organization = [String(parts[3])];
+      if (parts[4] != null) preprocessorVersion = String(parts[4]);
+      if (parts[5] != null) originatingSystem = String(parts[5]);
     }
 
     // FILE_SCHEMA
@@ -835,8 +818,8 @@ export class STEPConverter {
         geometry.push({
           id,
           type: entity.type,
-          name: entity.params[0],
-          data: entity.params
+          name: entity.attributes[0],
+          data: entity.attributes
         });
       }
     }
@@ -852,7 +835,7 @@ export class STEPConverter {
       if (entity.type === 'ASSEMBLY' || entity.type === 'PRODUCT_DEFINITION_SHAPE') {
         return {
           id,
-          name: entity.params[0],
+          name: entity.attributes[0],
           components: this.extractComponents(entities, id)
         };
       }
@@ -868,12 +851,12 @@ export class STEPConverter {
 
     for (const [id, entity] of entities) {
       if (entity.type === 'NEXT_ASSEMBLY_USAGE_OCCURRENCE') {
-        if (entity.params[3]?.reference === parentId) {
+        if ((entity.attributes[3] as any)?.reference === parentId) {
           components.push({
             id,
-            name: entity.params[0],
-            parentId: entity.params[3],
-            childId: entity.params[4]
+            name: entity.attributes[0],
+            parentId: entity.attributes[3],
+            childId: entity.attributes[4]
           });
         }
       }

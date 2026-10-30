@@ -200,7 +200,7 @@ export class Phase2QASuite {
       if (asm.components.length > 0) {
         const pattern = manager.createLinearPattern(
           asm.components[0].id,
-          { x: 1, y: 0, z: 0, normalize: () => ({}) },
+          { x: 1, y: 0, z: 0 },
           5,
           10
         );
@@ -213,7 +213,7 @@ export class Phase2QASuite {
       if (asm.components.length > 0) {
         const mirror = manager.createMirrorPattern(
           asm.components[0].id,
-          { normal: { x: 1, y: 0, z: 0, normalize: () => ({}) }, distance: 0 }
+          { normal: { x: 1, y: 0, z: 0 }, distance: 0 }
         );
         if (mirror.length !== 1) throw new Error('Mirror creation failed');
       }

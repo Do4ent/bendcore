@@ -3,6 +3,8 @@
  * Comprehensive testing and validation for manufacturing
  */
 
+import { performance } from 'perf_hooks';
+
 export interface QATest {
   name: string;
   category: string;
@@ -175,7 +177,7 @@ export class QAManager {
     };
     traverse(project.assembly);
 
-    const allParts = new Set(project.parts?.map((p: any) => p.id) || []);
+    const allParts: Set<string> = new Set((project.parts?.map((p: any) => p.id) || []) as string[]);
     for (const partId of allParts) {
       if (!assemblyParts.has(partId)) {
         issues.push(`Part ${partId} orphaned (не в assembly)`);
