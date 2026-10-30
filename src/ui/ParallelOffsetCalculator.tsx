@@ -442,6 +442,7 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
                 onChange={e => handleParameterChange('bend_angle', e.target.value)}
                 min="5"
                 max="180"
+                aria-label="Угол гибки (5-180°)"
                 className={getFieldError('bend_angle') ? 'input-error' : ''}
               />
               <span className="unit">°</span>

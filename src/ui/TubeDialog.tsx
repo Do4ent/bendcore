@@ -303,11 +303,12 @@ const GeometryTab: React.FC<GeometryTabProps> = ({
 
       {/* Outer Diameter */}
       <div className="border-l-4 border-ochre-600 pl-3">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="outer-diameter" className="block text-sm font-medium text-gray-700 mb-1">
           Outer Diameter (mm)
         </label>
         <div className="flex items-center gap-2">
           <input
+            id="outer-diameter"
             type="number"
             min="1"
             max="100"
@@ -329,11 +330,12 @@ const GeometryTab: React.FC<GeometryTabProps> = ({
 
       {/* Wall Thickness */}
       <div className="border-l-4 border-ochre-600 pl-3">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="wall-thickness" className="block text-sm font-medium text-gray-700 mb-1">
           Wall Thickness (mm)
         </label>
         <div className="flex items-center gap-2">
           <input
+            id="wall-thickness"
             type="number"
             min="0.1"
             max="10"
@@ -355,11 +357,12 @@ const GeometryTab: React.FC<GeometryTabProps> = ({
 
       {/* Length */}
       <div className="border-l-4 border-ochre-600 pl-3">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="tube-length" className="block text-sm font-medium text-gray-700 mb-1">
           Length (mm)
         </label>
         <div className="flex items-center gap-2">
           <input
+            id="tube-length"
             type="number"
             min="10"
             max="5000"
@@ -379,10 +382,11 @@ const GeometryTab: React.FC<GeometryTabProps> = ({
 
       {/* Material */}
       <div className="border-l-4 border-ochre-600 pl-3">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="tube-material" className="block text-sm font-medium text-gray-700 mb-1">
           Material
         </label>
         <select
+          id="tube-material"
           value={geometry.material}
           onChange={(e) =>
             handleChange(

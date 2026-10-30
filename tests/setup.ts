@@ -27,6 +27,40 @@ global.ResizeObserver = jest.fn().mockImplementation(() => ({
   disconnect: jest.fn(),
 }));
 
+// Mock HTMLCanvasElement.getContext (WebGL not available in jsdom)
+HTMLCanvasElement.prototype.getContext = jest.fn().mockReturnValue({
+  clearRect: jest.fn(),
+  fillRect: jest.fn(),
+  drawImage: jest.fn(),
+  beginPath: jest.fn(),
+  moveTo: jest.fn(),
+  lineTo: jest.fn(),
+  stroke: jest.fn(),
+  fill: jest.fn(),
+  arc: jest.fn(),
+  save: jest.fn(),
+  restore: jest.fn(),
+  scale: jest.fn(),
+  translate: jest.fn(),
+  rotate: jest.fn(),
+  createLinearGradient: jest.fn().mockReturnValue({
+    addColorStop: jest.fn(),
+  }),
+  measureText: jest.fn().mockReturnValue({ width: 0 }),
+  getImageData: jest.fn().mockReturnValue({ data: new Uint8ClampedArray(4) }),
+  putImageData: jest.fn(),
+  canvas: { width: 800, height: 600 },
+});
+
+// Mock global fetch with a default no-op implementation to prevent crashes in tests
+// that trigger network calls unexpectedly (e.g. loading a localStorage draft).
+// Individual tests can override with jest.fn().mockResolvedValueOnce(...).
+global.fetch = jest.fn().mockResolvedValue({
+  ok: false,
+  status: 503,
+  json: async () => ({ message: 'Not mocked' }),
+});
+
 // Mock Electron IPC
 (global.window as any).electron = {
   ipc: {
