@@ -130,7 +130,7 @@ describe('FormulaEditor Component', () => {
 
   describe('User Input', () => {
     test('should update formula on text input', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -147,7 +147,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should insert variable when clicking variable button', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -165,7 +165,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should insert operator with spaces', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -185,7 +185,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should insert function call', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -210,7 +210,7 @@ describe('FormulaEditor Component', () => {
         json: async () => ({ result: 10 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -238,7 +238,7 @@ describe('FormulaEditor Component', () => {
         json: async () => ({ result: 55 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -271,7 +271,7 @@ describe('FormulaEditor Component', () => {
         }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -298,7 +298,7 @@ describe('FormulaEditor Component', () => {
         }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -324,7 +324,7 @@ describe('FormulaEditor Component', () => {
         json: async () => ({ result: 10 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -349,7 +349,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should cancel on Escape', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -369,7 +369,7 @@ describe('FormulaEditor Component', () => {
 
   describe('localStorage Draft', () => {
     test('should save formula to localStorage on input', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -408,7 +408,7 @@ describe('FormulaEditor Component', () => {
         json: async () => ({ result: 7.5 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -432,7 +432,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should clear draft on cancel', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -462,7 +462,7 @@ describe('FormulaEditor Component', () => {
         json: async () => ({ message: 'Error' }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -487,7 +487,7 @@ describe('FormulaEditor Component', () => {
         json: async () => ({ result: 10 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -569,7 +569,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should have keyboard navigation', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"

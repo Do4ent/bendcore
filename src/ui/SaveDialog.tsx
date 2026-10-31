@@ -131,7 +131,7 @@ const SaveDialog: React.FC<SaveDialogProps> = ({
               </div>
               <div className="preview-item">
                 <span className="preview-label">Format:</span>
-                <span className="preview-value">
+                <span className="preview-value" data-testid="format-description">
                   {supportedFormats.find(f => f.extension === selectedFormat)?.description}
                 </span>
               </div>
