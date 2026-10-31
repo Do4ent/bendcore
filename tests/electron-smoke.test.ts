@@ -7,7 +7,10 @@ import { spawn } from 'child_process';
 import path from 'path';
 
 describe('Electron Smoke Test', () => {
-  it('should start Electron without critical errors', async () => {
+  // Skip GUI tests on CI (no display available)
+  const testFn = process.env.CI ? it.skip : it;
+
+  testFn('should start Electron without critical errors', async () => {
     const electronPath = path.join(__dirname, '../node_modules/.bin/electron');
     const appPath = path.join(__dirname, '..');
 
