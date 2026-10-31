@@ -80,69 +80,41 @@ jobs:
 
 
 
-  # Тело трубы на Open CASCADE (тесты test_tube_occt и остальные). Сборка OCCT кэшируется отдельно от установки.
+  # Тело трубы на Open CASCADE (тесты test_tube_occt и остальные).
+  # Сборка OCCT кэшируется отдельно от установки.
   occt:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Зависимости (Ninja, Eigen)
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev libx11-dev
+      - name: Зависимости (Ninja, Eigen, Python3)
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev libx11-dev python3
 
-      - name: Кэш сборки OCCT V8.0.1
+      - name: Кэш сборки OCCT V7.7.0
         id: occt-build-cache
         uses: actions/cache@v4
         with:
-          path: ~/occt-build
-          key: occt-build-V8.0.1-dataexchange-ubuntu-24.04-v2
+          path: |
+            third_party/occt-build
+            third_party/occt-install
+          key: occt-build-V7.7.0-bendcore-ubuntu-24.04-v1
 
-      - name: Исходники OCCT V8.0.1
-        shell: bash
-        run: |
-          [ -d ~/occt-src ] || git clone --depth 1 --branch V8.0.1 https://github.com/Open-Cascade-SAS/OCCT.git ~/occt-src
-
-      - name: Сборка OCCT V8.0.1 (статически, минимальный набор модулей)
+      - name: Сборка OCCT V7.7.0 (статически, минимальный набор модулей)
         if: steps.occt-build-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -o pipefail
-          {
-            cmake -S ~/occt-src -B ~/occt-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_INSTALL_PREFIX="$HOME/occt-install" \
-              -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
-              -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_Draw=OFF \
-              -DBUILD_SAMPLES=OFF -DUSE_TBB=OFF -DUSE_FREETYPE=OFF -DUSE_FREEIMAGE=OFF -DUSE_RAPIDJSON=OFF \
-              -DUSE_VTK=OFF -DUSE_OPENGL=OFF -DBUILD_Inspector=OFF
-            cmake --build ~/occt-build --parallel
-          } 2>&1 | tee "$GITHUB_WORKSPACE/occt-build.log"
-
-      - name: Сохранить кэш сборки OCCT
-        if: steps.occt-build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/occt-build
-          key: occt-build-V8.0.1-dataexchange-ubuntu-24.04-v2
-
-      - name: Установка OCCT
-        shell: bash
-        run: |
-          set -o pipefail
-          {
-            # Переконфигурация с префиксом установки: иначе заголовки ставятся в /usr/local (абсолютный путь в скрипте).
-            cmake -S ~/occt-src -B ~/occt-build -DCMAKE_INSTALL_PREFIX="$HOME/occt-install"
-            cmake --install ~/occt-build
-            # Установка копирует не все заголовки: добираем недостающие из дерева сборки (как в README).
-            cp -rn ~/occt-build/include/opencascade/. ~/occt-install/include/opencascade/
-          } 2>&1 | tee "$GITHUB_WORKSPACE/occt-install.log"
+          cd third_party
+          export OCCT_VERSION=7.7.0
+          ./build_occt.sh 2>&1 | tee "$GITHUB_WORKSPACE/occt-build.log"
 
       - name: Ошибки OCCT в аннотации (только при падении)
         if: failure()
         shell: bash
         run: |
-          for f in occt-build.log occt-install.log; do
-            [ -f "$f" ] || continue
-            grep -n -A6 -E "CMake Error|error:|FATAL" "$f" | head -n 30 | while IFS= read -r line; do echo "::error title=$f::${line:0:900}"; done
-          done
+          [ -f occt-build.log ] || exit 0
+          grep -n -E "ERROR|error:|FATAL|undefined reference" occt-build.log | head -n 20 | \
+            while IFS= read -r line; do echo "::error title=occt-build::${line:0:900}"; done
 
       - name: Сборка и тесты с Open CASCADE
         env:

@@ -133,15 +133,36 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # OCCT (Open Cascade Technology) для импорта STEP файлов (Q3 2027, Task 1)
-# Windows-only integration with OCCT 7.7+
-if(WIN32)
+# Find OCCT on all platforms (Windows, Linux, macOS)
+set(BENDCORE_OCCT_DIR "" CACHE PATH "OCCT install directory (build with: third_party/build_occt.sh)")
+
+if(BENDCORE_OCCT_DIR)
+  # Use manually built OCCT
+  set(OpenCASCADE_FOUND TRUE)
+  set(OpenCASCADE_INCLUDE_DIRS "${BENDCORE_OCCT_DIR}/include/opencascade")
+  file(GLOB OpenCASCADE_LIBRARIES "${BENDCORE_OCCT_DIR}/lib/libTK*.a")
+  message(STATUS "Using OCCT from: ${BENDCORE_OCCT_DIR}")
+  message(STATUS "  Headers: ${OpenCASCADE_INCLUDE_DIRS}")
+  message(STATUS "  Libraries: ${OpenCASCADE_LIBRARIES}")
+else()
+  # Try to find OCCT via system paths
   find_package(OpenCASCADE 7.7 QUIET)
   if(NOT OpenCASCADE_FOUND)
-    # Try to find OCCT via vcpkg
+    # Try config mode
     find_package(OpenCASCADE CONFIG QUIET)
   endif()
-else()
-  set(OpenCASCADE_FOUND FALSE)
+  if(NOT OpenCASCADE_FOUND)
+    # Try pkg-config
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+      pkg_check_modules(OpenCASCADE QUIET OpenCASCADE)
+    endif()
+  endif()
+  if(OpenCASCADE_FOUND)
+    message(STATUS "Found system OCCT")
+  else()
+    message(STATUS "OCCT not found (optional). Build with: cd third_party && ./build_occt.sh")
+  endif()
 endif()
 
 # M1 Core Components (CAD Foundation)
