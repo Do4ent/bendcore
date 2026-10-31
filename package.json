@@ -23,7 +23,8 @@
     "lint": "eslint src/ui --ext .ts,.tsx",
     "format": "prettier --write src/ui",
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "CAD",
