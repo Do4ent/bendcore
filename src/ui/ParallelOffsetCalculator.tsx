@@ -205,7 +205,7 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
         }),
       });
 
-      if (!response.ok) {
+      if (!response || !response.ok) {
         throw new Error('Ошибка при экспорте');
       }
 

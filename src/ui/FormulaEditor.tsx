@@ -113,13 +113,17 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({
         }),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        setResult({
-          success: false,
-          error: error.message || 'Evaluation failed',
-          suggestions: error.suggestions || [],
-        });
+      if (!response || !response.ok) {
+        let errorMsg = 'Evaluation failed';
+        let suggestions: string[] = [];
+        if (response) {
+          try {
+            const error = await response.json();
+            errorMsg = error.message || errorMsg;
+            suggestions = error.suggestions || [];
+          } catch {}
+        }
+        setResult({ success: false, error: errorMsg, suggestions });
         return;
       }
 
