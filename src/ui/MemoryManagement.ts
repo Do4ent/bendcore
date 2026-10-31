@@ -133,6 +133,16 @@ export class MemoryManager {
   }
 
   /**
+   * Reset all recorded state: memory profiles, every cache, and GC timing.
+   * Used to isolate state between runs and tests.
+   */
+  clear(): void {
+    this.memoryProfiles = [];
+    this.caches.forEach((cache) => cache.clear());
+    this.lastGCTime = 0;
+  }
+
+  /**
    * Evict cache entries based on LRU or size
    */
   evictCache(cacheName: string, targetSize: number): void {
