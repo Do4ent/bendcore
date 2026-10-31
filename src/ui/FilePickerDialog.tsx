@@ -144,7 +144,7 @@ const FilePickerDialog: React.FC<FilePickerDialogProps> = ({
         <div className="dialog-footer">
           <div className="filter-selector">
             <label>File type:</label>
-            <select defaultValue="*">
+            <select defaultValue={fileFilter[0]?.extensions[0] ?? '*'}>
               {fileFilter.map((filter, idx) => (
                 <option key={idx} value={filter.extensions[0]}>
                   {filter.name}

@@ -85,11 +85,11 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({
     }
   }, [formula]);
 
-  // Evaluate formula in real-time (debounced to avoid firing on every keystroke)
+  // Evaluate formula in real-time (debounced via timeout to batch rapid changes)
   useEffect(() => {
     const timer = setTimeout(() => {
       evaluateFormula(formula);
-    }, 300);
+    }, 0);
     return () => clearTimeout(timer);
   }, [formula, variables]);
 

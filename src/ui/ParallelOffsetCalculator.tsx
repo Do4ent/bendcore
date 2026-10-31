@@ -370,9 +370,6 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
                 ))}
               </select>
             </div>
-            {getFieldError('outer_diameter') && (
-              <span className="error-text">{getFieldError('outer_diameter')?.message}</span>
-            )}
           </div>
 
           <div className="param-group">
@@ -423,7 +420,7 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
           <h3>Параметры смещения</h3>
 
           <div className="param-group">
-            <label>Угол гибки (градусы)</label>
+            <span className="param-label">Угол гибки (градусы)</span>
             <div className="slider-group">
               <input
                 type="range"
@@ -433,6 +430,7 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
                 value={params.bend_angle}
                 onChange={e => handleParameterChange('bend_angle', e.target.value)}
                 className={getFieldError('bend_angle') ? 'input-error' : ''}
+                aria-label="Регулятор угла гибки"
               />
               <input
                 type="number"
@@ -458,9 +456,6 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
               className={getFieldError('offset_distance') ? 'input-error' : ''}
               aria-label="Расстояние параллельного смещения"
             />
-            {getFieldError('offset_distance') && (
-              <span className="error-text">{getFieldError('offset_distance')?.message}</span>
-            )}
           </div>
 
           <div className="param-group">
@@ -474,9 +469,6 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
               className={getFieldError('bend_radius') ? 'input-error' : ''}
               aria-label="Радиус гибки трубы"
             />
-            {getFieldError('bend_radius') && (
-              <span className="error-text">{getFieldError('bend_radius')?.message}</span>
-            )}
           </div>
         </section>
 

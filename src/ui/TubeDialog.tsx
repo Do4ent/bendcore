@@ -177,6 +177,29 @@ const getMaterialDisplayName = (materialId: string): string => {
   return names[materialId] || materialId;
 };
 
+// Normalize flat or nested initialConfig to nested TubeConfig format
+function normalizeConfig(cfg: any): TubeConfig {
+  if (cfg && cfg.geometry) return cfg as TubeConfig; // Already nested
+  return {
+    geometry: {
+      outerDiameter: cfg?.outerDiameter ?? 0,
+      wallThickness: cfg?.wallThickness ?? 1.5,
+      length: cfg?.length ?? 1000,
+      material: cfg?.material ?? "steel-1020",
+      materialName: cfg?.materialName ?? "Custom",
+    },
+    bends: cfg?.bends ?? [],
+    ports: cfg?.ports ?? [],
+    advanced: cfg?.advanced ?? {
+      springbackFactor: 0.3,
+      bendCompensation: false,
+      lengthTolerance: 2.0,
+      angleTolerance: 0.5,
+      surfaceFinish: "Raw",
+    },
+  };
+}
+
 const DEFAULT_CONFIG: TubeConfig = {
   geometry: {
     outerDiameter: 0,
@@ -1160,7 +1183,7 @@ const TubeDialog: React.FC<TubeDialogProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<string>("geometry");
   const [config, setConfig] = useState<TubeConfig>(
-    initialConfig || DEFAULT_CONFIG
+    initialConfig ? normalizeConfig(initialConfig) : DEFAULT_CONFIG
   );
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [calculatedMass, setCalculatedMass] = useState<number | null>(null);
