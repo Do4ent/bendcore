@@ -1,16 +1,16 @@
 /**
  * Smoke test for Electron main process
  * Verifies that the main process can be instantiated without critical errors
+ * Skipped on CI - requires display server
  */
 
 import { spawn } from 'child_process';
 import path from 'path';
 
-describe('Electron Smoke Test', () => {
-  // Skip GUI tests on CI (no display available)
-  const testFn = process.env.CI ? it.skip : it;
+const describeFn = process.env.CI ? describe.skip : describe;
 
-  testFn('should start Electron without critical errors', async () => {
+describeFn('Electron Smoke Test', () => {
+  it('should start Electron without critical errors', async () => {
     const electronPath = path.join(__dirname, '../node_modules/.bin/electron');
     const appPath = path.join(__dirname, '..');
 
