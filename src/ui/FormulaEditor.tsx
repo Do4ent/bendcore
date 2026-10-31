@@ -248,12 +248,9 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({
               className="variable-button"
               onClick={() => handleInsertVariable(v.name)}
               title={`${v.description}: ${v.value}${v.unit}`}
+              data-value={`${v.value}${v.unit}`}
             >
               {v.name}
-              <span className="variable-value">
-                {v.value}
-                {v.unit}
-              </span>
             </button>
           ))}
         </div>
