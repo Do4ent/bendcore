@@ -10,7 +10,10 @@
   },
   "scripts": {
     "dev": "electron . --debug",
+    "dev:web": "webpack serve --config webpack.web.js --mode development",
+    "dev:web:prod": "webpack serve --config webpack.web.js --mode production",
     "build": "tsc && webpack && node scripts/generate-index.js",
+    "build:web": "tsc && webpack --config webpack.web.js --mode production",
     "test": "jest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
@@ -39,48 +42,50 @@
   "author": "Do4ent",
   "license": "MIT",
   "dependencies": {
+    "@growthbook/growthbook": "^0.36.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "three": "^0.128.0",
-    "@growthbook/growthbook": "^0.36.0",
     "uuid": "^11.1.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "@types/jest": "^29.5.0",
-    "@types/node": "^20.0.0",
-    "typescript": "^5.1.0",
-    "tailwindcss": "^3.3.0",
-    "postcss": "^8.4.0",
-    "autoprefixer": "^10.4.0",
-    "webpack": "^5.88.0",
-    "webpack-cli": "^5.1.0",
-    "ts-loader": "^9.4.0",
-    "style-loader": "^3.3.0",
-    "css-loader": "^6.8.0",
-    "postcss-loader": "^7.3.0",
-    "electron": "^25.0.0",
-    "electron-builder": "^24.4.0",
     "@babel/core": "^7.22.0",
     "@babel/preset-typescript": "^7.22.0",
-    "babel-loader": "^9.1.0",
-    "jest": "^29.5.0",
-    "ts-jest": "^29.1.0",
-    "@testing-library/react": "^14.0.0",
+    "@playwright/test": "^1.40.0",
     "@testing-library/jest-dom": "^6.1.0",
+    "@testing-library/react": "^14.0.0",
     "@testing-library/user-event": "^14.5.0",
-    "prettier": "^3.0.0",
+    "@types/express": "^4.17.0",
+    "@types/jest": "^29.5.0",
+    "@types/multer": "^1.4.7",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/ws": "^8.18.1",
+    "autoprefixer": "^10.4.0",
+    "babel-loader": "^9.1.0",
+    "css-loader": "^6.8.0",
+    "electron": "^25.0.0",
+    "electron-builder": "^24.4.0",
     "eslint": "^8.42.0",
     "eslint-plugin-react": "^7.32.0",
-    "@playwright/test": "^1.40.0",
-    "mini-css-extract-plugin": "^2.9.0",
-    "jest-environment-jsdom": "^29.5.0",
+    "html-webpack-plugin": "^5.6.8",
     "identity-obj-proxy": "^3.0.0",
-    "@types/ws": "^8.18.1",
-    "@types/express": "^4.17.0",
-    "@types/multer": "^1.4.7"
+    "jest": "^29.5.0",
+    "jest-environment-jsdom": "^29.5.0",
+    "mini-css-extract-plugin": "^2.9.0",
+    "postcss": "^8.4.0",
+    "postcss-loader": "^7.3.0",
+    "prettier": "^3.0.0",
+    "style-loader": "^3.3.0",
+    "tailwindcss": "^3.3.0",
+    "ts-jest": "^29.1.0",
+    "ts-loader": "^9.4.0",
+    "typescript": "^5.1.0",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0",
+    "webpack-dev-server": "^6.1.0"
   },
   "engines": {
     "node": ">=16.0.0",
@@ -106,16 +111,22 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "certificateFile": null,
       "certificatePassword": null,
-      "signingHashAlgorithms": ["sha256"],
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
       "sign": null
     },
     "nsis": {
