@@ -51,6 +51,8 @@ describe('ImportDialog - Integration Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOnImport.mockClear();
+    mockOnCancel.mockClear();
   });
 
   test('dialog closes on cancel', () => {
@@ -182,6 +184,7 @@ describe('ImportDialog - Mock Server Integration', () => {
   });
 
   test('calls analyzeStep on STEP file', async () => {
+    const onImportFn = jest.fn();
     const { analyzeStep } = require('../tubeService');
 
     const stepFile = new File(['mock STEP content'], 'test.step', { type: 'application/step' });
@@ -189,7 +192,7 @@ describe('ImportDialog - Mock Server Integration', () => {
     render(
       <ImportDialog
         isOpen={true}
-        onImport={mockOnImport}
+        onImport={onImportFn}
       />
     );
 
@@ -218,11 +221,12 @@ describe('ImportDialog - Mock Server Integration', () => {
 
 describe('ImportDialog - Props Validation', () => {
   test('requires onImport callback', () => {
+    const onImportFn = jest.fn();
     const { container } = render(
       <ImportDialog
         isOpen={true}
         onCancel={mockOnCancel}
-        onImport={mockOnImport}
+        onImport={onImportFn}
       />
     );
 
@@ -230,10 +234,11 @@ describe('ImportDialog - Props Validation', () => {
   });
 
   test('handles isOpen prop change', () => {
+    const onImportFn = jest.fn();
     const { rerender } = render(
       <ImportDialog
         isOpen={true}
-        onImport={mockOnImport}
+        onImport={onImportFn}
       />
     );
 
@@ -242,7 +247,7 @@ describe('ImportDialog - Props Validation', () => {
     rerender(
       <ImportDialog
         isOpen={false}
-        onImport={mockOnImport}
+        onImport={onImportFn}
       />
     );
 
