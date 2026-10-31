@@ -242,10 +242,9 @@ describe('FilePickerDialog Component', () => {
         <FilePickerDialog isOpen={true} onClose={mockOnClose} onSelect={mockOnSelect} />
       );
 
-      // Switch to browse tab (if needed)
-      // Simulate file selection through the path input
-      const pathInput = screen.getByPlaceholderText('Enter file path...');
+      // Switch to browse tab first, then interact with path input
       fireEvent.click(screen.getByText('Browse'));
+      const pathInput = screen.getByPlaceholderText('Enter file path...');
 
       fireEvent.change(pathInput, { target: { value: '/home/newfile.bnd' } });
 

@@ -214,7 +214,7 @@ describe('SaveDialog Component', () => {
       render(
         <SaveDialog isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />
       );
-      expect(screen.getByText(/BendCore project file/)).toBeInTheDocument();
+      expect(screen.getByTestId('format-description')).toHaveTextContent(/BendCore project file/);
     });
   });
 
