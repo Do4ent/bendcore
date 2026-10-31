@@ -59,21 +59,31 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Install
+      - name: Install dependencies
         run: set -o pipefail; npm ci --no-audit --no-fund 2>&1 | tee ci-frontend.log
 
-      - name: Typecheck
+      - name: TypeScript strict mode check
         run: set -o pipefail; npm run typecheck 2>&1 | tee -a ci-frontend.log
 
       - name: Build (tsc + webpack)
         run: set -o pipefail; npm run build 2>&1 | tee -a ci-frontend.log
 
-      - name: Test
+      - name: Unit tests
         run: set -o pipefail; npm test -- --ci --runInBand 2>&1 | tee -a ci-frontend.log
 
-      - name: Ошибки в аннотации (только при падении)
+      - name: Verify dist/ output
+        run: |
+          [[ -d dist/web ]] && [[ -f dist/web/index.html ]] && echo "✓ Build output verified" || { echo "✗ Build output missing"; exit 1; }
+
+      - name: Report errors (on failure)
         if: failure()
         run: |
-          grep -n -E "error TS|ERROR|Error:|FAIL|✕" ci-frontend.log | head -n 30 \
-            | while IFS= read -r line; do echo "::error title=frontend::${line:0:900}"; done || true
-          tail -n 20 ci-frontend.log | while IFS= read -r line; do echo "::error title=frontend-tail::${line:0:900}"; done || true
+          echo "=== TypeScript Errors ===" >&2
+          grep -n "error TS" ci-frontend.log | head -n 20 || true
+          echo "=== Build Errors ===" >&2
+          grep -n "ERROR\|Error:" ci-frontend.log | head -n 20 || true
+          echo "=== Test Failures ===" >&2
+          grep -n "FAIL\|✕" ci-frontend.log | head -n 20 || true
+          echo "=== Last 30 lines ===" >&2
+          tail -n 30 ci-frontend.log || true
+          exit 1
