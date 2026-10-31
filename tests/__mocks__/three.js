@@ -28,6 +28,20 @@ class Vector3 {
     this.z = ax * v.y - ay * v.x;
     return this;
   }
+  // Same semantics as three.js: write (a x b) into this vector
+  crossVectors(a, b) {
+    const ax = a.x, ay = a.y, az = a.z;
+    const bx = b.x, by = b.y, bz = b.z;
+    this.x = ay * bz - az * by;
+    this.y = az * bx - ax * bz;
+    this.z = ax * by - ay * bx;
+    return this;
+  }
+  addScaledVector(v, s) { this.x += v.x * s; this.y += v.y * s; this.z += v.z * s; return this; }
+  addVectors(a, b) { this.x = a.x + b.x; this.y = a.y + b.y; this.z = a.z + b.z; return this; }
+  subVectors(a, b) { this.x = a.x - b.x; this.y = a.y - b.y; this.z = a.z - b.z; return this; }
+  setScalar(s) { this.x = s; this.y = s; this.z = s; return this; }
+  multiply(v) { this.x *= v.x; this.y *= v.y; this.z *= v.z; return this; }
   distanceTo(v) {
     return Math.sqrt((this.x-v.x)**2 + (this.y-v.y)**2 + (this.z-v.z)**2);
   }
@@ -433,6 +447,21 @@ class Sprite extends Object3D {
   }
 }
 
+class LOD extends Object3D {
+  constructor() {
+    super();
+    this.type = 'LOD';
+    this.levels = [];
+  }
+  addLevel(object, distance = 0) {
+    this.levels.push({ distance, object });
+    this.levels.sort((a, b) => a.distance - b.distance);
+    this.add(object);
+    return this;
+  }
+  update() { return this; }
+}
+
 class Group extends Object3D {
   constructor() {
     super();
@@ -628,6 +657,7 @@ module.exports = {
   Points,
   Sprite,
   Group,
+  LOD,
   WebGLRenderer,
   DirectionalLight,
   AmbientLight,
