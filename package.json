@@ -24,7 +24,8 @@
     "format": "prettier --write src/ui",
     "start": "electron .",
     "dist": "electron-builder",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
+    "typecheck:api": "tsc --noEmit -p tsconfig.api.json"
   },
   "keywords": [
     "CAD",

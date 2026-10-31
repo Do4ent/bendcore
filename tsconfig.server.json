@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/server",
+    "lib": ["ES2020"],
+    "jsx": "react",
+    "skipLibCheck": true,
+    "noEmitOnError": false
+  },
+  "include": ["src/collaboration/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx"]
+}

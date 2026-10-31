@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/api",
+    "lib": ["ES2020"],
+    "jsx": "react",
+    "skipLibCheck": true,
+    "noImplicitAny": false
+  },
+  "include": ["src/api/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx"]
+}
