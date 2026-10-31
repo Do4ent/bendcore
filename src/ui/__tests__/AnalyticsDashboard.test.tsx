@@ -171,6 +171,24 @@ describe('AnalyticsDashboard', () => {
     });
   });
 
+  test('should keep KPI cards numeric when the KPI response is partial', async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string) =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(url === '/api/analytics/kpi' ? { sessions: 1500 } : { experiments: [], events: [] }),
+      })
+    );
+
+    render(<AnalyticsDashboard />);
+    await waitFor(() => {
+      expect(screen.getByRole('article', { name: 'Sessions: 1.5K' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('article', { name: 'Events: 0' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Conversion Rate: 0.0%' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Avg Duration: 0s' })).toBeInTheDocument();
+  });
+
   test('should auto-refresh data', async () => {
     jest.useFakeTimers();
     render(<AnalyticsDashboard refreshInterval={5} />);
