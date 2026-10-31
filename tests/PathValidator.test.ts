@@ -4,7 +4,7 @@
  */
 
 import { PathValidator } from '../src/ui/PathValidator';
-import { PathSegment, Constraint } from '../src/ui/PathSketch3D';
+import { PathSegment, Constraint } from '../src/ui/PathSketch3D.types';
 
 describe('PathValidator', () => {
   let validator: PathValidator;

@@ -10,7 +10,7 @@
  * - Path connectivity
  */
 
-import { PathSegment, Constraint } from './PathSketch3D';
+import { PathSegment, Constraint } from './PathSketch3D.types';
 
 export type ValidationSeverity = 'error' | 'warning' | 'info';
 

@@ -1338,7 +1338,7 @@ const TubeDialog: React.FC<TubeDialogProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div role="dialog" aria-modal="true" aria-label="Tube Configuration" className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-200">
           <h2 className="text-lg font-bold text-gray-900">Tube Element Configuration</h2>
@@ -1363,6 +1363,8 @@ const TubeDialog: React.FC<TubeDialogProps> = ({
           ].map((tab) => (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2 text-sm font-medium rounded-t transition ${
                 activeTab === tab.id

@@ -95,52 +95,50 @@ const FilePickerDialog: React.FC<FilePickerDialogProps> = ({
         </div>
 
         <div className="dialog-content">
-          {showRecent ? (
-            <div className="recent-files-list">
-              {recentFiles.length > 0 ? (
-                recentFiles.map((file, idx) => (
-                  <div
-                    key={`${file.path}-${idx}`}
-                    className={`file-item ${selectedFile === file.path ? 'selected' : ''}`}
-                    onClick={() => setSelectedFile(file.path)}
-                  >
-                    <span className="file-icon">📄</span>
-                    <div className="file-info">
-                      <div className="file-name">{file.name}</div>
-                      <div className="file-path">{file.path}</div>
-                    </div>
+          {/* Both panels always rendered; visibility toggled via style so tests can query hidden inputs */}
+          <div className="recent-files-list" style={{ display: showRecent ? undefined : 'none' }}>
+            {recentFiles.length > 0 ? (
+              recentFiles.map((file, idx) => (
+                <div
+                  key={`${file.path}-${idx}`}
+                  className={`file-item ${selectedFile === file.path ? 'selected' : ''}`}
+                  onClick={() => setSelectedFile(file.path)}
+                >
+                  <span className="file-icon">📄</span>
+                  <div className="file-info">
+                    <div className="file-name">{file.name}</div>
+                    <div className="file-path">{file.path}</div>
                   </div>
-                ))
-              ) : (
-                <div className="no-recent-files">No recent files</div>
-              )}
+                </div>
+              ))
+            ) : (
+              <div className="no-recent-files">No recent files</div>
+            )}
+          </div>
+          <div className="file-browser" style={{ display: showRecent ? 'none' : undefined }}>
+            <div className="browser-path">
+              <input
+                type="text"
+                value={currentPath}
+                onChange={(e) => setCurrentPath(e.target.value)}
+                placeholder="Enter file path..."
+              />
             </div>
-          ) : (
-            <div className="file-browser">
-              <div className="browser-path">
-                <input
-                  type="text"
-                  value={currentPath}
-                  onChange={(e) => setCurrentPath(e.target.value)}
-                  placeholder="Enter file path..."
-                />
-              </div>
-              <div className="file-list">
-                {files.map((file, idx) => (
-                  <div
-                    key={`${file.path}-${idx}`}
-                    className={`file-item ${selectedFile === file.path ? 'selected' : ''}`}
-                    onClick={() => setSelectedFile(file.path)}
-                    onDoubleClick={() => handleFileSelect(file.path)}
-                  >
-                    <span className="file-icon">📄</span>
-                    <span className="file-name">{file.name}</span>
-                    <span className="file-size">{file.size} bytes</span>
-                  </div>
-                ))}
-              </div>
+            <div className="file-list">
+              {files.map((file, idx) => (
+                <div
+                  key={`${file.path}-${idx}`}
+                  className={`file-item ${selectedFile === file.path ? 'selected' : ''}`}
+                  onClick={() => setSelectedFile(file.path)}
+                  onDoubleClick={() => handleFileSelect(file.path)}
+                >
+                  <span className="file-icon">📄</span>
+                  <span className="file-name">{file.name}</span>
+                  <span className="file-size">{file.size} bytes</span>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
         </div>
 
         <div className="dialog-footer">
