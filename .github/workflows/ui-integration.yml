@@ -1,0 +1,79 @@
+name: UI Integration Tests
+
+# Run on every push to main/develop and all PRs
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  ui-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Start mock server in background
+        run: |
+          node scripts/mock-server.js > /tmp/mock-server.log 2>&1 &
+          echo $! > /tmp/mock-server.pid
+          # Wait for server to start
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080/v1/health >/dev/null 2>&1; then
+              echo "✓ Mock server started"
+              break
+            fi
+            sleep 0.5
+          done
+
+      - name: Run UI integration tests
+        run: npm test -- ImportDialog.integration --coverage --watchAll=false
+
+      - name: Test ImportDialog with mock data
+        run: |
+          set -o pipefail
+          {
+            echo "=== Testing /v1/tube endpoint ==="
+            echo "od,length" | curl -sf -X POST --data-binary @- "http://localhost:8080/v1/tube?format=csv&od=16&wall=1.5" | jq .
+
+            echo ""
+            echo "=== Testing /v1/analyze endpoint ==="
+            echo "test" | curl -sf -X POST --data-binary @- "http://localhost:8080/v1/analyze?format=step&deflection=0.1" | jq .
+          } | tee /tmp/endpoint-test.log
+
+      - name: Stop mock server
+        if: always()
+        run: |
+          if [ -f /tmp/mock-server.pid ]; then
+            kill $(cat /tmp/mock-server.pid) 2>/dev/null || true
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-integration-results
+          path: |
+            coverage/
+            /tmp/mock-server.log
+            /tmp/endpoint-test.log
+          if-no-files-found: warn
+
+      - name: Report coverage
+        if: always()
+        run: |
+          if [ -f coverage/coverage-final.json ]; then
+            echo "=== Coverage Report ==="
+            npx nyc report --reporter=text-summary 2>/dev/null || true
+          fi
