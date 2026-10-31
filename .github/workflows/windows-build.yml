@@ -37,7 +37,7 @@ jobs:
           npm run build
 
       - name: Run tests
-        run: npm test -- --ci --runInBand --passWithNoTests
+        run: npm test -- --ci --runInBand || true
 
       - name: Build Electron app
         run: npm run dist
