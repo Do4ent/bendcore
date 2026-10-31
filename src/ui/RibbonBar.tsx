@@ -139,6 +139,14 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
     [onCommand]
   );
 
+  // Context-sensitive ribbon: open the tab matching the active document type.
+  const activeDocumentType = activeDocument?.type ?? null;
+  useEffect(() => {
+    if (activeDocumentType) {
+      setActiveTab(activeDocumentType);
+    }
+  }, [activeDocumentType]);
+
   // Initialize keyboard shortcuts on mount
   useEffect(() => {
     initializeShortcutListeners(handleCommand);

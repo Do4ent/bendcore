@@ -10,11 +10,33 @@ import {
   listAllCategories,
 } from '../src/ui/ColorScheme';
 
+// The specification defines 11 colour categories; the coordinate axes are a
+// single category ("axes") rendered with three colours (X, Y, Z).
+const EXPECTED_KEYS = [
+  'tube',
+  'create',
+  'delete',
+  'import',
+  'links',
+  'edit',
+  'update',
+  'freeze',
+  'auxiliary',
+  'axes_x',
+  'axes_y',
+  'axes_z',
+  'neutral',
+];
+
 describe('ColorScheme', () => {
   describe('Color Definitions', () => {
     test('should have 11 color categories defined', () => {
-      const categories = Object.keys(colorScheme);
-      expect(categories.length).toBe(11);
+      expect(Object.keys(colorScheme).sort()).toEqual([...EXPECTED_KEYS].sort());
+
+      const specCategories = new Set(
+        Object.keys(colorScheme).map((key) => (key.startsWith('axes_') ? 'axes' : key))
+      );
+      expect(specCategories.size).toBe(11);
     });
 
     test('should have all required color categories', () => {
@@ -192,13 +214,14 @@ describe('ColorScheme', () => {
     test('should return array of all categories', () => {
       const categories = listAllCategories();
       expect(Array.isArray(categories)).toBe(true);
-      expect(categories.length).toBe(11);
+      expect(categories).toHaveLength(EXPECTED_KEYS.length);
+      expect(categories).toEqual(Object.values(colorScheme));
     });
 
     test('should return all unique categories', () => {
       const categories = listAllCategories();
       const uniqueNames = new Set(categories.map((c) => c.name));
-      expect(uniqueNames.size).toBe(11);
+      expect(uniqueNames.size).toBe(categories.length);
     });
 
     test('returned categories should match schema', () => {
