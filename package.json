@@ -24,6 +24,7 @@
     "format": "prettier --write src/ui",
     "start": "electron .",
     "dist": "electron-builder",
+    "verify": "node scripts/verify-build.js",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "typecheck:api": "tsc --noEmit -p tsconfig.api.json"
   },
@@ -86,19 +87,47 @@
   "build": {
     "appId": "com.do4ent.bendcore",
     "productName": "BendCore CAD",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
     "files": [
       "dist/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "package.json"
     ],
+    "extraMetadata": {
+      "name": "bendcore-ui"
+    },
     "win": {
       "target": [
-        "nsis",
-        "msi"
-      ]
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "certificateFile": null,
+      "certificatePassword": null,
+      "signingHashAlgorithms": ["sha256"],
+      "sign": null
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": null,
+      "uninstallerIcon": null,
+      "installerHeaderIcon": null,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BendCore CAD"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
     }
   }
 }

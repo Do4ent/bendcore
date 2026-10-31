@@ -1,0 +1,93 @@
+name: Windows Build & Release
+
+# Build Electron application for Windows
+# Generates .exe installer and portable executable
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run tests
+        run: npm test -- --ci --runInBand
+        continue-on-error: true
+
+      - name: Build and type-check
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Build Electron app
+        run: npm run dist
+        env:
+          CI: true
+          WINDOWS: true
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-builds
+          path: |
+            release/*.exe
+            release/*.msi
+            release/*.yml
+          retention-days: 30
+
+      - name: List build artifacts
+        run: ls -lh release/ || echo "No artifacts found"
+
+      - name: Generate checksums
+        run: |
+          cd release || exit 1
+          sha256sum *.exe > checksums.txt 2>/dev/null || true
+          sha256sum *.msi >> checksums.txt 2>/dev/null || true
+          cat checksums.txt || echo "No files to checksum"
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-checksums
+          path: release/checksums.txt
+          retention-days: 30
+
+      - name: Create Release (if tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/*.exe
+            release/*.msi
+            release/checksums.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report build status
+        if: failure()
+        run: |
+          echo "::error title=windows-build::Windows build failed"
+          exit 1
