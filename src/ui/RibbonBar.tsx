@@ -15,8 +15,8 @@ import BendDataDialog from "./BendDataDialog";
 import CheckPanel from "./CheckPanel";
 import InstancesPanel from "./InstancesPanel";
 import DrawingWorkspace from "./DrawingWorkspace";
+import Viewport3D from "./Viewport3D";
 import PropertiesPanel from "./components/PropertiesPanel";
-import ViewportControls from "./components/ViewportControls";
 import { t } from "./core/i18n";
 import type { CheckTubeInput, Feed } from "./core/types";
 
@@ -877,14 +877,22 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
           {workPanel === null && (
             <div className="flex h-full w-full gap-4 p-4 bg-white">
               {/* 3D Viewport - Center */}
-              <div className="flex-1 rounded border border-gray-300 bg-gray-900 relative">
-                <ViewportControls
-                  activeTube={activeTube}
-                  onGeometryLoaded={() => console.log('Geometry loaded')}
+              <div className="flex-1 rounded border border-gray-300 bg-gray-900 relative overflow-hidden">
+                <Viewport3D
+                  meshes={[]}
+                  onCommand={handleCommand}
                 />
                 {activeTube && (
                   <div className="absolute bottom-4 left-4 text-xs text-white bg-black/50 px-3 py-2 rounded">
-                    Tube: {activeTube.name} | OD: {activeTube.path}mm | L: {activeTube.straight_length}mm
+                    Tube: {activeTube.name} | Segments: {Array.isArray(activeTube.path) ? activeTube.path.length : '?'}
+                  </div>
+                )}
+                {!activeTube && (
+                  <div className="absolute inset-0 flex items-center justify-center text-gray-400 pointer-events-none">
+                    <div className="text-center">
+                      <p className="mb-2">No tube loaded</p>
+                      <p className="text-xs">Create new or import file</p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -892,16 +900,37 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
               {/* Properties Panel - Right */}
               <div className="w-80 border-l border-gray-300 overflow-y-auto bg-gray-50">
                 {activeTube ? (
-                  <PropertiesPanel
-                    tube={activeTube}
-                    onChange={(updates) => {
-                      onCommand('update-tube', { ...activeTube, ...updates });
-                    }}
-                  />
+                  <div className="p-4">
+                    <h3 className="font-bold mb-4 text-sm">Tube Properties</h3>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <label className="text-gray-600">Name</label>
+                        <p className="font-medium">{activeTube.name}</p>
+                      </div>
+                      <div>
+                        <label className="text-gray-600">Designation</label>
+                        <p className="font-medium">{activeTube.designation || '—'}</p>
+                      </div>
+                      <div>
+                        <label className="text-gray-600">Material</label>
+                        <p className="font-medium">{activeTube.material || '—'}</p>
+                      </div>
+                      <div>
+                        <label className="text-gray-600">Segments</label>
+                        <p className="font-medium">{Array.isArray(activeTube.path) ? activeTube.path.length : '?'}</p>
+                      </div>
+                      <button
+                        onClick={() => setTubeDialogOpen(true)}
+                        className="w-full mt-4 px-3 py-2 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
+                      >
+                        Edit Properties
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="p-4 text-gray-500 text-sm">
-                    <p className="mb-4">No tube selected</p>
-                    <p>• Create new tube from toolbar</p>
+                    <p className="mb-4 font-medium">Properties</p>
+                    <p className="mb-2">• Create new tube</p>
                     <p>• Or import DWF/STEP file</p>
                   </div>
                 )}
