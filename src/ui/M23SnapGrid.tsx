@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 
 export interface SnapGridProps {
   isOpen: boolean;
@@ -19,6 +19,11 @@ const SnapGrid: React.FC<SnapGridProps> = ({
     tangent: false
   });
 
+  const idPrefix = useId();
+  const gridSizeId = `${idPrefix}-grid-size`;
+  const snapPointsId = `${idPrefix}-snap-points`;
+  const snapGridId = `${idPrefix}-snap-grid`;
+
   const bgColor = isDarkMode ? '#2a2a2a' : '#ffffff';
   const textColor = isDarkMode ? '#ffffff' : '#000000';
 
@@ -29,12 +34,13 @@ const SnapGrid: React.FC<SnapGridProps> = ({
       <div className="snap-grid-dialog" style={{ backgroundColor: bgColor, color: textColor }}>
         <div className="snap-header">
           <h2>Snap & Grid Settings</h2>
-          <button className="close-btn" onClick={onClose}>×</button>
+          <button className="close-btn" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="snap-body">
           <div className="grid-size-section">
-            <label>Grid Size:</label>
+            <label htmlFor={gridSizeId}>Grid Size:</label>
             <input
+              id={gridSizeId}
               type="number"
               value={gridSize}
               onChange={(e) => setGridSize(parseInt(e.target.value))}
@@ -45,19 +51,21 @@ const SnapGrid: React.FC<SnapGridProps> = ({
           <div className="snap-types-section">
             <div className="snap-type">
               <input
+                id={snapPointsId}
                 type="checkbox"
                 checked={snapTypes.point}
                 onChange={(e) => setSnapTypes({ ...snapTypes, point: e.target.checked })}
               />
-              <label>Snap to Points</label>
+              <label htmlFor={snapPointsId}>Snap to Points</label>
             </div>
             <div className="snap-type">
               <input
+                id={snapGridId}
                 type="checkbox"
                 checked={snapTypes.grid}
                 onChange={(e) => setSnapTypes({ ...snapTypes, grid: e.target.checked })}
               />
-              <label>Snap to Grid</label>
+              <label htmlFor={snapGridId}>Snap to Grid</label>
             </div>
           </div>
         </div>

@@ -41,6 +41,18 @@ export class MouseGestures {
   private readonly DOUBLE_CLICK_THRESHOLD = 300;  // ms
   private readonly DRAG_THRESHOLD = 5;  // pixels
 
+  // Listeners registered by attachToElement, kept so they can be removed again
+  private attachedElement: HTMLElement | null = null;
+  private readonly onElementMouseDown = (e: MouseEvent) =>
+    this.handleMouseDown(e, this.attachedElement as HTMLElement);
+  private readonly onElementMouseMove = (e: MouseEvent) =>
+    this.handleMouseMove(e, this.attachedElement as HTMLElement);
+  private readonly onElementMouseUp = (e: MouseEvent) => this.handleMouseUp(e);
+  private readonly onElementWheel = (e: WheelEvent) => this.handleWheel(e);
+  private readonly onElementContextMenu = (e: Event) => e.preventDefault();
+  private readonly onDocumentKeyDown = (e: KeyboardEvent) => this.handleKeyDown(e);
+  private readonly onDocumentKeyUp = (e: KeyboardEvent) => this.handleKeyUp(e);
+
   constructor(camera: OrbitCamera, config?: MouseGestureConfig) {
     this.camera = camera;
     this.config = {
@@ -87,7 +99,7 @@ export class MouseGestures {
       this.activeGesture = 'orbit';
     } else if (event.button === 1) {  // Middle click
       this.activeGesture = 'pan';
-    } else if (event.button === 0 && this.keysPressed.has('Shift')) {  // Left + Shift = pan
+    } else if (event.button === 0 && this.isShiftActive(event)) {  // Left + Shift = pan
       this.activeGesture = 'pan';
     }
 
@@ -182,7 +194,7 @@ export class MouseGestures {
 
     // Single click selection
     if (event.button === 0) {  // Left click
-      if (this.keysPressed.has('Control') || this.keysPressed.has('Meta')) {
+      if (this.isMultiSelectModifierActive(event)) {
         // Multi-select
         this.emit({
           type: 'multi-select',
@@ -266,25 +278,54 @@ export class MouseGestures {
    * Attach event listeners to viewport element
    */
   attachToElement(element: HTMLElement): void {
-    element.addEventListener('mousedown', (e) => this.handleMouseDown(e, element));
-    element.addEventListener('mousemove', (e) => this.handleMouseMove(e, element));
-    element.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-    element.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
-    element.addEventListener('contextmenu', (e) => e.preventDefault());
+    if (this.attachedElement) {
+      this.detachFromElement(this.attachedElement);
+    }
+    this.attachedElement = element;
 
-    document.addEventListener('keydown', (e) => this.handleKeyDown(e));
-    document.addEventListener('keyup', (e) => this.handleKeyUp(e));
+    element.addEventListener('mousedown', this.onElementMouseDown);
+    element.addEventListener('mousemove', this.onElementMouseMove);
+    element.addEventListener('mouseup', this.onElementMouseUp);
+    element.addEventListener('wheel', this.onElementWheel, { passive: false });
+    element.addEventListener('contextmenu', this.onElementContextMenu);
+
+    document.addEventListener('keydown', this.onDocumentKeyDown);
+    document.addEventListener('keyup', this.onDocumentKeyUp);
   }
 
   /**
    * Detach event listeners from viewport element
    */
   detachFromElement(element: HTMLElement): void {
-    element.removeEventListener('mousedown', (e) => this.handleMouseDown(e, element));
-    element.removeEventListener('mousemove', (e) => this.handleMouseMove(e, element));
-    element.removeEventListener('mouseup', (e) => this.handleMouseUp(e));
-    element.removeEventListener('wheel', (e) => this.handleWheel(e));
-    element.removeEventListener('contextmenu', (e) => e.preventDefault());
+    element.removeEventListener('mousedown', this.onElementMouseDown);
+    element.removeEventListener('mousemove', this.onElementMouseMove);
+    element.removeEventListener('mouseup', this.onElementMouseUp);
+    element.removeEventListener('wheel', this.onElementWheel);
+    element.removeEventListener('contextmenu', this.onElementContextMenu);
+
+    if (this.attachedElement === element) {
+      document.removeEventListener('keydown', this.onDocumentKeyDown);
+      document.removeEventListener('keyup', this.onDocumentKeyUp);
+      this.attachedElement = null;
+    }
+  }
+
+  /**
+   * Shift held: tracked key codes (ShiftLeft/ShiftRight) or the event's own flag
+   */
+  private isShiftActive(event: MouseEvent): boolean {
+    return event.shiftKey || this.getModifierState().shift;
+  }
+
+  /**
+   * Modifier configured for multi-select (Ctrl, or Cmd on macOS; or Shift)
+   */
+  private isMultiSelectModifierActive(event: MouseEvent): boolean {
+    if (this.config.multiSelectModifier === 'shift') {
+      return this.isShiftActive(event);
+    }
+    const modifiers = this.getModifierState();
+    return event.ctrlKey || event.metaKey || modifiers.ctrl || modifiers.meta;
   }
 
   /**

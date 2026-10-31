@@ -277,7 +277,7 @@ describe('MouseGestures', () => {
     });
 
     test('should unregister handlers', () => {
-      const handler = () => {};
+      const handler = jest.fn();
       gestures.on(handler);
       gestures.off(handler);
 
@@ -285,7 +285,44 @@ describe('MouseGestures', () => {
       const initialLength = eventLog.length;
       gestures.handleWheel(wheelEvent);
 
-      expect(eventLog.length).toBe(initialLength);
+      // The removed handler is not called; the one still registered is
+      expect(handler).not.toHaveBeenCalled();
+      expect(eventLog.length).toBe(initialLength + 1);
+    });
+  });
+
+  describe('element attachment', () => {
+    test('should stop handling events after detach', () => {
+      const element = document.createElement('div');
+      gestures.attachToElement(element);
+
+      element.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, cancelable: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+      expect(eventLog.map((e) => e.type)).toEqual(['zoom', 'deselect']);
+
+      gestures.detachFromElement(element);
+      element.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, cancelable: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+      expect(eventLog.map((e) => e.type)).toEqual(['zoom', 'deselect']);
+    });
+  });
+
+  describe('modifier keys', () => {
+    test('should pan with Shift + left drag', () => {
+      gestures.handleKeyDown(new KeyboardEvent('keydown', { code: 'ShiftLeft' }));
+
+      const viewport = document.createElement('div');
+      gestures.handleMouseDown(new MouseEvent('mousedown', { clientX: 100, clientY: 100, button: 0 }), viewport);
+      gestures.handleMouseMove(new MouseEvent('mousemove', { clientX: 120, clientY: 110, button: 0 }), viewport);
+
+      expect(eventLog.filter((e) => e.type === 'pan').length).toBe(1);
+    });
+
+    test('should multi-select when the click itself carries ctrlKey', () => {
+      gestures.handleMouseDown(new MouseEvent('mousedown', { clientX: 10, clientY: 10, button: 0, ctrlKey: true }), document.createElement('div'));
+      gestures.handleMouseUp(new MouseEvent('mouseup', { clientX: 10, clientY: 10, button: 0, ctrlKey: true }));
+
+      expect(eventLog.map((e) => e.type)).toEqual(['multi-select']);
     });
   });
 

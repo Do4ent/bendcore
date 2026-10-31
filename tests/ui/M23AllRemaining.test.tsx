@@ -137,8 +137,15 @@ describe('M23 Remaining Components - Batch Tests', () => {
 
     test('should have snap options', () => {
       render(<SnapGrid isOpen={true} onClose={mockOnClose} />);
-      expect(screen.getByLabelText('Snap to Points')).toBeInTheDocument();
-      expect(screen.getByLabelText('Snap to Grid')).toBeInTheDocument();
+      const snapToPoints = screen.getByLabelText('Snap to Points');
+      const snapToGrid = screen.getByLabelText('Snap to Grid');
+      expect(snapToPoints).toBeChecked();
+      expect(snapToGrid).toBeChecked();
+
+      // Labels are associated with their checkboxes, so clicking one toggles it
+      fireEvent.click(screen.getByText('Snap to Points'));
+      expect(snapToPoints).not.toBeChecked();
+      expect(snapToGrid).toBeChecked();
     });
   });
 
