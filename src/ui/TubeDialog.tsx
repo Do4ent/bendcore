@@ -179,7 +179,7 @@ const getMaterialDisplayName = (materialId: string): string => {
 
 const DEFAULT_CONFIG: TubeConfig = {
   geometry: {
-    outerDiameter: 16.0,
+    outerDiameter: 0,
     wallThickness: 1.5,
     length: 1000,
     material: "steel-1020",
@@ -1341,7 +1341,7 @@ const TubeDialog: React.FC<TubeDialogProps> = ({
       <div role="dialog" aria-modal="true" aria-label="Tube Configuration" className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-200">
-          <h2 className="text-lg font-bold text-gray-900">Tube Element Configuration</h2>
+          <h2 className="text-lg font-bold text-gray-900">Tube Configuration</h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 text-2xl leading-none"

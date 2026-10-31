@@ -423,18 +423,16 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
           <h3>Параметры смещения</h3>
 
           <div className="param-group">
-            <label htmlFor="angle">Угол гибки (градусы)</label>
+            <label>Угол гибки (градусы)</label>
             <div className="slider-group">
               <input
                 type="range"
-                id="angle"
                 min="5"
                 max="180"
                 step="1"
                 value={params.bend_angle}
                 onChange={e => handleParameterChange('bend_angle', e.target.value)}
                 className={getFieldError('bend_angle') ? 'input-error' : ''}
-                aria-hidden="true"
               />
               <input
                 type="number"
