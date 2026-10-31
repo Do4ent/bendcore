@@ -132,6 +132,8 @@ describe('ThreeJsRenderer', () => {
       scene.add(mesh);
 
       camera.position.set(0, 0, 5);
+      // Raycaster reads camera.matrixWorld; the renderer normally updates it each frame.
+      camera.updateMatrixWorld();
       const mouse = new THREE.Vector2(0, 0);
       raycaster.setFromCamera(mouse, camera);
 
@@ -178,7 +180,18 @@ describe('ThreeJsRenderer', () => {
       const cloned = original.clone();
 
       expect(cloned).not.toBe(original);
-      expect(cloned.parameters.width).toBe(original.parameters.width);
+      // three.js r128 clones primitives into a plain BufferGeometry (no `parameters`),
+      // so compare the actual vertex data and resulting extents instead.
+      expect(cloned.getAttribute('position')).not.toBe(original.getAttribute('position'));
+      expect(Array.from(cloned.getAttribute('position').array)).toEqual(
+        Array.from(original.getAttribute('position').array)
+      );
+      cloned.computeBoundingBox();
+      original.computeBoundingBox();
+      const clonedSize = cloned.boundingBox!.getSize(new THREE.Vector3());
+      const originalSize = original.boundingBox!.getSize(new THREE.Vector3());
+      expect(clonedSize.x).toBeCloseTo(originalSize.x);
+      expect(clonedSize.x).toBeCloseTo(original.parameters.width);
     });
   });
 

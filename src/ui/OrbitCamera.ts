@@ -80,7 +80,19 @@ export class OrbitCamera {
    * Get current camera state
    */
   getState(): CameraState {
-    return { ...this.state };
+    return OrbitCamera.cloneState(this.state);
+  }
+
+  /**
+   * Deep-copy a camera state so callers (and animation snapshots) never share
+   * the nested position/target objects with the live state.
+   */
+  private static cloneState(state: CameraState): CameraState {
+    return {
+      ...state,
+      position: { ...state.position },
+      target: { ...state.target },
+    };
   }
 
   /**
@@ -250,7 +262,7 @@ export class OrbitCamera {
     this.animationStartTime = Date.now();
     this.animationDuration = duration;
     this.animationStartState = this.getState();
-    this.animationEndState = targetState;
+    this.animationEndState = OrbitCamera.cloneState(targetState);
   }
 
   /**
