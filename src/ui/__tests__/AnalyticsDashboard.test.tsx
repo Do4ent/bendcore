@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { AnalyticsDashboard } from '../AnalyticsDashboard';
 
@@ -53,11 +53,14 @@ describe('AnalyticsDashboard', () => {
 
   test('should render KPI cards', async () => {
     render(<AnalyticsDashboard />);
+    // "Sessions"/"Events" are also labels of the CSV export checkboxes, so look
+    // inside the KPI section's cards.
     await waitFor(() => {
-      expect(screen.getByText('Sessions')).toBeInTheDocument();
-      expect(screen.getByText('Events')).toBeInTheDocument();
-      expect(screen.getByText('Conversion Rate')).toBeInTheDocument();
-      expect(screen.getByText('Avg Duration')).toBeInTheDocument();
+      const kpis = within(screen.getByRole('region', { name: 'KPI metrics' }));
+      expect(kpis.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument();
+      expect(kpis.getByRole('heading', { name: 'Events' })).toBeInTheDocument();
+      expect(kpis.getByRole('heading', { name: 'Conversion Rate' })).toBeInTheDocument();
+      expect(kpis.getByRole('heading', { name: 'Avg Duration' })).toBeInTheDocument();
     });
   });
 
@@ -81,14 +84,21 @@ describe('AnalyticsDashboard', () => {
   test('should display event timeline', async () => {
     render(<AnalyticsDashboard />);
     await waitFor(() => {
-      expect(screen.getByText(/Recent Events/)).toBeInTheDocument();
+      // Section heading plus the timeline's own "Recent Events (Last N)" heading
+      expect(screen.getByRole('heading', { level: 2, name: 'Recent Events' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 3, name: /^Recent Events \(Last \d+\)$/ })
+      ).toBeInTheDocument();
     });
   });
 
   test('should render funnel chart', async () => {
     render(<AnalyticsDashboard />);
     await waitFor(() => {
-      expect(screen.getByText(/Conversion Funnel/)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: 'Conversion Funnel' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('region', { name: 'Import → Design → Export Conversion Funnel' })
+      ).toBeInTheDocument();
     });
   });
 
@@ -199,9 +209,12 @@ describe('AnalyticsDashboard', () => {
 
   test('should be WCAG AA compliant', () => {
     const { container } = render(<AnalyticsDashboard />);
+    fireEvent.click(screen.getByLabelText('Toggle date picker'));
     const buttons = container.querySelectorAll('button');
+    expect(buttons.length).toBeGreaterThan(0);
+    // WCAG 4.1.2: every control needs an accessible name (visible text or aria-label)
     buttons.forEach((button) => {
-      expect(button.getAttribute('aria-label')).toBeTruthy();
+      expect(button).toHaveAccessibleName();
     });
   });
 

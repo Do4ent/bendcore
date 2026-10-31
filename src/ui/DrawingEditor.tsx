@@ -180,20 +180,26 @@ export const DrawingEditor: React.FC<DrawingEditorProps> = ({
       </div>
 
       {/* Вкладки */}
-      <div className={styles.tabs}>
+      <div className={styles.tabs} role="tablist" aria-label="Разделы редактора">
         <button
+          role="tab"
+          aria-selected={activeTab === 'parameters'}
           className={`${styles.tab} ${activeTab === 'parameters' ? styles.active : ''}`}
           onClick={() => setActiveTab('parameters')}
         >
           Параметры
         </button>
         <button
+          role="tab"
+          aria-selected={activeTab === 'formula'}
           className={`${styles.tab} ${activeTab === 'formula' ? styles.active : ''}`}
           onClick={() => setActiveTab('formula')}
         >
           Формулы
         </button>
         <button
+          role="tab"
+          aria-selected={activeTab === 'history'}
           className={`${styles.tab} ${activeTab === 'history' ? styles.active : ''}`}
           onClick={() => setActiveTab('history')}
         >

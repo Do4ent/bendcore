@@ -1,9 +1,9 @@
 /**
  * BendCore Import Dialog Component
- * Handle STEP/IGES file import with geometry recognition
+ * Handle STEP file import with geometry recognition
  *
  * Features:
- * - Import STEP/IGES files
+ * - Import STEP files (IGES is rejected with an explanation until the kernel reads it)
  * - Auto-detect tubes and grouping
  * - Apply filters (diameter, material, contact)
  * - Preview recognized geometry
@@ -108,7 +108,7 @@ const FileSelector: React.FC<{
       <div className="file-drop-zone" onClick={() => inputRef.current?.click()}>
         <div className="drop-icon">📁</div>
         <h3>Select CAD File</h3>
-        <p>Click to browse or drag & drop a STEP/IGES file</p>
+        <p>Click to browse or drag & drop a STEP file</p>
       </div>
       <input
         ref={inputRef}
@@ -467,7 +467,7 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
     <div className="import-dialog">
       <div className="import-dialog-header">
         <h2>Import CAD File</h2>
-        <p>Import STEP/IGES files with automatic tube recognition</p>
+        <p>Import STEP files with automatic tube recognition</p>
       </div>
 
       <div className="import-dialog-content">
