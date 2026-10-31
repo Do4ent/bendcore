@@ -5,10 +5,9 @@ module.exports = {
   mode: 'production',
   entry: './src/ui/index.tsx',
   output: {
-    path: path.resolve(__dirname, 'dist'),
+    path: path.resolve(__dirname, 'dist/web'),
     filename: '[name].[contenthash].js',
     chunkFilename: '[name].[contenthash].chunk.js',
-    clean: true,
   },
   optimization: {
     minimize: true,

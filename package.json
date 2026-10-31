@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "electron . --debug",
-    "build": "tsc && webpack",
+    "build": "tsc && webpack && node scripts/generate-index.js",
     "test": "jest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
