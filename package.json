@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "electron . --debug",
-    "build": "tsc && webpack",
+    "build": "tsc && webpack && node scripts/generate-index.js",
     "test": "jest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
@@ -23,7 +23,10 @@
     "lint": "eslint src/ui --ext .ts,.tsx",
     "format": "prettier --write src/ui",
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "verify": "node scripts/verify-build.js",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
+    "typecheck:api": "tsc --noEmit -p tsconfig.api.json"
   },
   "keywords": [
     "CAD",
@@ -39,7 +42,9 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "three": "^0.128.0",
-    "@growthbook/growthbook": "^0.36.0"
+    "@growthbook/growthbook": "^0.36.0",
+    "uuid": "^11.1.1",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
@@ -72,7 +77,8 @@
     "@playwright/test": "^1.40.0",
     "mini-css-extract-plugin": "^2.9.0",
     "jest-environment-jsdom": "^29.5.0",
-    "identity-obj-proxy": "^3.0.0"
+    "identity-obj-proxy": "^3.0.0",
+    "@types/ws": "^8.18.1"
   },
   "engines": {
     "node": ">=16.0.0",
@@ -81,19 +87,47 @@
   "build": {
     "appId": "com.do4ent.bendcore",
     "productName": "BendCore CAD",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
     "files": [
       "dist/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "package.json"
     ],
+    "extraMetadata": {
+      "name": "bendcore-ui"
+    },
     "win": {
       "target": [
-        "nsis",
-        "msi"
-      ]
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "certificateFile": null,
+      "certificatePassword": null,
+      "signingHashAlgorithms": ["sha256"],
+      "sign": null
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": null,
+      "uninstallerIcon": null,
+      "installerHeaderIcon": null,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BendCore CAD"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
     }
   }
 }

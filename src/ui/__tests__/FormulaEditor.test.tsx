@@ -31,7 +31,8 @@ describe('FormulaEditor Component', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockClear();
+    // reset (not just clear) so persistent per-test responses do not leak
+    (global.fetch as jest.Mock).mockReset();
     localStorage.clear();
   });
 
@@ -130,7 +131,7 @@ describe('FormulaEditor Component', () => {
 
   describe('User Input', () => {
     test('should update formula on text input', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -147,7 +148,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should insert variable when clicking variable button', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -165,7 +166,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should insert operator with spaces', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -185,7 +186,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should insert function call', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -205,12 +206,12 @@ describe('FormulaEditor Component', () => {
 
   describe('Formula Evaluation', () => {
     test('should evaluate simple numeric formula', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 10 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -233,12 +234,12 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should evaluate formula with variables', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 55 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -263,7 +264,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should display error on invalid formula', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         json: async () => ({
           message: 'Division by zero',
@@ -271,7 +272,7 @@ describe('FormulaEditor Component', () => {
         }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -285,12 +286,13 @@ describe('FormulaEditor Component', () => {
       await user.type(input, '10 / 0');
 
       await waitFor(() => {
-        expect(screen.getByText(/division by zero/i)).toBeInTheDocument();
+        // The suggestion list also mentions division by zero, so scope to the message box
+        expect(screen.getByText(/division by zero/i, { selector: '.error-message' })).toBeInTheDocument();
       });
     });
 
     test('should display error suggestions', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         json: async () => ({
           message: 'Undefined variable',
@@ -298,7 +300,7 @@ describe('FormulaEditor Component', () => {
         }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -319,12 +321,12 @@ describe('FormulaEditor Component', () => {
 
   describe('Keyboard Shortcuts', () => {
     test('should apply formula on Ctrl+Enter', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 10 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -341,7 +343,7 @@ describe('FormulaEditor Component', () => {
         expect(screen.getByText(/10/)).toBeInTheDocument();
       });
 
-      await user.keyboard('{Control>}Return{/Control}');
+      await user.keyboard('{Control>}{Enter}{/Control}');
 
       await waitFor(() => {
         expect(mockOnApply).toHaveBeenCalledWith('5 + 5', 10);
@@ -349,7 +351,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should cancel on Escape', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -361,7 +363,7 @@ describe('FormulaEditor Component', () => {
 
       const input = screen.getByPlaceholderText('e.g., $OD * 2 + 5');
       await user.click(input);
-      await user.keyboard('Escape');
+      await user.keyboard('{Escape}');
 
       expect(mockOnCancel).toHaveBeenCalled();
     });
@@ -369,7 +371,7 @@ describe('FormulaEditor Component', () => {
 
   describe('localStorage Draft', () => {
     test('should save formula to localStorage on input', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -403,12 +405,12 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should clear draft on apply', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 7.5 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -432,7 +434,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should clear draft on cancel', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -457,12 +459,12 @@ describe('FormulaEditor Component', () => {
 
   describe('Apply Button State', () => {
     test('should disable Apply button when formula is invalid', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         json: async () => ({ message: 'Error' }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -482,12 +484,12 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should enable Apply button when formula is valid', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 10 }),
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
@@ -569,19 +571,31 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should have keyboard navigation', async () => {
-      const user = userEvent.setup();
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ result: 55 }),
+      });
+      const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
+          initialFormula="$OD * 2 + 5"
           variables={mockVariables}
           onApply={mockOnApply}
           onCancel={mockOnCancel}
         />
       );
 
+      // Apply is intentionally disabled (and therefore unfocusable) until the
+      // formula has been evaluated successfully.
       const applyButton = screen.getByRole('button', { name: /apply/i });
+      await waitFor(() => expect(applyButton).toBeEnabled());
+
       applyButton.focus();
       expect(document.activeElement).toBe(applyButton);
+
+      await user.keyboard('{Enter}');
+      expect(mockOnApply).toHaveBeenCalledWith('$OD * 2 + 5', 55);
     });
   });
 });

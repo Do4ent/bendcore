@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ProfileDialog from "../src/ui/ProfileDialog";
 
@@ -65,6 +65,19 @@ describe("ProfileDialog", () => {
     jest.clearAllMocks();
   });
 
+  const MANUAL_NAME = "Manual Hand Bender - ½\"";
+
+  // The profile name is shown both in the profile list and as the heading of
+  // the selected profile's details, so queries are scoped to one of them.
+  const profileList = () => screen.getByRole("listbox", { name: "Profiles" });
+  const listEntry = (name: string) => within(profileList()).getByText(name);
+  const queryListEntry = (name: string) => within(profileList()).queryByText(name);
+  const detailsHeading = (name: string) => screen.getByRole("heading", { level: 3, name });
+  const waitForProfiles = () =>
+    waitFor(() => {
+      expect(listEntry(MANUAL_NAME)).toBeInTheDocument();
+    });
+
   test("renders dialog when isOpen is true", async () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
@@ -82,29 +95,29 @@ describe("ProfileDialog", () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
     await waitFor(() => {
-      expect(
-        screen.getByText("Manual Hand Bender - ½\"")
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("Hydraulic Bender HB-16")
-      ).toBeInTheDocument();
+      expect(listEntry(MANUAL_NAME)).toBeInTheDocument();
+      expect(listEntry("Hydraulic Bender HB-16")).toBeInTheDocument();
     });
+    expect(within(profileList()).getAllByRole("option")).toHaveLength(2);
   });
 
   test("displays selected profile details", async () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
+    await waitForProfiles();
+
+    fireEvent.click(listEntry("Hydraulic Bender HB-16"));
+
     await waitFor(() => {
-      expect(
-        screen.getByText("Manual Hand Bender - ½\"")
-      ).toBeInTheDocument();
+      expect(detailsHeading("Hydraulic Bender HB-16")).toBeInTheDocument();
+      expect(screen.getByText("Amob")).toBeInTheDocument();
     });
+    expect(screen.queryByText("BendTech Pro")).not.toBeInTheDocument();
 
-    const profileName = screen.getByText("Manual Hand Bender - ½\"");
-    fireEvent.click(profileName);
+    fireEvent.click(listEntry(MANUAL_NAME));
 
     await waitFor(() => {
-      expect(screen.getByText("Manual Hand Bender - ½\"")).toBeInTheDocument();
+      expect(detailsHeading(MANUAL_NAME)).toBeInTheDocument();
       expect(screen.getByText("BendTech Pro")).toBeInTheDocument();
     });
   });
@@ -112,31 +125,21 @@ describe("ProfileDialog", () => {
   test("filters profiles by search term", async () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      expect(
-        screen.getByText("Manual Hand Bender - ½\"")
-      ).toBeInTheDocument();
-    });
+    await waitForProfiles();
 
     const searchInput = screen.getByPlaceholderText("Search profiles...");
     await userEvent.type(searchInput, "Hydraulic");
 
     await waitFor(() => {
-      expect(
-        screen.getByText("Hydraulic Bender HB-16")
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText("Manual Hand Bender - ½\"")
-      ).not.toBeInTheDocument();
+      expect(listEntry("Hydraulic Bender HB-16")).toBeInTheDocument();
+      expect(queryListEntry(MANUAL_NAME)).not.toBeInTheDocument();
     });
   });
 
   test("enters edit mode when Edit button is clicked", async () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Manual Hand Bender - ½\"")).toBeInTheDocument();
-    });
+    await waitForProfiles();
 
     const editButton = screen.getByText("Edit");
     fireEvent.click(editButton);
@@ -149,9 +152,7 @@ describe("ProfileDialog", () => {
   test("allows editing profile name", async () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Manual Hand Bender - ½\"")).toBeInTheDocument();
-    });
+    await waitForProfiles();
 
     const editButton = screen.getByText("Edit");
     fireEvent.click(editButton);
@@ -175,9 +176,7 @@ describe("ProfileDialog", () => {
   test("validates diameter constraints in edit mode", async () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Manual Hand Bender - ½\"")).toBeInTheDocument();
-    });
+    await waitForProfiles();
 
     const editButton = screen.getByText("Edit");
     fireEvent.click(editButton);
@@ -215,9 +214,7 @@ describe("ProfileDialog", () => {
     const onSave = jest.fn();
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} onSave={onSave} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Manual Hand Bender - ½\"")).toBeInTheDocument();
-    });
+    await waitForProfiles();
 
     const editButton = screen.getByText("Edit");
     fireEvent.click(editButton);
@@ -237,13 +234,10 @@ describe("ProfileDialog", () => {
   test("displays diameter table with correct data", async () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Manual Hand Bender - ½\"")).toBeInTheDocument();
-    });
+    await waitForProfiles();
 
     // Select profile to view
-    const profileName = screen.getByText("Manual Hand Bender - ½\"");
-    fireEvent.click(profileName);
+    fireEvent.click(listEntry(MANUAL_NAME));
 
     await waitFor(() => {
       expect(screen.getByText("0.5")).toBeInTheDocument(); // OD value
@@ -253,9 +247,7 @@ describe("ProfileDialog", () => {
   test("handles cancel in edit mode", async () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Manual Hand Bender - ½\"")).toBeInTheDocument();
-    });
+    await waitForProfiles();
 
     const editButton = screen.getByText("Edit");
     fireEvent.click(editButton);
@@ -275,18 +267,18 @@ describe("ProfileDialog", () => {
   test("displays profile metadata correctly", async () => {
     render(<ProfileDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      expect(
-        screen.getByText("Manual Hand Bender - ½\"")
-      ).toBeInTheDocument();
-    });
+    await waitForProfiles();
 
-    const profileName = screen.getByText("Manual Hand Bender - ½\"");
-    fireEvent.click(profileName);
+    fireEvent.click(listEntry(MANUAL_NAME));
 
     await waitFor(() => {
-      expect(screen.getByText("Manual Hand Bender")).toBeInTheDocument(); // category
-      expect(screen.getByText("BendTech Pro")).toBeInTheDocument(); // manufacturer
+      expect(detailsHeading(MANUAL_NAME)).toBeInTheDocument();
     });
+    // The category is also listed under each entry in the profile list, so
+    // check the selected profile's details panel specifically.
+    const details = within(detailsHeading(MANUAL_NAME).parentElement as HTMLElement);
+    expect(details.getByText("Manual Hand Bender")).toBeInTheDocument(); // category
+    expect(details.getByText("BendTech Pro")).toBeInTheDocument(); // manufacturer
+    expect(details.getByText("manual")).toBeInTheDocument(); // type
   });
 });

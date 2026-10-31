@@ -3,11 +3,11 @@
  * Window management and IPC handlers for BendCore UI
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
-import * as path from 'path';
-import { CoreBridge, defaultCliPath } from './core_bridge';
+const { app, BrowserWindow, ipcMain } = require('electron') as any;
+const path = require('path') as any;
+const { CoreBridge, defaultCliPath } = require('./core_bridge') as any;
 
-let mainWindow: BrowserWindow | null = null;
+let mainWindow: any = null;
 
 // Ядро C++ отдельным процессом (bendcore_cli). Команды вида «раздел.действие» идут в ядро.
 const core = new CoreBridge({
@@ -28,7 +28,7 @@ function createWindow() {
   const isDev = process.env.NODE_ENV === 'development';
   const startUrl = isDev
     ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, '../index.html')}`;
+    : `file://${path.join(__dirname, '../dist/web/index.html')}`;
 
   mainWindow.loadURL(startUrl);
 
@@ -36,13 +36,13 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   }
 
-  mainWindow.on('closed', () => {
+  (mainWindow as any).on('closed', () => {
     mainWindow = null;
   });
 }
 
 // IPC Handler: bendcore:command
-ipcMain.handle('bendcore:command', async (event, { command, args }) => {
+ipcMain.handle('bendcore:command', async (event: any, { command, args }: any) => {
   console.log(`IPC Command: ${command}`, args);
 
   try {
@@ -57,7 +57,7 @@ ipcMain.handle('bendcore:command', async (event, { command, args }) => {
 });
 
 // Команды оболочки, ещё не перенесённые в ядро (заглушки документа).
-async function handleCommand(command: string, args: any) {
+async function handleCommand(command: string, args: unknown) {
   console.log(`Handling: ${command}`, args);
 
   switch (command) {

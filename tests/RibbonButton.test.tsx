@@ -37,7 +37,10 @@ describe('RibbonButton', () => {
           onClick={mockOnClick}
         />
       );
-      expect(container.querySelector('[id="test-id"]')).toBeInTheDocument();
+      // Button ids are namespaced to avoid DOM id collisions with other widgets.
+      const button = container.querySelector('[id="ribbon-btn-test-id"]');
+      expect(button).toBeInTheDocument();
+      expect(button?.tagName).toBe('BUTTON');
     });
 
     test('should apply correct color category', () => {

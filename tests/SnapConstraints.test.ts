@@ -2,7 +2,23 @@
  * SnapConstraints Test Suite
  */
 
+import * as THREE from 'three';
 import { SnapConstraints, SnapMode } from '../src/ui/SnapConstraints';
+
+/**
+ * Real scene and camera looking down -Z at the origin. SnapConstraints maps
+ * world points to pixels using camera.userData.canvas (a 200x200 viewport),
+ * so the world origin projects to the screen centre (100, 100).
+ */
+const createView = () => {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+  camera.position.set(0, 0, 50);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  camera.userData.canvas = { clientWidth: 200, clientHeight: 200 };
+  return { scene, camera };
+};
 
 describe('SnapConstraints', () => {
   let snap: SnapConstraints;
@@ -115,8 +131,7 @@ describe('SnapConstraints', () => {
   describe('snap point detection', () => {
     test('should return empty array when snap disabled', () => {
       snap.setEnabled(false);
-      const mockScene = { traverse: () => {} } as any;
-      const mockCamera = {} as any;
+      const { scene: mockScene, camera: mockCamera } = createView();
 
       const points = snap.detectSnapPoints(100, 100, mockScene, mockCamera);
       expect(points).toEqual([]);
@@ -125,32 +140,36 @@ describe('SnapConstraints', () => {
     test('should detect snap points near cursor', () => {
       // Note: In a full test, we'd set up a complete Three.js scene
       // This is a basic validation of the function signature
-      const mockScene = { traverse: () => {} } as any;
-      const mockCamera = {} as any;
+      const { scene: mockScene, camera: mockCamera } = createView();
 
       const points = snap.detectSnapPoints(100, 100, mockScene, mockCamera);
       expect(Array.isArray(points)).toBe(true);
+      // The grid point at the origin sits under the cursor (screen centre)
+      expect(points).toHaveLength(1);
+      expect(points[0].type).toBe(SnapMode.GRID);
+      expect(points[0].position).toEqual({ x: 0, y: 0, z: 0 });
     });
 
     test('should filter by snap radius', () => {
       snap.setSnapRadius(5);  // Very small radius
 
-      const mockScene = { traverse: () => {} } as any;
-      const mockCamera = {} as any;
+      const { scene: mockScene, camera: mockCamera } = createView();
 
       const points = snap.detectSnapPoints(0, 0, mockScene, mockCamera);
       // Should find fewer points with small radius
       expect(Array.isArray(points)).toBe(true);
+      // The viewport corner is far from every grid point
+      expect(points).toEqual([]);
     });
 
     test('should respect snap modes when detecting', () => {
       snap.setSnapModes([SnapMode.GRID]);
 
-      const mockScene = { traverse: () => {} } as any;
-      const mockCamera = {} as any;
+      const { scene: mockScene, camera: mockCamera } = createView();
 
       const points = snap.detectSnapPoints(100, 100, mockScene, mockCamera);
       // All detected points should be GRID type
+      expect(points.length).toBeGreaterThan(0);
       points.forEach(point => {
         expect(point.type).toBe(SnapMode.GRID);
       });
@@ -273,8 +292,7 @@ describe('SnapConstraints', () => {
     test('should detect points from multiple modes', () => {
       snap.setSnapModes([SnapMode.GRID, SnapMode.AXIS]);
 
-      const mockScene = { traverse: () => {} } as any;
-      const mockCamera = {} as any;
+      const { scene: mockScene, camera: mockCamera } = createView();
 
       const points = snap.detectSnapPoints(100, 100, mockScene, mockCamera);
       expect(Array.isArray(points)).toBe(true);
@@ -283,8 +301,7 @@ describe('SnapConstraints', () => {
     test('should isolate points by mode', () => {
       snap.setSnapModes([SnapMode.GRID]);
 
-      const mockScene = { traverse: () => {} } as any;
-      const mockCamera = {} as any;
+      const { scene: mockScene, camera: mockCamera } = createView();
 
       const gridPoints = snap.detectSnapPoints(100, 100, mockScene, mockCamera);
 
@@ -294,6 +311,8 @@ describe('SnapConstraints', () => {
       // Both should have results but potentially different points
       expect(Array.isArray(gridPoints)).toBe(true);
       expect(Array.isArray(axisPoints)).toBe(true);
+      expect(gridPoints.map((p) => p.type)).toEqual([SnapMode.GRID]);
+      expect(axisPoints.map((p) => p.type)).toEqual([SnapMode.AXIS]);
     });
   });
 });

@@ -32,7 +32,11 @@ const RibbonButton: React.FC<RibbonButtonProps> = ({
 }) => {
   const bgColor = getColorHex(colorCategory);
   const shortcut = formatShortcutForDisplay(id);
-  const fullTooltip = shortcut ? `${tooltip || label} (${shortcut})` : (tooltip || label);
+  // Only set a native tooltip when it adds information beyond the visible label:
+  // an explicit tooltip, a keyboard shortcut, or the label itself when hidden.
+  const tooltipText = tooltip || (shortcut || !showLabel ? label : undefined);
+  const fullTooltip =
+    tooltipText && shortcut ? `${tooltipText} (${shortcut})` : tooltipText;
 
   const sizeStyles = {
     small: "w-12 h-12",
@@ -46,6 +50,7 @@ const RibbonButton: React.FC<RibbonButtonProps> = ({
       onClick={() => !disabled && onClick(id)}
       disabled={disabled}
       title={fullTooltip}
+      aria-label={showLabel ? undefined : label}
       className={`
         ${sizeStyles[size]}
         flex flex-col items-center justify-center

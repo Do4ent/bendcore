@@ -63,7 +63,7 @@ interface ParameterGroup {
 /**
  * Expression Evaluator for parametric calculations
  */
-class ExpressionEvaluator {
+export class ExpressionEvaluator {
   private context: Record<string, any> = {};
 
   /**
@@ -96,7 +96,7 @@ class ExpressionEvaluator {
 /**
  * Dependency resolver for parameter updates
  */
-class DependencyResolver {
+export class DependencyResolver {
   private parameters: ParameterDefinition[];
   private evaluator: ExpressionEvaluator;
 
@@ -109,7 +109,29 @@ class DependencyResolver {
    * Get all parameters that depend on the given parameter
    */
   getDependents(parameterId: string): ParameterDefinition[] {
-    return this.parameters.filter((p) => p.dependencies?.includes(parameterId));
+    return this.parameters.filter(
+      (p) =>
+        p.id !== parameterId &&
+        (p.dependencies?.includes(parameterId) ||
+          DependencyResolver.referencedIdentifiers(p.expression).has(parameterId))
+    );
+  }
+
+  /**
+   * Identifiers an expression refers to directly (e.g. `x` in `Math.sqrt(x*x)`).
+   * Member accesses such as `sqrt` in `Math.sqrt` are not parameter references.
+   */
+  static referencedIdentifiers(expression: string | undefined): Set<string> {
+    const identifiers = new Set<string>();
+    if (!expression) {
+      return identifiers;
+    }
+    const pattern = /(^|[^.\w$])([A-Za-z_$][\w$]*)/g;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(expression)) !== null) {
+      identifiers.add(match[2]);
+    }
+    return identifiers;
   }
 
   /**

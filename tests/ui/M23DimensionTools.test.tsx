@@ -250,7 +250,12 @@ describe('DimensionTools Component', () => {
     fireEvent.change(input, { target: { value: '50' } });
     const addBtn = screen.getByRole('button', { name: 'Add Dimension' });
     fireEvent.click(addBtn);
-    expect(input.value).toBe('0');
+
+    // Adding closes the value form (activeDimension is cleared), unmounting the input.
+    // The old element is detached, so verify the reset by reopening the form.
+    expect(screen.queryByPlaceholderText('Enter value')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('Linear Dimension'));
+    expect((screen.getByPlaceholderText('Enter value') as HTMLInputElement).value).toBe('0');
   });
 
   test('should have all dimension icons', () => {

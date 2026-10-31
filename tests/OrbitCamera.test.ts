@@ -125,10 +125,23 @@ describe('OrbitCamera', () => {
 
     test('should switch to named view', () => {
       const initialState = camera.getState();
-      camera.switchToView('Isometric');
+      const isoView = camera.getNamedViews().find(v => v.name === 'Isometric')!;
+
+      // switchToView animates; run the animation to completion deterministically.
+      const start = Date.now();
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(start);
+      try {
+        camera.switchToView('Isometric');
+        nowSpy.mockReturnValue(start + 10_000);
+        camera.updateAnimation();
+      } finally {
+        nowSpy.mockRestore();
+      }
       const newState = camera.getState();
 
       expect(newState.pitch).not.toBe(initialState.pitch);
+      expect(newState.pitch).toBeCloseTo(isoView.state.pitch);
+      expect(newState.yaw).toBeCloseTo(isoView.state.yaw);
     });
   });
 

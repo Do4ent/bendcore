@@ -21,6 +21,34 @@ export interface SnapPoint {
   distance: number;
 }
 
+/** Point in sketch/world coordinates; z is optional for 2D sketches. */
+export interface SnapCoordinates {
+  x: number;
+  y: number;
+  z?: number;
+}
+
+/** Vertex that points can snap to. */
+export interface SnapVertex {
+  id: string;
+  position: SnapCoordinates;
+}
+
+/** Result of snapping a point, for drawing snap feedback. */
+export interface SnapFeedback {
+  original: SnapCoordinates;
+  snapped: SnapCoordinates;
+  isSnapped: boolean;
+  type: SnapMode | null;
+  /** Id of the vertex snapped to, for vertex snaps */
+  targetId?: string;
+  /** Distance between the original and snapped point */
+  distance: number;
+}
+
+/** Snap mode names accepted by isSnapEnabled (in addition to SnapMode values). */
+export type SnapModeName = SnapMode | 'grid' | 'vertex';
+
 export interface SnapConstraint {
   position: { x: number; y: number; z: number };
   type: SnapMode;
@@ -38,6 +66,9 @@ export class SnapConstraints {
   private snapGroup: THREE.Group;
   private snapIndicators: Map<string, THREE.Object3D> = new Map();
   private isEnabled: boolean = true;
+  private gridSize: number = 1;  // world units, for coordinate snapping
+  private vertexSnapTolerance: number = 0.5;  // world units
+  private snapVertices: SnapVertex[] = [];
 
   // Visual styles
   private readonly SNAP_POINT_SIZE = 0.5;
@@ -69,10 +100,136 @@ export class SnapConstraints {
   }
 
   /**
-   * Check if snap is enabled
+   * Check if snapping is enabled, optionally for a specific mode
+   * ('vertex' is an alias for SnapMode.ENDPOINT).
    */
-  isSnapEnabled(): boolean {
-    return this.isEnabled;
+  isSnapEnabled(mode?: SnapModeName): boolean {
+    if (mode === undefined) {
+      return this.isEnabled;
+    }
+    return this.isEnabled && this.snapMode.has(SnapConstraints.resolveMode(mode));
+  }
+
+  private static resolveMode(mode: SnapModeName): SnapMode {
+    if (mode === 'vertex') return SnapMode.ENDPOINT;
+    if (mode === 'grid') return SnapMode.GRID;
+    return mode;
+  }
+
+  /**
+   * Enable/disable snapping to the grid
+   */
+  setSnapToGrid(enabled: boolean): void {
+    if (enabled) {
+      this.snapMode.add(SnapMode.GRID);
+    } else {
+      this.snapMode.delete(SnapMode.GRID);
+    }
+  }
+
+  /**
+   * Set grid spacing used for coordinate snapping (world units)
+   */
+  setGridSize(size: number): void {
+    if (!(size > 0) || !Number.isFinite(size)) {
+      throw new Error(`Grid size must be a positive number, got ${size}`);
+    }
+    this.gridSize = size;
+  }
+
+  getGridSize(): number {
+    return this.gridSize;
+  }
+
+  /**
+   * Enable/disable snapping to vertices, optionally replacing the vertex set
+   */
+  setSnapToVertices(enabled: boolean, vertices?: SnapVertex[]): void {
+    if (vertices) {
+      this.snapVertices = vertices.map((v) => ({ id: v.id, position: { ...v.position } }));
+    }
+    if (enabled) {
+      this.snapMode.add(SnapMode.ENDPOINT);
+    } else {
+      this.snapMode.delete(SnapMode.ENDPOINT);
+    }
+  }
+
+  /**
+   * Set the maximum distance (world units) at which a point snaps to a vertex
+   */
+  setVertexSnapTolerance(tolerance: number): void {
+    this.vertexSnapTolerance = Math.max(0, tolerance);
+  }
+
+  /**
+   * Snap a point: to the nearest vertex within tolerance first, otherwise to
+   * the grid. Returns the point unchanged when nothing applies.
+   */
+  snapPoint(point: SnapCoordinates): SnapCoordinates {
+    return this.getSnapFeedback(point).snapped;
+  }
+
+  /**
+   * Snap a point and describe the result for visual feedback
+   */
+  getSnapFeedback(point: SnapCoordinates): SnapFeedback {
+    const original = { ...point };
+    const unsnapped: SnapFeedback = {
+      original,
+      snapped: { ...point },
+      isSnapped: false,
+      type: null,
+      distance: 0,
+    };
+    if (!this.isEnabled) {
+      return unsnapped;
+    }
+
+    if (this.snapMode.has(SnapMode.ENDPOINT) && this.snapVertices.length > 0) {
+      let best: { vertex: SnapVertex; distance: number } | null = null;
+      for (const vertex of this.snapVertices) {
+        const distance = SnapConstraints.distance(point, vertex.position);
+        if (distance <= this.vertexSnapTolerance && (!best || distance < best.distance)) {
+          best = { vertex, distance };
+        }
+      }
+      if (best) {
+        const snapped: SnapCoordinates = { x: best.vertex.position.x, y: best.vertex.position.y };
+        if (point.z !== undefined || best.vertex.position.z !== undefined) {
+          snapped.z = best.vertex.position.z ?? 0;
+        }
+        return {
+          original,
+          snapped,
+          isSnapped: true,
+          type: SnapMode.ENDPOINT,
+          targetId: best.vertex.id,
+          distance: best.distance,
+        };
+      }
+    }
+
+    if (this.snapMode.has(SnapMode.GRID)) {
+      const round = (v: number) => Math.round(v / this.gridSize) * this.gridSize;
+      const snapped: SnapCoordinates = { x: round(point.x), y: round(point.y) };
+      if (point.z !== undefined) {
+        snapped.z = round(point.z);
+      }
+      return {
+        original,
+        snapped,
+        isSnapped: true,
+        type: SnapMode.GRID,
+        distance: SnapConstraints.distance(point, snapped),
+      };
+    }
+
+    return unsnapped;
+  }
+
+  private static distance(a: SnapCoordinates, b: SnapCoordinates): number {
+    return Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0));
   }
 
   /**

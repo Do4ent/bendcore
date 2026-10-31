@@ -415,7 +415,8 @@ describe('PathValidator', () => {
   // ===== PROFILE CONSTRAINT UPDATES =====
 
   test('should update profile constraints', () => {
-    validator.updateProfileConstraints(1.0, 0.0, 360.0);
+    // Lower the S minimum below the segment's 0.5 so it is no longer an error
+    validator.updateProfileConstraints(0.25, 0.0, 360.0);
 
     const segments: PathSegment[] = [
       {

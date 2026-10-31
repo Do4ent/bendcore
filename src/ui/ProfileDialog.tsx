@@ -286,6 +286,8 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({
               </div>
 
               <div
+                role="listbox"
+                aria-label="Profiles"
                 style={{
                   flex: 1,
                   overflowY: "auto",
@@ -295,6 +297,8 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({
                 {filteredProfiles.map((profile) => (
                   <div
                     key={profile.id}
+                    role="option"
+                    aria-selected={profile.id === selectedProfileId}
                     onClick={() => setSelectedProfileId(profile.id)}
                     style={{
                       padding: "12px",

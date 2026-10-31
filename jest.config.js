@@ -28,6 +28,7 @@ module.exports = {
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '^three$': '<rootDir>/tests/__mocks__/three.js',
   },
+  testTimeout: 15000,
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',

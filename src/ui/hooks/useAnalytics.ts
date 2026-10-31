@@ -34,6 +34,25 @@ export interface UseAnalyticsOptions {
   endDate?: Date;
 }
 
+const KPI_FIELDS: Array<keyof KPIMetrics> = ['sessions', 'events', 'conversionRate', 'avgSessionDuration'];
+
+/**
+ * Merge a KPI API payload into the current metrics, keeping the previous value
+ * for any field that is missing or not a finite number, so a partial or
+ * malformed response cannot leave non-numeric values in the KPI cards.
+ */
+export function mergeKPIMetrics(previous: KPIMetrics, payload: unknown): KPIMetrics {
+  const source = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
+  const next = { ...previous };
+  KPI_FIELDS.forEach((field) => {
+    const value = source[field];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      next[field] = value;
+    }
+  });
+  return next;
+}
+
 export function useAnalytics(options: UseAnalyticsOptions = {}) {
   const { refreshInterval = 30, startDate, endDate } = options;
 
@@ -59,8 +78,8 @@ export function useAnalytics(options: UseAnalyticsOptions = {}) {
 
       if (!response.ok) throw new Error('Failed to fetch KPI metrics');
 
-      const data = await response.json();
-      setKpiMetrics(data);
+      const data: unknown = await response.json();
+      setKpiMetrics((previous) => mergeKPIMetrics(previous, data));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');

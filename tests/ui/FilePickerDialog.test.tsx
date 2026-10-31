@@ -57,8 +57,8 @@ describe('FilePickerDialog Component', () => {
       render(
         <FilePickerDialog isOpen={true} onClose={mockOnClose} onSelect={mockOnSelect} />
       );
-      const recentTab = screen.getByText('Recent Files');
-      expect(recentTab.parentElement).toHaveClass('active');
+      const recentTab = screen.getByRole('button', { name: 'Recent Files' });
+      expect(recentTab).toHaveClass('active');
     });
 
     test('should display "No recent files" message when empty', () => {
@@ -242,10 +242,9 @@ describe('FilePickerDialog Component', () => {
         <FilePickerDialog isOpen={true} onClose={mockOnClose} onSelect={mockOnSelect} />
       );
 
-      // Switch to browse tab (if needed)
-      // Simulate file selection through the path input
-      const pathInput = screen.getByPlaceholderText('Enter file path...');
+      // Switch to browse tab first, then interact with path input
       fireEvent.click(screen.getByText('Browse'));
+      const pathInput = screen.getByPlaceholderText('Enter file path...');
 
       fireEvent.change(pathInput, { target: { value: '/home/newfile.bnd' } });
 
@@ -268,8 +267,15 @@ describe('FilePickerDialog Component', () => {
         <FilePickerDialog isOpen={true} onClose={mockOnClose} onSelect={mockOnSelect} />
       );
 
+      // The limit is enforced when a file is selected (handleFileSelect).
+      // Select the first recent entry and open it; the persisted list must stay <= 10.
+      const fileItem = screen.getByText('file0.bnd').closest('.file-item');
+      fireEvent.click(fileItem!);
+      fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+
       const stored = JSON.parse(localStorage.getItem('bendcore:recentFiles') || '[]');
       expect(stored.length).toBeLessThanOrEqual(10);
+      expect(stored[0].path).toBe('/home/file0.bnd');
     });
 
     test('should prevent duplicate entries in recent files', () => {
@@ -301,10 +307,10 @@ describe('FilePickerDialog Component', () => {
         <FilePickerDialog isOpen={true} onClose={mockOnClose} onSelect={mockOnSelect} />
       );
 
-      const browseTab = screen.getByText('Browse');
+      const browseTab = screen.getByRole('button', { name: 'Browse' });
       fireEvent.click(browseTab);
 
-      expect(browseTab.parentElement).toHaveClass('active');
+      expect(browseTab).toHaveClass('active');
     });
 
     test('should show path input in browse tab', () => {

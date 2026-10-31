@@ -89,16 +89,16 @@ describe('UI/UX Integration Tests', () => {
       const segmentId = uuid();
       const menu = mouse.getContextMenu('segment', segmentId);
 
-      expect(menu.items).toContain(expect.objectContaining({ label: 'Edit' }));
-      expect(menu.items).toContain(expect.objectContaining({ label: 'Delete' }));
+      expect(menu.items).toContainEqual(expect.objectContaining({ label: 'Edit' }));
+      expect(menu.items).toContainEqual(expect.objectContaining({ label: 'Delete' }));
     });
 
     test('should provide vertex operations in context menu', () => {
       const vertexId = uuid();
       const menu = mouse.getContextMenu('vertex', vertexId);
 
-      expect(menu.items).toContain(expect.objectContaining({ label: 'Fixed' }));
-      expect(menu.items).toContain(expect.objectContaining({ label: 'Remove' }));
+      expect(menu.items).toContainEqual(expect.objectContaining({ label: 'Fixed' }));
+      expect(menu.items).toContainEqual(expect.objectContaining({ label: 'Remove' }));
     });
 
     test('should execute menu action on selection', () => {

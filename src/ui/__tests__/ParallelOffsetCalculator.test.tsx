@@ -74,8 +74,7 @@ describe('ParallelOffsetCalculator Component', () => {
     render(<ParallelOffsetCalculator />);
     const input = screen.getByLabelText(/Внешний диаметр/) as HTMLInputElement;
 
-    await userEvent.clear(input);
-    await userEvent.type(input, '25');
+    fireEvent.change(input, { target: { value: '25' } });
 
     expect(input.value).toBe('25');
   });
@@ -93,7 +92,7 @@ describe('ParallelOffsetCalculator Component', () => {
     render(<ParallelOffsetCalculator />);
     const select = screen.getByLabelText(/Материал/) as HTMLSelectElement;
 
-    await userEvent.selectOptions(select, 'Aluminum');
+    fireEvent.change(select, { target: { value: 'Aluminum' } });
 
     expect(select.value).toBe('Aluminum');
   });
@@ -105,8 +104,7 @@ describe('ParallelOffsetCalculator Component', () => {
     const input = screen.getByLabelText(/Внешний диаметр/);
     const button = screen.getByRole('button', { name: /Рассчитать/ });
 
-    await userEvent.clear(input);
-    await userEvent.type(input, '2');
+    fireEvent.change(input, { target: { value: '2' } });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -121,8 +119,7 @@ describe('ParallelOffsetCalculator Component', () => {
     });
     const button = screen.getByRole('button', { name: /Рассчитать/ });
 
-    await userEvent.clear(angleInput);
-    await userEvent.type(angleInput, '2');
+    fireEvent.change(angleInput, { target: { value: '2' } });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -135,8 +132,7 @@ describe('ParallelOffsetCalculator Component', () => {
     const input = screen.getByLabelText(/Расстояние смещения/);
     const button = screen.getByRole('button', { name: /Рассчитать/ });
 
-    await userEvent.clear(input);
-    await userEvent.type(input, '-10');
+    fireEvent.change(input, { target: { value: '-10' } });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -152,8 +148,7 @@ describe('ParallelOffsetCalculator Component', () => {
     const button = screen.getByRole('button', { name: /Рассчитать/ });
 
     // Вызвать ошибку
-    await userEvent.clear(input);
-    await userEvent.type(input, '2');
+    fireEvent.change(input, { target: { value: '2' } });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -161,8 +156,7 @@ describe('ParallelOffsetCalculator Component', () => {
     });
 
     // Изменить значение и ошибка должна исчезнуть
-    await userEvent.clear(input);
-    await userEvent.type(input, '25');
+    fireEvent.change(input, { target: { value: '25' } });
 
     expect(screen.queryByText(/Диаметр должен быть в диапазоне/)).not.toBeInTheDocument();
   });
@@ -174,8 +168,7 @@ describe('ParallelOffsetCalculator Component', () => {
     const input = screen.getByLabelText(/Внешний диаметр/);
     const button = screen.getByRole('button', { name: /Рассчитать/ });
 
-    await userEvent.clear(input);
-    await userEvent.type(input, '2');
+    fireEvent.change(input, { target: { value: '2' } });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -380,8 +373,7 @@ describe('ParallelOffsetCalculator Component', () => {
     const input = screen.getByLabelText(/Внешний диаметр/);
     const button = screen.getByRole('button', { name: /Рассчитать/ });
 
-    await userEvent.clear(input);
-    await userEvent.type(input, '2');
+    fireEvent.change(input, { target: { value: '2' } });
     fireEvent.click(button);
 
     await waitFor(() => {

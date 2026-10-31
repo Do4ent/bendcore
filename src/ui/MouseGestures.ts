@@ -13,9 +13,64 @@ export interface MouseGestureConfig {
 }
 
 export interface GestureEvent {
-  type: 'orbit' | 'pan' | 'zoom' | 'select' | 'deselect' | 'multi-select' | 'fit-view';
+  type:
+    | 'orbit'
+    | 'pan'
+    | 'zoom'
+    | 'select'
+    | 'deselect'
+    | 'multi-select'
+    | 'fit-view'
+    | 'context-menu'
+    | 'menu-action';
   data?: any;
 }
+
+/** Element kinds that have their own context menu. */
+export type ContextMenuTarget = 'viewport' | 'segment' | 'vertex';
+
+export interface ContextMenuItem {
+  /** Action type sent to executeMenuAction */
+  action: string;
+  label: string;
+}
+
+export interface ContextMenuState {
+  visible: boolean;
+  position: { x: number; y: number };
+  target: ContextMenuTarget;
+  targetId?: string;
+  items: ContextMenuItem[];
+}
+
+export interface MenuAction {
+  type: string;
+  targetId?: string;
+}
+
+export interface MenuActionResult {
+  success: boolean;
+  action: MenuAction;
+  error?: string;
+}
+
+const CONTEXT_MENU_ITEMS: Record<ContextMenuTarget, ContextMenuItem[]> = {
+  viewport: [
+    { action: 'fit-view', label: 'Fit All' },
+    { action: 'home-view', label: 'Home View' },
+    { action: 'deselect', label: 'Clear Selection' },
+  ],
+  segment: [
+    { action: 'edit', label: 'Edit' },
+    { action: 'split', label: 'Split' },
+    { action: 'delete', label: 'Delete' },
+  ],
+  vertex: [
+    { action: 'toggle-fixed', label: 'Fixed' },
+    { action: 'edit', label: 'Edit' },
+    { action: 'remove', label: 'Remove' },
+  ],
+};
 
 export type GestureHandler = (event: GestureEvent) => void;
 
@@ -41,7 +96,21 @@ export class MouseGestures {
   private readonly DOUBLE_CLICK_THRESHOLD = 300;  // ms
   private readonly DRAG_THRESHOLD = 5;  // pixels
 
-  constructor(camera: OrbitCamera, config?: MouseGestureConfig) {
+  // Listeners registered by attachToElement, kept so they can be removed again
+  private attachedElement: HTMLElement | null = null;
+  private readonly onElementMouseDown = (e: MouseEvent) =>
+    this.handleMouseDown(e, this.attachedElement as HTMLElement);
+  private readonly onElementMouseMove = (e: MouseEvent) =>
+    this.handleMouseMove(e, this.attachedElement as HTMLElement);
+  private readonly onElementMouseUp = (e: MouseEvent) => this.handleMouseUp(e);
+  private readonly onElementWheel = (e: WheelEvent) => this.handleWheel(e);
+  private readonly onElementContextMenu = (e: Event) => e.preventDefault();
+  private readonly onDocumentKeyDown = (e: KeyboardEvent) => this.handleKeyDown(e);
+  private readonly onDocumentKeyUp = (e: KeyboardEvent) => this.handleKeyUp(e);
+
+  private contextMenu: ContextMenuState | null = null;
+
+  constructor(camera: OrbitCamera = new OrbitCamera(), config?: MouseGestureConfig) {
     this.camera = camera;
     this.config = {
       orbitButton: config?.orbitButton || 'right',
@@ -87,7 +156,7 @@ export class MouseGestures {
       this.activeGesture = 'orbit';
     } else if (event.button === 1) {  // Middle click
       this.activeGesture = 'pan';
-    } else if (event.button === 0 && this.keysPressed.has('Shift')) {  // Left + Shift = pan
+    } else if (event.button === 0 && this.isShiftActive(event)) {  // Left + Shift = pan
       this.activeGesture = 'pan';
     }
 
@@ -182,7 +251,7 @@ export class MouseGestures {
 
     // Single click selection
     if (event.button === 0) {  // Left click
-      if (this.keysPressed.has('Control') || this.keysPressed.has('Meta')) {
+      if (this.isMultiSelectModifierActive(event)) {
         // Multi-select
         this.emit({
           type: 'multi-select',
@@ -266,25 +335,113 @@ export class MouseGestures {
    * Attach event listeners to viewport element
    */
   attachToElement(element: HTMLElement): void {
-    element.addEventListener('mousedown', (e) => this.handleMouseDown(e, element));
-    element.addEventListener('mousemove', (e) => this.handleMouseMove(e, element));
-    element.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-    element.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
-    element.addEventListener('contextmenu', (e) => e.preventDefault());
+    if (this.attachedElement) {
+      this.detachFromElement(this.attachedElement);
+    }
+    this.attachedElement = element;
 
-    document.addEventListener('keydown', (e) => this.handleKeyDown(e));
-    document.addEventListener('keyup', (e) => this.handleKeyUp(e));
+    element.addEventListener('mousedown', this.onElementMouseDown);
+    element.addEventListener('mousemove', this.onElementMouseMove);
+    element.addEventListener('mouseup', this.onElementMouseUp);
+    element.addEventListener('wheel', this.onElementWheel, { passive: false });
+    element.addEventListener('contextmenu', this.onElementContextMenu);
+
+    document.addEventListener('keydown', this.onDocumentKeyDown);
+    document.addEventListener('keyup', this.onDocumentKeyUp);
   }
 
   /**
    * Detach event listeners from viewport element
    */
   detachFromElement(element: HTMLElement): void {
-    element.removeEventListener('mousedown', (e) => this.handleMouseDown(e, element));
-    element.removeEventListener('mousemove', (e) => this.handleMouseMove(e, element));
-    element.removeEventListener('mouseup', (e) => this.handleMouseUp(e));
-    element.removeEventListener('wheel', (e) => this.handleWheel(e));
-    element.removeEventListener('contextmenu', (e) => e.preventDefault());
+    element.removeEventListener('mousedown', this.onElementMouseDown);
+    element.removeEventListener('mousemove', this.onElementMouseMove);
+    element.removeEventListener('mouseup', this.onElementMouseUp);
+    element.removeEventListener('wheel', this.onElementWheel);
+    element.removeEventListener('contextmenu', this.onElementContextMenu);
+
+    if (this.attachedElement === element) {
+      document.removeEventListener('keydown', this.onDocumentKeyDown);
+      document.removeEventListener('keyup', this.onDocumentKeyUp);
+      this.attachedElement = null;
+    }
+  }
+
+  /**
+   * Shift held: tracked key codes (ShiftLeft/ShiftRight) or the event's own flag
+   */
+  private isShiftActive(event: MouseEvent): boolean {
+    return event.shiftKey || this.getModifierState().shift;
+  }
+
+  /**
+   * Modifier configured for multi-select (Ctrl, or Cmd on macOS; or Shift)
+   */
+  private isMultiSelectModifierActive(event: MouseEvent): boolean {
+    if (this.config.multiSelectModifier === 'shift') {
+      return this.isShiftActive(event);
+    }
+    const modifiers = this.getModifierState();
+    return event.ctrlKey || event.metaKey || modifiers.ctrl || modifiers.meta;
+  }
+
+  /**
+   * Open the viewport context menu at a screen position (right-click)
+   */
+  createContextMenu(position: { x: number; y: number }): ContextMenuState {
+    return this.openContextMenu('viewport', undefined, position);
+  }
+
+  /**
+   * Open the context menu for a sketch element
+   */
+  getContextMenu(
+    target: ContextMenuTarget,
+    targetId?: string,
+    position: { x: number; y: number } = this.lastMousePos
+  ): ContextMenuState {
+    return this.openContextMenu(target, targetId, position);
+  }
+
+  /**
+   * Currently open context menu, if any
+   */
+  getOpenContextMenu(): ContextMenuState | null {
+    return this.contextMenu;
+  }
+
+  closeContextMenu(): void {
+    this.contextMenu = null;
+  }
+
+  /**
+   * Execute a context-menu action: closes the menu and emits a 'menu-action'
+   * gesture for the application to carry out.
+   */
+  executeMenuAction(action: MenuAction): MenuActionResult {
+    if (!action || typeof action.type !== 'string' || action.type.length === 0) {
+      return { success: false, action, error: 'Menu action type is required' };
+    }
+    this.contextMenu = null;
+    this.emit({ type: 'menu-action', data: { ...action } });
+    return { success: true, action: { ...action } };
+  }
+
+  private openContextMenu(
+    target: ContextMenuTarget,
+    targetId: string | undefined,
+    position: { x: number; y: number }
+  ): ContextMenuState {
+    const menu: ContextMenuState = {
+      visible: true,
+      position: { ...position },
+      target,
+      targetId,
+      items: CONTEXT_MENU_ITEMS[target].map((item) => ({ ...item })),
+    };
+    this.contextMenu = menu;
+    this.emit({ type: 'context-menu', data: { target, targetId, position: menu.position } });
+    return menu;
   }
 
   /**

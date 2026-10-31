@@ -2,7 +2,8 @@ name: Build & Test
 
 # JavaScript/TypeScript: backend (Express, backend/) и интерфейс (React/Electron, корень репозитория, src/ui).
 # Ядро C++ (нативно с OCCT и WebAssembly) проверяется в wasm.yml.
-# lock-файлов в репозитории нет, поэтому npm install (не npm ci) и без кэша setup-node.
+# Интерфейс ставится через npm ci по зафиксированному package-lock.json (с кэшем npm).
+# У backend lock-файла нет, поэтому там npm install без кэша setup-node.
 on:
   push:
     branches: [ main, develop ]
@@ -55,15 +56,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install
-        run: set -o pipefail; npm install --no-audit --no-fund 2>&1 | tee ci-frontend.log
+        run: set -o pipefail; npm ci --no-audit --no-fund 2>&1 | tee ci-frontend.log
+
+      - name: Typecheck
+        run: set -o pipefail; npm run typecheck 2>&1 | tee -a ci-frontend.log
 
       - name: Build (tsc + webpack)
         run: set -o pipefail; npm run build 2>&1 | tee -a ci-frontend.log
 
       - name: Test
-        run: set -o pipefail; npm test -- --ci --passWithNoTests 2>&1 | tee -a ci-frontend.log
+        run: set -o pipefail; npm test -- --ci --runInBand 2>&1 | tee -a ci-frontend.log
 
       - name: Ошибки в аннотации (только при падении)
         if: failure()

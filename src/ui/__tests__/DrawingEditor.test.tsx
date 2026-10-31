@@ -59,9 +59,10 @@ describe('DrawingEditor Component', () => {
       />
     );
 
-    expect(screen.getByText('Параметры')).toBeInTheDocument();
-    expect(screen.getByText('Формулы')).toBeInTheDocument();
-    expect(screen.getByText('История')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Параметры' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Формулы' })).toBeInTheDocument();
+    // The history tab shows the number of recorded changes
+    expect(screen.getByRole('tab', { name: 'История (0)' })).toBeInTheDocument();
   });
 
   test('Должен отключить кнопку сохранения без изменений', () => {
@@ -112,8 +113,11 @@ describe('DrawingEditor Component', () => {
       />
     );
 
-    const undoButton = getByText(/Отменить/) as HTMLButtonElement;
-    const redoButton = getByText(/Повторить/) as HTMLButtonElement;
+    // "Отменить" is both the undo ("↶ Отменить") and the cancel ("✕ Отменить") label
+    const undoButton = screen.getByTitle('Отменить (Ctrl+Z)') as HTMLButtonElement;
+    const redoButton = screen.getByTitle('Повторить (Ctrl+Y)') as HTMLButtonElement;
+    expect(undoButton).toHaveTextContent('↶ Отменить');
+    expect(redoButton).toHaveTextContent('↷ Повторить');
 
     expect(undoButton.disabled).toBe(true);
     expect(redoButton.disabled).toBe(true);
@@ -134,8 +138,9 @@ describe('DrawingEditor Component', () => {
       expect(screen.getByText(/Поддерживаемые переменные/i)).toBeInTheDocument();
     });
 
-    const historyTab = getByText('История');
+    const historyTab = screen.getByRole('tab', { name: /^История/ });
     fireEvent.click(historyTab);
+    expect(historyTab).toHaveAttribute('aria-selected', 'true');
 
     await waitFor(() => {
       expect(screen.getByText(/История изменений/i)).toBeInTheDocument();
@@ -163,9 +168,12 @@ describe('DrawingEditor Component', () => {
       />
     );
 
-    const undoButton = getByText(/Отменить/) as HTMLButtonElement;
-    const redoButton = getByText(/Повторить/) as HTMLButtonElement;
-    const cancelButton = getByText(/✕ Отменить/) as HTMLButtonElement;
+    // "Отменить" is both the undo ("↶ Отменить") and the cancel ("✕ Отменить") label
+    const undoButton = screen.getByTitle('Отменить (Ctrl+Z)') as HTMLButtonElement;
+    const redoButton = screen.getByTitle('Повторить (Ctrl+Y)') as HTMLButtonElement;
+    expect(undoButton).toHaveTextContent('↶ Отменить');
+    expect(redoButton).toHaveTextContent('↷ Повторить');
+    const cancelButton = getByText('✕ Отменить') as HTMLButtonElement;
 
     expect(undoButton.disabled).toBe(true);
     expect(redoButton.disabled).toBe(true);

@@ -207,15 +207,39 @@ describe("ToolbarCustomizationDialog", () => {
   });
 
   describe("Drag and Drop", () => {
+    // jsdom has no DataTransfer; browsers always attach one to drag events.
+    const createDataTransfer = () => {
+      const data: Record<string, string> = {};
+      return {
+        effectAllowed: "uninitialized",
+        dropEffect: "none",
+        setData: jest.fn((type: string, value: string) => {
+          data[type] = value;
+        }),
+        getData: jest.fn((type: string) => data[type] ?? ""),
+      };
+    };
+    const availableItem = (container: HTMLElement, label: string) =>
+      Array.from(container.querySelectorAll<HTMLElement>(".customization-item")).find(
+        (item) => item.querySelector(".customization-item-label")?.textContent === label
+      ) as HTMLElement;
+    const previewTitles = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll<HTMLElement>(".toolbar-preview-item")).map(
+        (item) => item.title
+      );
+
     it("should handle drag start", () => {
       const { container } = render(
         <ToolbarCustomizationDialog {...defaultProps} />
       );
 
-      const items = container.querySelectorAll(".customization-item");
-      if (items.length > 0) {
-        fireEvent.dragStart(items[0]);
-      }
+      const item = availableItem(container, "New Tube");
+      const dataTransfer = createDataTransfer();
+      fireEvent.dragStart(item, { dataTransfer });
+
+      expect(dataTransfer.effectAllowed).toBe("move");
+      expect(dataTransfer.setData).toHaveBeenCalledWith("text/plain", "new-tube");
+      expect(item).toHaveClass("dragging");
     });
 
     it("should handle drag over preview", () => {
@@ -223,10 +247,17 @@ describe("ToolbarCustomizationDialog", () => {
         <ToolbarCustomizationDialog {...defaultProps} />
       );
 
-      const preview = container.querySelector(".toolbar-preview");
-      if (preview) {
-        fireEvent.dragOver(preview);
-      }
+      const dataTransfer = createDataTransfer();
+      fireEvent.dragStart(availableItem(container, "New Tube"), { dataTransfer });
+
+      const preview = container.querySelector(".toolbar-preview") as HTMLElement;
+      fireEvent.dragOver(preview, { dataTransfer });
+      expect(dataTransfer.dropEffect).toBe("move");
+
+      // Dropping on the preview background appends to the toolbar
+      fireEvent.drop(preview, { dataTransfer });
+      expect(previewTitles(container)).toEqual(["New Document", "Save Document", "New Tube"]);
+      expect(screen.getByText("Buttons: 3")).toBeInTheDocument();
     });
 
     it("should highlight drop zone on drag over", () => {
@@ -234,11 +265,46 @@ describe("ToolbarCustomizationDialog", () => {
         <ToolbarCustomizationDialog {...defaultProps} />
       );
 
-      const preview = container.querySelector(".toolbar-preview");
-      if (preview) {
-        fireEvent.dragOver(preview);
-        // Check if drag-over class is applied
-      }
+      const preview = container.querySelector(".toolbar-preview") as HTMLElement;
+      expect(preview).not.toHaveClass("drag-over");
+
+      fireEvent.dragOver(preview, { dataTransfer: createDataTransfer() });
+      // Check if drag-over class is applied
+      expect(preview).toHaveClass("drag-over");
+
+      fireEvent.dragLeave(preview);
+      expect(preview).not.toHaveClass("drag-over");
+    });
+
+    it("should insert dropped command before the target item", () => {
+      const { container } = render(
+        <ToolbarCustomizationDialog {...defaultProps} />
+      );
+
+      const dataTransfer = createDataTransfer();
+      fireEvent.dragStart(availableItem(container, "Delete"), { dataTransfer });
+      const firstPreviewItem = container.querySelector(".toolbar-preview-item") as HTMLElement;
+      fireEvent.dragOver(firstPreviewItem, { dataTransfer });
+      fireEvent.drop(firstPreviewItem, { dataTransfer });
+
+      expect(previewTitles(container)).toEqual(["Delete", "New Document", "Save Document"]);
+    });
+
+    it("should allow dropping into an empty toolbar", () => {
+      const { container } = render(
+        <ToolbarCustomizationDialog {...defaultProps} currentButtonIds={[]} />
+      );
+
+      const dataTransfer = createDataTransfer();
+      fireEvent.dragStart(availableItem(container, "New Tube"), { dataTransfer });
+      const preview = container.querySelector(".toolbar-preview") as HTMLElement;
+      fireEvent.dragOver(preview, { dataTransfer });
+      fireEvent.drop(preview, { dataTransfer });
+
+      expect(previewTitles(container)).toEqual(["New Tube"]);
+      expect(
+        screen.queryByText("Drag commands here to customize toolbar")
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -264,12 +330,21 @@ describe("ToolbarCustomizationDialog", () => {
       );
 
       fireEvent.keyDown(container, { key: "Escape" });
+      expect(mockOnClose).toHaveBeenCalledTimes(1);
+      expect(mockOnSave).not.toHaveBeenCalled();
     });
 
     it("should handle Enter key for adding commands", () => {
-      render(<ToolbarCustomizationDialog {...defaultProps} />);
+      const { container } = render(<ToolbarCustomizationDialog {...defaultProps} />);
 
-      // Keyboard handling for dialog
+      const item = screen.getByLabelText("New Tube (create)");
+      item.focus();
+      fireEvent.keyDown(item, { key: "Enter" });
+
+      const titles = Array.from(
+        container.querySelectorAll<HTMLElement>(".toolbar-preview-item")
+      ).map((el) => el.title);
+      expect(titles).toEqual(["New Document", "Save Document", "New Tube"]);
     });
   });
 
