@@ -1247,6 +1247,40 @@ if(EMSCRIPTEN)
     -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createBendcore
     -sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 -sNO_EXIT_RUNTIME=1)
   # Страница и JS-обёртка копируются рядом с модулем (открывать через http-сервер, не file://).
+# ============================================================================
+# M13 Phase: Advanced Rendering (GAP-054 to GAP-058) - 172 tests
+# ============================================================================
+
+# GAP-054: RealTime3DViewport (36 tests) - GPU acceleration, event handling
+add_executable(test_viewport_renderer tests/rendering/test_viewport_renderer.cpp src/rendering/viewport_renderer.cpp)
+target_link_libraries(test_viewport_renderer PRIVATE bendcore_core)
+target_include_directories(test_viewport_renderer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(viewport_renderer test_viewport_renderer)
+
+# GAP-055: MaterialTextureSupport (34 tests) - PBR textures, material system
+add_executable(test_material_system tests/rendering/test_material_system.cpp src/rendering/material_system.cpp)
+target_link_libraries(test_material_system PRIVATE bendcore_core)
+target_include_directories(test_material_system PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(material_system test_material_system)
+
+# GAP-056: LightingShadows (37 tests) - Advanced lighting, shadow mapping
+add_executable(test_lighting_engine tests/rendering/test_lighting_engine.cpp src/rendering/lighting_engine.cpp)
+target_link_libraries(test_lighting_engine PRIVATE bendcore_core)
+target_include_directories(test_lighting_engine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(lighting_engine test_lighting_engine)
+
+# GAP-057: HighQualityImageGeneration (30 tests) - Ray tracing, MSAA, 4K/8K export
+add_executable(test_image_generator tests/rendering/test_image_generator.cpp src/rendering/image_generator.cpp)
+target_link_libraries(test_image_generator PRIVATE bendcore_core)
+target_include_directories(test_image_generator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(image_generator test_image_generator)
+
+# GAP-058: PerformanceOptimization (35 tests) - LOD, culling, batching, FPS monitoring
+add_executable(test_performance_optimizer tests/rendering/test_performance_optimizer.cpp src/rendering/performance_optimizer.cpp)
+target_link_libraries(test_performance_optimizer PRIVATE bendcore_core)
+target_include_directories(test_performance_optimizer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+bendcore_add_test(performance_optimizer test_performance_optimizer)
+
   file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/web/ DESTINATION ${CMAKE_BINARY_DIR}/web)
 endif()
 
