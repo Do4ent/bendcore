@@ -3,7 +3,7 @@
  * Allows users to customize toolbar buttons, reorder them, and preview changes
  */
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import "./ToolbarCustomization.css";
 
 interface Command {
@@ -47,6 +47,7 @@ const ToolbarCustomizationDialog: React.FC<ToolbarCustomizationDialogProps> = ({
   );
   const [toolbarItems, setToolbarItems] = useState<string[]>(currentButtonIds);
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [isDragOverPreview, setIsDragOverPreview] = useState(false);
   const [dragSource, setDragSource] = useState<"available" | "toolbar" | null>(
     null
   );
@@ -97,21 +98,27 @@ const ToolbarCustomizationDialog: React.FC<ToolbarCustomizationDialogProps> = ({
     setDraggedItem(itemId);
     setDragSource(source);
     e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", itemId);
   };
 
   // Handle drag over
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
+    setIsDragOverPreview(true);
   };
 
   // Handle drop in toolbar
   const handleDropToolbar = (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
+    // Items sit inside the preview, which also accepts drops (append at end)
+    e.stopPropagation();
+    setIsDragOverPreview(false);
     if (!draggedItem) return;
 
     if (dragSource === "available") {
-      // Add from available commands
+      // Add from available commands (each command appears once, as with "Add")
+      if (toolbarItems.includes(draggedItem)) return;
       const newItems = [...toolbarItems];
       newItems.splice(targetIndex, 0, draggedItem);
       setToolbarItems(newItems);
@@ -154,6 +161,18 @@ const ToolbarCustomizationDialog: React.FC<ToolbarCustomizationDialogProps> = ({
   const handleReset = () => {
     setToolbarItems(currentButtonIds);
   };
+
+  // Escape closes the dialog without saving
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -216,6 +235,14 @@ const ToolbarCustomizationDialog: React.FC<ToolbarCustomizationDialogProps> = ({
                       : ""
                   }`}
                   draggable
+                  tabIndex={0}
+                  aria-label={`${cmd.label} (${cmd.category})`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && e.target === e.currentTarget) {
+                      e.preventDefault();
+                      handleAddCommand(cmd.id);
+                    }
+                  }}
                   onDragStart={(e) =>
                     handleDragStart(e, cmd.id, "available")
                   }
@@ -254,7 +281,12 @@ const ToolbarCustomizationDialog: React.FC<ToolbarCustomizationDialogProps> = ({
           <div className="toolbar-preview-panel">
             <div className="toolbar-preview-title">Toolbar Preview</div>
 
-            <div className="toolbar-preview">
+            <div
+              className={`toolbar-preview ${isDragOverPreview ? "drag-over" : ""}`}
+              onDragOver={handleDragOver}
+              onDragLeave={() => setIsDragOverPreview(false)}
+              onDrop={(e) => handleDropToolbar(e, toolbarItems.length)}
+            >
               {toolbarItems.length === 0 ? (
                 <div
                   style={{
