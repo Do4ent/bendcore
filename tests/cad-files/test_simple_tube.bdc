@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "name": "Simple Straight Tube",
+  "description": "Test case: Single straight tube, 12 inches, 1 inch diameter",
+  "metadata": {
+    "created": "2026-10-31T00:00:00Z",
+    "author": "Test Suite",
+    "category": "acceptance-test"
+  },
+  "design": {
+    "tubes": [
+      {
+        "id": "tube-001",
+        "name": "Main Tube",
+        "type": "straight",
+        "material": "Steel",
+        "profile": {
+          "type": "circular",
+          "diameterInches": 1.0,
+          "wallThicknessInches": 0.065
+        },
+        "segments": [
+          {
+            "id": "segment-001",
+            "type": "straight",
+            "startPoint": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "endPoint": {
+              "x": 12,
+              "y": 0,
+              "z": 0
+            },
+            "length": 12.0,
+            "description": "Straight segment, 12 inches"
+          }
+        ]
+      }
+    ],
+    "properties": {
+      "totalLength": 12.0,
+      "totalWeight": 1.456,
+      "materialGrade": "A513",
+      "units": "inches"
+    }
+  },
+  "expectedResults": {
+    "centerlineContinuity": "valid",
+    "bendCount": 0,
+    "straightSegmentCount": 1,
+    "geometryValid": true,
+    "expectedLength": 12.0,
+    "toleranceLength": 0.01
+  },
+  "testChecks": [
+    "Import successful",
+    "Feature tree shows 1 segment",
+    "3D viewport renders tube",
+    "Dimension shows 12.00 inches",
+    "Weight calculated correctly",
+    "Save/reload preserves geometry"
+  ]
+}

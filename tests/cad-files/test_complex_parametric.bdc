@@ -1,0 +1,186 @@
+{
+  "version": "1.0.0",
+  "name": "Complex Parametric Design",
+  "description": "Test case: Design with parametric relationships and formulas",
+  "metadata": {
+    "created": "2026-10-31T00:00:00Z",
+    "author": "Test Suite",
+    "category": "acceptance-test"
+  },
+  "design": {
+    "parameters": {
+      "baseLength": {
+        "name": "Base Length",
+        "value": 10.0,
+        "unit": "inches",
+        "description": "Base dimension for calculations"
+      },
+      "bendMultiplier": {
+        "name": "Bend Multiplier",
+        "value": 1.5,
+        "unit": "unitless",
+        "description": "Multiplier for bend segments"
+      },
+      "tubeCount": {
+        "name": "Tube Count",
+        "value": 2,
+        "unit": "count",
+        "description": "Number of parallel tubes"
+      }
+    },
+    "formulas": [
+      {
+        "id": "formula-length",
+        "name": "Total Length",
+        "expression": "baseLength * bendMultiplier + 5",
+        "expectedResult": 20.0,
+        "description": "Length = baseLength * bendMultiplier + 5"
+      },
+      {
+        "id": "formula-weight",
+        "name": "Total Weight",
+        "expression": "totalLength * tubeCount * 0.125",
+        "expectedResult": 5.0,
+        "description": "Weight = totalLength * tubeCount * 0.125"
+      }
+    ],
+    "tubes": [
+      {
+        "id": "tube-001",
+        "name": "Tube A",
+        "type": "parametric",
+        "material": "Steel",
+        "profile": {
+          "type": "circular",
+          "diameterInches": 0.5,
+          "wallThicknessInches": 0.035
+        },
+        "segments": [
+          {
+            "id": "segment-001",
+            "type": "straight",
+            "startPoint": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "endPoint": {
+              "x": "=baseLength",
+              "y": 0,
+              "z": 0
+            },
+            "length": "=baseLength",
+            "formula": "baseLength",
+            "description": "Length driven by baseLength parameter"
+          },
+          {
+            "id": "segment-002",
+            "type": "bend",
+            "startPoint": {
+              "x": "=baseLength",
+              "y": 0,
+              "z": 0
+            },
+            "endPoint": {
+              "x": "=baseLength",
+              "y": "=baseLength * 0.5",
+              "z": 0
+            },
+            "bendAngle": 90.0,
+            "bendRadius": 0.25,
+            "length": "=baseLength * 0.25",
+            "formula": "baseLength * 0.25",
+            "description": "Bend driven by parametric radius"
+          },
+          {
+            "id": "segment-003",
+            "type": "straight",
+            "startPoint": {
+              "x": "=baseLength",
+              "y": "=baseLength * 0.5",
+              "z": 0
+            },
+            "endPoint": {
+              "x": "=baseLength + 5",
+              "y": "=baseLength * 0.5",
+              "z": 0
+            },
+            "length": 5.0,
+            "description": "Fixed length segment"
+          }
+        ]
+      },
+      {
+        "id": "tube-002",
+        "name": "Tube B",
+        "type": "parametric",
+        "material": "Steel",
+        "profile": {
+          "type": "circular",
+          "diameterInches": 0.5,
+          "wallThicknessInches": 0.035
+        },
+        "segments": [
+          {
+            "id": "segment-004",
+            "type": "straight",
+            "startPoint": {
+              "x": 0,
+              "y": 2,
+              "z": 0
+            },
+            "endPoint": {
+              "x": "=baseLength",
+              "y": 2,
+              "z": 0
+            },
+            "length": "=baseLength",
+            "formula": "baseLength",
+            "description": "Parallel tube, same length formula"
+          }
+        ]
+      }
+    ],
+    "properties": {
+      "totalLength": 20.0,
+      "tubeCount": 2,
+      "totalWeight": 5.0,
+      "parametric": true,
+      "formulasCount": 2,
+      "units": "inches"
+    }
+  },
+  "expectedResults": {
+    "formulasValid": true,
+    "parametricUpdateWorks": true,
+    "expectedInitialLength": 20.0,
+    "expectedInitialWeight": 5.0,
+    "testParameterChanges": [
+      {
+        "paramName": "baseLength",
+        "newValue": 12.0,
+        "expectedNewLength": 23.0,
+        "expectedNewWeight": 5.75
+      },
+      {
+        "paramName": "bendMultiplier",
+        "newValue": 2.0,
+        "expectedNewLength": 25.0,
+        "expectedNewWeight": 6.25
+      }
+    ]
+  },
+  "testChecks": [
+    "Import successful with formulas",
+    "Parameters visible in property panel",
+    "Initial calculated values correct",
+    "Change baseLength → all dependent segments update",
+    "Change bendMultiplier → formula recalculates",
+    "Total weight updates when parameters change",
+    "Feature tree reflects parametric relationships",
+    "Undo/redo preserves parameter values",
+    "Save/reload maintains formulas and parameter values",
+    "Geometry updates dynamically on parameter change",
+    "Formulas remain linked after edit"
+  ]
+}

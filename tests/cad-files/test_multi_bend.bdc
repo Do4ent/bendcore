@@ -1,0 +1,142 @@
+{
+  "version": "1.0.0",
+  "name": "Multi-Bend Assembly",
+  "description": "Test case: 3 segments with 2 bends at 90 degrees",
+  "metadata": {
+    "created": "2026-10-31T00:00:00Z",
+    "author": "Test Suite",
+    "category": "acceptance-test"
+  },
+  "design": {
+    "tubes": [
+      {
+        "id": "tube-001",
+        "name": "Multi-Bend Assembly",
+        "type": "bent",
+        "material": "Steel",
+        "profile": {
+          "type": "circular",
+          "diameterInches": 0.75,
+          "wallThicknessInches": 0.049
+        },
+        "segments": [
+          {
+            "id": "segment-001",
+            "type": "straight",
+            "startPoint": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "endPoint": {
+              "x": 6,
+              "y": 0,
+              "z": 0
+            },
+            "length": 6.0,
+            "description": "First straight segment"
+          },
+          {
+            "id": "segment-002",
+            "type": "bend",
+            "startPoint": {
+              "x": 6,
+              "y": 0,
+              "z": 0
+            },
+            "endPoint": {
+              "x": 6,
+              "y": 4,
+              "z": 0
+            },
+            "bendAngle": 90.0,
+            "bendRadius": 0.5,
+            "bendPlane": "xy",
+            "length": 6.283,
+            "description": "90 degree bend, radius 0.5 inches"
+          },
+          {
+            "id": "segment-003",
+            "type": "straight",
+            "startPoint": {
+              "x": 6,
+              "y": 4,
+              "z": 0
+            },
+            "endPoint": {
+              "x": 6,
+              "y": 10,
+              "z": 0
+            },
+            "length": 6.0,
+            "description": "Second straight segment"
+          },
+          {
+            "id": "segment-004",
+            "type": "bend",
+            "startPoint": {
+              "x": 6,
+              "y": 10,
+              "z": 0
+            },
+            "endPoint": {
+              "x": 12,
+              "y": 10,
+              "z": 0
+            },
+            "bendAngle": 90.0,
+            "bendRadius": 0.5,
+            "bendPlane": "xy",
+            "length": 6.283,
+            "description": "90 degree bend, radius 0.5 inches"
+          },
+          {
+            "id": "segment-005",
+            "type": "straight",
+            "startPoint": {
+              "x": 12,
+              "y": 10,
+              "z": 0
+            },
+            "endPoint": {
+              "x": 18,
+              "y": 10,
+              "z": 0
+            },
+            "length": 6.0,
+            "description": "Third straight segment"
+          }
+        ]
+      }
+    ],
+    "properties": {
+      "totalLength": 30.566,
+      "bendCount": 2,
+      "bendTotalCompensation": 0.566,
+      "totalWeight": 2.184,
+      "materialGrade": "A513",
+      "units": "inches"
+    }
+  },
+  "expectedResults": {
+    "centerlineContinuity": "valid",
+    "bendCount": 2,
+    "straightSegmentCount": 3,
+    "geometryValid": true,
+    "expectedBendAngles": [90.0, 90.0],
+    "expectedBendRadii": [0.5, 0.5],
+    "expectedTotalLength": 30.566,
+    "toleranceLength": 0.05
+  },
+  "testChecks": [
+    "Import successful",
+    "Feature tree shows 5 segments (3 straight + 2 bends)",
+    "3D viewport renders all segments",
+    "Bend angles calculated correctly (90° each)",
+    "Bend radii preserved (0.5\" each)",
+    "Total length includes bend compensation",
+    "Save/reload preserves bend geometry",
+    "Tangency maintained at bend transitions",
+    "Undo/redo works on all segments"
+  ]
+}
