@@ -15,9 +15,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: ''
-      - name: Install dependencies and generate lockfile
-        run: npm install --package-lock-only --ignore-scripts && npm ci
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies from the committed lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Verify package.json and package-lock.json agree
+        run: npm ls --all --omit=optional > /dev/null
       - name: TypeScript
         if: always()
         run: npx tsc --noEmit > typescript-errors.log 2>&1 || { cat typescript-errors.log; exit 1; }
@@ -27,12 +30,11 @@ jobs:
       - name: Build
         if: always()
         run: npm run build > build-errors.log 2>&1 || { cat build-errors.log; exit 1; }
-      - name: Upload diagnostics and lockfile
+      - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: frontend-diagnostics
           path: |
-            package-lock.json
             *-errors.log
           if-no-files-found: warn
