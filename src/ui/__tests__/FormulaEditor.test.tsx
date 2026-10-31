@@ -363,7 +363,7 @@ describe('FormulaEditor Component', () => {
 
       const input = screen.getByPlaceholderText('e.g., $OD * 2 + 5');
       await user.click(input);
-      await user.keyboard('Escape');
+      await user.keyboard('{Escape}');
 
       expect(mockOnCancel).toHaveBeenCalled();
     });
