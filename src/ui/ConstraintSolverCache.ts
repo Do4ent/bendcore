@@ -61,17 +61,22 @@ export class ConstraintSolverCache {
    * Hash constraints for invalidation detection
    */
   private hashConstraints(constraints: SketchConstraint[]): string {
-    let hash = 0;
+    // 32-bit FNV-1a over the canonical form of every constraint. The entity
+    // list is copied before sorting so callers' arrays are not mutated.
+    let hash = 0x811c9dc5;
     for (const constraint of constraints) {
       const str = JSON.stringify({
         type: constraint.type,
-        entities: constraint.entities.sort(),
+        entities: [...constraint.entities].sort(),
         value: constraint.value,
+        parameters: constraint.parameters,
       });
-      hash = ((hash << 5) - hash) + str.charCodeAt(0);
-      hash = hash & hash; // Convert to 32-bit integer
+      for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+      }
     }
-    return Math.abs(hash).toString(16);
+    return (hash >>> 0).toString(16);
   }
 
   /**
@@ -81,8 +86,10 @@ export class ConstraintSolverCache {
     const key = this.generateKey(sketchId, constraints);
     const hash = this.hashConstraints(constraints);
 
-    // Check if we need to evict
-    if (this.cache.size >= this.maxSize) {
+    // Replacing an existing entry must not evict another one
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
       this.evictLRU();
     }
 
@@ -125,9 +132,11 @@ export class ConstraintSolverCache {
       return null;
     }
 
-    // Update access info
+    // Update access info and move the entry to the most-recently-used end
     entry.accessCount++;
     entry.lastAccessed = Date.now();
+    this.cache.delete(key);
+    this.cache.set(key, entry);
     this.hitCount++;
 
     return entry.result;
@@ -150,18 +159,11 @@ export class ConstraintSolverCache {
    * Evict least recently used entry
    */
   private evictLRU(): void {
-    let oldestKey: string | null = null;
-    let oldestTime = Date.now();
-
-    for (const [key, entry] of this.cache) {
-      if (entry.lastAccessed < oldestTime) {
-        oldestTime = entry.lastAccessed;
-        oldestKey = key;
-      }
-    }
-
-    if (oldestKey) {
-      this.cache.delete(oldestKey);
+    // Map preserves insertion order and entries are re-inserted on access,
+    // so the first key is always the least recently used one.
+    const oldest = this.cache.keys().next();
+    if (!oldest.done) {
+      this.cache.delete(oldest.value);
     }
   }
 

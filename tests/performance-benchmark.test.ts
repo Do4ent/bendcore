@@ -6,7 +6,12 @@
  */
 
 import { perfMonitor } from '../src/ui/PerformanceMonitoring';
-import { solverCache, ConstraintSolverCache } from '../src/ui/ConstraintSolverCache';
+import {
+  solverCache,
+  ConstraintSolverCache,
+  SketchConstraint,
+  solveConstraintsCached,
+} from '../src/ui/ConstraintSolverCache';
 import { memoryManager } from '../src/ui/MemoryManagement';
 import { dbOptimizer, DatabaseOptimizer } from '../src/ui/DatabaseOptimization';
 import { BinarySerializer, StreamingDeserializer } from '../src/ui/SerializationOptimization';
@@ -135,10 +140,47 @@ describe('Performance Benchmarks', () => {
 
       const stats = cache.getStats();
       expect(parseInt(stats.size)).toBeLessThanOrEqual(2);
+      // The least recently used entry (s1) is the one evicted
+      expect(cache.get('s1', constraints1)).toBeNull();
+      expect(cache.get('s2', constraints2)).toBe(result2);
+      expect(cache.get('s3', constraints3)).toBe(result3);
     });
 
-    test('should target <50ms solving for 50-constraint sketches', () => {
-      const constraints = [];
+    test('should keep recently read entries when evicting', () => {
+      const cache = new ConstraintSolverCache(2);
+      const c = (id: string) => [{ id, type: 'h', entities: [`e${id}`], parameters: {} }];
+      const result = (sketchId: string) => ({
+        sketchId, constraints: c(sketchId), solution: {}, residuals: {}, converged: true,
+        iterations: 1, solveTime: 1, timestamp: Date.now(),
+      });
+
+      cache.put('a', c('a'), result('a'));
+      cache.put('b', c('b'), result('b'));
+      expect(cache.get('a', c('a'))).not.toBeNull(); // 'a' becomes most recently used
+      cache.put('c', c('c'), result('c'));
+
+      expect(cache.get('b', c('b'))).toBeNull();
+      expect(cache.get('a', c('a'))).not.toBeNull();
+      expect(cache.get('c', c('c'))).not.toBeNull();
+    });
+
+    test('should miss when constraint values change', () => {
+      const cache = new ConstraintSolverCache(10);
+      const original = [{ id: '1', type: 'distance', entities: ['p2', 'p1'], value: 10, parameters: {} }];
+      const changed = [{ id: '1', type: 'distance', entities: ['p2', 'p1'], value: 12, parameters: {} }];
+      cache.put('s', original, {
+        sketchId: 's', constraints: original, solution: {}, residuals: {}, converged: true,
+        iterations: 1, solveTime: 1, timestamp: Date.now(),
+      });
+
+      expect(cache.get('s', changed)).toBeNull();
+      expect(cache.get('s', original)).not.toBeNull();
+      // Hashing must not reorder the caller's entity list
+      expect(original[0].entities).toEqual(['p2', 'p1']);
+    });
+
+    test('should target <50ms solving for 50-constraint sketches', async () => {
+      const constraints: SketchConstraint[] = [];
       for (let i = 0; i < 50; i++) {
         constraints.push({
           id: `c${i}`,
@@ -148,14 +190,30 @@ describe('Performance Benchmarks', () => {
         });
       }
 
-      perfMonitor.startTimer('solve-50-constraints');
-      // Simulate solve
-      for (let i = 0; i < 1000000; i++) {
-        Math.sqrt(i);
-      }
-      const solveTime = perfMonitor.endTimer('solve-50-constraints', 'solver');
+      const solver = jest.fn(async (c: SketchConstraint[]) => ({
+        sketchId: 'sketch-50', constraints: c, solution: {}, residuals: {}, converged: true,
+        iterations: 3, solveTime: 0, timestamp: Date.now(),
+      }));
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
 
-      expect(solveTime).toBeLessThan(100); // Aim for < 50ms, but realistic for simulation
+      try {
+        // First call solves and populates the cache
+        perfMonitor.startTimer('solve-50-constraints');
+        const first = await solveConstraintsCached('sketch-50', constraints, solver);
+        const solveTime = perfMonitor.endTimer('solve-50-constraints', 'solver');
+
+        // Second call with the same constraints is served from the cache
+        perfMonitor.startTimer('solve-50-constraints-cached');
+        const second = await solveConstraintsCached('sketch-50', constraints, solver);
+        const cachedTime = perfMonitor.endTimer('solve-50-constraints-cached', 'solver');
+
+        expect(solver).toHaveBeenCalledTimes(1);
+        expect(second).toBe(first);
+        expect(solveTime).toBeLessThan(50);
+        expect(cachedTime).toBeLessThan(50);
+      } finally {
+        logSpy.mockRestore();
+      }
     });
   });
 

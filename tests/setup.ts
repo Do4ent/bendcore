@@ -1,9 +1,19 @@
 import '@testing-library/jest-dom';
+import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util';
 
 /**
  * BendCore Test Setup
  * Global test configuration and mocks
  */
+
+// jest-environment-jsdom does not expose the WHATWG encoding API that browsers
+// and Electron provide; use Node's spec-compliant implementation.
+if (typeof globalThis.TextEncoder === 'undefined') {
+  globalThis.TextEncoder = NodeTextEncoder as unknown as typeof globalThis.TextEncoder;
+}
+if (typeof globalThis.TextDecoder === 'undefined') {
+  globalThis.TextDecoder = NodeTextDecoder as unknown as typeof globalThis.TextDecoder;
+}
 
 // Mock window.matchMedia (not available in jsdom)
 Object.defineProperty(window, 'matchMedia', {
