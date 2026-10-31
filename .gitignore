@@ -96,3 +96,7 @@ CMakeCache.txt
 cmake_install.cmake
 CTestTestfile.cmake
 release/
+
+# Test reports
+playwright-report/
+test-results/
