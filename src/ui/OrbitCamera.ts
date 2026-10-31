@@ -35,6 +35,7 @@ export class OrbitCamera {
   private animationDuration: number = 500;  // ms
   private animationStartState: CameraState | null = null;
   private animationEndState: CameraState | null = null;
+  private viewport: { width: number; height: number } | null = null;
 
   // Default settings
   private readonly DEFAULT_DISTANCE = 100;
@@ -208,6 +209,63 @@ export class OrbitCamera {
     this.state.yaw = 45;
 
     this.updateCameraMatrix();
+  }
+
+  /**
+   * Fit everything into view. Without a (non-empty) bounding box this resets
+   * to the default framing immediately.
+   */
+  fitAll(boundingBox?: THREE.Box3): void {
+    if (boundingBox && !boundingBox.isEmpty()) {
+      this.fitToView(boundingBox);
+      return;
+    }
+    this.isAnimating = false;
+    this.state.target = { x: 0, y: 0, z: 0 };
+    this.state.distance = this.DEFAULT_DISTANCE;
+    this.state.pitch = 30;  // Isometric-like view, as fitToView
+    this.state.yaw = 45;
+    this.updateCameraMatrix();
+  }
+
+  /**
+   * Current orbit angles in degrees: x = pitch, y = yaw
+   */
+  getRotation(): { x: number; y: number } {
+    return { x: this.state.pitch, y: this.state.yaw };
+  }
+
+  /**
+   * Current camera position in world space
+   */
+  getPosition(): { x: number; y: number; z: number } {
+    const { x, y, z } = this.camera.position;
+    return { x, y, z };
+  }
+
+  /**
+   * Current distance from the orbit target
+   */
+  getDistance(): number {
+    return this.state.distance;
+  }
+
+  /**
+   * Set the viewport size in pixels and update the camera aspect ratio
+   */
+  setViewport(width: number, height: number): void {
+    if (!(width > 0) || !(height > 0)) {
+      throw new Error(`Invalid viewport size: ${width}x${height}`);
+    }
+    this.viewport = { width, height };
+    this.handleWindowResize(width, height);
+  }
+
+  /**
+   * Viewport size last set with setViewport (null until set)
+   */
+  getViewport(): { width: number; height: number } | null {
+    return this.viewport ? { ...this.viewport } : null;
   }
 
   /**

@@ -13,9 +13,64 @@ export interface MouseGestureConfig {
 }
 
 export interface GestureEvent {
-  type: 'orbit' | 'pan' | 'zoom' | 'select' | 'deselect' | 'multi-select' | 'fit-view';
+  type:
+    | 'orbit'
+    | 'pan'
+    | 'zoom'
+    | 'select'
+    | 'deselect'
+    | 'multi-select'
+    | 'fit-view'
+    | 'context-menu'
+    | 'menu-action';
   data?: any;
 }
+
+/** Element kinds that have their own context menu. */
+export type ContextMenuTarget = 'viewport' | 'segment' | 'vertex';
+
+export interface ContextMenuItem {
+  /** Action type sent to executeMenuAction */
+  action: string;
+  label: string;
+}
+
+export interface ContextMenuState {
+  visible: boolean;
+  position: { x: number; y: number };
+  target: ContextMenuTarget;
+  targetId?: string;
+  items: ContextMenuItem[];
+}
+
+export interface MenuAction {
+  type: string;
+  targetId?: string;
+}
+
+export interface MenuActionResult {
+  success: boolean;
+  action: MenuAction;
+  error?: string;
+}
+
+const CONTEXT_MENU_ITEMS: Record<ContextMenuTarget, ContextMenuItem[]> = {
+  viewport: [
+    { action: 'fit-view', label: 'Fit All' },
+    { action: 'home-view', label: 'Home View' },
+    { action: 'deselect', label: 'Clear Selection' },
+  ],
+  segment: [
+    { action: 'edit', label: 'Edit' },
+    { action: 'split', label: 'Split' },
+    { action: 'delete', label: 'Delete' },
+  ],
+  vertex: [
+    { action: 'toggle-fixed', label: 'Fixed' },
+    { action: 'edit', label: 'Edit' },
+    { action: 'remove', label: 'Remove' },
+  ],
+};
 
 export type GestureHandler = (event: GestureEvent) => void;
 
@@ -53,7 +108,9 @@ export class MouseGestures {
   private readonly onDocumentKeyDown = (e: KeyboardEvent) => this.handleKeyDown(e);
   private readonly onDocumentKeyUp = (e: KeyboardEvent) => this.handleKeyUp(e);
 
-  constructor(camera: OrbitCamera, config?: MouseGestureConfig) {
+  private contextMenu: ContextMenuState | null = null;
+
+  constructor(camera: OrbitCamera = new OrbitCamera(), config?: MouseGestureConfig) {
     this.camera = camera;
     this.config = {
       orbitButton: config?.orbitButton || 'right',
@@ -326,6 +383,65 @@ export class MouseGestures {
     }
     const modifiers = this.getModifierState();
     return event.ctrlKey || event.metaKey || modifiers.ctrl || modifiers.meta;
+  }
+
+  /**
+   * Open the viewport context menu at a screen position (right-click)
+   */
+  createContextMenu(position: { x: number; y: number }): ContextMenuState {
+    return this.openContextMenu('viewport', undefined, position);
+  }
+
+  /**
+   * Open the context menu for a sketch element
+   */
+  getContextMenu(
+    target: ContextMenuTarget,
+    targetId?: string,
+    position: { x: number; y: number } = this.lastMousePos
+  ): ContextMenuState {
+    return this.openContextMenu(target, targetId, position);
+  }
+
+  /**
+   * Currently open context menu, if any
+   */
+  getOpenContextMenu(): ContextMenuState | null {
+    return this.contextMenu;
+  }
+
+  closeContextMenu(): void {
+    this.contextMenu = null;
+  }
+
+  /**
+   * Execute a context-menu action: closes the menu and emits a 'menu-action'
+   * gesture for the application to carry out.
+   */
+  executeMenuAction(action: MenuAction): MenuActionResult {
+    if (!action || typeof action.type !== 'string' || action.type.length === 0) {
+      return { success: false, action, error: 'Menu action type is required' };
+    }
+    this.contextMenu = null;
+    this.emit({ type: 'menu-action', data: { ...action } });
+    return { success: true, action: { ...action } };
+  }
+
+  private openContextMenu(
+    target: ContextMenuTarget,
+    targetId: string | undefined,
+    position: { x: number; y: number }
+  ): ContextMenuState {
+    const menu: ContextMenuState = {
+      visible: true,
+      position: { ...position },
+      target,
+      targetId,
+      items: CONTEXT_MENU_ITEMS[target].map((item) => ({ ...item })),
+    };
+    this.contextMenu = menu;
+    this.emit({ type: 'context-menu', data: { target, targetId, position: menu.position } });
+    return menu;
   }
 
   /**

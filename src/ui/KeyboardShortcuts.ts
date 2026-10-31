@@ -4,6 +4,19 @@
  * Part of Phase 31 foundational work
  */
 
+import {
+  ActionHistory,
+  AutoSaveSnapshot,
+  ProjectData,
+  ProjectSession,
+  RecordedAction,
+  ThemeColors,
+  ThemeDefinition,
+  ThemeRegistry,
+  ToolbarLayoutPreference,
+  ToolbarState,
+} from "./WorkspaceState";
+
 /**
  * Shortcut definition
  */
@@ -293,12 +306,13 @@ export function getShortcutsByCategory(
 }
 
 /**
- * Initialize keyboard shortcut listeners on app startup
+ * Initialize keyboard shortcut listeners on app startup.
+ * Returns a function that removes the listener again.
  */
 export function initializeShortcutListeners(
   onCommand: (commandId: string) => void
-): void {
-  window.addEventListener("keydown", (event: KeyboardEvent) => {
+): () => void {
+  const listener = (event: KeyboardEvent) => {
     // Build shortcut string from event
     const parts: string[] = [];
 
@@ -327,7 +341,9 @@ export function initializeShortcutListeners(
       event.preventDefault();
       onCommand(commandId);
     }
-  });
+  };
+  window.addEventListener("keydown", listener);
+  return () => window.removeEventListener("keydown", listener);
 }
 
 /**
@@ -343,4 +359,225 @@ export function formatShortcutForDisplay(commandId: string): string {
   }
 
   return shortcut;
+}
+
+// ---------------------------------------------------------------------------
+// KeyboardShortcuts controller
+// ---------------------------------------------------------------------------
+
+
+export interface ShortcutBinding {
+  action: string;
+  /** Normalised key combination, e.g. ["Ctrl", "Shift", "S"] */
+  keys: string[];
+}
+
+export interface WorkspacePreferences {
+  theme: string;
+  toolbarOrder: string[];
+  hiddenToolbarButtons: string[];
+  toolbarLayout: ToolbarLayoutPreference;
+  shortcuts: ShortcutBinding[];
+}
+
+const MODIFIER_ORDER = ["Ctrl", "Alt", "Shift", "Meta"];
+const MODIFIER_ALIASES: Record<string, string> = {
+  ctrl: "Ctrl",
+  control: "Ctrl",
+  alt: "Alt",
+  option: "Alt",
+  shift: "Shift",
+  meta: "Meta",
+  cmd: "Meta",
+  command: "Meta",
+};
+
+/** Normalise keys to "Ctrl+Alt+Shift+Meta+<KEY>" order with an upper-case key. */
+export function normalizeShortcut(keys: string[]): string {
+  const modifiers = new Set<string>();
+  const others: string[] = [];
+  keys
+    .flatMap((k) => k.split("+"))
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0)
+    .forEach((k) => {
+      const modifier = MODIFIER_ALIASES[k.toLowerCase()];
+      if (modifier) {
+        modifiers.add(modifier);
+      } else {
+        others.push(k.length === 1 ? k.toUpperCase() : k);
+      }
+    });
+  if (others.length !== 1) {
+    throw new Error(`A shortcut needs exactly one non-modifier key, got: ${keys.join("+")}`);
+  }
+  return [...MODIFIER_ORDER.filter((m) => modifiers.has(m)), others[0]].join("+");
+}
+
+/**
+ * Keyboard-driven workspace controller: the shortcut map plus the state the
+ * shortcuts act on (undo history, the open project, toolbar and theme
+ * preferences), so commands such as Ctrl+S or Ctrl+Z and the UI share it.
+ */
+export class KeyboardShortcuts {
+  private bindings = new Map<string, string>();
+  private readonly history = new ActionHistory();
+  private readonly project = new ProjectSession();
+  private readonly toolbar = new ToolbarState();
+  private readonly themes = new ThemeRegistry();
+  private savedPreferences: WorkspacePreferences | null = null;
+
+  constructor(definitions: KeyboardShortcutDef[] = KEYBOARD_SHORTCUTS) {
+    definitions.forEach((def) => this.bindings.set(normalizeShortcut([def.shortcut]), def.commandId));
+  }
+
+  // Shortcuts ---------------------------------------------------------------
+
+  /** Action bound to a key combination, e.g. ("Ctrl", "S") -> "save". */
+  handleKeyboardShortcut(...keys: string[]): string | undefined {
+    return this.bindings.get(normalizeShortcut(keys));
+  }
+
+  /** Bind a key combination to an action, replacing any existing binding. */
+  setShortcut(action: string, ...keys: string[]): void {
+    if (!action) {
+      throw new Error("Shortcut action is required");
+    }
+    this.bindings.set(normalizeShortcut(keys), action);
+  }
+
+  /** Action currently bound to a key combination (a conflict when re-binding). */
+  checkShortcutConflict(...keys: string[]): string | undefined {
+    return this.bindings.get(normalizeShortcut(keys));
+  }
+
+  getAllShortcuts(): ShortcutBinding[] {
+    return Array.from(this.bindings.entries()).map(([shortcut, action]) => ({
+      action,
+      keys: shortcut.split("+"),
+    }));
+  }
+
+  // Undo / redo -------------------------------------------------------------
+
+  recordAction(action: RecordedAction): void {
+    this.history.record(action);
+  }
+
+  undo(): RecordedAction | undefined {
+    return this.history.undo();
+  }
+
+  redo(): RecordedAction | undefined {
+    return this.history.redo();
+  }
+
+  canUndo(): boolean {
+    return this.history.canUndo();
+  }
+
+  canRedo(): boolean {
+    return this.history.canRedo();
+  }
+
+  getUndoHistory(): RecordedAction[] {
+    return this.history.getHistory();
+  }
+
+  // Project -----------------------------------------------------------------
+
+  saveProject(project?: ProjectData): boolean {
+    return this.project.save(project);
+  }
+
+  loadProject(source: string | ProjectData): ProjectData {
+    return this.project.load(source);
+  }
+
+  modifyProject(changes: Partial<ProjectData>): ProjectData {
+    return this.project.modify(changes);
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.project.hasUnsavedChanges();
+  }
+
+  enableAutoSave(intervalMs: number): void {
+    this.project.enableAutoSave(intervalMs);
+  }
+
+  disableAutoSave(): void {
+    this.project.disableAutoSave();
+  }
+
+  getAutoSaveData(projectId: string): AutoSaveSnapshot | undefined {
+    return this.project.getAutoSave(projectId);
+  }
+
+  // Toolbar -----------------------------------------------------------------
+
+  setToolbarOrder(order: string[]): void {
+    this.toolbar.setOrder(order);
+  }
+
+  getToolbarOrder(): string[] {
+    return this.toolbar.getOrder();
+  }
+
+  setToolbarVisibility(buttonId: string, visible: boolean): void {
+    this.toolbar.setVisibility(buttonId, visible);
+  }
+
+  isToolbarButtonVisible(buttonId: string): boolean {
+    return this.toolbar.isVisible(buttonId);
+  }
+
+  resetToolbarDefaults(): void {
+    this.toolbar.resetDefaults();
+  }
+
+  saveToolbarLayout(layout: ToolbarLayoutPreference): void {
+    this.toolbar.saveLayout(layout);
+  }
+
+  getToolbarLayout(): ToolbarLayoutPreference {
+    return this.toolbar.getLayout();
+  }
+
+  // Themes ------------------------------------------------------------------
+
+  registerTheme(theme: ThemeDefinition): void {
+    this.themes.register(theme);
+  }
+
+  setTheme(name: string): void {
+    this.themes.set(name);
+  }
+
+  getTheme(): string {
+    return this.themes.get();
+  }
+
+  getThemeColors(): ThemeColors {
+    return this.themes.getColors();
+  }
+
+  // Preferences -------------------------------------------------------------
+
+  /** Snapshot the current preferences (theme, toolbar, shortcuts). */
+  savePreferences(): WorkspacePreferences {
+    this.savedPreferences = {
+      theme: this.themes.get(),
+      toolbarOrder: this.toolbar.getOrder(),
+      hiddenToolbarButtons: this.toolbar.getHidden(),
+      toolbarLayout: this.toolbar.getLayout(),
+      shortcuts: this.getAllShortcuts(),
+    };
+    return this.getPreferences() as WorkspacePreferences;
+  }
+
+  /** Last saved preferences, or null if none were saved yet. */
+  getPreferences(): WorkspacePreferences | null {
+    return this.savedPreferences ? JSON.parse(JSON.stringify(this.savedPreferences)) : null;
+  }
 }

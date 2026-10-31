@@ -148,9 +148,7 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   }, [activeDocumentType]);
 
   // Initialize keyboard shortcuts on mount
-  useEffect(() => {
-    initializeShortcutListeners(handleCommand);
-  }, [handleCommand]);
+  useEffect(() => initializeShortcutListeners(handleCommand), [handleCommand]);
 
   const handleTubeSave = useCallback(
     async (config: TubeConfig) => {
