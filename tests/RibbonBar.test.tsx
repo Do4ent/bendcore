@@ -153,7 +153,7 @@ describe('RibbonBar', () => {
   });
 
   describe('Dialog Integration', () => {
-    test('should open tube dialog on new-tube command', async () => {
+    test('should open new tube wizard on new-tube command', async () => {
       render(<RibbonBar onCommand={mockOnCommand} />);
       fireEvent.click(tab('Part'));
 
@@ -162,21 +162,30 @@ describe('RibbonBar', () => {
       await waitFor(() => {
         expect(mockOnCommand).toHaveBeenCalledWith('new-tube');
       });
-      expect(screen.getByRole('dialog', { name: 'Tube Configuration' })).toBeInTheDocument();
+      // NewTubeDialog shows "Create New Tube" as heading
+      expect(screen.getByText('Create New Tube')).toBeInTheDocument();
     });
 
-    test('should close dialog when cancelled', async () => {
+    test('should close new tube wizard when cancelled', async () => {
       render(<RibbonBar onCommand={mockOnCommand} />);
       fireEvent.click(tab('Part'));
       fireEvent.click(ribbonButton('New Tube'));
 
-      // Dialog should open and then be closeable
-      const dialog = await screen.findByRole('dialog', { name: 'Tube Configuration' });
-      const cancelButtons = within(dialog).getAllByRole('button', { name: 'Cancel' });
-      fireEvent.click(cancelButtons[cancelButtons.length - 1]);
+      // Wait for dialog to appear
+      await waitFor(() => {
+        expect(screen.getByText('Create New Tube')).toBeInTheDocument();
+      });
+
+      // Click Cancel button
+      const cancelButton = screen.getAllByRole('button', { name: 'Cancel' }).find(
+        btn => btn.textContent === 'Cancel'
+      );
+      if (cancelButton) {
+        fireEvent.click(cancelButton);
+      }
 
       await waitFor(() => {
-        expect(screen.queryByRole('dialog', { name: 'Tube Configuration' })).not.toBeInTheDocument();
+        expect(screen.queryByText('Create New Tube')).not.toBeInTheDocument();
       });
     });
   });
