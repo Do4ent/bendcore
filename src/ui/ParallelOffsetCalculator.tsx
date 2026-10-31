@@ -88,7 +88,8 @@ export const ParallelOffsetCalculator: React.FC<ParallelOffsetCalculatorProps> =
     (key: keyof CalculationParameters, value: string | number) => {
       setParams(prev => ({
         ...prev,
-        [key]: typeof value === 'string' ? parseFloat(value) || 0 : value,
+        // material is a string id; every other field is numeric
+        [key]: key === 'material' || typeof value !== 'string' ? value : parseFloat(value) || 0,
       }));
       // Очистить ошибки при изменении
       setErrors([]);
