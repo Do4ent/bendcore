@@ -262,7 +262,8 @@ describe("ProfilesManager", () => {
     it("should display theme name", () => {
       render(<ProfilesManager {...defaultProps} />);
 
-      expect(screen.getByText(/Theme:/)).toBeInTheDocument();
+      // "Theme:" also appears inside the toolbar summary line; target the stat label
+      expect(screen.getByText("Theme:", { selector: ".profile-stat-label" })).toBeInTheDocument();
     });
   });
 

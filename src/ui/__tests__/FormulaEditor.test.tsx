@@ -286,7 +286,8 @@ describe('FormulaEditor Component', () => {
       await user.type(input, '10 / 0');
 
       await waitFor(() => {
-        expect(screen.getByText(/division by zero/i)).toBeInTheDocument();
+        // The suggestion list also mentions division by zero, so scope to the message box
+        expect(screen.getByText(/division by zero/i, { selector: '.error-message' })).toBeInTheDocument();
       });
     });
 
