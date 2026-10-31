@@ -33,7 +33,6 @@ jobs:
 
       - name: Run tests
         run: npm test -- --ci --runInBand
-        continue-on-error: true
 
       - name: Build and type-check
         run: |
@@ -47,7 +46,7 @@ jobs:
           WINDOWS: true
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-builds
           path: |
@@ -67,7 +66,7 @@ jobs:
           cat checksums.txt || echo "No files to checksum"
 
       - name: Upload checksums
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-checksums
           path: release/checksums.txt

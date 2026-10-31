@@ -5,7 +5,8 @@
     "lib": ["ES2020"],
     "jsx": "react",
     "skipLibCheck": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "types": ["node"]
   },
   "include": ["src/api/**/*"],
   "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx"]
