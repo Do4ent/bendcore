@@ -1,6 +1,6 @@
 /**
  * TubeDialog Tests
- * Validates tube configuration dialog with 5 tabs
+ * Validates tube configuration dialog with 7 tabs
  */
 
 import React from 'react';
@@ -22,10 +22,12 @@ describe('TubeDialog', () => {
     onClose: mockOnClose,
   };
 
+  const tab = (name: string) => screen.getByRole('tab', { name });
+
   describe('Rendering', () => {
     test('should render dialog when isOpen is true', () => {
       render(<TubeDialog {...defaultProps} />);
-      expect(screen.getByText(/Tube Configuration|Geometry|Bends/i)).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Tube Configuration' })).toBeInTheDocument();
     });
 
     test('should not render dialog when isOpen is false', () => {
@@ -38,219 +40,157 @@ describe('TubeDialog', () => {
 
     test('should display dialog title', () => {
       render(<TubeDialog {...defaultProps} />);
-      expect(screen.getByText(/Tube|Configuration/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Tube Configuration' })).toBeInTheDocument();
     });
   });
 
   describe('Tab Navigation', () => {
-    test('should have 5 tabs available', () => {
-      const { container } = render(<TubeDialog {...defaultProps} />);
-      const tabs = container.querySelectorAll('[role="tab"]');
-      expect(tabs.length).toBeGreaterThanOrEqual(5);
+    test('should have 7 tabs available', () => {
+      render(<TubeDialog {...defaultProps} />);
+      expect(screen.getAllByRole('tab')).toHaveLength(7);
     });
 
     test('should switch to Geometry tab', () => {
       render(<TubeDialog {...defaultProps} />);
-      const geometryTab = screen.getByText(/Geometry/i);
-      fireEvent.click(geometryTab);
+      fireEvent.click(tab('Geometry'));
 
-      expect(screen.getByText(/Outer Diameter|Wall Thickness|Length/i)).toBeInTheDocument();
+      expect(tab('Geometry')).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByLabelText('Outer Diameter (mm)')).toBeInTheDocument();
     });
 
     test('should switch to Bends tab', async () => {
       render(<TubeDialog {...defaultProps} />);
-      const bendsTab = screen.getByText(/Bends/i);
-      fireEvent.click(bendsTab);
+      fireEvent.click(tab('Bends'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Bend|Add|Position|Angle/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '+ Add New Bend' })).toBeInTheDocument();
       });
     });
 
     test('should switch to Ports tab', async () => {
       render(<TubeDialog {...defaultProps} />);
-      const portsTab = screen.getByText(/Ports/i);
-      fireEvent.click(portsTab);
+      fireEvent.click(tab('Ports'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Port|Position/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '+ Add New Port' })).toBeInTheDocument();
       });
     });
 
     test('should switch to Advanced tab', async () => {
       render(<TubeDialog {...defaultProps} />);
-      const advancedTab = screen.getByText(/Advanced/i);
-      fireEvent.click(advancedTab);
+      fireEvent.click(tab('Advanced'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Advanced|Settings|Parameters/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Reset to Defaults' })).toBeInTheDocument();
       });
     });
 
     test('should switch to Preview tab', async () => {
       render(<TubeDialog {...defaultProps} />);
-      const previewTab = screen.getByText(/Preview/i);
-      fireEvent.click(previewTab);
+      fireEvent.click(tab('Preview'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Summary|Preview/i)).toBeInTheDocument();
+        expect(screen.getByText('Calculated Mass:')).toBeInTheDocument();
       });
     });
 
-    test('should maintain tab state when switching', async () => {
+    test('should maintain tab state when switching', () => {
       render(<TubeDialog {...defaultProps} />);
 
       // Go to Geometry tab
-      fireEvent.click(screen.getByText(/Geometry/i));
-      expect(screen.getByText(/Outer Diameter/i)).toBeInTheDocument();
+      fireEvent.click(tab('Geometry'));
+      expect(screen.getByLabelText('Outer Diameter (mm)')).toBeInTheDocument();
 
       // Go to Bends tab
-      fireEvent.click(screen.getByText(/Bends/i));
-      expect(screen.queryByText(/Outer Diameter/i)).not.toBeInTheDocument();
+      fireEvent.click(tab('Bends'));
+      expect(screen.queryByLabelText('Outer Diameter (mm)')).not.toBeInTheDocument();
 
       // Back to Geometry tab
-      fireEvent.click(screen.getByText(/Geometry/i));
-      expect(screen.getByText(/Outer Diameter/i)).toBeInTheDocument();
+      fireEvent.click(tab('Geometry'));
+      expect(screen.getByLabelText('Outer Diameter (mm)')).toBeInTheDocument();
     });
   });
 
   describe('Geometry Tab', () => {
-    test('should have outer diameter input', async () => {
+    beforeEach(() => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
-
-      await waitFor(() => {
-        const odInput = screen.getByLabelText(/Outer Diameter|OD/i);
-        expect(odInput).toBeInTheDocument();
-      });
+      fireEvent.click(tab('Geometry'));
     });
 
-    test('should have wall thickness input', async () => {
-      render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
-
-      await waitFor(() => {
-        const wtInput = screen.getByLabelText(/Wall Thickness|WT/i);
-        expect(wtInput).toBeInTheDocument();
-      });
+    test('should have outer diameter input', () => {
+      expect(screen.getByLabelText('Outer Diameter (mm)')).toBeInTheDocument();
     });
 
-    test('should have length input', async () => {
-      render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
-
-      await waitFor(() => {
-        const lengthInput = screen.getByLabelText(/Length|Total/i);
-        expect(lengthInput).toBeInTheDocument();
-      });
+    test('should have wall thickness input', () => {
+      expect(screen.getByLabelText('Wall Thickness (mm)')).toBeInTheDocument();
     });
 
-    test('should have material selection dropdown', async () => {
-      render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
-
-      await waitFor(() => {
-        const materialSelect = screen.getByLabelText(/Material/i);
-        expect(materialSelect).toBeInTheDocument();
-      });
+    test('should have length input', () => {
+      expect(screen.getByLabelText('Length (mm)')).toBeInTheDocument();
     });
 
-    test('should validate outer diameter input', async () => {
-      render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
-
-      await waitFor(() => {
-        const odInput = screen.getByLabelText(/Outer Diameter/i) as HTMLInputElement;
-        fireEvent.change(odInput, { target: { value: 'invalid' } });
-        fireEvent.blur(odInput);
-
-        // Should show validation error
-        expect(odInput.value).not.toBe('invalid');
-      });
+    test('should have material selection dropdown', () => {
+      expect(screen.getByLabelText('Material')).toBeInTheDocument();
     });
 
-    test('should calculate mass on input change', async () => {
-      render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
+    test('should validate outer diameter input', () => {
+      const odInput = screen.getByLabelText('Outer Diameter (mm)') as HTMLInputElement;
+      fireEvent.change(odInput, { target: { value: '-5' } });
+      fireEvent.blur(odInput);
 
-      await waitFor(() => {
-        const odInput = screen.getByLabelText(/Outer Diameter/i) as HTMLInputElement;
-        fireEvent.change(odInput, { target: { value: '25' } });
+      expect(screen.getByText('OD must be between 1 and 100 mm')).toBeInTheDocument();
+    });
 
-        // Mass should be recalculated
-        expect(mockOnSave).not.toHaveBeenCalled(); // Not saved yet
-      });
+    test('should calculate mass on input change', () => {
+      const odInput = screen.getByLabelText('Outer Diameter (mm)') as HTMLInputElement;
+      fireEvent.change(odInput, { target: { value: '25' } });
+
+      expect(mockOnSave).not.toHaveBeenCalled(); // Not saved yet
     });
   });
 
   describe('Bends Tab', () => {
     test('should display add bend button', async () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Bends/i));
+      fireEvent.click(tab('Bends'));
 
       await waitFor(() => {
-        const addBtn = screen.getByText(/Add|Insert/i);
-        expect(addBtn).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '+ Add New Bend' })).toBeInTheDocument();
       });
     });
 
     test('should add bend to list', async () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Bends/i));
+      fireEvent.click(tab('Bends'));
+
+      expect(screen.getByText('No bends defined yet')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '+ Add New Bend' }));
 
       await waitFor(() => {
-        const addBtn = screen.getByText(/Add Bend/i);
-        fireEvent.click(addBtn);
-
-        // Bend should appear in list
-        expect(screen.getByText(/Bend 1|Position/i)).toBeInTheDocument();
+        expect(screen.queryByText('No bends defined yet')).not.toBeInTheDocument();
       });
-    });
-
-    test('should allow editing bends', async () => {
-      render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Bends/i));
-
-      await waitFor(() => {
-        const editBtn = screen.queryByText(/Edit/i);
-        if (editBtn) {
-          fireEvent.click(editBtn);
-        }
-      });
-    });
-
-    test('should allow deleting bends', async () => {
-      render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Bends/i));
-
-      await waitFor(() => {
-        const deleteBtn = screen.queryByText(/Delete|Remove/i);
-        if (deleteBtn) {
-          fireEvent.click(deleteBtn);
-        }
-      });
+      expect(screen.getByText('Total Bends:').nextElementSibling).toHaveTextContent('1');
     });
   });
 
   describe('Ports Tab', () => {
     test('should display port list', async () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Ports/i));
+      fireEvent.click(tab('Ports'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Port|List/i)).toBeInTheDocument();
+        expect(screen.getByText('No ports defined yet')).toBeInTheDocument();
       });
     });
 
     test('should allow adding ports', async () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Ports/i));
+      fireEvent.click(tab('Ports'));
+
+      fireEvent.click(screen.getByRole('button', { name: '+ Add New Port' }));
 
       await waitFor(() => {
-        const addBtn = screen.queryByText(/Add|Insert/i);
-        if (addBtn) {
-          fireEvent.click(addBtn);
-        }
+        expect(screen.queryByText('No ports defined yet')).not.toBeInTheDocument();
       });
     });
   });
@@ -258,135 +198,106 @@ describe('TubeDialog', () => {
   describe('Advanced Tab', () => {
     test('should display advanced settings', async () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Advanced/i));
+      fireEvent.click(tab('Advanced'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Settings|Advanced/i)).toBeInTheDocument();
+        expect(screen.getByRole('checkbox')).toBeInTheDocument();
       });
     });
 
     test('should have toggleable options', async () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Advanced/i));
+      fireEvent.click(tab('Advanced'));
 
-      await waitFor(() => {
-        const toggle = screen.queryByRole('checkbox');
-        if (toggle) {
-          fireEvent.click(toggle);
-        }
-      });
-    });
-
-    test('should have slider controls', async () => {
-      render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Advanced/i));
-
-      await waitFor(() => {
-        const slider = screen.queryByRole('slider');
-        if (slider) {
-          fireEvent.change(slider, { target: { value: '50' } });
-        }
-      });
+      const toggle = await screen.findByRole('checkbox');
+      fireEvent.click(toggle);
+      expect(toggle).toBeChecked();
     });
   });
 
   describe('Preview Tab', () => {
     test('should display summary information', async () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Preview/i));
+      fireEvent.click(tab('Preview'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Summary|Preview|Total/i)).toBeInTheDocument();
+        expect(screen.getByText('Calculated Mass:')).toBeInTheDocument();
       });
     });
 
     test('should show calculated values', async () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Preview/i));
+      fireEvent.click(tab('Preview'));
 
       await waitFor(() => {
-        // Should display mass, length, bend count, etc.
-        expect(screen.getByText(/Total|Mass|Length|Count/i)).toBeInTheDocument();
+        expect(screen.getByText('Bends:')).toBeInTheDocument();
+        expect(screen.getByText('Ports:')).toBeInTheDocument();
       });
     });
   });
 
   describe('Form Validation', () => {
-    test('should require outer diameter', async () => {
+    test('should disable Save while the default OD is invalid', () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
+      fireEvent.click(tab('Geometry'));
 
-      await waitFor(() => {
-        const saveBtn = screen.getByText(/Save/i);
-        fireEvent.click(saveBtn);
-
-        // Should show validation error
-        expect(mockOnSave).not.toHaveBeenCalled();
-      });
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+      expect(mockOnSave).not.toHaveBeenCalled();
     });
 
-    test('should require wall thickness', async () => {
+    test('should show error for wall thickness greater than half the OD', () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
+      fireEvent.click(tab('Geometry'));
 
-      await waitFor(() => {
-        const saveBtn = screen.getByText(/Save/i);
-        fireEvent.click(saveBtn);
+      fireEvent.change(screen.getByLabelText('Outer Diameter (mm)'), { target: { value: '10' } });
+      fireEvent.change(screen.getByLabelText('Wall Thickness (mm)'), { target: { value: '6' } });
 
-        // Should show validation error
-        expect(mockOnSave).not.toHaveBeenCalled();
-      });
+      expect(screen.getByText(/WT must be between 0.1 and 5.00 mm/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     });
 
-    test('should enforce minimum values', async () => {
+    test('should reject a negative outer diameter', () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
+      fireEvent.click(tab('Geometry'));
 
-      await waitFor(() => {
-        const odInput = screen.getByLabelText(/Outer Diameter/i) as HTMLInputElement;
-        fireEvent.change(odInput, { target: { value: '-5' } });
-        fireEvent.blur(odInput);
+      fireEvent.change(screen.getByLabelText('Outer Diameter (mm)'), { target: { value: '-5' } });
 
-        // Should be rejected
-      });
+      expect(screen.getByText('OD must be between 1 and 100 mm')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     });
 
-    test('should enforce maximum values', async () => {
+    test('should reject an outer diameter above 100 mm', () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
+      fireEvent.click(tab('Geometry'));
 
-      await waitFor(() => {
-        const odInput = screen.getByLabelText(/Outer Diameter/i) as HTMLInputElement;
-        fireEvent.change(odInput, { target: { value: '200' } });
-        fireEvent.blur(odInput);
+      fireEvent.change(screen.getByLabelText('Outer Diameter (mm)'), { target: { value: '200' } });
 
-        // Should be limited to max (100mm)
-      });
+      expect(screen.getByText('OD must be between 1 and 100 mm')).toBeInTheDocument();
     });
   });
 
   describe('Save/Close Actions', () => {
     test('should call onSave with config when Save clicked', async () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
+      fireEvent.click(tab('Geometry'));
 
-      await waitFor(() => {
-        const odInput = screen.getByLabelText(/Outer Diameter/i) as HTMLInputElement;
-        fireEvent.change(odInput, { target: { value: '25' } });
+      fireEvent.change(screen.getByLabelText('Outer Diameter (mm)'), { target: { value: '25' } });
 
-        const saveBtn = screen.getByText(/Save/i);
-        fireEvent.click(saveBtn);
-
-        // Should call onSave with config
-        expect(mockOnSave).toHaveBeenCalled();
+      const saveBtn = await waitFor(() => {
+        const btn = screen.getByRole('button', { name: 'Save' });
+        expect(btn).toBeEnabled();
+        return btn;
       });
+      fireEvent.click(saveBtn);
+
+      expect(mockOnSave).toHaveBeenCalledTimes(1);
+      expect(mockOnSave.mock.calls[0][0].geometry.outerDiameter).toBe(25);
     });
 
     test('should call onClose when Cancel clicked', () => {
       render(<TubeDialog {...defaultProps} />);
 
-      const cancelBtn = screen.getByText(/Cancel|Close/i);
-      fireEvent.click(cancelBtn);
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
       expect(mockOnClose).toHaveBeenCalled();
     });
@@ -394,62 +305,69 @@ describe('TubeDialog', () => {
     test('should close dialog after Save', async () => {
       const { rerender } = render(<TubeDialog {...defaultProps} />);
 
-      fireEvent.click(screen.getByText(/Geometry/i));
+      fireEvent.click(tab('Geometry'));
+      fireEvent.change(screen.getByLabelText('Outer Diameter (mm)'), { target: { value: '25' } });
 
       await waitFor(() => {
-        const saveBtn = screen.getByText(/Save/i);
-        fireEvent.click(saveBtn);
+        expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
       });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       // Simulate closed state
       rerender(<TubeDialog {...defaultProps} isOpen={false} />);
 
-      const dialog = screen.queryByText(/Tube Configuration/i);
-      expect(dialog).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 
   describe('Initial Configuration', () => {
     test('should use initial config if provided', () => {
       const initialConfig: TubeConfig = {
-        outerDiameter: 25,
-        wallThickness: 2,
-        length: 500,
-        material: 'steel',
+        geometry: {
+          outerDiameter: 25,
+          wallThickness: 2,
+          length: 500,
+          material: 'steel-1020',
+          materialName: 'Carbon Steel 1020',
+        },
         bends: [],
         ports: [],
+        advanced: {
+          springbackFactor: 0.3,
+          bendCompensation: false,
+          lengthTolerance: 2.0,
+          angleTolerance: 0.5,
+          surfaceFinish: 'Raw',
+        },
       };
 
       render(
         <TubeDialog {...defaultProps} initialConfig={initialConfig} />
       );
 
-      fireEvent.click(screen.getByText(/Geometry/i));
+      fireEvent.click(tab('Geometry'));
 
-      // Dialog should show initial values
-      expect(screen.getByText(/Tube Configuration/i)).toBeInTheDocument();
+      expect(screen.getByLabelText('Outer Diameter (mm)')).toHaveValue(25);
+      expect(screen.getByLabelText('Length (mm)')).toHaveValue(500);
     });
   });
 
   describe('Accessibility', () => {
     test('should have tab roles', () => {
-      const { container } = render(<TubeDialog {...defaultProps} />);
-      const tabs = container.querySelectorAll('[role="tab"]');
-      expect(tabs.length).toBeGreaterThanOrEqual(5);
+      render(<TubeDialog {...defaultProps} />);
+      expect(screen.getAllByRole('tab')).toHaveLength(7);
     });
 
     test('should have dialog role', () => {
-      const { container } = render(<TubeDialog {...defaultProps} />);
-      const dialog = container.querySelector('[role="dialog"]');
-      expect(dialog).toBeInTheDocument();
+      render(<TubeDialog {...defaultProps} />);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
     test('should have form inputs with labels', () => {
       render(<TubeDialog {...defaultProps} />);
-      fireEvent.click(screen.getByText(/Geometry/i));
+      fireEvent.click(tab('Geometry'));
 
-      // Should have associated labels
-      expect(screen.getByText(/Outer Diameter|OD/i)).toBeInTheDocument();
+      expect(screen.getByLabelText('Outer Diameter (mm)')).toBeInTheDocument();
     });
   });
 });

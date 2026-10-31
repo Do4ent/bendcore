@@ -31,7 +31,8 @@ describe('FormulaEditor Component', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockClear();
+    // reset (not just clear) so persistent per-test responses do not leak
+    (global.fetch as jest.Mock).mockReset();
     localStorage.clear();
   });
 
@@ -205,7 +206,7 @@ describe('FormulaEditor Component', () => {
 
   describe('Formula Evaluation', () => {
     test('should evaluate simple numeric formula', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 10 }),
       });
@@ -233,7 +234,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should evaluate formula with variables', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 55 }),
       });
@@ -263,7 +264,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should display error on invalid formula', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         json: async () => ({
           message: 'Division by zero',
@@ -290,7 +291,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should display error suggestions', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         json: async () => ({
           message: 'Undefined variable',
@@ -319,7 +320,7 @@ describe('FormulaEditor Component', () => {
 
   describe('Keyboard Shortcuts', () => {
     test('should apply formula on Ctrl+Enter', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 10 }),
       });
@@ -341,7 +342,7 @@ describe('FormulaEditor Component', () => {
         expect(screen.getByText(/10/)).toBeInTheDocument();
       });
 
-      await user.keyboard('{Control>}Return{/Control}');
+      await user.keyboard('{Control>}{Enter}{/Control}');
 
       await waitFor(() => {
         expect(mockOnApply).toHaveBeenCalledWith('5 + 5', 10);
@@ -403,7 +404,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should clear draft on apply', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 7.5 }),
       });
@@ -457,7 +458,7 @@ describe('FormulaEditor Component', () => {
 
   describe('Apply Button State', () => {
     test('should disable Apply button when formula is invalid', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         json: async () => ({ message: 'Error' }),
       });
@@ -482,7 +483,7 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should enable Apply button when formula is valid', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ result: 10 }),
       });

@@ -57,8 +57,8 @@ describe('FilePickerDialog Component', () => {
       render(
         <FilePickerDialog isOpen={true} onClose={mockOnClose} onSelect={mockOnSelect} />
       );
-      const recentTab = screen.getByText('Recent Files');
-      expect(recentTab.parentElement).toHaveClass('active');
+      const recentTab = screen.getByRole('button', { name: 'Recent Files' });
+      expect(recentTab).toHaveClass('active');
     });
 
     test('should display "No recent files" message when empty', () => {
@@ -300,10 +300,10 @@ describe('FilePickerDialog Component', () => {
         <FilePickerDialog isOpen={true} onClose={mockOnClose} onSelect={mockOnSelect} />
       );
 
-      const browseTab = screen.getByText('Browse');
+      const browseTab = screen.getByRole('button', { name: 'Browse' });
       fireEvent.click(browseTab);
 
-      expect(browseTab.parentElement).toHaveClass('active');
+      expect(browseTab).toHaveClass('active');
     });
 
     test('should show path input in browse tab', () => {
