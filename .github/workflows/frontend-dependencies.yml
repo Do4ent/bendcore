@@ -1,0 +1,38 @@
+name: Frontend dependency verification
+
+on:
+  push:
+    branches:
+      - fix/frontend-missing-dependencies
+  workflow_dispatch:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: ''
+      - name: Install dependencies and generate lockfile
+        run: npm install --package-lock-only --ignore-scripts && npm ci
+      - name: TypeScript
+        if: always()
+        run: npx tsc --noEmit > typescript-errors.log 2>&1 || { cat typescript-errors.log; exit 1; }
+      - name: Jest
+        if: always()
+        run: npx jest --runInBand --ci > jest-errors.log 2>&1 || { cat jest-errors.log; exit 1; }
+      - name: Build
+        if: always()
+        run: npm run build > build-errors.log 2>&1 || { cat build-errors.log; exit 1; }
+      - name: Upload diagnostics and lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-diagnostics
+          path: |
+            package-lock.json
+            *-errors.log
+          if-no-files-found: warn
