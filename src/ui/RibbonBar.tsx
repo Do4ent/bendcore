@@ -8,6 +8,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import RibbonButton, { RibbonButtonGroup } from "./RibbonButton";
 import { RibbonTabBar } from "./RibbonTab";
 import TubeDialog, { TubeConfig } from "./TubeDialog";
+import NewTubeDialog from "./NewTubeDialog";
 import SearchBar from "./SearchBar";
 import FeatureTree from "./FeatureTree";
 import { initializeShortcutListeners, formatShortcutForDisplay } from "./KeyboardShortcuts";
@@ -98,6 +99,7 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   const [showGapPanel, setShowGapPanel] = useState(false);
   const [massResult, setMassResult] = useState<MassResult | null>(null);
   const [showMassPanel, setShowMassPanel] = useState(false);
+  const [newTubeDialogOpen, setNewTubeDialogOpen] = useState(false);
   const [tubeDialogOpen, setTubeDialogOpen] = useState(false);
   const [selectedTubeConfig, setSelectedTubeConfig] = useState<TubeConfig | undefined>();
   const [showTechSpecs, setShowTechSpecs] = useState(false);
@@ -126,12 +128,12 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
         setShowMassPanel(true);
         onCommand(commandId);
       } else if (commandId === "new-tube") {
-        // Open new tube dialog
-        setSelectedTubeConfig(undefined);
-        setTubeDialogOpen(true);
+        // Open new tube creation wizard (3-tab form)
+        setNewTubeDialogOpen(true);
         onCommand(commandId);
       } else if (commandId === "edit-tube") {
-        // Open edit tube dialog with existing config
+        // Open tube editing dialog (5-tab form for existing tube)
+        setSelectedTubeConfig(undefined);
         setTubeDialogOpen(true);
         onCommand(commandId);
       } else if (commandId === "import-dwfx" || commandId === "import-step") {
@@ -225,6 +227,38 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
   const handleTubeDialogClose = useCallback(() => {
     setTubeDialogOpen(false);
     setSelectedTubeConfig(undefined);
+  }, []);
+
+  const handleNewTubeCreate = useCallback(
+    async (formData: any) => {
+      console.log("Creating new tube from wizard:", formData);
+      try {
+        // Send to backend via IPC
+        if (window.electron?.ipc) {
+          const result = await window.electron.ipc.invoke("bendcore:command", {
+            command: "new-tube",
+            args: formData,
+          });
+
+          const res = result as { success?: boolean; error?: string } | null;
+          if (!res || (res.success === false)) {
+            console.error("Tube creation failed:", res?.error || "Unknown error");
+            return;
+          }
+
+          console.log("Tube created successfully");
+        }
+
+        setNewTubeDialogOpen(false);
+      } catch (error) {
+        console.error("Failed to create tube:", error);
+      }
+    },
+    []
+  );
+
+  const handleNewTubeDialogClose = useCallback(() => {
+    setNewTubeDialogOpen(false);
   }, []);
 
   // HOME TAB: File operations
@@ -940,7 +974,14 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
         </div>
       </div>
 
-      {/* Tube Dialog */}
+      {/* New Tube Creation Wizard (3-tab) */}
+      <NewTubeDialog
+        isOpen={newTubeDialogOpen}
+        onClose={handleNewTubeDialogClose}
+        onCreate={handleNewTubeCreate}
+      />
+
+      {/* Tube Editing Dialog (5-tab) */}
       <TubeDialog
         isOpen={tubeDialogOpen}
         onClose={handleTubeDialogClose}
