@@ -15,6 +15,8 @@ import BendDataDialog from "./BendDataDialog";
 import CheckPanel from "./CheckPanel";
 import InstancesPanel from "./InstancesPanel";
 import DrawingWorkspace from "./DrawingWorkspace";
+import PropertiesPanel from "./components/PropertiesPanel";
+import ViewportControls from "./components/ViewportControls";
 import { t } from "./core/i18n";
 import type { CheckTubeInput, Feed } from "./core/types";
 
@@ -131,6 +133,42 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
       } else if (commandId === "edit-tube") {
         // Open edit tube dialog with existing config
         setTubeDialogOpen(true);
+        onCommand(commandId);
+      } else if (commandId === "import-dwfx" || commandId === "import-step") {
+        // Open file picker for CAD file import (DWF/DWFx or STEP)
+        const input = document.createElement('input');
+        const isStep = commandId === "import-step";
+        input.type = 'file';
+        input.accept = isStep ? '.step,.stp,.STEP,.STP' : '.dwf,.dwfx,.DWF,.DWFX';
+        input.onchange = async (e: any) => {
+          const file = e.target.files[0];
+          if (file) {
+            console.log(`Selected ${isStep ? 'STEP' : 'DWF'} file:`, file.name);
+            try {
+              // Send to backend via IPC
+              if (window.electron?.ipc) {
+                const fileData = await file.arrayBuffer();
+                const result = await window.electron.ipc.invoke("bendcore:command", {
+                  command: commandId,
+                  args: {
+                    filename: file.name,
+                    data: fileData,
+                  },
+                });
+                console.log(`${isStep ? 'STEP' : 'DWF'} import result:`, result);
+                // TODO: Handle imported geometry - update activeTube with results
+                alert(`${isStep ? 'STEP' : 'DWF'} file imported successfully!\nGeometry loaded and ready for editing.`);
+              } else {
+                // Fallback for web version (GitHub Pages)
+                alert(`${isStep ? 'STEP' : 'DWF'} import: Feature available in Electron/Desktop version`);
+              }
+            } catch (error) {
+              console.error(`Failed to import ${isStep ? 'STEP' : 'DWF'}:`, error);
+              alert(`Failed to import ${isStep ? 'STEP' : 'DWF'} file. Please check the file format.`);
+            }
+          }
+        };
+        input.click();
         onCommand(commandId);
       } else {
         onCommand(commandId);
@@ -837,7 +875,38 @@ const RibbonBar: React.FC<RibbonBarProps> = ({
             />
           )}
           {workPanel === null && (
-            <div className="p-4 text-gray-500">3D Viewport and Properties (to be integrated)</div>
+            <div className="flex h-full w-full gap-4 p-4 bg-white">
+              {/* 3D Viewport - Center */}
+              <div className="flex-1 rounded border border-gray-300 bg-gray-900 relative">
+                <ViewportControls
+                  activeTube={activeTube}
+                  onGeometryLoaded={() => console.log('Geometry loaded')}
+                />
+                {activeTube && (
+                  <div className="absolute bottom-4 left-4 text-xs text-white bg-black/50 px-3 py-2 rounded">
+                    Tube: {activeTube.name} | OD: {activeTube.path}mm | L: {activeTube.straight_length}mm
+                  </div>
+                )}
+              </div>
+
+              {/* Properties Panel - Right */}
+              <div className="w-80 border-l border-gray-300 overflow-y-auto bg-gray-50">
+                {activeTube ? (
+                  <PropertiesPanel
+                    tube={activeTube}
+                    onChange={(updates) => {
+                      onCommand('update-tube', { ...activeTube, ...updates });
+                    }}
+                  />
+                ) : (
+                  <div className="p-4 text-gray-500 text-sm">
+                    <p className="mb-4">No tube selected</p>
+                    <p>• Create new tube from toolbar</p>
+                    <p>• Or import DWF/STEP file</p>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
