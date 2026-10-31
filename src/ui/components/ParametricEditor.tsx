@@ -63,7 +63,7 @@ interface ParameterGroup {
 /**
  * Expression Evaluator for parametric calculations
  */
-class ExpressionEvaluator {
+export class ExpressionEvaluator {
   private context: Record<string, any> = {};
 
   /**
@@ -96,7 +96,7 @@ class ExpressionEvaluator {
 /**
  * Dependency resolver for parameter updates
  */
-class DependencyResolver {
+export class DependencyResolver {
   private parameters: ParameterDefinition[];
   private evaluator: ExpressionEvaluator;
 
