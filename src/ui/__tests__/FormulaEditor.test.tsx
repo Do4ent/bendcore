@@ -571,19 +571,31 @@ describe('FormulaEditor Component', () => {
     });
 
     test('should have keyboard navigation', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ result: 55 }),
+      });
       const user = userEvent.setup({ delay: null });
       render(
         <FormulaEditor
           dimensionId="dim_001"
+          initialFormula="$OD * 2 + 5"
           variables={mockVariables}
           onApply={mockOnApply}
           onCancel={mockOnCancel}
         />
       );
 
+      // Apply is intentionally disabled (and therefore unfocusable) until the
+      // formula has been evaluated successfully.
       const applyButton = screen.getByRole('button', { name: /apply/i });
+      await waitFor(() => expect(applyButton).toBeEnabled());
+
       applyButton.focus();
       expect(document.activeElement).toBe(applyButton);
+
+      await user.keyboard('{Enter}');
+      expect(mockOnApply).toHaveBeenCalledWith('$OD * 2 + 5', 55);
     });
   });
 });

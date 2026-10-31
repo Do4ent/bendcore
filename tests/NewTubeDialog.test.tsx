@@ -74,6 +74,32 @@ describe("NewTubeDialog", () => {
     jest.clearAllMocks();
   });
 
+  // Diameter options are rendered as `{OD}" (R: {R}", Min S: {S_min}")`.
+  const HALF_INCH_DIAMETER = '0.5" (R: 1", Min S: 0.25")';
+
+  /** Tab 1 -> Tab 2, waiting until the asynchronously loaded profile is applied. */
+  const goToToolProfileTab = async () => {
+    await waitFor(() => {
+      expect(screen.getByText("Tube Specification")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("Next →"));
+    await waitFor(() => {
+      expect(screen.getByText("Bending Tool Profile")).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(HALF_INCH_DIAMETER)).toBeInTheDocument();
+    });
+  };
+
+  /** Tab 1 -> Tab 2 -> Tab 3. */
+  const goToBlankTab = async () => {
+    await goToToolProfileTab();
+    fireEvent.click(screen.getByText("Next →"));
+    await waitFor(() => {
+      expect(screen.getByText("Blank Configuration")).toBeInTheDocument();
+    });
+  };
+
   test("renders dialog when isOpen is true", async () => {
     render(<NewTubeDialog isOpen={true} onClose={jest.fn()} />);
 
@@ -147,16 +173,7 @@ describe("NewTubeDialog", () => {
   test("Tab 2 displays profile and diameter selection", async () => {
     render(<NewTubeDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      const nextButton = screen.getByText("Next →");
-      fireEvent.click(nextButton);
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("Bending Tool Profile")
-      ).toBeInTheDocument();
-    });
+    await goToToolProfileTab();
 
     // Check for profile dropdown
     // Option text is rendered as "{name} ({category})" in NewTubeDialog.tsx
@@ -164,10 +181,11 @@ describe("NewTubeDialog", () => {
       "Manual Hand Bender - ½\" (Manual Hand Bender)"
     ) as HTMLSelectElement;
     expect(profileSelect).toBeInTheDocument();
+    expect(profileSelect).toHaveValue("manual-half-inch");
 
-    // Diameter should be populated
-    const diameterSelect = screen.getByDisplayValue("0.5") as HTMLSelectElement;
-    expect(diameterSelect).toBeInTheDocument();
+    // Diameter should be populated with the profile's first diameter
+    const diameterSelect = screen.getByDisplayValue(HALF_INCH_DIAMETER) as HTMLSelectElement;
+    expect(diameterSelect).toHaveValue("0.5");
 
     // Radius should be read-only
     expect(screen.getByText('1"')).toBeInTheDocument();
@@ -176,16 +194,7 @@ describe("NewTubeDialog", () => {
   test("updates diameter options when profile changes", async () => {
     render(<NewTubeDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      const nextButton = screen.getByText("Next →");
-      fireEvent.click(nextButton);
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("Bending Tool Profile")
-      ).toBeInTheDocument();
-    });
+    await goToToolProfileTab();
 
     // Change to hydraulic profile with multiple diameters
     const profileSelect = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
@@ -194,7 +203,7 @@ describe("NewTubeDialog", () => {
     await waitFor(() => {
       // Should now have 2 diameter options
       const diameterSelect = screen.getByDisplayValue(
-        "0.5"
+        HALF_INCH_DIAMETER
       ) as HTMLSelectElement;
       const options = diameterSelect.querySelectorAll("option");
       expect(options.length).toBeGreaterThan(2); // More than just placeholder + 0.5
@@ -204,16 +213,7 @@ describe("NewTubeDialog", () => {
   test("navigates to Tab 3 from Tab 2", async () => {
     render(<NewTubeDialog isOpen={true} onClose={jest.fn()} />);
 
-    await waitFor(() => {
-      const nextButton = screen.getByText("Next →");
-      fireEvent.click(nextButton);
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("Bending Tool Profile")
-      ).toBeInTheDocument();
-    });
+    await goToToolProfileTab();
 
     const nextButton = screen.getByText("Next →");
     fireEvent.click(nextButton);
@@ -228,22 +228,7 @@ describe("NewTubeDialog", () => {
   test("Tab 3 displays blank configuration fields", async () => {
     render(<NewTubeDialog isOpen={true} onClose={jest.fn()} />);
 
-    // Navigate to Tab 3
-    await waitFor(() => {
-      let nextButton = screen.getByText("Next →");
-      fireEvent.click(nextButton);
-    });
-
-    await waitFor(() => {
-      let nextButton = screen.getByText("Next →");
-      fireEvent.click(nextButton);
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("Blank Configuration")
-      ).toBeInTheDocument();
-    });
+    await goToBlankTab();
 
     // Check for all blank configuration fields
     expect(screen.getByText("Trimming:")).toBeInTheDocument();
@@ -285,12 +270,17 @@ describe("NewTubeDialog", () => {
       expect(screen.getByText("Tube Specification")).toBeInTheDocument();
     });
 
-    // Don't fill in required fields, just try to advance
+    // Material has a default value; clear it so the required-field check applies
+    const materialSelect = screen.getByDisplayValue("Steel 1020");
+    fireEvent.change(materialSelect, { target: { value: "" } });
+
     const nextButton = screen.getByText("Next →");
     fireEvent.click(nextButton);
 
-    // Should still be on Tab 1 (validation failed)
+    // Should still be on Tab 1 (validation failed) and show the error
     expect(screen.getByText("Tube Specification")).toBeInTheDocument();
+    expect(screen.getByText("Material is required")).toBeInTheDocument();
+    expect(screen.queryByText("Bending Tool Profile")).not.toBeInTheDocument();
   });
 
   test("Tab 2 validation prevents advancing with invalid wall thickness", async () => {
@@ -330,26 +320,22 @@ describe("NewTubeDialog", () => {
     render(<NewTubeDialog isOpen={true} onClose={jest.fn()} onCreate={onCreate} />);
 
     // Go to Tab 3 (all fields should be filled)
-    await waitFor(() => {
-      const nextButton = screen.getByText("Next →");
-      fireEvent.click(nextButton);
-    });
-
-    await waitFor(() => {
-      const nextButton = screen.getByText("Next →");
-      fireEvent.click(nextButton);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("Create ✓")).toBeInTheDocument();
-    });
+    await goToBlankTab();
 
     const createButton = screen.getByText("Create ✓");
     fireEvent.click(createButton);
 
     await waitFor(() => {
-      expect(onCreate).toHaveBeenCalled();
+      expect(onCreate).toHaveBeenCalledTimes(1);
     });
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        material: "steel-1020",
+        profileId: "manual-half-inch",
+        diameter: 0.5,
+        radius: 1.0,
+      })
+    );
   });
 
   test("calls onClose when Cancel is clicked", () => {
@@ -414,22 +400,7 @@ describe("NewTubeDialog", () => {
   test("checkbox for auto-calculate allowance works", async () => {
     render(<NewTubeDialog isOpen={true} onClose={jest.fn()} />);
 
-    // Navigate to Tab 3
-    await waitFor(() => {
-      let nextButton = screen.getByText("Next →");
-      fireEvent.click(nextButton);
-    });
-
-    await waitFor(() => {
-      let nextButton = screen.getByText("Next →");
-      fireEvent.click(nextButton);
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("Blank Configuration")
-      ).toBeInTheDocument();
-    });
+    await goToBlankTab();
 
     const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
     expect(checkbox.checked).toBe(true);
