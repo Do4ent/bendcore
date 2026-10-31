@@ -159,8 +159,9 @@ describe("NewTubeDialog", () => {
     });
 
     // Check for profile dropdown
+    // Option text is rendered as "{name} ({category})" in NewTubeDialog.tsx
     const profileSelect = screen.getByDisplayValue(
-      "Manual Hand Bender - ½\""
+      "Manual Hand Bender - ½\" (Manual Hand Bender)"
     ) as HTMLSelectElement;
     expect(profileSelect).toBeInTheDocument();
 
