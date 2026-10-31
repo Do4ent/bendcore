@@ -267,8 +267,15 @@ describe('FilePickerDialog Component', () => {
         <FilePickerDialog isOpen={true} onClose={mockOnClose} onSelect={mockOnSelect} />
       );
 
+      // The limit is enforced when a file is selected (handleFileSelect).
+      // Select the first recent entry and open it; the persisted list must stay <= 10.
+      const fileItem = screen.getByText('file0.bnd').closest('.file-item');
+      fireEvent.click(fileItem!);
+      fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+
       const stored = JSON.parse(localStorage.getItem('bendcore:recentFiles') || '[]');
       expect(stored.length).toBeLessThanOrEqual(10);
+      expect(stored[0].path).toBe('/home/file0.bnd');
     });
 
     test('should prevent duplicate entries in recent files', () => {
