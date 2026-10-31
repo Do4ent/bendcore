@@ -1,4 +1,5 @@
-import WebSocket from 'ws';
+import WebSocket, { RawData } from 'ws';
+import type { AddressInfo } from 'net';
 import { EventEmitter } from 'events';
 import * as uuid from 'uuid';
 
@@ -26,7 +27,14 @@ interface Operation {
 }
 
 interface Message {
-  type: 'JOIN' | 'OPERATION' | 'CURSOR_MOVE' | 'SYNC' | 'PRESENCE_UPDATE' | 'OPERATION_UPDATE';
+  type:
+    | 'JOIN'
+    | 'OPERATION'
+    | 'CURSOR_MOVE'
+    | 'CURSOR_UPDATE'
+    | 'SYNC'
+    | 'PRESENCE_UPDATE'
+    | 'OPERATION_UPDATE';
   [key: string]: any;
 }
 
@@ -65,10 +73,17 @@ export class CollaborationEngine extends EventEmitter {
         this.handleNewConnection(ws);
       });
 
-      this.server.on('listening', () => {
-        console.log(`Collaboration server listening on port ${this.port}`);
+      const onListening = () => {
+        console.log(`Collaboration server listening on port ${this.getPort()}`);
         resolve();
-      });
+      };
+      // The server starts listening from the constructor; if that already
+      // happened, 'listening' will not fire again.
+      if (this.server.address()) {
+        onListening();
+      } else {
+        this.server.once('listening', onListening);
+      }
     });
   }
 
@@ -85,9 +100,9 @@ export class CollaborationEngine extends EventEmitter {
     this.sessions.set(sessionId, session);
     console.log(`New session: ${sessionId}`);
 
-    ws.on('message', (data: string) => {
+    ws.on('message', (data: RawData) => {
       try {
-        const msg: Message = JSON.parse(data);
+        const msg: Message = JSON.parse(data.toString());
         this.handleMessage(sessionId, msg);
       } catch (err) {
         console.error('Error parsing message:', err);
@@ -318,6 +333,12 @@ export class CollaborationEngine extends EventEmitter {
 
   // Public API methods
 
+  /** Port the server is bound to (resolves port 0 to the assigned port). */
+  public getPort(): number {
+    const address = this.server.address();
+    return address && typeof address === 'object' ? (address as AddressInfo).port : this.port;
+  }
+
   public getSessionCount(): number {
     return this.sessions.size;
   }
@@ -333,7 +354,6 @@ export class CollaborationEngine extends EventEmitter {
   }
 
   public clearOperationLog(): void {
-    this.operationLog = [];
     this.operationLog = [];
   }
 
