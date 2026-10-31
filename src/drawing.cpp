@@ -1717,9 +1717,9 @@ bool remove_manual_dimension(
 static std::string generate_comment_id() {
     static unsigned int counter = 0;
     char buf[64];
-    std::snprintf(buf, sizeof(buf), "comment_%u_%lld",
+    std::snprintf(buf, sizeof(buf), "comment_%u_%ld",
                  ++counter,
-                 std::chrono::system_clock::now().time_since_epoch().count());
+                 static_cast<long>(std::chrono::system_clock::now().time_since_epoch().count()));
     return std::string(buf);
 }
 
@@ -1727,9 +1727,9 @@ static std::string generate_comment_id() {
 static std::string generate_reply_id() {
     static unsigned int counter = 0;
     char buf[64];
-    std::snprintf(buf, sizeof(buf), "reply_%u_%lld",
+    std::snprintf(buf, sizeof(buf), "reply_%u_%ld",
                  ++counter,
-                 std::chrono::system_clock::now().time_since_epoch().count());
+                 static_cast<long>(std::chrono::system_clock::now().time_since_epoch().count()));
     return std::string(buf);
 }
 

@@ -160,6 +160,7 @@ drawing::ManualDimension manual_dimension_from(const json& j) {
     return d;
 }
 
+[[maybe_unused]]
 json manual_dimension_table_json(const drawing::ManualDimensionTable& table) {
     json dims = json::array();
     for (const auto& dim : table.dimensions) {
@@ -168,6 +169,7 @@ json manual_dimension_table_json(const drawing::ManualDimensionTable& table) {
     return dims;
 }
 
+[[maybe_unused]]
 drawing::ManualDimensionTable manual_dimension_table_from(const json& j) {
     drawing::ManualDimensionTable table;
     if (j.is_array()) {
