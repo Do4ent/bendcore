@@ -335,6 +335,132 @@ router.post('/', (req: Request, res: Response): void => {
 });
 
 /**
+ * POST /api/import/export-drawing
+ * Export 2D drawing (SVG) from tube analysis results
+ */
+router.post('/export-drawing', (req: Request, res: Response): void => {
+  try {
+    const { od, wall, length, bends } = req.body;
+
+    if (!od || !wall || !length) {
+      res.status(400).json({
+        success: false,
+        error: 'od, wall, and length are required',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    // Generate SVG drawing
+    const svg = generateTubeDrawing({
+      od: Number(od),
+      wall: Number(wall),
+      length: Number(length),
+      bends: Array.isArray(bends) ? bends : []
+    });
+
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Content-Disposition', 'attachment; filename="tube_drawing.svg"');
+    res.send(svg);
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({
+      success: false,
+      error,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * Generate 2D SVG drawing of tube with bends
+ */
+function generateTubeDrawing(tube: {
+  od: number;
+  wall: number;
+  length: number;
+  bends: Array<{ angle: number; radius: number }>;
+}): string {
+  const scale = 0.5; // 0.5 pixels per mm
+  const padding = 40;
+  const width = tube.length * scale + padding * 2;
+  const height = tube.od * scale + padding * 2;
+
+  let svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>
+    <style>
+      .tube-outline { fill: none; stroke: #1f6fc5; stroke-width: 2; }
+      .tube-wall { fill: #e3f2fd; stroke: #1f6fc5; stroke-width: 1; }
+      .dimension { font-size: 12px; fill: #333; }
+      .dimension-line { stroke: #999; stroke-width: 0.5; }
+      .center-line { stroke: #ccc; stroke-width: 0.5; stroke-dasharray: 2,2; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="${width}" height="${height}" fill="white"/>
+
+  <!-- Title -->
+  <text x="${width / 2}" y="25" class="dimension" text-anchor="middle" font-weight="bold">
+    Tube Drawing - OD ${tube.od}mm × Wall ${tube.wall}mm
+  </text>
+
+  <!-- Tube Centerline -->
+  <line x1="${padding}" y1="${height / 2}" x2="${width - padding}" y2="${height / 2}" class="center-line"/>
+
+  <!-- Outer Diameter -->
+  <circle cx="${padding + 20}" cy="${height / 2}" r="${(tube.od / 2) * scale}" class="tube-outline"/>
+
+  <!-- Inner Diameter -->
+  <circle cx="${padding + 20}" cy="${height / 2}" r="${((tube.od / 2) - tube.wall) * scale}" class="tube-outline"/>
+
+  <!-- Tube Body (simplified side view) -->
+  <rect
+    x="${padding}"
+    y="${height / 2 - (tube.od / 2) * scale}"
+    width="${tube.length * scale}"
+    height="${tube.od * scale}"
+    class="tube-wall"/>
+
+  <!-- Wall Thickness Indicator -->
+  <g class="dimension">
+    <line x1="${padding - 5}" y1="${height / 2}" x2="${padding - 5}" y2="${height / 2 - (tube.od / 2) * scale}" class="dimension-line"/>
+    <text x="${padding - 15}" y="${height / 2 - (tube.od / 4) * scale}" text-anchor="end">OD</text>
+
+    <line x1="${padding + 5}" y1="${height / 2}" x2="${padding + 5}" y2="${height / 2 - ((tube.od / 2) - tube.wall) * scale}" class="dimension-line"/>
+    <text x="${padding + 15}" y="${height / 2 - ((tube.od / 2) - tube.wall / 2) * scale}">Wall</text>
+  </g>
+
+  <!-- Length Dimension -->
+  <line x1="${padding}" y1="${height - 10}" x2="${width - padding}" y2="${height - 10}" class="dimension-line"/>
+  <text x="${width / 2}" y="${height - 2}" class="dimension" text-anchor="middle">
+    Length: ${tube.length.toFixed(1)}mm
+  </text>
+
+  <!-- Bends Information -->
+  <text x="${padding}" y="${height - 50}" class="dimension" font-weight="bold">Bends:</text>
+  ${tube.bends
+    .map(
+      (bend, i) =>
+        `<text x="${padding}" y="${height - 35 + i * 15}" class="dimension">
+      ${i + 1}. ${bend.angle.toFixed(0)}° @ R${bend.radius.toFixed(1)}mm
+    </text>`
+    )
+    .join('\n')}
+
+  <!-- Legend -->
+  <rect x="${width - 150}" y="${padding}" width="140" height="80" fill="#f9f9f9" stroke="#ddd" stroke-width="1"/>
+  <text x="${width - 145}" y="${padding + 15}" class="dimension" font-weight="bold">Properties:</text>
+  <text x="${width - 145}" y="${padding + 32}" class="dimension">OD: ${tube.od}mm</text>
+  <text x="${width - 145}" y="${padding + 49}" class="dimension">Wall: ${tube.wall}mm</text>
+  <text x="${width - 145}" y="${padding + 66}" class="dimension">ID: ${(tube.od - 2 * tube.wall).toFixed(1)}mm</text>
+</svg>`;
+
+  return svg;
+}
+
+/**
  * GET /api/import/standards
  * Get standard values for rounding
  */

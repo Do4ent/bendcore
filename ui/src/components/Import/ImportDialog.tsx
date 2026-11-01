@@ -70,6 +70,33 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
     deflection: 0.1,
   });
 
+  const downloadDrawing = async (tube: AnalysisResult['tube']) => {
+    try {
+      const response = await fetch('/api/import/export-drawing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tube)
+      });
+
+      if (!response.ok) {
+        setError('Failed to export drawing');
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tube_drawing_${Date.now()}.svg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export failed');
+    }
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -314,6 +341,15 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
           >
             Cancel
           </button>
+          {analysisResult && analysisResult.tube && (
+            <button
+              className="btn-secondary"
+              onClick={() => downloadDrawing(analysisResult.tube!)}
+              title="Export 2D drawing as SVG"
+            >
+              📋 Export Drawing
+            </button>
+          )}
           <button
             className="btn-primary"
             onClick={handleImport}
