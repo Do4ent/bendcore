@@ -71,9 +71,13 @@ TEST_F(PublishingManagerTest, PublishToLocalDirectory) {
 
 TEST_F(PublishingManagerTest, PublishToLocalMissingDirectory) {
   auto job = createTestPublishingJob();
-  job.local_settings = LocalPublishSettings{"/nonexistent/path/that/does/not/exist"};
+  // A directory below a regular file cannot be created, even as root.
+  const auto blocker = fs::temp_directory_path() / "bendcore_publish_blocker";
+  { std::ofstream(blocker.string()) << "x"; }
+  job.local_settings = LocalPublishSettings{(blocker / "sub").string()};
 
   auto result = publishToLocal(job);
+  fs::remove(blocker);
 
   // Should handle error gracefully
   EXPECT_FALSE(result.success);
@@ -281,9 +285,23 @@ TEST_F(PublishingManagerTest, GetDrawingVersionHistory) {
   std::ofstream f2((fs::path(test_dir) / "DRW-001_revB.pdf").string());
   f2.close();
 
+  // Unrelated drawing and non-revision files are ignored
+  std::ofstream((fs::path(test_dir) / "DRW-002_revC.pdf").string()).close();
+  std::ofstream((fs::path(test_dir) / "DRW-001_notes.txt").string()).close();
+
   auto versions = getDrawingVersionHistory(test_dir, "DRW-001");
 
-  EXPECT_GE(versions.size(), 0);
+  ASSERT_EQ(versions.size(), 2u);
+  EXPECT_EQ(versions[0].revision_letter, "A");
+  EXPECT_EQ(versions[1].revision_letter, "B");
+  EXPECT_EQ(versions[1].version_number, 2);
+  EXPECT_EQ(generateNextRevision(test_dir, "DRW-001"), "C");
+
+  // Z rolls over to AA, AZ to BA
+  std::ofstream((fs::path(test_dir) / "DRW-001_revZ.pdf").string()).close();
+  EXPECT_EQ(generateNextRevision(test_dir, "DRW-001"), "AA");
+  std::ofstream((fs::path(test_dir) / "DRW-001_revAZ.pdf").string()).close();
+  EXPECT_EQ(generateNextRevision(test_dir, "DRW-001"), "BA");
 
   // Clean up
   fs::remove_all(test_dir);

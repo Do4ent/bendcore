@@ -378,6 +378,7 @@ TEST_F(DrawingExportTest, QualitySettingsDraft) {
   auto sheet = createTestSheet();
 
   ExportOptions opts;
+  opts.output_path = "/tmp/test_qualitysettingsdraft.png";
   opts.format = ExportFormat::PNG;
   opts.raster.level = QualityLevel::Draft;
   opts.raster.dpi = 150;
@@ -390,6 +391,7 @@ TEST_F(DrawingExportTest, QualitySettingsMaximum) {
   auto sheet = createTestSheet();
 
   ExportOptions opts;
+  opts.output_path = "/tmp/test_qualitysettingsmaximum.png";
   opts.format = ExportFormat::PNG;
   opts.raster.level = QualityLevel::Maximum;
   opts.raster.dpi = 600;
@@ -406,6 +408,7 @@ TEST_F(DrawingExportTest, ColorSettingsFullColor) {
   auto sheet = createTestSheet();
 
   ExportOptions opts;
+  opts.output_path = "/tmp/test_colorsettingsfullcolor.png";
   opts.format = ExportFormat::PNG;
   opts.raster.mode = ColorMode::FullColor;
 
@@ -417,6 +420,7 @@ TEST_F(DrawingExportTest, ColorSettingsGrayscale) {
   auto sheet = createTestSheet();
 
   ExportOptions opts;
+  opts.output_path = "/tmp/test_colorsettingsgrayscale.png";
   opts.format = ExportFormat::PNG;
   opts.raster.mode = ColorMode::Grayscale;
 
@@ -428,6 +432,7 @@ TEST_F(DrawingExportTest, ColorSettingsMonochrome) {
   auto sheet = createTestSheet();
 
   ExportOptions opts;
+  opts.output_path = "/tmp/test_colorsettingsmonochrome.png";
   opts.format = ExportFormat::PNG;
   opts.raster.mode = ColorMode::Monochrome;
 
@@ -443,6 +448,7 @@ TEST_F(DrawingExportTest, PDFWithMetadata) {
   auto sheet = createTestSheet();
 
   ExportOptions opts;
+  opts.output_path = "/tmp/test_pdfwithmetadata.pdf";
   opts.format = ExportFormat::PDF;
   opts.pdf.add_metadata = true;
   opts.pdf.dpi = 300;
@@ -455,6 +461,7 @@ TEST_F(DrawingExportTest, PDFWithWatermark) {
   auto sheet = createTestSheet();
 
   ExportOptions opts;
+  opts.output_path = "/tmp/test_pdfwithwatermark.pdf";
   opts.format = ExportFormat::PDF;
   opts.pdf.add_watermark = true;
   opts.pdf.watermark_text = "DRAFT";

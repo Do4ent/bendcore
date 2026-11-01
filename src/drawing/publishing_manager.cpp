@@ -4,8 +4,24 @@
 #include <chrono>
 #include <sstream>
 #include <algorithm>
+#include <filesystem>
 
 namespace BendCore::Drawing {
+
+namespace {
+
+// Cloud upload and e-mail attach files exported to a staging location;
+// use the system temp directory unless the job names one.
+ExportOptions withStagingPath(ExportOptions opts) {
+    if (opts.output_path.empty()) {
+        std::error_code ec;
+        auto tmp = std::filesystem::temp_directory_path(ec);
+        opts.output_path = ec ? std::string(".") : tmp.string();
+    }
+    return opts;
+}
+
+}  // namespace
 
 // ============================================================================
 // Local Publishing
@@ -104,7 +120,7 @@ PublishingResult publishToCloud(const PublishingJob& job) {
 
     // Export sheets (in real implementation, would upload to cloud)
     for (const auto& sheet : job.sheets) {
-        ExportOptions export_opts = job.export_options;
+        ExportOptions export_opts = withStagingPath(job.export_options);
         auto export_result = exportDrawing(*sheet, export_opts);
 
         if (export_result.success) {
@@ -156,7 +172,7 @@ PublishingResult publishViaEmail(const PublishingJob& job) {
     // Export sheets to temporary location
     std::vector<std::string> export_files;
     for (const auto& sheet : job.sheets) {
-        ExportOptions export_opts = job.export_options;
+        ExportOptions export_opts = withStagingPath(job.export_options);
         auto export_result = exportDrawing(*sheet, export_opts);
 
         if (export_result.success) {
@@ -312,15 +328,74 @@ BatchExportResult batchExportMultipleFormats(
 // Change Tracking and Versioning
 // ============================================================================
 
+namespace {
+
+// Revision letters follow A..Z, AA..AZ, BA..: bijective base-26.
+long revisionToIndex(const std::string& rev) {
+    long n = 0;
+    for (char c : rev) n = n * 26 + (c - 'A' + 1);
+    return n;
+}
+
+std::string indexToRevision(long n) {
+    std::string rev;
+    while (n > 0) {
+        --n;
+        rev.insert(rev.begin(), static_cast<char>('A' + n % 26));
+        n /= 26;
+    }
+    return rev;
+}
+
+}  // namespace
+
 std::vector<DrawingVersion> getDrawingVersionHistory(
     const std::string& archive_directory,
     const std::string& drawing_number) {
 
+    namespace fs = std::filesystem;
     std::vector<DrawingVersion> versions;
 
-    // In real implementation, would scan archive directory for versions
-    // For now, return empty vector
+    std::error_code ec;
+    if (drawing_number.empty() || !fs::is_directory(archive_directory, ec)) {
+        return versions;
+    }
 
+    // Archived files are named "<drawing_number>_rev<LETTERS>.<ext>"
+    const std::string prefix = drawing_number + "_rev";
+    for (const auto& entry : fs::directory_iterator(archive_directory, ec)) {
+        if (!entry.is_regular_file(ec)) continue;
+        const std::string stem = entry.path().stem().string();
+        if (stem.size() <= prefix.size() || stem.compare(0, prefix.size(), prefix) != 0) {
+            continue;
+        }
+        const std::string rev = stem.substr(prefix.size());
+        if (!std::all_of(rev.begin(), rev.end(), [](char c) { return c >= 'A' && c <= 'Z'; })) {
+            continue;
+        }
+
+        DrawingVersion v;
+        v.revision_letter = rev;
+        v.file_path = entry.path().string();
+        auto mtime = fs::last_write_time(entry.path(), ec);
+        if (!ec) {
+            v.timestamp = std::chrono::clock_cast<std::chrono::system_clock>(mtime);
+        }
+        versions.push_back(std::move(v));
+    }
+
+    // Chronological = revision order. Same revision in several formats
+    // (e.g. revA.pdf + revA.dwg) collapses to one entry.
+    std::sort(versions.begin(), versions.end(), [](const auto& a, const auto& b) {
+        return revisionToIndex(a.revision_letter) < revisionToIndex(b.revision_letter);
+    });
+    versions.erase(std::unique(versions.begin(), versions.end(), [](const auto& a, const auto& b) {
+        return a.revision_letter == b.revision_letter;
+    }), versions.end());
+
+    for (size_t i = 0; i < versions.size(); ++i) {
+        versions[i].version_number = static_cast<int>(i + 1);
+    }
     return versions;
 }
 
@@ -329,18 +404,10 @@ std::string generateNextRevision(
     const std::string& drawing_number) {
 
     auto versions = getDrawingVersionHistory(archive_directory, drawing_number);
-
     if (versions.empty()) {
         return "A";
     }
-
-    // Get last revision and increment
-    char last_revision = versions.back().revision_letter[0];
-    if (last_revision >= 'Z') {
-        return std::string("A") + std::string(1, 'A');  // AA
-    }
-
-    return std::string(1, last_revision + 1);
+    return indexToRevision(revisionToIndex(versions.back().revision_letter) + 1);
 }
 
 // ============================================================================

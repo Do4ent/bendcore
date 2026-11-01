@@ -69,6 +69,7 @@ PrintResult printDrawing(const PrintJob& job) {
         result.error_message = "Printer not found: " + job.settings.printer_name;
         return result;
     }
+    result.printer_name = printer_info->printer_name;
 
     // Validate settings
     auto [valid, error] = validatePrintSettings(job.settings, printer_info.value());
@@ -196,6 +197,11 @@ std::optional<PrinterInfo> getDefaultPrinter() {
 }
 
 std::optional<PrinterInfo> getPrinterInfo(const std::string& printer_name) {
+    // No name selected means the system default printer
+    if (printer_name.empty()) {
+        return getDefaultPrinter();
+    }
+
     auto printers = getAvailablePrinters();
 
     for (const auto& printer : printers) {
@@ -336,8 +342,9 @@ double getOptimalPrintScale(
     double scale_width = available_width / total_width;
     double scale_height = available_height / total_height;
 
-    // Use smaller scale to fit both dimensions
-    return std::min(scale_width, scale_height);
+    // Use smaller scale to fit both dimensions; never enlarge past 1:1,
+    // which would misstate the sheet's drawing scale
+    return std::min({scale_width, scale_height, 1.0});
 }
 
 std::pair<bool, std::string> cancelPrintJob(const std::string& job_id) {

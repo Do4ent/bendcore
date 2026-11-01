@@ -99,8 +99,13 @@ TEST_F(MaterialCostCalculatorTest, CalculateCostForDifferentMaterials) {
 }
 
 TEST_F(MaterialCostCalculatorTest, LargeTubeCost) {
+    // 1 m of Ø25x2 steel: pi/4*(25^2-21^2) = 144.51 mm^2 -> 144.51 cm^3
+    // -> 1.1344 kg; +5% scrap at 0.80/kg = 0.9529
     auto result = calculator.calculateMaterialCost("Steel", 1000.0, 25.0, 2.0);
-    EXPECT_GT(result.totalMaterialCost, 50.0);
+    const double kg = 3.14159265358979 / 4.0 * (25.0 * 25.0 - 21.0 * 21.0) * 1000.0 / 1000.0 * 7.85 / 1000.0;
+    EXPECT_NEAR(result.totalMaterialCost, kg * 1.05 * 0.80, 1e-6);
+    EXPECT_GT(result.totalMaterialCost,
+              calculator.calculateMaterialCost("Steel", 100.0, 25.0, 2.0).totalMaterialCost);
 }
 
 TEST_F(MaterialCostCalculatorTest, SmallTubeCost) {
