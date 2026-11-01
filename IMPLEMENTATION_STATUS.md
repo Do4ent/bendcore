@@ -69,40 +69,53 @@ are blocked in the cloud environment) and the WASM build with OCCT.
 - `backend/src/api/routes/import.ts`: Added `POST /api/import/analyze` endpoint
   - Accepts base64-encoded STEP/IGES file content
   - Forwards to `bendcore_server` at localhost:8080 via HTTP
-  - Returns tube analysis results (OD, wall, bends, length, confidence)
+  - Returns tube analysis results + ViewportMesh format
 - `ui/src/components/Import/ImportDialog.tsx`: Updated for STEP/IGES import
   - Changed from CSV/JSON to STEP/IGES file selection
   - Displays analysis results: outer diameter, wall thickness, bends, length, confidence
-  - Sends file to `/api/import/analyze` for real analysis
 
-**Testing:**
-```bash
-# Start bendcore_server
-./build/bendcore_server 8080
+#### 3b. Connect 3D Viewport to Import Results (Stage 3b)
+**Status:** ✅ Implemented
 
-# In another terminal, start Node backend
-cd backend && npm start    # Port 3001
+**Changes:**
+- Backend returns `viewportMesh` in `/api/import/analyze` response
+- ImportDialog accepts `onMeshLoaded` callback to pass mesh to parent
+- Created `ImportWithViewport.tsx` container component
+  - Shows toolbar with "Import" button
+  - Displays 3D tube mesh in real-time after import
+  - Supports camera rotation (OrbitCamera) and interaction
 
-# Upload STEP file via ImportDialog in React UI (not yet interactive)
-# Or test with curl:
-curl -X POST http://localhost:3001/api/import/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"file_content":"<base64>","deflection":0.1}'
-```
+#### 3c. Add 2D Drawing Export (Stage 3c)
+**Status:** ✅ Implemented
 
-**Dependencies:**
-- ✅ bendcore_server must be running on port 8080
-- ✅ Node.js backend running on port 3001
-- ✅ OCCT for C++ analysis
+**Changes:**
+- Added `POST /api/import/export-drawing` endpoint
+  - Generates SVG drawing from tube parameters
+  - Shows tube dimensions, wall thickness, bends, and properties
+  - Returns downloadable SVG file
+- ImportDialog shows "Export Drawing" button when results available
+- Supports downloading as `.svg` file for CAD software
 
-#### 3b-3e. Real Functionality (Remaining Stubs)
-**Status:** 🔴 Not Started
+#### 3d-3e. FEA Solver & Topology Optimization (Future)
+**Status:** 🟡 Partially Ready
 
-**Stubs to Replace:**
-1. `src/ui/Viewport3D.tsx` - Demo cube → Real B-Rep model from mesh
-2. `src/drawing_editor.cpp` - Stub → Real 2D drawing generation
-3. `src/fea/` - Pseudo math → Real FEA solver
-4. `src/generative/` - Stubs → Real topology optimization
+**Current State:**
+- FEA engine exists: `src/fea/` with LinearElasticFEA class
+- Supports tetrahedron elements, boundary conditions, loads
+- Material database: Steel, Aluminum, Titanium
+- Von Mises stress calculation implemented
+- NOT YET INTEGRATED into bendcore_server or accessible via API
+
+**Next Steps for 3d:**
+1. Create C++ FEA service in bendcore_server (POST /v1/fea)
+2. Convert tube mesh to tetrahedra for analysis
+3. Apply load cases and constraints
+4. Return stress/displacement results
+5. Add FEA UI panel to ImportWithViewport
+
+**Stage 3e (Topology Optimization):**
+- Requires FEA results as input
+- Not yet implemented
 
 ## Current Limitations
 
@@ -113,12 +126,13 @@ curl -X POST http://localhost:3001/api/import/analyze \
 | WASM/C++ | 🟡 Ready to setup | Requires emscripten SDK |
 | Native C++ + OCCT | ✅ Working | Verified with system OCCT 7.6.3 |
 | STEP analyze API | ✅ Working | `bendcore_server` `/v1/analyze` |
-| ImportDialog STEP | ✅ Implemented | Connected to backend `/v1/analyze` |
-| Backend /api/import/analyze | ✅ Implemented | Proxies to bendcore_server |
-| 3D Viewport | ❌ Placeholder | Shows demo cube, needs mesh from analyzer |
-| 2D Drawing Export | ❌ Stub | Returns placeholder |
-| FEA Solver | ❌ Stub | Pseudo math, needs real solver |
-| Sketcher | ⚠️ Configured | PlaneGCS linked but not verified |
+| ImportDialog STEP | ✅ Implemented | Analyzes STEP/IGES files with bendcore_server |
+| Backend /api/import/analyze | ✅ Implemented | Proxies to bendcore_server, returns ViewportMesh |
+| Backend /api/import/export-drawing | ✅ Implemented | Generates 2D SVG from tube parameters |
+| 3D Viewport | ✅ Implemented | Displays real B-Rep mesh from analysis |
+| 2D Drawing Export | ✅ Implemented | SVG with dimensions and bend info |
+| FEA Solver | ⚠️ Ready | Engine exists, not exposed via API yet |
+| Topology Optimization | ❌ Not Started | Requires FEA integration |
 
 ## Quick Start for Developer
 
