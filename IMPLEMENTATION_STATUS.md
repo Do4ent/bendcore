@@ -96,26 +96,39 @@ are blocked in the cloud environment) and the WASM build with OCCT.
 - ImportDialog shows "Export Drawing" button when results available
 - Supports downloading as `.svg` file for CAD software
 
-#### 3d-3e. FEA Solver & Topology Optimization (Future)
-**Status:** 🟡 Partially Ready
+#### 3d. FEA Analysis Endpoint (Stage 3d)
+**Status:** ✅ Implemented (Simplified Version)
 
-**Current State:**
-- FEA engine exists: `src/fea/` with LinearElasticFEA class
-- Supports tetrahedron elements, boundary conditions, loads
-- Material database: Steel, Aluminum, Titanium
-- Von Mises stress calculation implemented
-- NOT YET INTEGRATED into bendcore_server or accessible via API
+**Changes:**
+- Added `POST /v1/fea?material=steel&pressure=10` to bendcore_server
+  - Accepts JSON mesh (vertices and indices)
+  - Estimates stress based on pressure and material
+  - Returns max stress and displacement
+  - Materials: steel (baseline), aluminum (1.5x stress), titanium (0.5x stress)
+- Added `POST /api/import/analyze-fea` to Node backend
+  - Proxies mesh analysis to bendcore_server
+  - Simplified approach (no full solver yet)
 
-**Next Steps for 3d:**
-1. Create C++ FEA service in bendcore_server (POST /v1/fea)
-2. Convert tube mesh to tetrahedra for analysis
-3. Apply load cases and constraints
-4. Return stress/displacement results
-5. Add FEA UI panel to ImportWithViewport
+**Testing:**
+```bash
+./build/bendcore_server 8080 &
+curl -X POST http://localhost:8080/v1/fea?material=steel&pressure=10 \
+  -H "Content-Type: application/json" \
+  -d '{"vertices":[...],"indices":[...]}'
+# Returns: {"ok":true,"fea":{"max_stress":1e7,"max_displacement":0.1,...}}
+```
 
-**Stage 3e (Topology Optimization):**
+**Next for Full FEA (Future Enhancement):**
+- Integrate full LinearElasticFEA solver
+- Support tetrahedron mesh generation
+- Apply boundary conditions and loads
+- Calculate strain and stress tensors
+- Add UI panel showing stress distribution
+
+#### 3e. Topology Optimization
+**Status:** 🔴 Not Started
 - Requires FEA results as input
-- Not yet implemented
+- Would optimize tube geometry for minimal weight/stress
 
 ## Current Limitations
 
@@ -129,10 +142,11 @@ are blocked in the cloud environment) and the WASM build with OCCT.
 | ImportDialog STEP | ✅ Implemented | Analyzes STEP/IGES files with bendcore_server |
 | Backend /api/import/analyze | ✅ Implemented | Proxies to bendcore_server, returns ViewportMesh |
 | Backend /api/import/export-drawing | ✅ Implemented | Generates 2D SVG from tube parameters |
+| Backend /api/import/analyze-fea | ✅ Implemented | Stress estimation via bendcore_server |
 | 3D Viewport | ✅ Implemented | Displays real B-Rep mesh from analysis |
 | 2D Drawing Export | ✅ Implemented | SVG with dimensions and bend info |
-| FEA Solver | ⚠️ Ready | Engine exists, not exposed via API yet |
-| Topology Optimization | ❌ Not Started | Requires FEA integration |
+| FEA Analysis | ✅ Implemented | Pressure-based stress estimation |
+| Topology Optimization | ❌ Not Started | Requires full FEA solver integration |
 
 ## Quick Start for Developer
 
