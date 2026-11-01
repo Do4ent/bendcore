@@ -66,6 +66,8 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string>('');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [feaResult, setFeaResult] = useState<any>(null);
+  const [topoResult, setTopoResult] = useState<any>(null);
   const [options, setOptions] = useState({
     deflection: 0.1,
   });
@@ -94,6 +96,51 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed');
+    }
+  };
+
+  const runFEAAnalysis = async () => {
+    if (!analysisResult?.tube) return;
+    try {
+      const response = await fetch('/api/import/analyze-fea', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mesh: analysisResult.mesh,
+          material: 'steel',
+          pressure: 10
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setFeaResult(result.data);
+      }
+    } catch (err) {
+      setError('FEA analysis failed');
+    }
+  };
+
+  const runTopologyOptimization = async () => {
+    if (!feaResult?.fea || !analysisResult?.tube) return;
+    try {
+      const response = await fetch('/api/import/topology-optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stress: feaResult.fea.max_stress,
+          displacement: feaResult.fea.max_displacement,
+          od: analysisResult.tube.od,
+          wall: analysisResult.tube.wall,
+          length: analysisResult.tube.length,
+          material: 'steel'
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setTopoResult(result.data);
+      }
+    } catch (err) {
+      setError('Topology optimization failed');
     }
   };
 
@@ -316,6 +363,56 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
             </div>
           )}
 
+          {/* FEA Results */}
+          {feaResult && feaResult.fea && (
+            <div className="section">
+              <h3>4. FEA Analysis Results</h3>
+              <div className="results-grid">
+                <div className="result-item">
+                  <span className="result-label">Max Stress:</span>
+                  <span className="result-value">{(feaResult.fea.max_stress / 1e6).toFixed(1)} MPa</span>
+                </div>
+                <div className="result-item">
+                  <span className="result-label">Max Displacement:</span>
+                  <span className="result-value">{feaResult.fea.max_displacement.toFixed(3)} mm</span>
+                </div>
+                <div className="result-item">
+                  <span className="result-label">Elements:</span>
+                  <span className="result-value">{feaResult.fea.element_count}</span>
+                </div>
+                <div className="result-item">
+                  <span className="result-label">Nodes:</span>
+                  <span className="result-value">{feaResult.fea.node_count}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Topology Optimization Results */}
+          {topoResult && topoResult.topology && (
+            <div className="section">
+              <h3>5. Topology Optimization</h3>
+              <div className="results-grid">
+                <div className="result-item">
+                  <span className="result-label">Current Wall:</span>
+                  <span className="result-value">{topoResult.topology.original_wall.toFixed(2)} mm</span>
+                </div>
+                <div className="result-item">
+                  <span className="result-label">Optimal Wall:</span>
+                  <span className="result-value">{topoResult.topology.optimal_wall.toFixed(2)} mm</span>
+                </div>
+                <div className="result-item">
+                  <span className="result-label">Weight Reduction:</span>
+                  <span className="result-value">{topoResult.topology.weight_reduction_percent.toFixed(1)}%</span>
+                </div>
+                <div className="result-item">
+                  <span className="result-label">Recommendation:</span>
+                  <span className="result-value" style={{fontSize: '11px'}}>{topoResult.topology.recommendation}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Error Message */}
           {error && (
             <div className="error-section">
@@ -342,13 +439,33 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
             Cancel
           </button>
           {analysisResult && analysisResult.tube && (
-            <button
-              className="btn-secondary"
-              onClick={() => downloadDrawing(analysisResult.tube!)}
-              title="Export 2D drawing as SVG"
-            >
-              📋 Export Drawing
-            </button>
+            <>
+              <button
+                className="btn-secondary"
+                onClick={() => downloadDrawing(analysisResult.tube!)}
+                title="Export 2D drawing as SVG"
+              >
+                📋 Export Drawing
+              </button>
+              {!feaResult && (
+                <button
+                  className="btn-secondary"
+                  onClick={runFEAAnalysis}
+                  title="Run FEA stress analysis"
+                >
+                  ⚙️ Analyze (FEA)
+                </button>
+              )}
+              {feaResult && !topoResult && (
+                <button
+                  className="btn-secondary"
+                  onClick={runTopologyOptimization}
+                  title="Optimize geometry for weight reduction"
+                >
+                  🎯 Optimize
+                </button>
+              )}
+            </>
           )}
           <button
             className="btn-primary"
