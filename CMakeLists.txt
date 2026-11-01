@@ -406,12 +406,8 @@ if(LibDWG_FOUND)
   target_compile_definitions(bendcore_core PRIVATE BENDCORE_WITH_LIBDWG=1)
 endif()
 
-# Link OCCT libraries if available
-if(OpenCASCADE_FOUND)
-  target_include_directories(bendcore_core SYSTEM PRIVATE ${OpenCASCADE_INCLUDE_DIRS})
-  target_link_libraries(bendcore_core PRIVATE ${OpenCASCADE_LIBRARIES})
-  target_compile_definitions(bendcore_core PRIVATE BENDCORE_WITH_OCCT=1)
-endif()
+# bendcore_core does not use OCCT; OCCT-dependent code lives in
+# bendcore_import (below) and bendcore_occt (BENDCORE_WITH_OCCT).
 
 # M1 Integration Test (CAD Foundation)
 add_executable(test_m1_integration tests/integration/test_m1_integration.cpp)
@@ -769,58 +765,41 @@ add_executable(test_geometry_analyzer tests/test_geometry_analyzer.cpp)
 target_link_libraries(test_geometry_analyzer PRIVATE bendcore_core)
 bendcore_add_test(geometry_analyzer test_geometry_analyzer)
 
-if(WIN32 OR OpenCASCADE_FOUND)
-  add_executable(test_occt_init tests/test_occt_init.cpp)
-  target_include_directories(test_occt_init PRIVATE include)
-  if(OpenCASCADE_FOUND)
-    target_include_directories(test_occt_init SYSTEM PRIVATE ${OpenCASCADE_INCLUDE_DIRS})
-    target_link_libraries(test_occt_init PRIVATE ${OpenCASCADE_LIBRARIES})
-    target_compile_definitions(test_occt_init PRIVATE BENDCORE_WITH_OCCT=1)
-  else()
-    target_link_libraries(test_occt_init PRIVATE bendcore_core)
+# Import pipeline (Q3 2027, Task 1): STEP/IGES through the OCCT XCAF readers,
+# DXF, geometry cache, parametric dimensions, import workflow.
+if(OpenCASCADE_FOUND)
+  add_library(bendcore_import STATIC
+    src/occt_init.cpp
+    src/step_reader.cpp
+    src/dxf_reader.cpp
+    src/import_cache.cpp
+    src/parametric_builder.cpp
+    src/import_workflow.cpp)
+  target_include_directories(bendcore_import PUBLIC include)
+  target_include_directories(bendcore_import SYSTEM PUBLIC ${OpenCASCADE_INCLUDE_DIRS})
+  target_compile_definitions(bendcore_import PRIVATE BENDCORE_WITH_OCCT=1)
+  target_link_libraries(bendcore_import PUBLIC bendcore_core bendcore_formula
+    -Wl,--start-group ${OpenCASCADE_LIBRARIES} -Wl,--end-group pthread dl m)
+
+  # With BENDCORE_WITH_OCCT the import workflow uses the real B-Rep
+  # analyser from bendcore_occt (defined further below).
+  if(BENDCORE_WITH_OCCT)
+    target_link_libraries(bendcore_import PUBLIC bendcore_occt)
+    target_compile_definitions(bendcore_import PRIVATE BENDCORE_HAS_OCCT_GEOMETRY_BACKEND=1)
   endif()
-  bendcore_add_test(occt_init test_occt_init)
 
-  # STEP File Reader test (Q3 2027, Task 1, Subtask 2)
-  add_executable(test_step_reader tests/test_step_reader.cpp)
-  target_include_directories(test_step_reader PRIVATE include)
-  target_link_libraries(test_step_reader PRIVATE bendcore_core)
-  if(OpenCASCADE_FOUND)
-    target_include_directories(test_step_reader SYSTEM PRIVATE ${OpenCASCADE_INCLUDE_DIRS})
-    target_link_libraries(test_step_reader PRIVATE ${OpenCASCADE_LIBRARIES})
-    target_compile_definitions(test_step_reader PRIVATE BENDCORE_WITH_OCCT=1)
-  endif()
-  bendcore_add_test(step_reader test_step_reader)
+  foreach(t occt_init step_reader parametric_builder geometry_cache dxf_reader import_workflow)
+    add_executable(test_${t} tests/test_${t}.cpp)
+    target_link_libraries(test_${t} PRIVATE bendcore_import)
+    bendcore_add_test(${t} test_${t})
+  endforeach()
+  target_compile_definitions(test_occt_init PRIVATE BENDCORE_WITH_OCCT=1)
 
-
-  # Parametric Builder test (Q3 2027, Task 1, Subtask 4)
-  add_executable(test_parametric_builder tests/test_parametric_builder.cpp)
-  target_include_directories(test_parametric_builder PRIVATE include)
-  target_link_libraries(test_parametric_builder PRIVATE bendcore_core)
-  bendcore_add_test(parametric_builder test_parametric_builder)
-
-  # Geometry Cache test (Q3 2027, Task 1, Subtask 5)
-  add_executable(test_geometry_cache tests/test_geometry_cache.cpp)
-  target_include_directories(test_geometry_cache PRIVATE include)
-  target_link_libraries(test_geometry_cache PRIVATE bendcore_core)
-  bendcore_add_test(geometry_cache test_geometry_cache)
-
-  # DXF Reader test (Q3 2027, Task 1, Subtask 6)
-  add_executable(test_dxf_reader tests/test_dxf_reader.cpp)
-  target_include_directories(test_dxf_reader PRIVATE include)
-  target_link_libraries(test_dxf_reader PRIVATE bendcore_core)
-  bendcore_add_test(dxf_reader test_dxf_reader)
-
-  # Import Workflow test (Q3 2027, Task 1, Subtask 7)
-  add_executable(test_import_workflow tests/test_import_workflow.cpp)
-  target_include_directories(test_import_workflow PRIVATE include)
-  target_link_libraries(test_import_workflow PRIVATE bendcore_core)
-  bendcore_add_test(import_workflow test_import_workflow)
-
-  # E2E Import test (Q3 2027, Task 1, Subtask 10)
   add_executable(e2e_import tests/e2e_import.cpp)
-  target_include_directories(e2e_import PRIVATE include)
-  target_link_libraries(e2e_import PRIVATE bendcore_core)
+  target_link_libraries(e2e_import PRIVATE bendcore_import)
+  if(BENDCORE_WITH_OCCT)
+    target_compile_definitions(e2e_import PRIVATE BENDCORE_HAS_OCCT_GEOMETRY_BACKEND=1)
+  endif()
   bendcore_add_test(e2e_import e2e_import)
 endif()
 

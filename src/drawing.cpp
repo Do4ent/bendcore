@@ -865,7 +865,7 @@ const char* associativity_name(DrawingAssociativity a) {
 
 // SHA-256 строки (FIPS 180-4), шестнадцатеричная строка из 64 символов. Собственная реализация:
 // ядро не зависит от OpenSSL и собирается под WebAssembly.
-static std::string sha256_string(const std::string& input) {
+std::string sha256_hex(const std::string& input) {
     static const uint32_t K[64] = {
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
         0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -938,7 +938,7 @@ PathFingerprint compute_fingerprint(
     ss << "std:" << static_cast<int>(standard) << "|";
     ss << "fmt:" << format;
 
-    return PathFingerprint{sha256_string(ss.str())};
+    return PathFingerprint{sha256_hex(ss.str())};
 }
 
 std::string iso_8601_now() {

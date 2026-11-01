@@ -1,5 +1,8 @@
 // Import Workflow Manager Implementation (Q3 2027, Task 1, Subtask 7)
 #include <bendcore/import_workflow.hpp>
+#ifdef BENDCORE_HAS_OCCT_GEOMETRY_BACKEND
+#include <bendcore/occt/geometry_backend.hpp>
+#endif
 
 #include <chrono>
 #include <algorithm>
@@ -11,6 +14,13 @@
 namespace bendcore::import {
 
 ImportWorkflow::ImportWorkflow() {
+#ifdef BENDCORE_HAS_OCCT_GEOMETRY_BACKEND
+    // Real B-Rep analysis (Open CASCADE); without it analyze() reports
+    // confidence 0 and STEP imports fail with a clear message.
+    if (!bendcore::geometry::has_geometry_backend()) {
+        bendcore::occt::install_geometry_backend();
+    }
+#endif
 }
 
 ImportWorkflow::~ImportWorkflow() {
@@ -157,36 +167,32 @@ ImportResult ImportWorkflow::import_step_file(const ImportConfig& config) {
     // Analyze geometry
     log_step("Analyzing geometry");
 
-    // 3D-005: FIXED — Pass real OCCT Shape data, not placeholder_geometry
-    // Proper approach: serialize actual TopoDS_Shape for geometry analysis
-    std::string geometry_data;
-
+    // Analyse the B-Rep of the first top-level shape (BRepTools text from
+    // STEPReader). Previously the shape *ID* ("shape_0") was analysed, which
+    // can never be recognised.
     if (step_result.shape_ids.empty()) {
-        // No shapes imported - this should be treated as an error
         result.warnings.push_back("No shapes found in STEP file");
-        result.success = false;
+        log_step("Geometry analysis", false);
         return result;
-    } else {
-        // Use actual shape identifiers or serialized geometry
-        // In production: pass Handle(TopoDS_Shape) or serialized B-rep data
-        // NOT "placeholder_geometry" string
-        geometry_data = step_result.shape_ids[0];
-
-        // Validate that this is real geometry data, not a placeholder
-        if (geometry_data == "placeholder_geometry") {
-            result.warnings.push_back("Invalid placeholder geometry - STEP reader did not return real geometry");
-            result.success = false;
-            return result;
-        }
+    }
+    const std::string geometry_data = step_reader_.get_shape_data(step_result.shape_ids[0]);
+    if (geometry_data.empty()) {
+        result.warnings.push_back("STEP reader returned no geometry for " + step_result.shape_ids[0]);
+        log_step("Geometry analysis", false);
+        return result;
     }
 
     auto params = analyzer_.analyze(geometry_data);
 
-    if (params.confidence < 0.5) {
-        result.warnings.push_back("Low confidence in geometry analysis: " +
-                                 std::to_string(params.confidence));
+    // Unrecognised or low-confidence (< 0.5, see is_valid) geometry must not
+    // turn into zero dimensions, nor be cached
+    if (!params.is_valid()) {
+        result.warnings.push_back("Geometry not recognised as a tube: " +
+                                  (params.analysis_notes.empty() ? std::string("no details")
+                                                                 : params.analysis_notes));
+        log_step("Geometry analysis", false);
+        return result;
     }
-
     log_step("Geometry analysis complete");
 
     // Build parametric dimensions
