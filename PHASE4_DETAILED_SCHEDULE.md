@@ -1,9 +1,20 @@
-# Phase 4 - Detailed Implementation Schedule
-## Строгое выполнение по документации
+# Phase 4 - Detailed Implementation Schedule (REVISED)
+## Строгое выполнение по документации - FEA & API FROZEN
 
 **Начало:** January 15, 2027  
 **Завершение:** April 10, 2027  
-**Длительность:** 12 недель
+**Длительность:** 12 недель  
+**Status:** ✅ UPDATED - FEA & API components FROZEN (see FROZEN_COMPONENTS.md)
+
+---
+
+## ⚠️ IMPORTANT: FROZEN COMPONENTS
+
+**The following components are LOCKED for modifications:**
+- ❌ FEA (src/fea/) - ZERO changes allowed
+- ❌ API Routes (backend/src/api/routes/) - ZERO changes allowed
+
+See detailed restrictions in: [FROZEN_COMPONENTS.md](FROZEN_COMPONENTS.md)
 
 ---
 
