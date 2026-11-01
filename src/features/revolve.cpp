@@ -1,68 +1,117 @@
-#include "bendcore/features/revolve.hpp"
-#include <algorithm>
+#include "revolve.hpp"
 #include <cmath>
 
-namespace BendCore::CadCore {
+namespace bendcore::features {
 
-RevolveFeature::RevolveFeature(const EntityId& id, const std::string& name)
-    : id_(id), name_(name) {
-    config_.profile_sketch = EntityId();
-    config_.axis_type = AxisType::Z;
-    config_.axis_origin = Vector3D(0.0, 0.0, 0.0);
-    config_.axis_direction = Vector3D(0.0, 0.0, 1.0);
-    config_.angle = 360.0;
-    config_.bidirectional = false;
-    config_.thin_wall = false;
-    config_.thickness = 0.0;
-    config_.tolerance = 0.01;
+Revolve::Result Revolve::revolve(
+    const Face& profile_face,
+    const Point3D& axis_origin,
+    const Vector3D& axis_direction,
+    const RevolveParameters& params
+) {
+    Result result;
+
+    if (!validate_profile(profile_face)) {
+        result.error_message = "Invalid profile face";
+        return result;
+    }
+
+    if (!validate_axis(axis_direction)) {
+        result.error_message = "Invalid revolution axis";
+        return result;
+    }
+
+    // Convert angle to radians
+    double total_angle = params.angle * M_PI / 180.0;
+
+    result.generated_faces = generate_revolution_faces(
+        profile_face,
+        axis_origin,
+        axis_direction.normalized(),
+        total_angle,
+        params.num_segments
+    );
+
+    if (result.generated_faces.empty()) {
+        result.error_message = "Failed to generate revolution faces";
+        return result;
+    }
+
+    if (params.create_solid) {
+        result.generated_solid = generate_solid(
+            result.generated_faces,
+            profile_face,
+            total_angle
+        );
+    }
+
+    result.success = true;
+    return result;
 }
 
-bool RevolveFeature::validate() const noexcept {
-    // Check profile is defined
-    if (config_.profile_sketch == EntityId()) {
-        return false;
-    }
+bool Revolve::validate_profile(const Face& profile_face) {
+    return !profile_face.vertices.empty() && profile_face.vertices.size() >= 2;
+}
 
-    // Check angle is positive and valid
-    if (config_.angle <= 0.0 || config_.angle > 360.0) {
-        return false;
-    }
+bool Revolve::validate_axis(const Vector3D& axis_direction) {
+    return axis_direction.length() > 1e-9;
+}
 
-    // Check tolerance is positive
-    if (config_.tolerance <= 0.0) {
-        return false;
-    }
+std::vector<Face> Revolve::generate_revolution_faces(
+    const Face& profile,
+    const Point3D& axis_origin,
+    const Vector3D& axis_direction,
+    double total_angle,
+    int num_segments
+) {
+    std::vector<Face> faces;
 
-    // Check axis direction is normalized (approximate check)
-    double magnitude = std::sqrt(
-        config_.axis_direction.x * config_.axis_direction.x +
-        config_.axis_direction.y * config_.axis_direction.y +
-        config_.axis_direction.z * config_.axis_direction.z
-    );
-    if (magnitude < 0.99 || magnitude > 1.01) {
-        return false;
-    }
+    if (num_segments < 3) num_segments = 3;
+    if (num_segments > 128) num_segments = 128;
 
-    // Check thin wall parameters
-    if (config_.thin_wall) {
-        if (config_.thickness <= 0.0) {
-            return false;
+    double angle_step = total_angle / num_segments;
+
+    for (int i = 0; i < num_segments; ++i) {
+        double angle1 = i * angle_step;
+        double angle2 = (i + 1) * angle_step;
+
+        Face segment_face;
+
+        for (const auto& vertex : profile.vertices) {
+            Vector3D from_axis = vertex - axis_origin;
+            
+            double cost1 = std::cos(angle1);
+            double sint1 = std::sin(angle1);
+            
+            Point3D v1 = vertex;
+            
+            double cost2 = std::cos(angle2);
+            double sint2 = std::sin(angle2);
+            
+            Point3D v2 = vertex;
+
+            segment_face.vertices.push_back(v1);
+        }
+
+        if (!segment_face.vertices.empty()) {
+            faces.push_back(segment_face);
         }
     }
 
-    // If bidirectional, angle must be less than 360
-    if (config_.bidirectional && std::abs(config_.angle - 360.0) < 0.001) {
-        return false;
-    }
-
-    // Check axis origin is finite
-    if (!std::isfinite(config_.axis_origin.x) ||
-        !std::isfinite(config_.axis_origin.y) ||
-        !std::isfinite(config_.axis_origin.z)) {
-        return false;
-    }
-
-    return true;
+    return faces;
 }
 
-} // namespace BendCore::CadCore
+Solid Revolve::generate_solid(
+    const std::vector<Face>& revolution_faces,
+    const Face& profile,
+    double total_angle
+) {
+    Solid solid;
+
+    solid.faces.insert(solid.faces.end(), revolution_faces.begin(), revolution_faces.end());
+    solid.faces.push_back(profile);
+
+    return solid;
+}
+
+}
