@@ -157,10 +157,10 @@ protected:
         .bend_radius = 150.0,
         .num_bends = 5,
         .distribution = "custom",
-        .custom_bend_positions = {0.2, 0.4, 0.5, 0.7, 0.85},
         .inclination_angle = 30.0,
         .springback_correction = true,
-        .material = "aluminum"
+        .material = "aluminum",
+        .custom_bend_positions = {0.2, 0.4, 0.5, 0.7, 0.85}
     };
   }
 };

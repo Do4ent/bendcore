@@ -549,4 +549,3 @@ TEST_F(GenerativeDesignIntegrationTest, MultiObjectiveOptimization) {
     EXPECT_TRUE(!result.best_design.empty());
 }
 
-} // namespace

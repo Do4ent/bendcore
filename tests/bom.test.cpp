@@ -74,7 +74,7 @@ protected:
     BOMItem testItem1, testItem2, testItem3;
 };
 
-class BOMGeneratorTest : public ::testing::Test {
+class BOMGeneratorTest : public BOMTest {
 protected:
     BOMGenerator generator_;
 };
@@ -229,13 +229,13 @@ TEST_F(BOMTest, StatisticsByCategory) {
 
     const auto& stats = bom.getStatistics();
 
-    EXPECT_EQ(stats.itemsByCategory["tube"], 1);
-    EXPECT_EQ(stats.itemsByCategory["fitting"], 1);
-    EXPECT_EQ(stats.itemsByCategory["fastener"], 1);
+    EXPECT_EQ(stats.itemsByCategory.at("tube"), 1);
+    EXPECT_EQ(stats.itemsByCategory.at("fitting"), 1);
+    EXPECT_EQ(stats.itemsByCategory.at("fastener"), 1);
 
-    EXPECT_EQ(stats.quantityByCategory["tube"], 5);
-    EXPECT_EQ(stats.quantityByCategory["fitting"], 10);
-    EXPECT_EQ(stats.quantityByCategory["fastener"], 20);
+    EXPECT_EQ(stats.quantityByCategory.at("tube"), 5);
+    EXPECT_EQ(stats.quantityByCategory.at("fitting"), 10);
+    EXPECT_EQ(stats.quantityByCategory.at("fastener"), 20);
 }
 
 TEST_F(BOMTest, StatisticsByCostCategory) {
@@ -246,9 +246,9 @@ TEST_F(BOMTest, StatisticsByCostCategory) {
 
     const auto& stats = bom.getStatistics();
 
-    EXPECT_DOUBLE_EQ(stats.costByCategory["tube"], 125.00);
-    EXPECT_DOUBLE_EQ(stats.costByCategory["fitting"], 50.00);
-    EXPECT_DOUBLE_EQ(stats.costByCategory["fastener"], 10.00);
+    EXPECT_DOUBLE_EQ(stats.costByCategory.at("tube"), 125.00);
+    EXPECT_DOUBLE_EQ(stats.costByCategory.at("fitting"), 50.00);
+    EXPECT_DOUBLE_EQ(stats.costByCategory.at("fastener"), 10.00);
 }
 
 TEST_F(BOMTest, StatisticsBySupplier) {
@@ -259,9 +259,9 @@ TEST_F(BOMTest, StatisticsBySupplier) {
 
     const auto& stats = bom.getStatistics();
 
-    EXPECT_EQ(stats.itemsBySupplier["MetalSupplies Inc."], 1);
-    EXPECT_EQ(stats.itemsBySupplier["FittingSupplies Ltd."], 1);
-    EXPECT_EQ(stats.itemsBySupplier["FastenerCorp"], 1);
+    EXPECT_EQ(stats.itemsBySupplier.at("MetalSupplies Inc."), 1);
+    EXPECT_EQ(stats.itemsBySupplier.at("FittingSupplies Ltd."), 1);
+    EXPECT_EQ(stats.itemsBySupplier.at("FastenerCorp"), 1);
 }
 
 TEST_F(BOMTest, CriticalItemsIdentification) {

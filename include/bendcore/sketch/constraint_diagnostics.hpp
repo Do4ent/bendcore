@@ -118,6 +118,11 @@ public:
     std::string getConstraintDescription(int constraint_id) const;
 
     /**
+     * @brief IDs of all registered constraints (ascending)
+     */
+    std::vector<int> getConstraints() const;
+
+    /**
      * @brief Suggest constraints to fully constrain sketch
      */
     std::vector<std::string> suggestConstraints();

@@ -177,6 +177,13 @@ std::string ConstraintDiagnosticsEngine::getConstraintDescription(int constraint
     return "Unknown constraint";
 }
 
+std::vector<int> ConstraintDiagnosticsEngine::getConstraints() const {
+    std::vector<int> ids;
+    ids.reserve(constraints_.size());
+    for (const auto& [id, info] : constraints_) ids.push_back(id);
+    return ids;
+}
+
 std::vector<std::string> ConstraintDiagnosticsEngine::suggestConstraints() {
     std::vector<std::string> suggestions;
 

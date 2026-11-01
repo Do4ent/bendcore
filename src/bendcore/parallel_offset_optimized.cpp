@@ -132,7 +132,7 @@ ParallelOffsetCalculatorOptimized::calculate(const Parameters& params) {  // Not
   result.confidence = std::max(50.0, confidence);
 
   // Проверка на предупреждения (минимизирован number of string operations)
-  if (result.bend_2_angle > params.bend_angle * 1.1) {
+  if (result.bend_angles[1] > params.bend_angle * 1.1) {
     if (result.warnings.empty()) {
       result.warnings = "Вторая гибка может быть более сложной. ";
     }

@@ -169,7 +169,7 @@ struct STEPSettings : public ScaleSettings {
 // Raster Settings
 // ============================================================================
 
-struct RasterSettings : public QualitySettings {
+struct RasterSettings : public QualitySettings, public ColorSettings {
     bool trim_whitespace = false;
     int background_color = 0xFFFFFF;  // White background
     bool transparent_background = false;

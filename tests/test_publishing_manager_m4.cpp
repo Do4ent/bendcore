@@ -3,6 +3,7 @@
 #include "../include/bendcore/drawing/publishing_manager.hpp"
 #include "../include/bendcore/drawing/file_handler.hpp"
 #include <filesystem>
+#include <fstream>
 
 namespace fs = std::filesystem;
 
@@ -38,7 +39,7 @@ class PublishingManagerTest : public ::testing::Test {
 
     job.metadata.title = "Test Drawing";
     job.metadata.drawing_number = "DRW-001";
-    job.metadata.revision_number = 1;
+    job.metadata.revision_number = "1";
     job.metadata.author = "Test Author";
     job.metadata.description = "Test Description";
 
@@ -369,7 +370,7 @@ TEST_F(PublishingManagerTest, CreateDocumentDigest) {
   PublishingMetadata metadata;
   metadata.title = "Test Drawing";
   metadata.drawing_number = "DRW-001";
-  metadata.revision_number = 1;
+  metadata.revision_number = "1";
   metadata.author = "Test Author";
 
   auto digest = createDocumentDigest(*sheet, metadata);
@@ -438,7 +439,7 @@ TEST_F(PublishingManagerTest, PublishingJobMetadata) {
 
   EXPECT_EQ(job.metadata.title, "Test Drawing");
   EXPECT_EQ(job.metadata.drawing_number, "DRW-001");
-  EXPECT_EQ(job.metadata.revision_number, 1);
+  EXPECT_EQ(job.metadata.revision_number, "1");
   EXPECT_EQ(job.metadata.author, "Test Author");
 }
 

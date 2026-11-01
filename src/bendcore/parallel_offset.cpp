@@ -130,7 +130,7 @@ ParallelOffsetCalculator::Result ParallelOffsetCalculator::calculate(
   // Проверка на предупреждения
   std::stringstream warnings;
 
-  if (result.bend_2_angle > params.bend_angle * 1.1) {
+  if (result.bend_angles[1] > params.bend_angle * 1.1) {
     warnings << "Вторая гибка может быть более сложной. ";
   }
 

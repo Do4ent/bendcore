@@ -133,7 +133,7 @@ TEST_F(TemplateManagerTest, TemplateCRUDOperations) {
   custom_template.outer_diameter = {20.0, 40.0, 30.0, "mm"};
   custom_template.wall_thickness = {1.5, 2.5, 2.0, "mm"};
   custom_template.length = {100.0, 600.0, 350.0, "mm"};
-  custom_template.compatible_materials = {"steel-1020", "aluminum-6061"};
+  custom_template.recommended_materials = {"steel-1020", "aluminum-6061"};
 
   // Create (Add)
   manager.add_template(custom_template);
@@ -177,7 +177,7 @@ TEST_F(TemplateManagerTest, CustomTemplatePersistence) {
   custom_template.outer_diameter = {12.0, 48.0, 30.0, "mm"};
   custom_template.wall_thickness = {1.0, 3.0, 2.0, "mm"};
   custom_template.length = {30.0, 900.0, 400.0, "mm"};
-  custom_template.compatible_materials = {};
+  custom_template.recommended_materials = {};
 
   manager.add_template(custom_template);
   manager.set_active_template("custom-persistent");

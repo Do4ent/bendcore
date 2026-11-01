@@ -667,7 +667,7 @@ target_include_directories(bendcore_formula PUBLIC include third_party)
 # Template tests (GoogleTest)
 find_package(GTest QUIET)
 if(GTest_FOUND)
-  add_executable(test_templates tests/test_templates.cpp)
+  add_executable(test_templates tests/test_templates.cpp src/template_manager.cpp)
   target_link_libraries(test_templates PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(templates test_templates)
 endif()
@@ -680,7 +680,12 @@ if(GTest_FOUND)
   bendcore_add_test(performance test_performance)
 
   # Offset modules performance benchmarks
-  add_executable(test_offset_performance tests/test_offset_performance.cpp)
+  add_executable(test_offset_performance tests/test_offset_performance.cpp
+    src/combined_3d_offset.cpp
+    src/bendcore/combined_3d_offset_optimized.cpp
+    src/bendcore/parallel_offset.cpp
+    src/bendcore/parallel_offset_optimized.cpp
+    src/bendcore/offset_profiler.cpp)
   target_link_libraries(test_offset_performance PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(offset_performance test_offset_performance)
 

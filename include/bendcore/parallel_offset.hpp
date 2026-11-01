@@ -68,7 +68,7 @@ public:
   static bool can_bend(double od, double wall_thickness, double bend_radius,
                        const std::string& material);
 
-private:
+protected:
   mutable std::string error_message_;
   mutable std::vector<ValidationError> validation_errors_;
 
