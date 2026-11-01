@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useIpc } from '../../hooks/useIpc';
+import type { ViewportMesh } from '../Viewport3D';
 
 interface ImportDialogProps {
   isOpen: boolean;
@@ -17,13 +18,6 @@ interface FileInfo {
 interface MeshData {
   vertices: number[];
   indices: number[];
-}
-
-interface ViewportMesh {
-  id: string;
-  name: string;
-  mesh: MeshData;
-  color?: number;
 }
 
 interface AnalysisResult {

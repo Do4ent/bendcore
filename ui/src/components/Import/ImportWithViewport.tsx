@@ -5,8 +5,8 @@
 
 import React, { useState } from 'react';
 import { ImportDialog } from './ImportDialog';
-import { Viewport3D, Viewport3DProps } from '../Viewport3D';
-import type { ViewportMesh } from '../../tubeService';
+import { Viewport3D } from '../Viewport3D';
+import type { ViewportMesh } from '../Viewport3D';
 
 export interface ImportWithViewportProps {
   width?: number;
