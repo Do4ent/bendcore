@@ -5,6 +5,7 @@ interface ImportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (tubeId: string) => void;
+  onMeshLoaded?: (mesh: ViewportMesh) => void;
 }
 
 interface FileInfo {
@@ -13,17 +14,29 @@ interface FileInfo {
   format: 'step' | 'stp' | 'iges' | 'igs' | null;
 }
 
+interface MeshData {
+  vertices: number[];
+  indices: number[];
+}
+
+interface ViewportMesh {
+  id: string;
+  name: string;
+  mesh: MeshData;
+  color?: number;
+}
+
 interface AnalysisResult {
   ok?: boolean;
-  od?: number;
-  wall?: number;
-  bends?: Array<{ angle: number; radius: number }>;
-  length?: number;
-  confidence?: number;
-  mesh?: {
-    vertices: Array<[number, number, number]>;
-    faces: Array<[number, number, number]>;
+  tube?: {
+    od?: number;
+    wall?: number;
+    bends?: Array<{ angle: number; radius: number }>;
+    length?: number;
+    confidence?: number;
   };
+  mesh?: MeshData;
+  viewportMesh?: ViewportMesh;
 }
 
 /**
@@ -41,6 +54,7 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  onMeshLoaded,
 }) => {
   const ipc = useIpc();
 
@@ -119,8 +133,11 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
       if (result.success) {
         setProgress(100);
         setAnalysisResult(result.data);
-        if (onSuccess && result.data.id) {
-          onSuccess(result.data.id);
+        if (result.data.viewportMesh && onMeshLoaded) {
+          onMeshLoaded(result.data.viewportMesh);
+        }
+        if (onSuccess) {
+          onSuccess(result.data.viewportMesh?.id || `import_${Date.now()}`);
         }
       } else {
         setError(result.error || 'Import failed');
@@ -225,43 +242,48 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
           )}
 
           {/* Analysis Results */}
-          {analysisResult && (
+          {analysisResult && analysisResult.tube && (
             <div className="section">
               <h3>3. Analysis Results</h3>
               <div className="results-grid">
-                {analysisResult.od && (
+                {analysisResult.tube.od && (
                   <div className="result-item">
                     <span className="result-label">OD:</span>
-                    <span className="result-value">{analysisResult.od.toFixed(2)} mm</span>
+                    <span className="result-value">{analysisResult.tube.od.toFixed(2)} mm</span>
                   </div>
                 )}
-                {analysisResult.wall && (
+                {analysisResult.tube.wall && (
                   <div className="result-item">
                     <span className="result-label">Wall:</span>
-                    <span className="result-value">{analysisResult.wall.toFixed(2)} mm</span>
+                    <span className="result-value">{analysisResult.tube.wall.toFixed(2)} mm</span>
                   </div>
                 )}
-                {analysisResult.length && (
+                {analysisResult.tube.length && (
                   <div className="result-item">
                     <span className="result-label">Length:</span>
-                    <span className="result-value">{analysisResult.length.toFixed(2)} mm</span>
+                    <span className="result-value">{analysisResult.tube.length.toFixed(2)} mm</span>
                   </div>
                 )}
-                {analysisResult.confidence !== undefined && (
+                {analysisResult.tube.confidence !== undefined && (
                   <div className="result-item">
                     <span className="result-label">Confidence:</span>
-                    <span className="result-value">{(analysisResult.confidence * 100).toFixed(0)}%</span>
+                    <span className="result-value">{(analysisResult.tube.confidence * 100).toFixed(0)}%</span>
                   </div>
                 )}
               </div>
-              {analysisResult.bends && analysisResult.bends.length > 0 && (
+              {analysisResult.tube.bends && analysisResult.tube.bends.length > 0 && (
                 <div className="bends-list">
                   <h4>Bends</h4>
-                  {analysisResult.bends.map((bend, i) => (
+                  {analysisResult.tube.bends.map((bend, i) => (
                     <div key={i} className="bend-item">
                       {bend.angle.toFixed(0)}° @ R{bend.radius.toFixed(1)}
                     </div>
                   ))}
+                </div>
+              )}
+              {analysisResult.mesh && (
+                <div className="mesh-info">
+                  ✓ 3D mesh loaded ({analysisResult.mesh.vertices.length / 3} vertices, {analysisResult.mesh.indices.length / 3} triangles)
                 </div>
               )}
             </div>
@@ -631,6 +653,16 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
           padding: 6px 0;
           font-size: 12px;
           color: #333;
+        }
+
+        .mesh-info {
+          margin-top: 12px;
+          padding: 10px;
+          background: #e8f5e9;
+          border: 1px solid #4caf50;
+          border-radius: 4px;
+          font-size: 12px;
+          color: #2e7d32;
         }
       `}</style>
     </div>

@@ -199,7 +199,7 @@ router.post('/smooth', (req: Request, res: Response): void => {
 
 /**
  * POST /api/import/analyze
- * Analyze STEP/IGES file from bendcore_server
+ * Analyze STEP/IGES file from bendcore_server, return tube data + viewport mesh
  */
 router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -237,9 +237,20 @@ router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
 
       const analysisData = await analysisResponse.json();
 
+      // Transform bendcore_server response to include ViewportMesh
+      const transformedData = {
+        ...analysisData,
+        viewportMesh: analysisData.mesh ? {
+          id: `tube_${Date.now()}`,
+          name: 'Imported Tube',
+          mesh: analysisData.mesh,
+          color: 0x1f6fc5
+        } : undefined
+      };
+
       const response: ApiResponse<unknown> = {
         success: true,
-        data: analysisData,
+        data: transformedData,
         timestamp: new Date().toISOString()
       };
 
