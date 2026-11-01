@@ -214,10 +214,16 @@ std::shared_ptr<BOM> BOMGenerator::generateFromTubes(
 
     // Generate tube items
     int itemNum = 1;
-    std::map<std::string, int> aggregatedQuantities;
+    // Aggregate equal specs, numbering items in order of first appearance
+    std::vector<std::pair<std::string, int>> aggregatedQuantities;
+    std::map<std::string, size_t> specIndex;
 
     for (const auto& spec : tubeSpecs) {
-        aggregatedQuantities[spec.first] += spec.second;
+        auto [it, inserted] = specIndex.try_emplace(spec.first, aggregatedQuantities.size());
+        if (inserted) {
+            aggregatedQuantities.emplace_back(spec.first, 0);
+        }
+        aggregatedQuantities[it->second].second += spec.second;
     }
 
     for (const auto& [spec, totalQty] : aggregatedQuantities) {

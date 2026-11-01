@@ -30,6 +30,14 @@ if(NOT TARGET Eigen3::Eigen)
     message(STATUS "Using Eigen stub from third_party_stubs/")
   endif()
 
+  # third_party/eigen-5.0.0 and third_party_stubs are header stubs, not Eigen:
+  # sketch.cpp / PlaneGCS / the thermal solver do not compile against them.
+  if(NOT EXISTS "${BENDCORE_EIGEN_INCLUDE}/Eigen/src/Core/Matrix.h")
+    message(WARNING "Eigen at '${BENDCORE_EIGEN_INCLUDE}' is a stub, the build will fail. "
+                    "Install real Eigen (apt install libeigen3-dev / brew install eigen) "
+                    "or pass -DBENDCORE_EIGEN_DIR=<dir containing Eigen/>.")
+  endif()
+
   add_library(bendcore_eigen INTERFACE)
   target_include_directories(bendcore_eigen SYSTEM INTERFACE ${BENDCORE_EIGEN_INCLUDE})
 else()

@@ -572,7 +572,9 @@ TEST_F(DirectEditingManagerTest, VerySmallDisplacements) {
 }
 
 TEST_F(DirectEditingManagerTest, VeryLargeDisplacements) {
-    Vector3D huge_displacement(999.0, 999.0, 999.0);
+    // Largest move within the 1000 mm sanity limit (|d| = 999.4);
+    // (999, 999, 999) has |d| = 1730 and is rejected by design.
+    Vector3D huge_displacement(577.0, 577.0, 577.0);
     auto result = manager_.moveFace(face_id_, huge_displacement, false);
 
     EXPECT_TRUE(result.success);

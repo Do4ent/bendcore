@@ -1,6 +1,6 @@
 # BendCore Implementation Status
 
-**Last Updated:** 2026-10-31  
+**Last Updated:** 2026-11-01  
 **Status:** Partially Complete - Honest Assessment
 
 ## Completed (✅)
@@ -18,6 +18,41 @@
   - TypeScript: 0 errors  
   - Tests: 130/130 PASS
   - Build: tsc OK
+
+### Stage 2a: Native C++ build without OCCT — ✅ (2026-11-01)
+
+Previously the native build never completed: `third_party/eigen-5.0.0` is a
+24 KB stub, not Eigen, so `sketch.cpp` / PlaneGCS failed, and with no GTest
+installed every GoogleTest target was silently skipped (they had never
+compiled). Now:
+
+```bash
+sudo apt install libeigen3-dev libgtest-dev   # real Eigen 3.4 + GTest
+cmake --preset host && cmake --build build -j
+ctest --test-dir build -j4                    # 73/74 PASS
+```
+
+- Build: 0 errors (CMake now warns when it falls back to the Eigen stub)
+- Tests: **73/74 ctest targets pass** (was 63/74 after the build was fixed,
+  and the build did not finish before that)
+- Only failure: `simulation_m6` → `CFDSolverTest.SimpleSolve`. `CFDSolver` is
+  placeholder pseudo-physics, not a discretisation; it needs a real solver
+  (Stage 3), not test tweaks.
+
+Real defects found and fixed while getting the suites green:
+
+| Module | Defect |
+|---|---|
+| sketch `ConstraintDiagnosticsEngine` | `diagnose()` ↔ `suggestConstraints()` infinite recursion → stack overflow |
+| `Combined3DOffsetCalculatorOptimized` | "optimized" was no faster (92% of the time was iostream G-code formatting); now `std::to_chars`, byte-identical output, ~70% faster |
+| `LinearRegression` | gradient descent on raw features diverged (R² ≈ −5e154 in CV); now standardised |
+| `DesignLearningSystem::cluster_designs` | empty cluster → empty centroid; non-deterministic init; now farthest-point init |
+| `ThermalSolver` (steady) | explicit relaxation that could not converge; now a sparse linear solve (Eigen SparseLU) with analytic tests |
+| `getDrawingVersionHistory` | stub returning `{}`; revision Z→AA broken; now scans the archive, base-26 revisions |
+| publishing cloud/e-mail | exported with an empty path (always rejected); now stage to temp dir |
+| `TemplateMatcher` | ties ordered by unstable sort; now by closeness to template defaults |
+| `BOMGenerator` | items numbered alphabetically instead of in listed order |
+| print manager | empty printer name ≠ default printer; scale enlarged past 1:1 |
 
 ## In Progress / Requires Setup
 
@@ -118,6 +153,9 @@ source ~/.bashrc
 
 ## Next Steps (Priority Order)
 
+0. **Add a native C++ CI job** (build + ctest). None exists today — only
+   WASM/OCCT — which is how the broken GTest suites went unnoticed.
+   It would be red until `CFDSolver` is real.
 1. **Get WASM working locally** (use setup_wasm.sh)
 2. **Build C++ with OCCT** (Stage 2)
 3. **Replace placeholder 3D viewport** with real model

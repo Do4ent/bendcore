@@ -292,16 +292,15 @@ TEST_F(BOMTest, CacheClearedAfterModification) {
     BOM bom;
     bom.addItem(testItem1);
 
-    const auto& stats1 = bom.getStatistics();
-    const auto* ptr1 = &stats1;
+    EXPECT_EQ(bom.getStatistics().itemsByCategory.count("fitting"), 0u);
 
     bom.addItem(testItem2);
 
-    const auto& stats2 = bom.getStatistics();
-    const auto* ptr2 = &stats2;
-
-    // Cache should be invalidated and new object created
-    EXPECT_NE(ptr1, ptr2);
+    // Cache must be invalidated: statistics reflect the new item.
+    // (The cache is a member, so its address legitimately stays the same.)
+    const auto& stats = bom.getStatistics();
+    EXPECT_EQ(stats.itemsByCategory.at("fitting"), 1);
+    EXPECT_EQ(stats.quantityByCategory.at("fitting"), 10);
 }
 
 // ============================================================================
