@@ -60,14 +60,76 @@
 
 ---
 
+### 3. Collaboration & Team Features
+**Location:** `ui/src/components/Collaboration/`, `backend/src/collaboration/`  
+**Status:** 🔒 FROZEN - ZERO MODIFICATIONS  
+**Reason:** Not part of Phase 4 scope  
+**Duration:** Indefinite until explicit authorization  
+
+**What's FROZEN:**
+- ✅ Collaboration UI components - FROZEN
+- ✅ Real-time sync features - FROZEN
+- ✅ Team workspace features - FROZEN
+- ✅ Sharing & permissions system - FROZEN
+- ✅ Multi-user editing - FROZEN
+- ✅ Comments & annotations - FROZEN
+- ✅ Version control features - FROZEN
+
+**Prohibited Actions:**
+```
+❌ DO NOT create collaboration components
+❌ DO NOT add sharing/permissions features
+❌ DO NOT implement multi-user editing
+❌ DO NOT add team workspace UI
+❌ DO NOT integrate collaboration APIs
+```
+
+---
+
+### 4. In-App Documentation System
+**Location:** `ui/src/components/Documentation/`, `backend/src/documentation/`  
+**Status:** 🔒 FROZEN - ZERO MODIFICATIONS  
+**Reason:** Not part of Phase 4 scope  
+**Duration:** Indefinite until explicit authorization  
+
+**What's FROZEN:**
+- ✅ Help system UI - FROZEN
+- ✅ Tutorials & guides - FROZEN
+- ✅ In-app documentation viewer - FROZEN
+- ✅ Context-sensitive help - FROZEN
+- ✅ Knowledge base integration - FROZEN
+- ✅ Video tutorials player - FROZEN
+- ✅ API documentation generator - FROZEN
+- ✅ User manual generation - FROZEN
+
+**Prohibited Actions:**
+```
+❌ DO NOT create documentation UI components
+❌ DO NOT add help system
+❌ DO NOT implement tutorials
+❌ DO NOT add in-app guides
+❌ DO NOT create documentation generator
+❌ DO NOT add knowledge base features
+```
+
+---
+
 ## ✅ WHAT IS NOT FROZEN (Available for Phase 4)
 
-### UI/Frontend Components (UNFROZEN)
-- ✅ React components (ui/src/components/)
-- ✅ UI styling
-- ✅ Viewport components
-- ✅ Dialog components
-- ✅ Import workflow UI
+### UI/Frontend Components (UNFROZEN - Phase 4 Only)
+- ✅ Parametric Design UI (NEW)
+- ✅ Geometry operation UI (NEW)
+- ✅ Assembly system UI (NEW)
+- ✅ UI styling (for Phase 4 components only)
+- ✅ Viewport components (for Phase 4 features)
+- ✅ Dialog components (for Phase 4 features)
+- ✅ Import workflow UI (existing only)
+
+**LOCKED - NOT for Phase 4:**
+- ❌ Collaboration UI
+- ❌ Documentation UI
+- ❌ Team workspace UI
+- ❌ Help system components
 
 ### Geometry & Modeling (UNFROZEN)
 - ✅ GeometryKernel (for Phase 4 Extrude/Revolve)
@@ -111,10 +173,33 @@ WILL BE REJECTED with message:
   "❌ API FROZEN - This component is locked for modifications"
 ```
 
-### Rule 3: Pre-commit Hook Enforcement
+### Rule 3: No Collaboration Features
+```
+ANY commit that touches:
+  ui/src/components/Collaboration/
+  backend/src/collaboration/
+  Or files containing "collaboration", "sharing", "team", "multi-user"
+
+WILL BE REJECTED with message:
+  "❌ COLLABORATION FROZEN - This component is locked for modifications"
+```
+
+### Rule 4: No In-App Documentation
+```
+ANY commit that touches:
+  ui/src/components/Documentation/
+  backend/src/documentation/
+  Or files containing "documentation", "help", "tutorial", "guide"
+
+WILL BE REJECTED with message:
+  "❌ DOCUMENTATION FROZEN - This component is locked for modifications"
+```
+
+### Rule 5: Pre-commit Hook Enforcement
 ```bash
 # .git/hooks/pre-commit (UPDATED)
 
+# Check 1: FEA files
 FEA_FILES=$(git diff --name-only --staged | grep -E "src/fea/|fea_")
 if [ ! -z "$FEA_FILES" ]; then
     echo "❌ ERROR: FEA component is FROZEN"
@@ -122,6 +207,7 @@ if [ ! -z "$FEA_FILES" ]; then
     exit 1
 fi
 
+# Check 2: API routes
 API_FILES=$(git diff --name-only --staged | grep "backend/src/api/routes/")
 if [ ! -z "$API_FILES" ]; then
     echo "❌ ERROR: API routes are FROZEN"
@@ -129,16 +215,34 @@ if [ ! -z "$API_FILES" ]; then
     exit 1
 fi
 
+# Check 3: Collaboration features
+COLLAB_FILES=$(git diff --name-only --staged | grep -E "ui/src/components/Collaboration/|backend/src/collaboration/")
+if [ ! -z "$COLLAB_FILES" ]; then
+    echo "❌ ERROR: Collaboration features are FROZEN"
+    echo "Frozen files: $COLLAB_FILES"
+    exit 1
+fi
+
+# Check 4: Documentation system
+DOC_FILES=$(git diff --name-only --staged | grep -E "ui/src/components/Documentation/|backend/src/documentation/")
+if [ ! -z "$DOC_FILES" ]; then
+    echo "❌ ERROR: In-app Documentation system is FROZEN"
+    echo "Frozen files: $DOC_FILES"
+    exit 1
+fi
+
 exit 0
 ```
 
-### Rule 4: Code Review Enforcement
+### Rule 6: Code Review Enforcement
 ```
 Code Review Checklist Addition:
 
 BEFORE MERGE:
 - [ ] Does this PR modify FEA code? → REJECT IF YES
 - [ ] Does this PR modify API routes? → REJECT IF YES
+- [ ] Does this PR modify Collaboration features? → REJECT IF YES
+- [ ] Does this PR modify Documentation system? → REJECT IF YES
 - [ ] Only allowed changes (Geometry, UI, Assembly, Parametric)? → MUST BE YES
 ```
 
@@ -278,6 +382,20 @@ jobs:
             exit 1
           fi
       
+      - name: Check Collaboration modifications
+        run: |
+          if git diff HEAD~1 --name-only | grep -E "ui/src/components/Collaboration/|backend/src/collaboration/"; then
+            echo "❌ ERROR: Collaboration features are FROZEN"
+            exit 1
+          fi
+      
+      - name: Check Documentation modifications
+        run: |
+          if git diff HEAD~1 --name-only | grep -E "ui/src/components/Documentation/|backend/src/documentation/"; then
+            echo "❌ ERROR: In-app Documentation system is FROZEN"
+            exit 1
+          fi
+      
       - name: Report status
         run: echo "✅ No frozen components modified"
 ```
@@ -309,9 +427,11 @@ jobs:
 |-----------|--------|-------|-----------|
 | FEA (src/fea/) | 🔒 FROZEN | Authorization | Project Lead |
 | API Routes | 🔒 FROZEN | Authorization | Project Lead |
+| Collaboration Features | 🔒 FROZEN | Authorization | Project Lead |
+| In-App Documentation | 🔒 FROZEN | Authorization | Project Lead |
 | Parametric Design | ✅ OPEN | Phase 4 | Available |
-| Geometry Ops | ✅ OPEN | Phase 4 | Available |
-| Assembly | ✅ OPEN | Phase 4 | Available |
+| Geometry Ops (Extrude/Revolve/Boolean) | ✅ OPEN | Phase 4 | Available |
+| Assembly System | ✅ OPEN | Phase 4 | Available |
 
 ---
 
