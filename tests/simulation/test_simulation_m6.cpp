@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <cmath>
 #include "bendcore/simulation/cfd_solver.hpp"
 #include "bendcore/simulation/structural_solver.hpp"
 #include "bendcore/simulation/thermal_solver.hpp"
@@ -142,6 +143,100 @@ TEST_F(CFDSolverTest, GetMaxPressure) {
 TEST_F(CFDSolverTest, GetConvergenceStatus) {
     solver.solve();
     EXPECT_TRUE(solver.isConverged() || solver.getIterationCount() > 0);
+}
+
+TEST_F(CFDSolverTest, ViscousLimitGivesLinearProfile) {
+    // Re_cell = rho*u*h/mu = 5e-4: diffusion dominates, so between u=1 at
+    // the inlet and a no-slip node the profile is linear.
+    BoundaryCondition inlet;
+    inlet.type = BoundaryConditionType::DIRICHLET;
+    inlet.velocity_x = 1.0;
+    inlet.face_indices = {0};
+    BoundaryCondition wall;
+    wall.type = BoundaryConditionType::NO_SLIP;
+    wall.face_indices = {4};
+    solver.addBoundaryCondition(inlet);
+    solver.addBoundaryCondition(wall);
+    solver.setTurbulenceModel(TurbulenceModel::LAMINAR);
+    solver.setFluidDensity(1.0);
+    solver.setFluidViscosity(1000.0);
+    solver.setNumberOfIterations(200);
+
+    ASSERT_TRUE(solver.solve());
+    const auto& v = solver.getVelocityField();
+    EXPECT_NEAR(v[1].velocity_x, 0.75, 1e-3);
+    EXPECT_NEAR(v[2].velocity_x, 0.50, 1e-3);
+    EXPECT_NEAR(v[3].velocity_x, 0.25, 1e-3);
+    EXPECT_DOUBLE_EQ(v[4].velocity_x, 0.0);
+}
+
+TEST_F(CFDSolverTest, ConvectionDominatedStaysBoundedAndMonotone) {
+    // Air at 1 m/s on h = 0.5 m: Re_cell ~ 3e4. Upwinding must not
+    // overshoot: 0 <= u <= 1 and u decreases towards the wall.
+    BoundaryCondition inlet;
+    inlet.type = BoundaryConditionType::DIRICHLET;
+    inlet.velocity_x = 1.0;
+    inlet.face_indices = {0};
+    BoundaryCondition wall;
+    wall.type = BoundaryConditionType::NO_SLIP;
+    wall.face_indices = {4};
+    solver.addBoundaryCondition(inlet);
+    solver.addBoundaryCondition(wall);
+    solver.setTurbulenceModel(TurbulenceModel::LAMINAR);
+    solver.setNumberOfIterations(200);
+
+    ASSERT_TRUE(solver.solve());
+    const auto& v = solver.getVelocityField();
+    for (size_t i = 0; i < v.size(); ++i) {
+        EXPECT_GE(v[i].velocity_x, 0.0);
+        EXPECT_LE(v[i].velocity_x, 1.0 + 1e-12);
+        if (i > 0) EXPECT_LE(v[i].velocity_x, v[i - 1].velocity_x + 1e-12);
+    }
+    EXPECT_GT(v[3].velocity_x, 0.99);  // boundary layer only at the wall
+}
+
+TEST_F(CFDSolverTest, NoBoundaryConditionsMeansFluidAtRest) {
+    ASSERT_TRUE(solver.solve());
+    EXPECT_DOUBLE_EQ(solver.getMaxVelocity(), 0.0);
+    EXPECT_DOUBLE_EQ(solver.getMaxPressure(), 101325.0);
+}
+
+TEST_F(CFDSolverTest, TemperatureIsAdvectedDownstream) {
+    BoundaryCondition inlet;
+    inlet.type = BoundaryConditionType::DIRICHLET;
+    inlet.velocity_x = 1.0;
+    inlet.temperature = 350.0;
+    inlet.face_indices = {0};
+    solver.addBoundaryCondition(inlet);
+    solver.setTurbulenceModel(TurbulenceModel::LAMINAR);
+    solver.setNumberOfIterations(50);
+
+    ASSERT_TRUE(solver.solve());
+    for (double t : solver.getTemperatureField()) EXPECT_NEAR(t, 350.0, 1e-9);
+}
+
+TEST_F(CFDSolverTest, KEpsilonProducesTurbulenceDownstream) {
+    BoundaryCondition inlet;
+    inlet.type = BoundaryConditionType::DIRICHLET;
+    inlet.velocity_x = 10.0;
+    inlet.face_indices = {0};
+    BoundaryCondition wall;
+    wall.type = BoundaryConditionType::NO_SLIP;
+    wall.face_indices = {4};
+    solver.addBoundaryCondition(inlet);
+    solver.addBoundaryCondition(wall);
+    solver.setTurbulenceModel(TurbulenceModel::K_EPSILON);
+    solver.setNumberOfIterations(500);
+
+    ASSERT_TRUE(solver.solve());
+    const auto& v = solver.getVelocityField();
+    // Inlet k = 1.5 (0.05 * 10)^2 = 0.375
+    EXPECT_NEAR(v[0].turbulent_kinetic_energy, 0.375, 1e-12);
+    for (size_t i = 1; i < 4; ++i) {
+        EXPECT_GT(v[i].turbulent_kinetic_energy, 0.0);
+        EXPECT_GT(v[i].turbulent_dissipation, 0.0);
+        EXPECT_TRUE(std::isfinite(v[i].velocity_x));
+    }
 }
 
 // ==================== Structural Solver Tests ====================

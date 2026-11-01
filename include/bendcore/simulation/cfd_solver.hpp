@@ -118,7 +118,28 @@ struct FlowField {
 };
 
 /**
- * @brief CFD Solver for incompressible flow
+ * @brief Steady incompressible flow solver on an unstructured node graph
+ *
+ * Model (what is actually solved):
+ *  - Momentum: rho (u.grad) u = div((mu + mu_t) grad u), per component,
+ *    first-order upwind convection + graph-Laplacian diffusion, Picard
+ *    iterations (each one a sparse LU solve). The relaxation factor damps the
+ *    lagged advecting velocity. There is NO pressure-velocity coupling, so
+ *    continuity is not enforced (Burgers-type transport).
+ *  - Pressure: pressure Poisson equation lap(p) = -rho d_i u_j d_j u_i,
+ *    evaluated on the converged velocity (absolute Pa, 1 atm reference;
+ *    BoundaryCondition::pressure is gauge).
+ *  - Temperature: rho u.grad T = div((k/cp + mu_t/Pr_t) grad T) (air).
+ *  - Turbulence: standard k-epsilon (Launder-Spalding constants), inlet
+ *    intensity 5 %. SPALART_ALLMARAS and K_OMEGA_SST are not implemented
+ *    and are solved with k-epsilon.
+ *
+ * Neighbours come from tetrahedron edges when the mesh has elements,
+ * otherwise from proximity (within 1.5x each node's nearest distance).
+ * BCs (face_indices are node indices): DIRICHLET fixes velocity (and
+ * temperature if > 0 K); NO_SLIP fixes velocity to 0; NEUMANN / SLIP /
+ * MIXED / PERIODIC impose zero normal gradient. Parts of the mesh with no
+ * fixed node keep their initial state (fluid at rest).
  */
 class CFDSolver {
 public:
@@ -180,12 +201,7 @@ private:
 
     // Internal solver methods
     void initializeFields();
-    void computeMomentumEquation();
-    void computePressureCorrection();
-    void correctVelocity();
-    void computeTurbulenceFields();
-    void computeTemperatureField();
-    [[nodiscard]] double computeResidual();
+    [[nodiscard]] double computeResidual(const std::vector<FlowField>& previous) const;
 };
 
 }  // namespace BendCore::CadCore::Simulation
