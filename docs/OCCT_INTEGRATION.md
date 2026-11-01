@@ -2,19 +2,21 @@
 
 ## Overview
 
-BendCore integrates Open Cascade Technology (OCCT) 7.7+ for professional CAD file processing and parametric dimension extraction.
+BendCore integrates Open Cascade Technology (OCCT) 8.0 for professional CAD file processing and parametric dimension extraction.
 
 ## System Requirements
 
-- **Platform**: Windows x64 only
-- **OCCT Version**: 7.7.0 or later
+- **Platform**: Linux / macOS (static OCCT via `third_party/build_occt.sh`), Windows x64
+- **OCCT Version**: 8.0.1 (default in build_occt.sh); 7.8+ required (`TopTools_ShapeMapHasher`)
+- **OCCT modules**: FoundationClasses, ModelingData, ModelingAlgorithms, DataExchange
 - **C++ Standard**: C++20
 
 ## Build Configuration
 
 ### CMake Setup
 ```bash
-cmake -B build -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=/path/to/occt-install
+(cd third_party && ./build_occt.sh)   # -> third_party/occt-install (static libTK*.a)
+cmake -B build -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install
 cmake --build build
 ```
 

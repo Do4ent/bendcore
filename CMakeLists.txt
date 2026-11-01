@@ -154,10 +154,12 @@ if(BENDCORE_OCCT_DIR)
   message(STATUS "  Libraries: ${OpenCASCADE_LIBRARIES}")
 else()
   # Try to find OCCT via system paths
-  find_package(OpenCASCADE 7.7 QUIET)
+  # NO_CMAKE_PACKAGE_REGISTRY: an OCCT build tree registers itself in
+  # ~/.cmake/packages; a half-built tree there breaks configuration.
+  find_package(OpenCASCADE 7.7 QUIET NO_CMAKE_PACKAGE_REGISTRY)
   if(NOT OpenCASCADE_FOUND)
     # Try config mode
-    find_package(OpenCASCADE CONFIG QUIET)
+    find_package(OpenCASCADE CONFIG QUIET NO_CMAKE_PACKAGE_REGISTRY)
   endif()
   if(NOT OpenCASCADE_FOUND)
     # Try pkg-config
