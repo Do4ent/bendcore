@@ -6,10 +6,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 OCCT_VERSION="${OCCT_VERSION:-7.7.0}"
-OCCT_URL="https://github.com/Open-Cascade-SAS/OCCT/releases/download/V${OCCT_VERSION}/OCCT-${OCCT_VERSION}-source.tar.gz"
+# Теги OCCT имеют вид V7_7_0 (не V7.7.0); архив тега распаковывается в OCCT-7_7_0/
+OCCT_TAG="V${OCCT_VERSION//./_}"
+OCCT_URL="https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/${OCCT_TAG}.tar.gz"
 OCCT_BUILD="${ROOT}/occt-build"
 OCCT_INSTALL="${ROOT}/occt-install"
-OCCT_SOURCE="${ROOT}/occt-${OCCT_VERSION}"
+OCCT_SOURCE="${ROOT}/OCCT-${OCCT_VERSION//./_}"
+OCCT_LOG="${ROOT}/occt-build.log"
 
 echo "=== BendCore OCCT Build ==="
 echo "Version: $OCCT_VERSION"
@@ -60,17 +63,20 @@ cmake "$OCCT_SOURCE" \
   -DBUILD_SHARED_LIBS=OFF \
   -DBUILD_TESTING=OFF \
   -DBUILD_MODULE_FoundationClasses=ON \
-  -DBUILD_MODULE_Modeling=ON \
+  -DBUILD_MODULE_ModelingData=ON \
+  -DBUILD_MODULE_ModelingAlgorithms=ON \
+  -DBUILD_MODULE_DataExchange=ON \
   -DBUILD_MODULE_Visualization=OFF \
-  -DBUILD_MODULE_ApplicationFramework=OFF \
+  -DBUILD_MODULE_ApplicationFramework=ON \
+  -DBUILD_MODULE_Draw=OFF \
   -DUSE_FREETYPE=OFF \
   -DUSE_RAPIDJSON=OFF \
   -DUSE_OPENCL=OFF \
   -DUSE_OPENVINO=OFF \
   -DUSE_VTK=OFF \
-  >/dev/null 2>&1 || {
-    echo "ERROR: CMake configuration failed" >&2
-    tail -n 50 CMakeOutput.log >&2
+  >"$OCCT_LOG" 2>&1 || {
+    echo "ERROR: CMake configuration failed (full log: $OCCT_LOG)" >&2
+    tail -n 50 "$OCCT_LOG" >&2
     exit 1
   }
 
@@ -78,17 +84,17 @@ echo "  ✓ CMake configured"
 
 # Step 4: Build
 echo "[4/5] Building OCCT (this may take 10-20 minutes)..."
-if ! ninja >/dev/null 2>&1; then
-  echo "ERROR: Build failed" >&2
+if ! ninja >>"$OCCT_LOG" 2>&1; then
+  echo "ERROR: Build failed (full log: $OCCT_LOG)" >&2
   echo "Last 50 lines of build output:" >&2
-  tail -n 50 /dev/null >&2 || true
+  tail -n 50 "$OCCT_LOG" >&2
   exit 1
 fi
 echo "  ✓ Build complete"
 
 # Step 5: Install
 echo "[5/5] Installing OCCT..."
-ninja install >/dev/null 2>&1 || {
+ninja install >>"$OCCT_LOG" 2>&1 || {
   echo "ERROR: Installation failed" >&2
   exit 1
 }
@@ -115,7 +121,11 @@ fi
 echo ""
 echo "✓ OCCT installation successful!"
 echo ""
-echo "To use with BendCore:"
+echo "Alternative without building (Ubuntu 24.04 ships OCCT 7.6):"
+echo "  sudo apt install libocct-data-exchange-dev libocct-modeling-algorithms-dev libtbb-dev libeigen3-dev"
+echo "  cmake --preset host -DBENDCORE_WITH_OCCT=ON"
+echo ""
+echo "To use this build with BendCore:"
 echo "  cmake --preset host -DBENDCORE_OCCT_DIR=$OCCT_INSTALL -DBENDCORE_WITH_OCCT=ON"
 echo "  cmake --build --preset host"
 echo ""

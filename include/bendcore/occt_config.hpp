@@ -8,17 +8,11 @@ namespace bendcore::occt {
 
 // OCCT version requirements
 constexpr int OCCT_VERSION_MAJOR = 7;
-constexpr int OCCT_VERSION_MINOR = 7;
+constexpr int OCCT_VERSION_MINOR = 6;  // 7.6 = Ubuntu 24.04 libocct-*-dev
 constexpr int OCCT_VERSION_PATCH = 0;
 
-// Platform validation (Windows x64 only)
-#if !defined(_WIN32) && !defined(_WIN64)
-    #error "BendCore OCCT integration requires Windows platform (_WIN32 or _WIN64)"
-#endif
-
-#if !defined(_WIN64)
-    #error "BendCore OCCT integration requires 64-bit Windows (_WIN64)"
-#endif
+// Platform validation: Windows, Linux and macOS are supported; 64-bit only.
+static_assert(sizeof(void*) == 8, "BendCore OCCT integration requires a 64-bit platform");
 
 // Error codes for OCCT operations
 enum class OCCTErrorCode {

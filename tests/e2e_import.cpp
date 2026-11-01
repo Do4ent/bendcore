@@ -41,7 +41,7 @@ int main() {
         config.author = "TestAuthor";
         config.use_cache = true;
 
-        ImportResult result = workflow.import(config);
+        bendcore::import::ImportResult result = workflow.import(config);
 
         std::remove(test_file.c_str());
 
@@ -54,11 +54,11 @@ int main() {
         std::cout << "Test 2: Geometry extraction and analysis... ";
         
         GeometryAnalyzer analyzer;
+        // Not B-rep text: the analyzer must reject it instead of inventing a tube.
         ExtractedParams params = analyzer.analyze("test_geometry");
-        
-        assert(params.outer_diameter > 0);
-        assert(params.total_length > 0);
-        assert(params.confidence >= 0);
+
+        assert(params.confidence == 0.0);
+        assert(!params.is_valid());
         
         std::cout << "PASS\n";
     }

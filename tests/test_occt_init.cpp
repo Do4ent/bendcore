@@ -30,17 +30,15 @@ int test_occt_version_detected() {
 }
 
 int test_platform_validation() {
-    std::cout << "Test 2: Platform validation (Windows x64)... ";
+    std::cout << "Test 2: Platform validation (64-bit)... ";
 
-    // This test passes if compilation succeeded (_WIN32 and _WIN64 are checked)
-    // The code doesn't compile on non-Windows platforms
-    #if defined(_WIN64)
-        std::cout << "PASS (Windows x64 detected)" << std::endl;
+    // occt_config.hpp static_asserts a 64-bit platform (Windows, Linux or macOS).
+    if (sizeof(void*) == 8) {
+        std::cout << "PASS (64-bit)" << std::endl;
         return 0;
-    #else
-        std::cout << "FAIL (not Windows x64)" << std::endl;
-        return 1;
-    #endif
+    }
+    std::cout << "FAIL (not 64-bit)" << std::endl;
+    return 1;
 }
 
 int test_initialization_succeeds() {

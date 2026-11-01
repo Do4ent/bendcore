@@ -43,7 +43,7 @@ geometry::BRepTubeFeatures analyze_brep(const std::string& brep_text) {
         BRep_Builder builder;
         BRepTools::Read(shape, in, builder);
     } catch (const Standard_Failure& e) {
-        out.error = std::string("B-rep не читается: ") + e.what();
+        out.error = std::string("B-rep не читается: ") + (e.GetMessageString() ? e.GetMessageString() : "Standard_Failure");
         return out;
     }
     if (shape.IsNull()) {

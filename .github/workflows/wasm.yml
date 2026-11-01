@@ -80,6 +80,25 @@ jobs:
 
 
 
+  # Быстрая проверка с системным OCCT 7.6 из пакетов Ubuntu (без сборки OCCT из исходников):
+  # полный набор C++ тестов, включая сквозной импорт STEP и HTTP-сервис /v1/analyze.
+  occt-system:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Зависимости (Ninja, Eigen, TBB, OCCT 7.6)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build libeigen3-dev libtbb-dev \
+            libocct-data-exchange-dev libocct-modeling-algorithms-dev
+
+      - name: Сборка и тесты с системным OCCT
+        run: |
+          cmake --preset host -DBENDCORE_WITH_OCCT=ON
+          cmake --build --preset host --parallel
+          ctest --preset host --timeout 120
+
   # Тело трубы на Open CASCADE (тесты test_tube_occt и остальные).
   # Сборка OCCT кэшируется отдельно от установки.
   occt:
@@ -121,7 +140,7 @@ jobs:
           BENDCORE_EIGEN_DIR: /usr/include/eigen3
         run: |
           cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=Release -DBENDCORE_WITH_OCCT=ON \
-            -DBENDCORE_OCCT_DIR="$HOME/occt-install" -DBENDCORE_EIGEN_DIR="$BENDCORE_EIGEN_DIR"
+            -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install" -DBENDCORE_EIGEN_DIR="$BENDCORE_EIGEN_DIR"
           cmake --build build-occt --parallel
           ctest --test-dir build-occt --output-on-failure
 
@@ -130,7 +149,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          docker build --build-context occt="$HOME/occt-install" -f docker/Dockerfile -t bendcore-server:ci . \
+          docker build --build-context occt="$GITHUB_WORKSPACE/third_party/occt-install" -f docker/Dockerfile -t bendcore-server:ci . \
             2>&1 | tee "$GITHUB_WORKSPACE/docker-build.log"
 
       - name: Проверка сервиса в контейнере

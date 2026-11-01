@@ -157,8 +157,6 @@ ImportResult ImportWorkflow::import_step_file(const ImportConfig& config) {
     // Analyze geometry
     log_step("Analyzing geometry");
 
-    // 3D-005: FIXED — Pass real OCCT Shape data, not placeholder_geometry
-    // Proper approach: serialize actual TopoDS_Shape for geometry analysis
     std::string geometry_data;
 
     if (step_result.shape_ids.empty()) {
@@ -167,14 +165,10 @@ ImportResult ImportWorkflow::import_step_file(const ImportConfig& config) {
         result.success = false;
         return result;
     } else {
-        // Use actual shape identifiers or serialized geometry
-        // In production: pass Handle(TopoDS_Shape) or serialized B-rep data
-        // NOT "placeholder_geometry" string
-        geometry_data = step_result.shape_ids[0];
-
-        // Validate that this is real geometry data, not a placeholder
-        if (geometry_data == "placeholder_geometry") {
-            result.warnings.push_back("Invalid placeholder geometry - STEP reader did not return real geometry");
+        // B-rep text of the first solid (BRepTools format) for GeometryAnalyzer.
+        geometry_data = step_reader_.get_shape_data(step_result.shape_ids[0]);
+        if (geometry_data.empty()) {
+            result.warnings.push_back("STEP reader returned no geometry for " + step_result.shape_ids[0]);
             result.success = false;
             return result;
         }

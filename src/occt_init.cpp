@@ -29,14 +29,14 @@ OCCTErrorCode initialize_occt() {
         g_occt_info.version_minor = OCC_VERSION_MINOR;
         g_occt_info.version_patch = OCC_VERSION_MAINTENANCE;
 
-        // Validate version is >= 7.7
+        // Validate version is >= OCCT_VERSION_MAJOR.OCCT_VERSION_MINOR
         if (g_occt_info.version_major < OCCT_VERSION_MAJOR ||
             (g_occt_info.version_major == OCCT_VERSION_MAJOR &&
              g_occt_info.version_minor < OCCT_VERSION_MINOR)) {
             std::ostringstream oss;
             oss << "OCCT version " << g_occt_info.version_major << "."
                 << g_occt_info.version_minor << "." << g_occt_info.version_patch
-                << " is below required 7.7.0";
+                << " is below required " << OCCT_VERSION_MAJOR << "." << OCCT_VERSION_MINOR;
             g_occt_info.error_message = oss.str();
             return OCCTErrorCode::INITIALIZATION_FAILED;
         }
@@ -46,7 +46,7 @@ OCCTErrorCode initialize_occt() {
 
         // Mark as initialized
         g_occt_info.is_initialized = true;
-        g_occt_info.library_path = "OCCT 7.7+";
+        g_occt_info.library_path = OCC_VERSION_COMPLETE;
 
         return OCCTErrorCode::SUCCESS;
     } catch (const Standard_Failure& e) {

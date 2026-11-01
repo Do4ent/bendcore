@@ -1,185 +1,163 @@
 // STEP File Reader Implementation (Q3 2027, Task 1, Subtask 2)
+// С OCCT (BENDCORE_WITH_OCCT): читает STEP/IGES на любой платформе, каждое тело (solid)
+// сохраняется как B-rep текст BRepTools — формат, который принимает GeometryAnalyzer::analyze.
+// Без OCCT read() возвращает ошибку с причиной.
 #include <bendcore/step_reader.hpp>
-#include <bendcore/occt_config.hpp>
 
 #include <algorithm>
-#include <sstream>
-#include <fstream>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <system_error>
 
-#if defined(_WIN32) || defined(_WIN64)
-  #include <windows.h>
-  #include <STEPCAFControl_Reader.hxx>
-  #include <TDocStd_Document.hxx>
-  #include <Handle_TDocStd_Document.hxx>
+#ifdef BENDCORE_WITH_OCCT
+  #include <bendcore/occt_config.hpp>
+
+  #include <BRepTools.hxx>
+  #include <IFSelect_ReturnStatus.hxx>
+  #include <IGESControl_Reader.hxx>
+  #include <STEPControl_Reader.hxx>
   #include <Standard_Failure.hxx>
+  #include <TopAbs_ShapeEnum.hxx>
   #include <TopExp_Explorer.hxx>
-  #include <TopoDS_Solid.hxx>
-  #include <XCAFDoc_ShapeTool.hxx>
-  #include <XCAFDoc_DocumentTool.hxx>
-  #include <TDataStd_Name.hxx>
+  #include <TopoDS_Shape.hxx>
 #endif
 
 namespace bendcore::step {
 
-STEPReader::STEPReader() {
-    #if defined(_WIN32) || defined(_WIN64)
-      // OCCT will be initialized on first use
-    #endif
-}
-
-STEPReader::~STEPReader() {
-    // Cleanup handled by OCCT
-}
+STEPReader::STEPReader() = default;
+STEPReader::~STEPReader() = default;
 
 std::string STEPReader::get_file_extension(const std::string& file_path) {
-    size_t dot_pos = file_path.rfind('.');
-    if (dot_pos == std::string::npos) {
+    const std::string ext = std::filesystem::path(file_path).extension().string();
+    if (ext.size() < 2) {
         return "";
     }
-    std::string ext = file_path.substr(dot_pos + 1);
-    std::transform(ext.begin(), ext.end(), ext.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    return ext;
+    std::string out = ext.substr(1);
+    std::transform(out.begin(), out.end(), out.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return out;
 }
 
 bool STEPReader::is_supported_format(const std::string& file_path) {
-    std::string ext = get_file_extension(file_path);
+    const std::string ext = get_file_extension(file_path);
     return ext == "step" || ext == "stp" || ext == "iges" || ext == "igs";
 }
 
-#if defined(_WIN32) || defined(_WIN64)
-std::wstring STEPReader::utf8_to_wide(const std::string& utf8_str) {
-    if (utf8_str.empty()) {
-        return std::wstring();
-    }
+#ifdef BENDCORE_WITH_OCCT
+namespace {
 
-    // Calculate required size
-    int size_needed = MultiByteToWideChar(CP_UTF8, 0, utf8_str.c_str(),
-                                          (int)utf8_str.length(), NULL, 0);
-    if (size_needed == 0) {
-        return std::wstring();
+// Читает файл в одну форму (compound при нескольких корнях). Пустая форма — ошибка чтения.
+template <class Reader>
+TopoDS_Shape read_with(Reader& reader, const std::string& file_path, int& roots) {
+    if (reader.ReadFile(file_path.c_str()) != IFSelect_RetDone) {
+        return {};
     }
+    roots = reader.TransferRoots();
+    return reader.OneShape();
+}
 
-    // Convert UTF-8 to wide
-    std::wstring wide_str(size_needed, 0);
-    MultiByteToWideChar(CP_UTF8, 0, utf8_str.c_str(),
-                        (int)utf8_str.length(), &wide_str[0], size_needed);
-    return wide_str;
+std::string brep_text(const TopoDS_Shape& shape) {
+    std::ostringstream out;
+    BRepTools::Write(shape, out);
+    return out.str();
 }
-#else
-std::wstring STEPReader::utf8_to_wide(const std::string& utf8_str) {
-    // Non-Windows stub
-    std::wstring result(utf8_str.begin(), utf8_str.end());
-    return result;
-}
+
+}  // namespace
 #endif
 
 ImportResult STEPReader::read(const std::string& file_path) {
     ImportResult result;
-    result.success = false;
+    shapes_.clear();
+    properties_.clear();
+    warning_count_ = 0;
 
-    // Check file format
     if (!is_supported_format(file_path)) {
         result.error_message = "Unsupported file format (expected .step, .stp, .iges, .igs)";
         return result;
     }
 
-    // Check if file exists
-    std::ifstream file_check(file_path);
-    if (!file_check.good()) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(file_path, ec)) {
         result.error_message = "File not found: " + file_path;
         return result;
     }
-    file_check.close();
 
-#if defined(_WIN32) || defined(_WIN64)
+    const std::string ext = get_file_extension(file_path);
+    properties_["file_path"] = file_path;
+    properties_["file_name"] = std::filesystem::path(file_path).filename().string();
+    properties_["file_extension"] = ext;
+    const auto size = std::filesystem::file_size(file_path, ec);
+    if (!ec) {
+        properties_["file_size"] = std::to_string(size);
+    }
+
+#ifdef BENDCORE_WITH_OCCT
     try {
-        // Initialize OCCT if needed
         occt::initialize_occt();
 
-        // Convert path to wide char for Windows API
-        std::wstring wide_path = utf8_to_wide(file_path);
+        int roots = 0;
+        TopoDS_Shape shape;
+        if (ext == "iges" || ext == "igs") {
+            IGESControl_Reader reader;
+            shape = read_with(reader, file_path, roots);
+            properties_["format"] = "IGES";
+        } else {
+            STEPControl_Reader reader;
+            shape = read_with(reader, file_path, roots);
+            properties_["format"] = "STEP";
+        }
+        properties_["root_count"] = std::to_string(roots);
 
-        // Convert wide to OCCT-compatible string
-        std::string occt_path(file_path.begin(), file_path.end());
-
-        // Load STEP file
-        STEPCAFControl_Reader reader;
-        int status = reader.ReadFile(occt_path.c_str());
-
-        if (status != IFSelect_RetDone) {
-            result.error_message = "Failed to read STEP file: " + occt::occt_error_to_string(
-                occt::OCCTErrorCode::INVALID_FORMAT);
+        if (shape.IsNull()) {
+            result.error_message = "Failed to read file: " +
+                occt::occt_error_to_string(occt::OCCTErrorCode::INVALID_FORMAT);
+            result.properties = properties_;
             return result;
         }
 
-        // Create document
-        Handle(TDocStd_Document) doc = new TDocStd_Document("STEP");
-
-        // Transfer data
-        if (!reader.Transfer(doc)) {
-            result.error_message = "Failed to transfer STEP data to document";
-            return result;
+        // Тела по отдельности; если тел нет (только оболочки/поверхности) — вся форма целиком.
+        int index = 0;
+        for (TopExp_Explorer it(shape, TopAbs_SOLID); it.More(); it.Next()) {
+            shapes_["solid_" + std::to_string(index++)] = brep_text(it.Current());
         }
+        if (shapes_.empty()) {
+            shapes_["shape_0"] = brep_text(shape);
+            ++warning_count_;
+            properties_["warning"] = "no solids found; whole shape exported";
+        }
+        properties_["solid_count"] = std::to_string(index);
 
-        // Extract shapes
-        extract_shapes(file_path);
-        extract_metadata(file_path);
-
-        // Build result
         result.success = true;
-        result.shape_count = (int)shapes_.size();
+        result.shape_count = static_cast<int>(shapes_.size());
         result.warning_count = warning_count_;
-
-        // Convert shape map keys to result
-        for (const auto& [shape_id, shape_data] : shapes_) {
+        for (const auto& [shape_id, data] : shapes_) {
             result.shape_ids.push_back(shape_id);
         }
-
-        // Add file properties
         result.properties = properties_;
-
     } catch (const Standard_Failure& e) {
         result.error_message = "OCCT error: ";
-        result.error_message += (e.GetMessageString() ? std::string(e.GetMessageString()) : "Unknown error");
-        return result;
+        result.error_message += e.GetMessageString() ? e.GetMessageString() : "Unknown error";
     } catch (const std::exception& e) {
         result.error_message = std::string("Error: ") + e.what();
-        return result;
-    } catch (...) {
-        result.error_message = "Unknown error reading STEP file";
-        return result;
     }
+    return result;
 #else
-    result.error_message = "STEP file reading requires Windows platform with OCCT library";
+    result.error_message = "STEP file reading requires BendCore built with OCCT (BENDCORE_WITH_OCCT)";
+    result.properties = properties_;
     return result;
 #endif
 }
 
-void STEPReader::extract_shapes(const std::string& file_path) {
-    // Placeholder for shape extraction
-    // In production, this would traverse the OCCT document and extract all solids
-    shapes_["shape_0"] = "placeholder_shape_data";
-    properties_["file_name"] = file_path;
-}
-
-void STEPReader::extract_metadata(const std::string& file_path) {
-    // Placeholder for metadata extraction
-    properties_["file_path"] = file_path;
-    properties_["file_extension"] = get_file_extension(file_path);
-}
-
 std::string STEPReader::get_shape_data(const std::string& shape_id) const {
     auto it = shapes_.find(shape_id);
-    if (it != shapes_.end()) {
-        return it->second;
-    }
-    return "";
+    return it != shapes_.end() ? it->second : std::string();
 }
 
 std::vector<std::string> STEPReader::get_property_keys() const {
     std::vector<std::string> keys;
+    keys.reserve(properties_.size());
     for (const auto& [key, value] : properties_) {
         keys.push_back(key);
     }
@@ -188,10 +166,7 @@ std::vector<std::string> STEPReader::get_property_keys() const {
 
 std::string STEPReader::get_property(const std::string& key) const {
     auto it = properties_.find(key);
-    if (it != properties_.end()) {
-        return it->second;
-    }
-    return "";
+    return it != properties_.end() ? it->second : std::string();
 }
 
 }  // namespace bendcore::step

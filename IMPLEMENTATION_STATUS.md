@@ -1,6 +1,6 @@
 # BendCore Implementation Status
 
-**Last Updated:** 2026-10-31  
+**Last Updated:** 2026-11-01  
 **Status:** Partially Complete - Honest Assessment
 
 ## Completed (✅)
@@ -22,31 +22,42 @@
 ## In Progress / Requires Setup
 
 ### Stage 2: C++ Integration with OCCT
-**Status:** 🟡 Configured, not tested locally
+**Status:** ✅ Verified locally with system OCCT 7.6.3 (Ubuntu 24.04 packages)
 
-**What exists:**
-- CMakeLists.txt - Proper structure
-- CMakePresets.json - wasm and host presets
-- OCCT download/build in wasm.yml
-
-**What needs:**
 ```bash
-# 1. Install OpenCASCADE (6-8 hours)
-cd third_party
-./build_occt.sh  # Does not exist yet - needs creation
-
-# 2. Build native (optional)
-cmake --preset host
+sudo apt install ninja-build libeigen3-dev libtbb-dev \
+  libocct-data-exchange-dev libocct-modeling-algorithms-dev
+cmake --preset host -DBENDCORE_WITH_OCCT=ON
 cmake --build --preset host
-
-# 3. Build WASM with OCCT
-./scripts/setup_wasm.sh
-./scripts/build_wasm.sh
+ctest --preset host            # 71/71 pass
+./build/bendcore_server 8080   # GET /v1/health, POST /v1/analyze?format=step
 ```
 
-**Blockers:**
-- OCCT build script missing
-- No local testing environment available
+**Verified (2026-11-01):**
+- Native C++ build: 0 failures in all three configurations
+  (no OCCT: 60/60 tests; system OCCT: 67/67; `BENDCORE_WITH_OCCT=ON`: 71/71)
+- `bendcore_server` `/v1/analyze` on a generated STEP tube (Ø20×2, 100 + R40/90° + 80):
+  returns OD 20, wall 2, one 90° bend R40, length 242.83, mesh 1445 vertices; garbage → HTTP 400
+- `test_import_workflow_occt`: STEP → `STEPReader` → `GeometryAnalyzer` (OCCT backend) →
+  parametric dimensions, second import served from cache
+
+**Fixed to get there:**
+- `third_party/eigen-5.0.0` is a 24 KB stub, not Eigen — use system `libeigen3-dev`
+- CMake: system OCCT (config mode) include dir + toolkit list (distro config lists Draw/test
+  toolkits that are not installed); `BENDCORE_WITH_OCCT` accepts system OCCT, not only a static tree
+- `occt_config.hpp`: removed Windows-only `#error`; minimum OCCT version 7.6
+- `STEPReader`: real OCCT reading on all platforms (was `_WIN32`-only with placeholder shape data);
+  IGES read too; shape data is BRepTools text for `GeometryAnalyzer`
+- `ImportWorkflow` passed the shape *ID* to the analyzer instead of its B-rep
+- `bendcore::cache::GeometryCache` had no implementation — added (LRU, 100 MB, SHA-256 key of
+  path + size + mtime); SHA-256 moved from `drawing.cpp` to shared `bendcore/sha256.hpp`
+- `third_party/build_occt.sh`: download URL was wrong (tags are `V7_7_0`), DataExchange module
+  enabled, errors logged to `third_party/occt-build.log` instead of `/dev/null`
+- CI (`wasm.yml`): `occt` job looked for OCCT in `$HOME/occt-install` while the script installs to
+  `third_party/occt-install`; new `occt-system` job builds and tests with apt OCCT
+
+**Not verified here:** building OCCT 7.7 from source with `build_occt.sh` (GitHub archive downloads
+are blocked in the cloud environment) and the WASM build with OCCT.
 
 ### Stage 3: Real Functionality (Replace Stubs)
 **Status:** 🔴 Not Started
@@ -70,7 +81,8 @@ cmake --build --preset host
 | JavaScript/TypeScript | ✅ Working | None |
 | Node.js Backend | ✅ Working | None |
 | WASM/C++ | 🟡 Ready to setup | Requires emscripten SDK |
-| OCCT Integration | 🟡 Configured | Not built locally |
+| Native C++ + OCCT | ✅ Working | Verified with system OCCT 7.6.3 |
+| STEP analyze API | ✅ Working | `bendcore_server` `/v1/analyze` |
 | 3D Viewport | ❌ Placeholder | Shows demo cube |
 | CAD Import | ❌ Mock data | Uses mock geometry |
 | Sketcher | ⚠️ Configured | PlaneGCS linked but not verified |
@@ -113,17 +125,17 @@ source ~/.bashrc
 1. **3D Viewport** - Shows demo cube, not actual model
 2. **Import Dialog** - Uses hardcoded mock data
 3. **Sketcher** - Configured but untested
-4. **C++ Builds** - Require emscripten and OCCT setup
-5. **OCCT Integration** - Partial, needs completion
+4. **WASM build** - Requires emscripten; OCCT for WASM not attempted
+5. **`EncryptionManager::hashSHA256`** (`src/security/encryption_support.cpp`) returns
+   `"sha256_" + data` — passwords are stored effectively in plain text
 
 ## Next Steps (Priority Order)
 
-1. **Get WASM working locally** (use setup_wasm.sh)
-2. **Build C++ with OCCT** (Stage 2)
-3. **Replace placeholder 3D viewport** with real model
-4. **Implement real CAD import** (STEP/DWF)
-5. **Add real FEA solver**
-6. **Complete sketcher integration**
+1. **Connect Node backend / ImportDialog to `bendcore_server` `/v1/analyze`** (Stage 3a)
+2. **Get WASM working locally** (use setup_wasm.sh)
+3. **Replace placeholder 3D viewport** with the mesh returned by `/v1/analyze`
+4. **Add real FEA solver**
+5. **Complete sketcher integration** (PlaneGCS now compiles against real Eigen; `planegcs`, `sketch` tests pass)
 
 ## Files to Review
 
