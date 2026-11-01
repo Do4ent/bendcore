@@ -669,6 +669,7 @@ find_package(GTest QUIET)
 if(GTest_FOUND)
   add_executable(test_templates tests/test_templates.cpp src/template_manager.cpp)
   target_link_libraries(test_templates PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
+  target_compile_definitions(test_templates PRIVATE BENDCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
   bendcore_add_test(templates test_templates)
 endif()
 

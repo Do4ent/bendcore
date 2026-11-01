@@ -185,26 +185,7 @@ std::vector<int> ConstraintDiagnosticsEngine::getConstraints() const {
 }
 
 std::vector<std::string> ConstraintDiagnosticsEngine::suggestConstraints() {
-    std::vector<std::string> suggestions;
-
-    auto report = diagnose();
-
-    if (report.is_underconstrained) {
-        suggestions.push_back("Add distance constraint between underconstrained points");
-        suggestions.push_back("Fix position of at least one geometry");
-        suggestions.push_back("Add parallel or perpendicular constraints");
-    }
-
-    if (report.is_overconstrained) {
-        suggestions.push_back("Remove one or more conflicting constraints");
-        suggestions.push_back("Modify constraint values to avoid conflicts");
-    }
-
-    if (report.is_redundant) {
-        suggestions.push_back("Remove redundant constraints for cleaner sketch");
-    }
-
-    return suggestions;
+    return generateSuggestions(diagnose());
 }
 
 std::string ConstraintDiagnosticsEngine::generateErrorMessage(const SketchDiagnosticReport& report) {
@@ -285,7 +266,25 @@ std::string ConstraintDiagnosticsEngine::generateStatusMessage(const SketchDiagn
 }
 
 std::vector<std::string> ConstraintDiagnosticsEngine::generateSuggestions(const SketchDiagnosticReport& report) {
-    return suggestConstraints();
+    // Built from the report only: diagnose() calls this, so it must not call diagnose().
+    std::vector<std::string> suggestions;
+
+    if (report.is_underconstrained) {
+        suggestions.push_back("Add distance constraint between underconstrained points");
+        suggestions.push_back("Fix position of at least one geometry");
+        suggestions.push_back("Add parallel or perpendicular constraints");
+    }
+
+    if (report.is_overconstrained) {
+        suggestions.push_back("Remove one or more conflicting constraints");
+        suggestions.push_back("Modify constraint values to avoid conflicts");
+    }
+
+    if (report.is_redundant) {
+        suggestions.push_back("Remove redundant constraints for cleaner sketch");
+    }
+
+    return suggestions;
 }
 
 } // namespace bendcore::sketch
