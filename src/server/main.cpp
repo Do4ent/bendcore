@@ -1,10 +1,13 @@
-// HTTP-сервис bendcore: POST /v1/tube, POST /v1/analyze, POST /v1/fea, GET /v1/health. Без внешних библиотек, один поток, Connection: close.
+// HTTP-сервис bendcore: POST /v1/tube, POST /v1/analyze, POST /v1/fea, POST /v1/topology, GET /v1/health.
+// Без внешних библиотек, один поток, Connection: close.
 // Использование: bendcore_server [порт], по умолчанию 8080. Слушает 0.0.0.0.
 //   POST /v1/tube?format=csv|json&od=20&wall=0&deflection=0.01   тело запроса — текст файла.
 //   POST /v1/analyze?format=step&deflection=0.1                     тело запроса — файл STEP; распознавание трубы.
 //   POST /v1/fea?material=steel&pressure=10                         тело запроса — JSON mesh; анализ напряжений.
+//   POST /v1/topology?material=steel&target=20                      тело запроса — JSON stress/disp; оптимизация.
 #include "bendcore/tube_service.hpp"
 #include "fea_service.hpp"
+#include "topology_service.hpp"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -207,6 +210,20 @@ void handle(int fd, const Request& req) {
         }
         const Response res = bendcore::server::fea_response(req.body, pressure,
                                                            mat == req.query.end() ? "steel" : mat->second);
+        respond(fd, res.status, res.contentType, res.body);
+        return;
+    }
+    if (req.path == "/v1/topology") {
+        if (req.method != "POST") return respond(fd, 405, "application/json", "{\"ok\":false,\"error\":\"нужен POST\"}");
+        const auto mat = req.query.find("material");
+        double stress = 0.0, disp = 0.0, od = 20.0, wall = 2.0, length = 100.0, target = 20.0;
+        if (!number_param(req, "stress", 1e7, stress) || !number_param(req, "displacement", 0.1, disp) ||
+            !number_param(req, "od", 20.0, od) || !number_param(req, "wall", 2.0, wall) ||
+            !number_param(req, "length", 100.0, length) || !number_param(req, "target", 20.0, target)) {
+            return respond(fd, 400, "application/json", "{\"ok\":false,\"error\":\"неверный параметр\"}");
+        }
+        const Response res = bendcore::server::topology_optimize(stress, disp, od, wall, length,
+                                                                mat == req.query.end() ? "steel" : mat->second, target);
         respond(fd, res.status, res.contentType, res.body);
         return;
     }

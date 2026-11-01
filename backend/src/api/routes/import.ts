@@ -335,6 +335,67 @@ router.post('/', (req: Request, res: Response): void => {
 });
 
 /**
+ * POST /api/import/topology-optimize
+ * Optimize tube geometry for minimal weight based on stress analysis
+ */
+router.post('/topology-optimize', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { stress, displacement, od, wall, length, material } = req.body;
+
+    if (!stress || !od || !wall || !length) {
+      res.status(400).json({
+        success: false,
+        error: 'stress, od, wall, and length are required',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    // Forward to bendcore_server on localhost:8080
+    const bendcorePort = process.env.BENDCORE_SERVER_PORT || '8080';
+    const bendcoreUrl = `http://localhost:${bendcorePort}/v1/topology?material=${encodeURIComponent(material || 'steel')}&stress=${stress}&displacement=${displacement || 0}&od=${od}&wall=${wall}&length=${length}&target=20`;
+
+    try {
+      const topoResponse = await fetch(bendcoreUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+
+      if (!topoResponse.ok) {
+        const errorText = await topoResponse.text();
+        res.status(topoResponse.status).json({
+          success: false,
+          error: `Topology optimization failed: ${errorText}`,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
+      const topoData = await topoResponse.json();
+
+      const response: ApiResponse<unknown> = {
+        success: true,
+        data: topoData,
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (fetchErr) {
+      const error = fetchErr instanceof Error ? fetchErr.message : 'Failed to connect to bendcore_server';
+      res.status(503).json({
+        success: false,
+        error: `bendcore_server unavailable: ${error}`,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error, timestamp: new Date().toISOString() });
+  }
+});
+
+/**
  * POST /api/import/analyze-fea
  * Perform FEA analysis on mesh from tube analysis
  */
