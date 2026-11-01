@@ -1,0 +1,181 @@
+.feature-operation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.panel-header {
+  border-bottom: 2px solid #ddd;
+  padding-bottom: 12px;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+.tab {
+  padding: 10px 16px;
+  background: white;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.tab:hover {
+  color: #333;
+  background: #f5f5f5;
+}
+
+.tab.active {
+  color: #0066cc;
+  border-bottom-color: #0066cc;
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-group input[type="number"],
+.control-group input[type="text"] {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: 'Monaco', 'Courier New', monospace;
+}
+
+.control-group input[type="number"]:focus,
+.control-group input[type="text"]:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.control-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.apply-button {
+  padding: 10px 16px;
+  background: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+}
+
+.apply-button:hover {
+  background: #0052a3;
+  box-shadow: 0 2px 6px rgba(0, 102, 204, 0.3);
+}
+
+.apply-button:active {
+  transform: scale(0.98);
+}
+
+.cancel-button {
+  padding: 10px 16px;
+  background: white;
+  color: #666;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-button:hover {
+  color: #333;
+  border-color: #999;
+  background: #f9f9f9;
+}
+
+@media (prefers-color-scheme: dark) {
+  .feature-operation-panel {
+    background: #333;
+    color: #e0e0e0;
+  }
+
+  .panel-header h2 {
+    color: #e0e0e0;
+  }
+
+  .tab {
+    background: #333;
+    color: #999;
+  }
+
+  .tab:hover {
+    background: #404040;
+    color: #ccc;
+  }
+
+  .tab.active {
+    color: #4db8ff;
+    border-bottom-color: #4db8ff;
+  }
+
+  .control-group label {
+    color: #ccc;
+  }
+
+  .control-group input[type="number"],
+  .control-group input[type="text"] {
+    background: #404040;
+    color: #e0e0e0;
+    border-color: #555;
+  }
+
+  .cancel-button {
+    background: #404040;
+    color: #ccc;
+    border-color: #555;
+  }
+
+  .cancel-button:hover {
+    background: #4a4a4a;
+    color: #e0e0e0;
+  }
+}
