@@ -2,6 +2,8 @@
 #include <cmath>
 #include <algorithm>
 #include <numeric>
+#include <Eigen/Sparse>
+#include <Eigen/SparseLU>
 
 namespace BendCore::CadCore::Simulation {
 
@@ -64,33 +66,136 @@ void ThermalSolver::addHeatSource(const HeatSource& source) {
     heat_sources_.push_back(source);
 }
 
+namespace {
+
+// Nodes closer than this are treated as conduction neighbours (same rule
+// the explicit transient update and the heat-flux post-processing use).
+constexpr double kNeighbourRadius = 2.0;
+constexpr double kStefanBoltzmann = 5.67e-8;  // W/(m^2*K^4)
+
+}  // namespace
+
 bool ThermalSolver::solve() {
     if (transient_mode_) {
         return solveTransient();
     }
 
+    converged_ = false;
     if (num_nodes_ == 0) {
         return false;
     }
 
     initializeTemperatureField();
 
+    // Steady-state conduction on the node graph:
+    //   sum_j k (T_j - T_i) / d_ij^2 + q_i = 0
+    // with Dirichlet (TEMPERATURE), Robin (CONVECTION), linearised
+    // RADIATION, and HEAT_FLUX / heat sources on the right-hand side.
+    // Radiation is non-linear, so the system is re-solved (Picard)
+    // until temperatures stop changing.
+    const size_t n = num_nodes_;
+    const double k = material_.thermal_conductivity;
+
+    std::vector<bool> fixed(n, false);
+    std::vector<double> fixed_value(n, 0.0);
+    bool has_radiation = false;
+    for (const auto& bc : boundary_conditions_) {
+        if (bc.type == ThermalBCType::TEMPERATURE) {
+            for (size_t idx : bc.face_indices) {
+                if (idx < n) { fixed[idx] = true; fixed_value[idx] = bc.temperature; }
+            }
+        } else if (bc.type == ThermalBCType::RADIATION) {
+            has_radiation = true;
+        }
+    }
+
+    const int max_picard = has_radiation ? 100 : 1;
     iteration_count_ = 0;
-    while (iteration_count_ < 100) {
+    for (int picard = 0; picard < max_picard; ++picard) {
         temperature_field_previous_ = temperature_field_;
 
-        assembleConductivityMatrix();
-        applyBoundaryConditions();
-        solveLinearSystem();
+        std::vector<Eigen::Triplet<double>> triplets;
+        Eigen::VectorXd rhs = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(n));
+        std::vector<double> diag(n, 0.0);
 
-        double residual = computeResidual();
+        for (size_t i = 0; i < n; ++i) {
+            if (fixed[i]) continue;
+            for (size_t j = 0; j < n; ++j) {
+                if (i == j) continue;
+                double dist = (node_coordinates_[j] - node_coordinates_[i]).magnitude();
+                if (dist >= kNeighbourRadius || dist <= 1e-10) continue;
+                double g = k / (dist * dist);
+                diag[i] += g;
+                if (fixed[j]) {
+                    rhs[i] += g * fixed_value[j];
+                } else {
+                    triplets.emplace_back(i, j, -g);
+                }
+            }
+        }
 
-        if (residual < convergence_tolerance_) {
+        for (const auto& bc : boundary_conditions_) {
+            for (size_t idx : bc.face_indices) {
+                if (idx >= n || fixed[idx]) continue;
+                switch (bc.type) {
+                    case ThermalBCType::HEAT_FLUX:
+                        rhs[idx] += bc.heat_flux;
+                        break;
+                    case ThermalBCType::CONVECTION:
+                        diag[idx] += bc.convection_coefficient;
+                        rhs[idx] += bc.convection_coefficient * bc.ambient_temperature;
+                        break;
+                    case ThermalBCType::RADIATION: {
+                        // q = e*s*(T^4 - Ta^4) = h_r (T - Ta), h_r from last iterate
+                        double T = temperature_field_[idx];
+                        double Ta = bc.ambient_temperature;
+                        double h_r = material_.emissivity * kStefanBoltzmann *
+                                     (T * T + Ta * Ta) * (T + Ta);
+                        diag[idx] += h_r;
+                        rhs[idx] += h_r * Ta;
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+        }
+        for (const auto& source : heat_sources_) {
+            if (source.element_id < n && !fixed[source.element_id]) {
+                rhs[source.element_id] += source.heat_generation;
+            }
+        }
+
+        for (size_t i = 0; i < n; ++i) {
+            if (fixed[i]) {
+                triplets.emplace_back(i, i, 1.0);
+                rhs[i] = fixed_value[i];
+            } else {
+                triplets.emplace_back(i, i, diag[i]);
+            }
+        }
+
+        Eigen::SparseMatrix<double> K(static_cast<Eigen::Index>(n), static_cast<Eigen::Index>(n));
+        K.setFromTriplets(triplets.begin(), triplets.end());
+        Eigen::SparseLU<Eigen::SparseMatrix<double>> lu;
+        lu.compute(K);
+        if (lu.info() != Eigen::Success) {
+            // Singular: no boundary condition anchors the temperature level
+            updateResults();
+            return false;
+        }
+        Eigen::VectorXd T = lu.solve(rhs);
+        if (lu.info() != Eigen::Success || !T.allFinite()) {
+            updateResults();
+            return false;
+        }
+        for (size_t i = 0; i < n; ++i) temperature_field_[i] = T[static_cast<Eigen::Index>(i)];
+
+        ++iteration_count_;
+        if (computeResidual() < convergence_tolerance_ || !has_radiation) {
             converged_ = true;
             break;
         }
-
-        iteration_count_++;
     }
 
     updateResults();

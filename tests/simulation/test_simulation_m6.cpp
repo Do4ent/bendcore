@@ -322,6 +322,54 @@ TEST_F(ThermalSolverTest, SteadyStateSolve) {
     EXPECT_TRUE(success);
 }
 
+TEST_F(ThermalSolverTest, SteadyStateLinearProfile) {
+    // Bar x = 0..4 with fixed ends: steady conduction gives a linear profile
+    ThermalBoundaryCondition hot;
+    hot.type = ThermalBCType::TEMPERATURE;
+    hot.temperature = 400.0;
+    hot.face_indices = {0};
+    ThermalBoundaryCondition cold = hot;
+    cold.temperature = 300.0;
+    cold.face_indices = {4};
+    solver.addBoundaryCondition(hot);
+    solver.addBoundaryCondition(cold);
+    solver.setTransientMode(false);
+
+    ASSERT_TRUE(solver.solve());
+    const auto& r = solver.getTemperatureField();
+    ASSERT_EQ(r.size(), 5u);
+    EXPECT_NEAR(r[1].temperature, 375.0, 1e-9);
+    EXPECT_NEAR(r[2].temperature, 350.0, 1e-9);
+    EXPECT_NEAR(r[3].temperature, 325.0, 1e-9);
+}
+
+TEST_F(ThermalSolverTest, SteadyStateHeatSource) {
+    // Ends at 300 K, source q at the middle node: T_mid = 300 + q/k
+    ThermalBoundaryCondition ends;
+    ends.type = ThermalBCType::TEMPERATURE;
+    ends.temperature = 300.0;
+    ends.face_indices = {0, 4};
+    solver.addBoundaryCondition(ends);
+    HeatSource source;
+    source.element_id = 2;
+    source.heat_generation = 1000.0;
+    solver.addHeatSource(source);
+    solver.setTransientMode(false);
+
+    ASSERT_TRUE(solver.solve());
+    const double k = solver.getMaterialProperties().thermal_conductivity;
+    const auto& r = solver.getTemperatureField();
+    EXPECT_NEAR(r[2].temperature, 300.0 + 1000.0 / k, 1e-9);
+    EXPECT_NEAR(r[1].temperature, 300.0 + 500.0 / k, 1e-9);
+    EXPECT_NEAR(r[1].temperature, r[3].temperature, 1e-9);
+}
+
+TEST_F(ThermalSolverTest, SteadyStateWithoutAnchorFails) {
+    // Only an adiabatic BC: temperature level is undetermined
+    solver.setTransientMode(false);
+    EXPECT_FALSE(solver.solve());
+}
+
 TEST_F(ThermalSolverTest, TransientSolve) {
     solver.setTimeStep(0.1);
     solver.setTotalTime(1.0);

@@ -70,20 +70,25 @@ std::vector<DesignCluster> DesignLearningSystem::cluster_designs(
         return {};
     }
 
-    // Initialize centroids randomly
+    // Deterministic farthest-point initialisation (k-means++ without the
+    // randomness): first centroid is the first design, each next one is
+    // the design farthest from all centroids chosen so far.
     std::vector<std::vector<double>> centroids;
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, designs.size() - 1);
-
-    std::vector<bool> used(designs.size(), false);
-    for (int i = 0; i < k; ++i) {
-        int idx = dis(gen);
-        while (used[idx]) {
-            idx = dis(gen);
+    centroids.push_back(designs[0].features);
+    while (static_cast<int>(centroids.size()) < k) {
+        size_t best = 0;
+        double best_dist = -1.0;
+        for (size_t i = 0; i < designs.size(); ++i) {
+            double nearest = std::numeric_limits<double>::max();
+            for (const auto& c : centroids) {
+                nearest = std::min(nearest, euclidean_distance(designs[i].features, c));
+            }
+            if (nearest > best_dist) {
+                best_dist = nearest;
+                best = i;
+            }
         }
-        used[idx] = true;
-        centroids.push_back(designs[idx].features);
+        centroids.push_back(designs[best].features);
     }
 
     std::vector<int> assignments(designs.size(), 0);
@@ -119,15 +124,22 @@ std::vector<DesignCluster> DesignLearningSystem::cluster_designs(
             cluster_sizes[cluster]++;
         }
 
+        bool changed = false;
         for (int c = 0; c < k; ++c) {
-            if (cluster_sizes[c] > 0) {
-                for (auto& val : new_centroids[c]) {
-                    val /= cluster_sizes[c];
-                }
+            if (cluster_sizes[c] == 0) {
+                continue;  // empty cluster keeps its previous centroid
+            }
+            for (auto& val : new_centroids[c]) {
+                val /= cluster_sizes[c];
+            }
+            if (new_centroids[c] != centroids[c]) {
+                centroids[c] = std::move(new_centroids[c]);
+                changed = true;
             }
         }
-
-        centroids = new_centroids;
+        if (!changed) {
+            break;  // converged
+        }
     }
 
     // Build result clusters

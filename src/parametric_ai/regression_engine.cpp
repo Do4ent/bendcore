@@ -21,37 +21,61 @@ void LinearRegression::train(
 ) {
     if (data.empty()) return;
 
-    int num_features = data[0].features.size();
-    coefficients_.resize(num_features, 0.0);
-    intercept_ = 0.0;
+    const size_t num_features = data[0].features.size();
+    auto feature = [](const RegressionDataPoint& p, size_t i) {
+        return i < p.features.size() ? p.features[i] : 0.0;
+    };
 
-    // Gradient descent
+    // Weighted mean / std of each feature and mean of the target.
+    // Gradient descent runs on standardized features: on raw features the
+    // step size that is stable depends on feature magnitude, and e.g.
+    // lr=0.01 diverged to ~1e154 on inputs in the 0..18 range.
+    double total_weight = 0.0, target_mean = 0.0;
+    std::vector<double> mean(num_features, 0.0), scale(num_features, 0.0);
+    for (const auto& p : data) {
+        total_weight += p.weight;
+        target_mean += p.weight * p.target;
+        for (size_t i = 0; i < num_features; ++i) mean[i] += p.weight * feature(p, i);
+    }
+    if (total_weight <= 0.0) return;
+    target_mean /= total_weight;
+    for (auto& m : mean) m /= total_weight;
+    for (const auto& p : data) {
+        for (size_t i = 0; i < num_features; ++i) {
+            double d = feature(p, i) - mean[i];
+            scale[i] += p.weight * d * d;
+        }
+    }
+    for (auto& sc : scale) {
+        sc = std::sqrt(sc / total_weight);
+        if (sc < 1e-12) sc = 1.0;  // constant feature: leave unscaled (it is centred to 0)
+    }
+
+    // With centred features the intercept decouples and equals the target mean.
+    std::vector<double> w(num_features, 0.0);
     for (int iter = 0; iter < iterations; ++iter) {
-        double intercept_grad = 0.0;
-        std::vector<double> coeff_grads(num_features, 0.0);
-
-        for (const auto& point : data) {
-            double pred = intercept_;
-            for (int i = 0; i < num_features; ++i) {
-                if (i < static_cast<int>(point.features.size())) {
-                    pred += coefficients_[i] * point.features[i];
-                }
+        std::vector<double> grad(num_features, 0.0);
+        for (const auto& p : data) {
+            double pred = target_mean;
+            for (size_t i = 0; i < num_features; ++i) {
+                pred += w[i] * (feature(p, i) - mean[i]) / scale[i];
             }
-
-            double error = pred - point.target;
-            intercept_grad += error * point.weight;
-            for (int i = 0; i < num_features; ++i) {
-                if (i < static_cast<int>(point.features.size())) {
-                    coeff_grads[i] += error * point.features[i] * point.weight;
-                }
+            double error = (pred - p.target) * p.weight;
+            for (size_t i = 0; i < num_features; ++i) {
+                grad[i] += error * (feature(p, i) - mean[i]) / scale[i];
             }
         }
-
-        // Update parameters
-        intercept_ -= learning_rate * intercept_grad / data.size();
-        for (int i = 0; i < num_features; ++i) {
-            coefficients_[i] -= learning_rate * coeff_grads[i] / data.size();
+        for (size_t i = 0; i < num_features; ++i) {
+            w[i] -= learning_rate * grad[i] / total_weight;
         }
+    }
+
+    // Back to original feature units
+    coefficients_.assign(num_features, 0.0);
+    intercept_ = target_mean;
+    for (size_t i = 0; i < num_features; ++i) {
+        coefficients_[i] = w[i] / scale[i];
+        intercept_ -= coefficients_[i] * mean[i];
     }
 
     trained_ = true;

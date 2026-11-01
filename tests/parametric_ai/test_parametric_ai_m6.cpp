@@ -73,12 +73,24 @@ TEST_F(DesignLearningTest, ClusterDesigns) {
     auto designs = create_test_designs();
     auto clusters = learning_system.cluster_designs(designs, 2, 100);
 
-    EXPECT_EQ(clusters.size(), 2);
+    ASSERT_EQ(clusters.size(), 2);
     for (const auto& cluster : clusters) {
         EXPECT_GE(cluster.cluster_id, 0);
         EXPECT_LE(cluster.cluster_id, 1);
-        EXPECT_GT(cluster.radius, 0.0);
+        ASSERT_FALSE(cluster.design_ids.empty());
+        // A single-member cluster has radius 0; a multi-member one does not
+        if (cluster.design_ids.size() == 1) {
+            EXPECT_DOUBLE_EQ(cluster.radius, 0.0);
+        } else {
+            EXPECT_GT(cluster.radius, 0.0);
+        }
     }
+
+    // DESIGN-001/002 are near each other, DESIGN-003 is ~10x larger
+    const auto& near = clusters[0].design_ids.size() == 2 ? clusters[0] : clusters[1];
+    const auto& far = clusters[0].design_ids.size() == 2 ? clusters[1] : clusters[0];
+    EXPECT_EQ(near.design_ids, (std::vector<std::string>{"DESIGN-001", "DESIGN-002"}));
+    EXPECT_EQ(far.design_ids, (std::vector<std::string>{"DESIGN-003"}));
 }
 
 TEST_F(DesignLearningTest, PerformPCA) {
