@@ -1,9 +1,29 @@
 #include "bendcore/document/undo_redo_manager.hpp"
 #include "bendcore/serialization/document_serializer.hpp"
 #include <algorithm>
+#include <cstring>
 #include <zlib.h>
 
 namespace BendCore::CadCore {
+
+namespace {
+
+// Byte buffers have no alignment guarantee: dereferencing a uint32_t* /
+// uint64_t* at an arbitrary offset is undefined behaviour (UBSan:
+// "store to misaligned address"). memcpy compiles to the same move.
+template <typename T>
+inline void storeUnaligned(void* dst, T value) noexcept {
+    std::memcpy(dst, &value, sizeof(T));
+}
+
+template <typename T>
+inline T loadUnaligned(const void* src) noexcept {
+    T value;
+    std::memcpy(&value, src, sizeof(T));
+    return value;
+}
+
+}  // namespace
 
 UndoRedoManager::UndoRedoManager(size_t max_snapshots, size_t max_memory)
     : max_snapshots_(max_snapshots)
@@ -178,7 +198,7 @@ std::vector<uint8_t> UndoRedoManager::serializeDocument(const CadDocument& doc) 
     // Write entity count
     size_t entity_count = doc.getActiveEntityCount();
     buffer.resize(sizeof(uint64_t));
-    *reinterpret_cast<uint64_t*>(buffer.data()) = entity_count;
+    storeUnaligned<uint64_t>(buffer.data(), entity_count);
 
     // Serialize each entity (simplified)
     for (const auto& entity_id : doc.getEntityIds()) {
@@ -190,7 +210,7 @@ std::vector<uint8_t> UndoRedoManager::serializeDocument(const CadDocument& doc) 
             uint32_t id_size = id_str.size();
             size_t pos = buffer.size();
             buffer.resize(pos + sizeof(uint32_t) + id_size);
-            *reinterpret_cast<uint32_t*>(buffer.data() + pos) = id_size;
+            storeUnaligned<uint32_t>(buffer.data() + pos, id_size);
             std::copy(id_str.begin(), id_str.end(), buffer.begin() + pos + sizeof(uint32_t));
 
             // Entity data
@@ -203,15 +223,15 @@ std::vector<uint8_t> UndoRedoManager::serializeDocument(const CadDocument& doc) 
             pos = buffer.size();
             buffer.resize(pos + sizeof(uint32_t) + sizeof(uint32_t) + name_size + sizeof(uint64_t) + sizeof(uint32_t));
 
-            *reinterpret_cast<uint32_t*>(buffer.data() + pos) = type;
+            storeUnaligned<uint32_t>(buffer.data() + pos, type);
             pos += sizeof(uint32_t);
-            *reinterpret_cast<uint32_t*>(buffer.data() + pos) = name_size;
+            storeUnaligned<uint32_t>(buffer.data() + pos, name_size);
             pos += sizeof(uint32_t);
             std::copy(name.begin(), name.end(), buffer.begin() + pos);
             pos += name_size;
-            *reinterpret_cast<uint64_t*>(buffer.data() + pos) = revision;
+            storeUnaligned<uint64_t>(buffer.data() + pos, revision);
             pos += sizeof(uint64_t);
-            *reinterpret_cast<uint32_t*>(buffer.data() + pos) = state;
+            storeUnaligned<uint32_t>(buffer.data() + pos, state);
         } catch (...) {
             return std::vector<uint8_t>();
         }

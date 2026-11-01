@@ -1,4 +1,5 @@
 #include "bendcore/compat/legacy_adapter.hpp"
+#include <cstring>
 
 namespace BendCore::CadCore {
 
@@ -7,7 +8,8 @@ LegacyVersion LegacyAdapter::detectVersion(const std::vector<uint8_t>& data) noe
 
     // Simple version detection based on first bytes
     if (data.size() >= 4) {
-        uint32_t magic = *reinterpret_cast<const uint32_t*>(data.data());
+        uint32_t magic = 0;
+        std::memcpy(&magic, data.data(), sizeof magic);  // no aliasing/alignment UB
 
         if (magic == 0x00000001) return LegacyVersion::V1_0;
         if (magic == 0x00000015) return LegacyVersion::V1_5;

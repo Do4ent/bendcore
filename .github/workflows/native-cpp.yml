@@ -22,8 +22,10 @@ jobs:
             build_type: Release
             cxx: g++
             flags: ""
-          - name: Debug + ASan/UBSan (gcc)
-            build_type: Debug
+          # Optimised so the timing thresholds in perf tests (e.g. batch_check:
+          # 3000 tubes < 10 s) still hold under sanitizers; -O0 overshoots.
+          - name: RelWithDebInfo + ASan/UBSan (gcc)
+            build_type: RelWithDebInfo
             cxx: g++
             flags: "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
     steps:

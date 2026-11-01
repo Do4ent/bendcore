@@ -8,6 +8,25 @@
 
 namespace BendCore::CadCore {
 
+namespace {
+
+// Byte buffers have no alignment guarantee: dereferencing a uint32_t* /
+// uint64_t* at an arbitrary offset is undefined behaviour (UBSan:
+// "store to misaligned address"). memcpy compiles to the same move.
+template <typename T>
+inline void storeUnaligned(void* dst, T value) noexcept {
+    std::memcpy(dst, &value, sizeof(T));
+}
+
+template <typename T>
+inline T loadUnaligned(const void* src) noexcept {
+    T value;
+    std::memcpy(&value, src, sizeof(T));
+    return value;
+}
+
+}  // namespace
+
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
@@ -242,14 +261,14 @@ std::vector<uint8_t> DocumentSerializer::serializeToBinary(
         uint64_t version = metadata.version.toUint64();
         size_t pos = buffer.size();
         buffer.resize(pos + sizeof(uint64_t));
-        *reinterpret_cast<uint64_t*>(buffer.data() + pos) = version;
+        storeUnaligned<uint64_t>(buffer.data() + pos, version);
 
         // Write metadata
         auto write_string = [&](const std::string& str) {
             uint32_t size = str.size();
             pos = buffer.size();
             buffer.resize(pos + sizeof(uint32_t) + size);
-            *reinterpret_cast<uint32_t*>(buffer.data() + pos) = size;
+            storeUnaligned<uint32_t>(buffer.data() + pos, size);
             if (size > 0) {
                 std::copy(str.begin(), str.end(), buffer.begin() + pos + sizeof(uint32_t));
             }
@@ -263,14 +282,14 @@ std::vector<uint8_t> DocumentSerializer::serializeToBinary(
         uint64_t doc_revision = doc.getRevision();
         pos = buffer.size();
         buffer.resize(pos + sizeof(uint64_t));
-        *reinterpret_cast<uint64_t*>(buffer.data() + pos) = doc_revision;
+        storeUnaligned<uint64_t>(buffer.data() + pos, doc_revision);
 
         // Write entities
         auto entities = doc.getEntityIds();
         uint32_t entity_count = entities.size();
         pos = buffer.size();
         buffer.resize(pos + sizeof(uint32_t));
-        *reinterpret_cast<uint32_t*>(buffer.data() + pos) = entity_count;
+        storeUnaligned<uint32_t>(buffer.data() + pos, entity_count);
 
         for (const auto& entity_id : entities) {
             const auto& entity = doc.getEntity(entity_id);
@@ -283,7 +302,7 @@ std::vector<uint8_t> DocumentSerializer::serializeToBinary(
             uint32_t type = static_cast<uint32_t>(entity.type);
             pos = buffer.size();
             buffer.resize(pos + sizeof(uint32_t));
-            *reinterpret_cast<uint32_t*>(buffer.data() + pos) = type;
+            storeUnaligned<uint32_t>(buffer.data() + pos, type);
 
             // Entity name
             write_string(entity.name);
@@ -297,8 +316,8 @@ std::vector<uint8_t> DocumentSerializer::serializeToBinary(
             uint32_t state = static_cast<uint32_t>(entity.state);
             pos = buffer.size();
             buffer.resize(pos + sizeof(uint64_t) + sizeof(uint32_t));
-            *reinterpret_cast<uint64_t*>(buffer.data() + pos) = entity_rev;
-            *reinterpret_cast<uint32_t*>(buffer.data() + pos + sizeof(uint64_t)) = state;
+            storeUnaligned<uint64_t>(buffer.data() + pos, entity_rev);
+            storeUnaligned<uint32_t>(buffer.data() + pos + sizeof(uint64_t), state);
         }
 
     } catch (const std::exception&) {
@@ -320,7 +339,7 @@ bool DocumentSerializer::deserializeFromBinary(
         size_t pos = 0;
 
         // Read version
-        [[maybe_unused]] uint64_t version = *reinterpret_cast<const uint64_t*>(data.data() + pos);
+        [[maybe_unused]] uint64_t version = loadUnaligned<uint64_t>(data.data() + pos);
         pos += sizeof(uint64_t);
 
         // TODO: Version migration logic here
