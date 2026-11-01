@@ -10,7 +10,20 @@ interface ImportDialogProps {
 interface FileInfo {
   name: string;
   size: number;
-  format: 'csv' | 'json' | null;
+  format: 'step' | 'stp' | 'iges' | 'igs' | null;
+}
+
+interface AnalysisResult {
+  ok?: boolean;
+  od?: number;
+  wall?: number;
+  bends?: Array<{ angle: number; radius: number }>;
+  length?: number;
+  confidence?: number;
+  mesh?: {
+    vertices: Array<[number, number, number]>;
+    faces: Array<[number, number, number]>;
+  };
 }
 
 /**
@@ -38,11 +51,9 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string>('');
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [options, setOptions] = useState({
-    validateGeometry: true,
-    autoFixErrors: false,
-    mergeColinearSegments: true,
-    toleranceMm: 0.1,
+    deflection: 0.1,
   });
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,14 +61,13 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
     if (!file) return;
 
     // Determine format
-    const format = file.name.endsWith('.csv')
-      ? 'csv'
-      : file.name.endsWith('.json')
-      ? 'json'
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const format = (ext === 'step' || ext === 'stp' || ext === 'iges' || ext === 'igs')
+      ? (ext as 'step' | 'stp' | 'iges' | 'igs')
       : null;
 
     if (!format) {
-      setError('Please select a CSV or JSON file');
+      setError('Please select a STEP or IGES file (.step, .stp, .iges, .igs)');
       return;
     }
 
@@ -68,15 +78,8 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
       format,
     });
     setError(null);
-
-    // Generate preview
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      // Show first 500 chars
-      setPreview(content.substring(0, 500));
-    };
-    reader.readAsText(file);
+    setAnalysisResult(null);
+    setPreview(`File: ${file.name}\nSize: ${(file.size / 1024).toFixed(1)} KB\nFormat: ${format.toUpperCase()}`);
   };
 
   const handleImport = async () => {
@@ -88,41 +91,39 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
     setIsImporting(true);
     setProgress(0);
     setError(null);
+    setAnalysisResult(null);
 
     try {
-      const fileContent = await selectedFile.text();
+      // Read file as binary
+      const arrayBuffer = await selectedFile.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-      // Extract tube parameters from file content
-      // This is a simplified example - real implementation would parse properly
-      const tubeParams = {
-        outerDiameter: 20.0,
-        wallThickness: 1.5,
-        material: 'Copper',
-      };
+      setProgress(30);
 
-      // Call IPC to import
-      setProgress(33);
-
-      const result = await ipc.importTube({
-        format: fileInfo.format,
-        content: fileContent,
-        ...tubeParams,
-        options,
+      // Send to backend for analysis
+      const response = await fetch('/api/import/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          file_content: base64,
+          deflection: options.deflection,
+        }),
       });
 
-      setProgress(66);
+      setProgress(70);
 
-      if (result && result.ok && result.id) {
+      const result = await response.json();
+
+      if (result.success) {
         setProgress(100);
-        if (onSuccess) {
-          onSuccess(result.id);
+        setAnalysisResult(result.data);
+        if (onSuccess && result.data.id) {
+          onSuccess(result.data.id);
         }
-        // Close after success
-        setTimeout(() => {
-          onClose();
-        }, 500);
       } else {
-        setError(result?.error || 'Import failed');
+        setError(result.error || 'Import failed');
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Import failed';
@@ -151,7 +152,7 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
             <div className="file-input-wrapper">
               <input
                 type="file"
-                accept=".csv,.json"
+                accept=".step,.stp,.iges,.igs"
                 onChange={handleFileSelect}
                 disabled={isImporting}
                 className="file-input"
@@ -160,7 +161,7 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
               <label htmlFor="file-input" className="file-label">
                 {fileInfo ? (
                   <>
-                    <span className="file-icon">📄</span>
+                    <span className="file-icon">📦</span>
                     <div>
                       <div className="file-name">{fileInfo.name}</div>
                       <div className="file-meta">
@@ -172,8 +173,8 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
                   <>
                     <span className="file-icon">📁</span>
                     <div>
-                      <div className="file-prompt">Click to select CSV or JSON file</div>
-                      <div className="file-hint">Supported formats: .csv, .json</div>
+                      <div className="file-prompt">Click to select STEP or IGES file</div>
+                      <div className="file-hint">Supported formats: .step, .stp, .iges, .igs</div>
                     </div>
                   </>
                 )}
@@ -191,59 +192,20 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
             </div>
           )}
 
-          {/* Import Options */}
+          {/* Analysis Options */}
           <div className="section">
-            <h3>3. Options</h3>
+            <h3>2. Options</h3>
             <div className="options-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={options.validateGeometry}
-                  onChange={(e) =>
-                    setOptions({ ...options, validateGeometry: e.target.checked })
-                  }
-                  disabled={isImporting}
-                />
-                <span>Validate geometry</span>
-              </label>
-
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={options.autoFixErrors}
-                  onChange={(e) =>
-                    setOptions({ ...options, autoFixErrors: e.target.checked })
-                  }
-                  disabled={isImporting}
-                />
-                <span>Auto-fix minor errors</span>
-              </label>
-
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={options.mergeColinearSegments}
-                  onChange={(e) =>
-                    setOptions({
-                      ...options,
-                      mergeColinearSegments: e.target.checked,
-                    })
-                  }
-                  disabled={isImporting}
-                />
-                <span>Merge colinear segments</span>
-              </label>
-
               <label className="number-label">
-                <span>Tolerance (mm):</span>
+                <span>Deflection (mm):</span>
                 <input
                   type="number"
                   min="0.01"
                   max="1.0"
-                  step="0.1"
-                  value={options.toleranceMm}
+                  step="0.05"
+                  value={options.deflection}
                   onChange={(e) =>
-                    setOptions({ ...options, toleranceMm: parseFloat(e.target.value) })
+                    setOptions({ ...options, deflection: parseFloat(e.target.value) })
                   }
                   disabled={isImporting}
                 />
@@ -254,11 +216,54 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
           {/* Progress */}
           {isImporting && (
             <div className="section">
-              <h3>Importing...</h3>
+              <h3>Analyzing...</h3>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${progress}%` }} />
               </div>
               <div className="progress-text">{progress}%</div>
+            </div>
+          )}
+
+          {/* Analysis Results */}
+          {analysisResult && (
+            <div className="section">
+              <h3>3. Analysis Results</h3>
+              <div className="results-grid">
+                {analysisResult.od && (
+                  <div className="result-item">
+                    <span className="result-label">OD:</span>
+                    <span className="result-value">{analysisResult.od.toFixed(2)} mm</span>
+                  </div>
+                )}
+                {analysisResult.wall && (
+                  <div className="result-item">
+                    <span className="result-label">Wall:</span>
+                    <span className="result-value">{analysisResult.wall.toFixed(2)} mm</span>
+                  </div>
+                )}
+                {analysisResult.length && (
+                  <div className="result-item">
+                    <span className="result-label">Length:</span>
+                    <span className="result-value">{analysisResult.length.toFixed(2)} mm</span>
+                  </div>
+                )}
+                {analysisResult.confidence !== undefined && (
+                  <div className="result-item">
+                    <span className="result-label">Confidence:</span>
+                    <span className="result-value">{(analysisResult.confidence * 100).toFixed(0)}%</span>
+                  </div>
+                )}
+              </div>
+              {analysisResult.bends && analysisResult.bends.length > 0 && (
+                <div className="bends-list">
+                  <h4>Bends</h4>
+                  {analysisResult.bends.map((bend, i) => (
+                    <div key={i} className="bend-item">
+                      {bend.angle.toFixed(0)}° @ R{bend.radius.toFixed(1)}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -577,6 +582,55 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({
         .btn-primary:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+        }
+
+        /* Results */
+        .results-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+
+        .result-item {
+          display: flex;
+          justify-content: space-between;
+          padding: 10px;
+          background: #f9f9f9;
+          border: 1px solid #e0e0e0;
+          border-radius: 4px;
+          font-size: 13px;
+        }
+
+        .result-label {
+          font-weight: 600;
+          color: #666;
+        }
+
+        .result-value {
+          color: #333;
+          font-weight: 500;
+        }
+
+        .bends-list {
+          margin-top: 12px;
+          padding: 10px;
+          background: #f9f9f9;
+          border: 1px solid #e0e0e0;
+          border-radius: 4px;
+        }
+
+        .bends-list h4 {
+          margin: 0 0 8px 0;
+          font-size: 12px;
+          font-weight: 600;
+          color: #666;
+        }
+
+        .bend-item {
+          padding: 6px 0;
+          font-size: 12px;
+          color: #333;
         }
       `}</style>
     </div>

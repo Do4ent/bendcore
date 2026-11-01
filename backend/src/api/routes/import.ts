@@ -198,6 +198,67 @@ router.post('/smooth', (req: Request, res: Response): void => {
 });
 
 /**
+ * POST /api/import/analyze
+ * Analyze STEP/IGES file from bendcore_server
+ */
+router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { file_content, deflection } = req.body;
+
+    if (!file_content) {
+      res.status(400).json({
+        success: false,
+        error: 'file_content is required',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    // Forward to bendcore_server on localhost:8080
+    const bendcorePort = process.env.BENDCORE_SERVER_PORT || '8080';
+    const bendcoreUrl = `http://localhost:${bendcorePort}/v1/analyze?format=step&deflection=${deflection || 0.1}`;
+
+    try {
+      const analysisResponse = await fetch(bendcoreUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: file_content
+      });
+
+      if (!analysisResponse.ok) {
+        const errorText = await analysisResponse.text();
+        res.status(analysisResponse.status).json({
+          success: false,
+          error: `bendcore_server error: ${errorText}`,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
+      const analysisData = await analysisResponse.json();
+
+      const response: ApiResponse<unknown> = {
+        success: true,
+        data: analysisData,
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (fetchErr) {
+      const error = fetchErr instanceof Error ? fetchErr.message : 'Failed to connect to bendcore_server';
+      res.status(503).json({
+        success: false,
+        error: `bendcore_server unavailable: ${error}`,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error, timestamp: new Date().toISOString() });
+  }
+});
+
+/**
  * POST /api/import
  * Combined import endpoint: filter segments, recognize geometry, match/suggest profiles, round
  */
