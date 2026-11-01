@@ -335,6 +335,67 @@ router.post('/', (req: Request, res: Response): void => {
 });
 
 /**
+ * POST /api/import/analyze-fea
+ * Perform FEA analysis on mesh from tube analysis
+ */
+router.post('/analyze-fea', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { mesh, material, pressure } = req.body;
+
+    if (!mesh) {
+      res.status(400).json({
+        success: false,
+        error: 'mesh is required',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    // Forward to bendcore_server on localhost:8080
+    const bendcorePort = process.env.BENDCORE_SERVER_PORT || '8080';
+    const bendcoreUrl = `http://localhost:${bendcorePort}/v1/fea?material=${encodeURIComponent(material || 'steel')}&pressure=${pressure || 0}`;
+
+    try {
+      const feaResponse = await fetch(bendcoreUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mesh)
+      });
+
+      if (!feaResponse.ok) {
+        const errorText = await feaResponse.text();
+        res.status(feaResponse.status).json({
+          success: false,
+          error: `bendcore_server FEA failed: ${errorText}`,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
+      const feaData = await feaResponse.json();
+
+      const response: ApiResponse<unknown> = {
+        success: true,
+        data: feaData,
+        timestamp: new Date().toISOString()
+      };
+
+      res.json(response);
+    } catch (fetchErr) {
+      const error = fetchErr instanceof Error ? fetchErr.message : 'Failed to connect to bendcore_server';
+      res.status(503).json({
+        success: false,
+        error: `bendcore_server unavailable: ${error}`,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error, timestamp: new Date().toISOString() });
+  }
+});
+
+/**
  * POST /api/import/export-drawing
  * Export 2D drawing (SVG) from tube analysis results
  */

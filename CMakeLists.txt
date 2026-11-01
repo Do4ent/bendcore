@@ -939,7 +939,7 @@ if(BENDCORE_WITH_OCCT)
   endif()
 
   # Сервис тела трубы и HTTP-сервер bendcore_server (без внешних библиотек).
-  add_library(bendcore_server_core STATIC src/server/tube_service.cpp)
+  add_library(bendcore_server_core STATIC src/server/tube_service.cpp src/server/fea_service.cpp)
   target_include_directories(bendcore_server_core PUBLIC include)
   target_link_libraries(bendcore_server_core PUBLIC bendcore_occt)
   add_executable(bendcore_server src/server/main.cpp)
