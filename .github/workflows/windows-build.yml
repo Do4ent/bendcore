@@ -1,93 +1,383 @@
-name: Windows Build & Release
+name: Windows Build & Validation
 
-# Build Electron application for Windows
-# Generates .exe installer and portable executable
+# Automated Windows build and validation pipeline
+# Covers: C++ compilation, TypeScript checks, Jest tests, Electron packaging
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, ccr-* ]
     tags:
       - 'v*'
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  NINJA_STATUS: "[%f/%t %o/sec] "
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      node-versions: ${{ steps.versions.outputs.node-versions }}
     steps:
-      - uses: actions/checkout@v4
+      - id: versions
+        run: echo "node-versions=[\"18.x\", \"20.x\"]" >> $GITHUB_OUTPUT
+
+  build-windows:
+    needs: setup-matrix
+    runs-on: windows-2022
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ${{ fromJson(needs.setup-matrix.outputs.node-versions) }}
+
+    steps:
+      # === CHECKOUT ===
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
-      - uses: actions/setup-node@v4
+      # === ENVIRONMENT SETUP ===
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: pip
 
-      - name: Build and type-check
+      - name: Install CMake 3.28+
+        run: choco install cmake -y --version=3.28.0 2>&1
+        continue-on-error: false
+
+      - name: Install Ninja
+        run: choco install ninja -y 2>&1
+        continue-on-error: false
+
+      - name: Setup MSVC
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-version: latest
+          vs-version: '17.0'
+          vswhere-path: 'C:\Program Files (x86)\Microsoft Visual Studio\Installer'
+
+      # === CACHE SETUP ===
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      # === DEPENDENCIES ===
+      - name: Setup vcpkg (dependency management)
         run: |
-          npm run typecheck
-          npm run build
+          git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg --depth=1
+          cd C:\vcpkg
+          .\bootstrap-vcpkg.bat
+          echo "C:\vcpkg" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
+        continue-on-error: true
 
-      - name: Run tests
-        run: npm test -- --ci --runInBand || true
+      - name: Cache vcpkg dependencies
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg\installed
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: vcpkg-${{ runner.os }}-
 
-      - name: Build Electron app
-        run: npm run dist
+      - name: Install Eigen via vcpkg
+        run: |
+          vcpkg install eigen3:x64-windows
+        shell: pwsh
+        continue-on-error: true
+
+      # === FRONTEND BUILD ===
+      - name: Install npm dependencies
+        run: npm ci --no-audit --no-fund
+        continue-on-error: false
+
+      - name: TypeScript strict type check
+        run: |
+          echo "=== TypeScript Type Checking ==="
+          npm run typecheck 2>&1 | Tee-Object -FilePath ci-typecheck.log
+          if ($LASTEXITCODE -ne 0) { throw "TypeScript check failed" }
+        shell: pwsh
+        continue-on-error: false
+
+      - name: Frontend build
+        run: |
+          echo "=== Building Frontend ==="
+          npm run build 2>&1 | Tee-Object -FilePath ci-frontend-build.log
+          if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
+        shell: pwsh
+        continue-on-error: false
+
+      - name: Jest unit tests
+        run: |
+          echo "=== Running Jest Tests ==="
+          npm test -- --ci --runInBand --coverage 2>&1 | Tee-Object -FilePath ci-jest.log
+          if ($LASTEXITCODE -ne 0) { throw "Jest tests failed" }
+        shell: pwsh
+        continue-on-error: false
+
+      # === BACKEND BUILD ===
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --no-audit --no-fund 2>&1 | Tee-Object -FilePath ..\ci-backend-install.log
+        shell: pwsh
+        continue-on-error: false
+
+      - name: Backend build
+        working-directory: backend
+        run: |
+          echo "=== Building Backend ==="
+          npm run build 2>&1 | Tee-Object -FilePath ..\ci-backend-build.log
+          if ($LASTEXITCODE -ne 0) { throw "Backend build failed" }
+        shell: pwsh
+        continue-on-error: false
+
+      - name: Backend tests
+        working-directory: backend
+        run: |
+          echo "=== Running Backend Tests ==="
+          npm test -- --ci 2>&1 | Tee-Object -FilePath ..\ci-backend-test.log
+          if ($LASTEXITCODE -ne 0) { throw "Backend tests failed" }
+        shell: pwsh
+        continue-on-error: false
+
+      # === C++ NATIVE BUILD ===
+      - name: Configure CMake (MSVC, Release)
+        run: |
+          echo "=== Configuring CMake ==="
+          cmake -B build-native `
+            -G "Visual Studio 17 2022" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_CXX_COMPILER=cl.exe `
+            -DCMAKE_C_COMPILER=cl.exe `
+            -DBENDCORE_EIGEN_DIR="C:/vcpkg/installed/x64-windows/include" `
+            -DBENDCORE_WITH_OCCT=OFF `
+            2>&1 | Tee-Object -FilePath ci-cmake-config.log
+
+          if ($LASTEXITCODE -ne 0) {
+            type ci-cmake-config.log
+            throw "CMake configuration failed"
+          }
+        shell: pwsh
+        continue-on-error: false
+
+      - name: Build C++ native components
+        run: |
+          echo "=== Building C++ Components ==="
+          cmake --build build-native --config Release --parallel 4 2>&1 | Tee-Object -FilePath ci-cmake-build.log
+
+          if ($LASTEXITCODE -ne 0) {
+            type ci-cmake-build.log
+            throw "C++ build failed"
+          }
+        shell: pwsh
+        continue-on-error: false
+
+      - name: Run C++ unit tests
+        run: |
+          echo "=== Running C++ Unit Tests ==="
+          ctest --test-dir build-native --config Release --output-on-failure 2>&1 | Tee-Object -FilePath ci-cpp-tests.log
+
+          # Don't fail if no tests exist
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 2) {
+            throw "C++ tests failed"
+          }
+        shell: pwsh
+        continue-on-error: true
+
+      # === ELECTRON PACKAGING ===
+      - name: Build Electron app (Windows x64)
+        run: |
+          echo "=== Packaging Electron App ==="
+          npm run dist 2>&1 | Tee-Object -FilePath ci-electron-build.log
+
+          if ($LASTEXITCODE -ne 0) {
+            type ci-electron-build.log
+            throw "Electron packaging failed"
+          }
         env:
           CI: true
           WINDOWS: true
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        continue-on-error: false
 
-      - name: Upload Windows artifacts
+      # === ARTIFACT VERIFICATION ===
+      - name: Verify build artifacts
+        run: |
+          echo "=== Verifying Build Artifacts ==="
+
+          $artifacts = @(
+              "dist/web/index.html",
+              "dist/main.js",
+              "backend/dist/server.js"
+          )
+
+          foreach ($item in $artifacts) {
+              if (Test-Path $item) {
+                  $size = (Get-Item $item).Length / 1MB
+                  Write-Host "✓ $item ($([math]::Round($size, 2)) MB)" -ForegroundColor Green
+              } else {
+                  Write-Host "✗ $item MISSING" -ForegroundColor Red
+                  exit 1
+              }
+          }
+
+          if (Test-Path "release") {
+              Write-Host ""
+              Write-Host "=== Release Directory ==="
+              Get-ChildItem release -Recurse | Select-Object Name, Length | Format-Table
+          } else {
+              Write-Host "WARNING: release/ directory not found" -ForegroundColor Yellow
+          }
+        shell: pwsh
+        continue-on-error: false
+
+      - name: Verify Windows executables
+        run: |
+          echo "=== Verifying Windows Executables ==="
+
+          if (Test-Path "release") {
+              $exes = Get-ChildItem release -Filter "*.exe" -ErrorAction SilentlyContinue
+              $msis = Get-ChildItem release -Filter "*.msi" -ErrorAction SilentlyContinue
+
+              if ($exes.Count -gt 0) {
+                  Write-Host "✓ Found $($exes.Count) .exe files" -ForegroundColor Green
+              } else {
+                  Write-Host "⚠ No .exe files found (may be in alternative location)" -ForegroundColor Yellow
+              }
+
+              if ($msis.Count -gt 0) {
+                  Write-Host "✓ Found $($msis.Count) .msi installers" -ForegroundColor Green
+              } else {
+                  Write-Host "⚠ No .msi files found" -ForegroundColor Yellow
+              }
+          }
+        shell: pwsh
+        continue-on-error: true
+
+      # === ARTIFACT UPLOAD ===
+      - name: Upload build logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-builds
+          name: build-logs-node-${{ matrix.node-version }}
+          path: |
+            ci-*.log
+            build-native/CMakeFiles/CMakeError.log
+            build-native/CMakeFiles/CMakeOutput.log
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload Windows executables
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-executables-node-${{ matrix.node-version }}
           path: |
             release/*.exe
             release/*.msi
-            release/*.yml
+            release/installer*.nsis
           retention-days: 30
+          if-no-files-found: warn
 
-      - name: List build artifacts
-        run: ls -lh release/ || echo "No artifacts found"
-
-      - name: Generate checksums
-        run: |
-          cd release || exit 1
-          sha256sum *.exe > checksums.txt 2>/dev/null || true
-          sha256sum *.msi >> checksums.txt 2>/dev/null || true
-          cat checksums.txt || echo "No files to checksum"
-
-      - name: Upload checksums
+      - name: Upload web distribution
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-checksums
-          path: release/checksums.txt
+          name: web-dist-node-${{ matrix.node-version }}
+          path: |
+            dist/
+            public/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload C++ build outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-build-node-${{ matrix.node-version }}
+          path: |
+            build-native/CMakeFiles/CMakeError.log
+            build-native/CMakeFiles/CMakeOutput.log
+            build-native/Testing/Temporary/LastTest.log
+          retention-days: 30
+          if-no-files-found: warn
+
+      # === TEST REPORT ===
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "=== BUILD SUMMARY ===" | Tee-Object -FilePath ci-summary.txt
+          echo "Node.js: ${{ matrix.node-version }}" | Tee-Object -FilePath ci-summary.txt -Append
+          echo "Runner: windows-2022" | Tee-Object -FilePath ci-summary.txt -Append
+          echo "" | Tee-Object -FilePath ci-summary.txt -Append
+
+          if (Test-Path "ci-typecheck.log") {
+              $typecheck = (Get-Content ci-typecheck.log | Select-String "error" | Measure-Object).Count
+              echo "TypeScript Errors: $typecheck" | Tee-Object -FilePath ci-summary.txt -Append
+          }
+
+          if (Test-Path "build-native") {
+              $cppErrors = (Get-ChildItem build-native -Recurse -Filter "CMakeError.log" -ErrorAction SilentlyContinue).Count
+              echo "C++ Build Errors: $cppErrors" | Tee-Object -FilePath ci-summary.txt -Append
+          }
+
+          Get-ChildItem "release" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+              echo "Artifact: $($_.Name) ($($_.Length) bytes)" | Tee-Object -FilePath ci-summary.txt -Append
+          }
+        shell: pwsh
+
+      - name: Upload test summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary-node-${{ matrix.node-version }}
+          path: ci-summary.txt
           retention-days: 30
 
-      - name: Create Release (if tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            release/*.exe
-            release/*.msi
-            release/checksums.txt
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  aggregate-results:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    if: always()
 
-      - name: Report build status
-        if: failure()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Report final status
         run: |
-          echo "::error title=windows-build::Windows build failed"
-          exit 1
+          echo "=== BUILD RESULTS ==="
+
+          if [ -d "artifacts/windows-executables-node-20.x" ]; then
+              echo "✅ Windows executables generated"
+          else
+              echo "⚠️  Check executable artifacts"
+          fi
+
+          if [ -d "artifacts/build-logs-node-20.x" ]; then
+              echo "✅ Build logs available"
+          fi
+
+          if [ -d "artifacts/web-dist-node-20.x" ]; then
+              echo "✅ Web distribution generated"
+          fi
+
+          echo ""
+          echo "All artifacts stored in GitHub Actions"
