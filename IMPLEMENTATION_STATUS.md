@@ -59,20 +59,50 @@ ctest --preset host            # 71/71 pass
 **Not verified here:** building OCCT 7.7 from source with `build_occt.sh` (GitHub archive downloads
 are blocked in the cloud environment) and the WASM build with OCCT.
 
-### Stage 3: Real Functionality (Replace Stubs)
+### Stage 3: Frontend Integration with C++ Backend
+**Status:** 🟡 Partially Complete
+
+#### 3a. Connect Node Backend to bendcore_server (Stage 3a)
+**Status:** ✅ Implemented
+
+**Changes:**
+- `backend/src/api/routes/import.ts`: Added `POST /api/import/analyze` endpoint
+  - Accepts base64-encoded STEP/IGES file content
+  - Forwards to `bendcore_server` at localhost:8080 via HTTP
+  - Returns tube analysis results (OD, wall, bends, length, confidence)
+- `ui/src/components/Import/ImportDialog.tsx`: Updated for STEP/IGES import
+  - Changed from CSV/JSON to STEP/IGES file selection
+  - Displays analysis results: outer diameter, wall thickness, bends, length, confidence
+  - Sends file to `/api/import/analyze` for real analysis
+
+**Testing:**
+```bash
+# Start bendcore_server
+./build/bendcore_server 8080
+
+# In another terminal, start Node backend
+cd backend && npm start    # Port 3001
+
+# Upload STEP file via ImportDialog in React UI (not yet interactive)
+# Or test with curl:
+curl -X POST http://localhost:3001/api/import/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"file_content":"<base64>","deflection":0.1}'
+```
+
+**Dependencies:**
+- ✅ bendcore_server must be running on port 8080
+- ✅ Node.js backend running on port 3001
+- ✅ OCCT for C++ analysis
+
+#### 3b-3e. Real Functionality (Remaining Stubs)
 **Status:** 🔴 Not Started
 
 **Stubs to Replace:**
-1. `src/ui/Viewport3D.tsx` - Demo cube → Real B-Rep model
-2. `src/ui/ImportDialog.tsx` - Mock groups → Real STEP/DWF parsing
-3. `src/drawing_editor.cpp` - Stub → Real 2D drawing gen
-4. `src/fea/` - Pseudo math → Real FEA solver
-5. `src/generative/` - Stubs → Real topology optimization
-
-**Dependencies:**
-- OCCT must be fully integrated (Stage 2)
-- C++ bindings to WASM (emscripten)
-- WebAssembly infrastructure working (Stage 1)
+1. `src/ui/Viewport3D.tsx` - Demo cube → Real B-Rep model from mesh
+2. `src/drawing_editor.cpp` - Stub → Real 2D drawing generation
+3. `src/fea/` - Pseudo math → Real FEA solver
+4. `src/generative/` - Stubs → Real topology optimization
 
 ## Current Limitations
 
@@ -83,21 +113,33 @@ are blocked in the cloud environment) and the WASM build with OCCT.
 | WASM/C++ | 🟡 Ready to setup | Requires emscripten SDK |
 | Native C++ + OCCT | ✅ Working | Verified with system OCCT 7.6.3 |
 | STEP analyze API | ✅ Working | `bendcore_server` `/v1/analyze` |
-| 3D Viewport | ❌ Placeholder | Shows demo cube |
-| CAD Import | ❌ Mock data | Uses mock geometry |
+| ImportDialog STEP | ✅ Implemented | Connected to backend `/v1/analyze` |
+| Backend /api/import/analyze | ✅ Implemented | Proxies to bendcore_server |
+| 3D Viewport | ❌ Placeholder | Shows demo cube, needs mesh from analyzer |
+| 2D Drawing Export | ❌ Stub | Returns placeholder |
+| FEA Solver | ❌ Stub | Pseudo math, needs real solver |
 | Sketcher | ⚠️ Configured | PlaneGCS linked but not verified |
-| Drawing Export | ❌ Stub | Returns placeholder |
 
 ## Quick Start for Developer
 
 ```bash
-# Stage 1: Get JS/TS working (already done)
 cd /home/user/bendcore
+
+# Stage 1: Frontend & Backend (✅ Done)
 npm test              # Should show 1217 PASS
 npm run build         # Should succeed
 
-# Stage 2: Setup WASM (3-4 hours)
-./scripts/setup_wasm.sh
+# Stage 2: C++ OCCT Integration (✅ Done)
+cmake --preset host -DBENDCORE_WITH_OCCT=ON
+cmake --build --preset host
+ctest --preset host  # Should show 71/71 PASS
+
+# Stage 3a: Start services for frontend integration
+./build/bendcore_server 8080 &                    # C++ OCCT analyzer
+cd backend && npm start &                         # Node.js proxy backend (port 3001)
+# Open http://localhost:3000 in browser and test ImportDialog with STEP file
+
+# Later: Stage 3b-3e (3D viewport, drawing export, FEA, optimization)
 source ~/.bashrc
 ./scripts/build_wasm.sh
 
