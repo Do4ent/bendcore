@@ -7,7 +7,7 @@ BendCore integrates Open Cascade Technology (OCCT) 8.0 for professional CAD file
 ## System Requirements
 
 - **Platform**: Linux / macOS (static OCCT via `third_party/build_occt.sh`), Windows x64
-- **OCCT Version**: 8.0.1 (default in build_occt.sh); 7.8+ required (`TopTools_ShapeMapHasher`)
+- **OCCT Version**: 8.0.1 (default in build_occt.sh, tested on Linux: 84/84 ctest); 7.8+ required (`TopTools_ShapeMapHasher`)
 - **OCCT modules**: FoundationClasses, ModelingData, ModelingAlgorithms, DataExchange
 - **C++ Standard**: C++20
 
