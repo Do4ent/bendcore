@@ -219,10 +219,13 @@ router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
     const bendcoreUrl = `http://localhost:${bendcorePort}/v1/analyze?format=step&deflection=${deflection || 0.1}`;
 
     try {
+      // Decode base64 from frontend to binary
+      const binaryData = Buffer.from(file_content, 'base64');
+
       const analysisResponse = await fetch(bendcoreUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
-        body: file_content
+        body: binaryData
       });
 
       if (!analysisResponse.ok) {
