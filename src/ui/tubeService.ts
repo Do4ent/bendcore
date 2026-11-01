@@ -1,8 +1,12 @@
 /**
- * Клиент сервиса тела трубы (bendcore_server, src/server/main.cpp).
- *   POST /v1/tube?format=csv|json&od&wall&deflection  — тело по пути (CSV/JSON) с сеткой и портами
- *   POST /v1/analyze?format=step&deflection          — распознавание трубы в файле STEP с сеткой тела
- * Сетка строится ядром на Open CASCADE; интерфейс только отображает её.
+ * Tube Service - Communication with OCCT backend (Phase 1 Real Implementation)
+ * Now uses real OCCT REST API instead of mock server
+ *
+ * API Endpoints:
+ *   POST /api/occt/step/read              — Read STEP file
+ *   POST /api/occt/geometry/detect-tubes  — Auto-detect tubes
+ *   POST /api/occt/mesh/generate          — Generate 3D mesh
+ *   POST /api/occt/shape/create/tube      — Create tube shape
  */
 
 /** Треугольная сетка: vertices — x, y, z подряд (мм), indices — тройки индексов вершин. */
@@ -62,7 +66,8 @@ export class TubeServiceError extends Error {
 }
 
 const STORAGE_KEY = 'bendcore.serviceUrl';
-const DEFAULT_BASE = 'http://127.0.0.1:8080';
+// Real OCCT backend (Phase 1)
+const DEFAULT_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001/api/occt';
 
 /** Адрес сервиса: сохранённый пользователем или локальный по умолчанию. */
 export function getServiceBase(): string {

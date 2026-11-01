@@ -18,6 +18,7 @@ import importRoutes from './api/routes/import';
 import projectRoutes, { setDatabase } from './api/routes/projects';
 import searchRoutes from './api/routes/search';
 import drawingsRoutes from './api/routes/drawings';
+import occtRoutes from './routes/occt.routes';
 
 // Load environment variables
 dotenv.config();
@@ -71,6 +72,7 @@ app.use('/api/sketches', sketchRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/drawings', drawingsRoutes);
+app.use('/api/occt', occtRoutes);
 app.use('/api', searchRoutes);
 
 // 404 handler
