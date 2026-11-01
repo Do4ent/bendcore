@@ -125,10 +125,25 @@ curl -X POST http://localhost:8080/v1/fea?material=steel&pressure=10 \
 - Calculate strain and stress tensors
 - Add UI panel showing stress distribution
 
-#### 3e. Topology Optimization
-**Status:** 🔴 Not Started
-- Requires FEA results as input
-- Would optimize tube geometry for minimal weight/stress
+#### 3e. Topology Optimization (Final Stage)
+**Status:** ✅ Implemented
+
+**Changes:**
+- Added `POST /v1/topology` endpoint to bendcore_server
+  - Optimizes wall thickness based on stress utilization
+  - Material-specific safety factors (steel 2.5x, aluminum 3x, titanium 2x)
+  - Calculates weight reduction potential
+  - Ensures minimum wall thickness (5% of OD)
+- Added `POST /api/import/topology-optimize` to Node backend
+  - Proxies optimization requests to bendcore_server
+  - Returns optimal geometry and weight savings
+
+**Algorithm:**
+- Input: Stress, displacement, current geometry, material
+- Calculate stress utilization ratio vs allowable stress
+- Optimize wall thickness: `optimal_wall = wall × √(utilization)`
+- Ensure minimum safety margins
+- Return weight reduction percentage
 
 ## Current Limitations
 
@@ -146,7 +161,8 @@ curl -X POST http://localhost:8080/v1/fea?material=steel&pressure=10 \
 | 3D Viewport | ✅ Implemented | Displays real B-Rep mesh from analysis |
 | 2D Drawing Export | ✅ Implemented | SVG with dimensions and bend info |
 | FEA Analysis | ✅ Implemented | Pressure-based stress estimation |
-| Topology Optimization | ❌ Not Started | Requires full FEA solver integration |
+| Topology Optimization | ✅ Implemented | Wall thickness optimization for weight |
+| Backend /api/import/topology-optimize | ✅ Implemented | Proxies to bendcore_server /v1/topology |
 
 ## Quick Start for Developer
 
