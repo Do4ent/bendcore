@@ -1,0 +1,41 @@
+{
+  "name": "bendcore-occt-binding",
+  "version": "0.1.0-alpha",
+  "description": "OpenCASCADE Node.js binding for BendCore CAD",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "build:windows": "node-gyp rebuild --msbuild_toolset=v142",
+    "build:debug": "node-gyp rebuild --debug",
+    "clean": "node-gyp clean",
+    "configure": "node-gyp configure",
+    "test": "jest",
+    "test:native": "node tests/test-binding.js"
+  },
+  "dependencies": {
+    "node-addon-api": "^6.1.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^9.4.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0"
+  },
+  "gypfile": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Do4ent/bendcore.git"
+  },
+  "keywords": [
+    "OCCT",
+    "CAD",
+    "geometry",
+    "STEP",
+    "3D",
+    "modeling"
+  ],
+  "author": "BendCore Development Team",
+  "license": "MIT"
+}
