@@ -753,6 +753,11 @@ add_executable(test_sketch2d tests/test_sketch2d.cpp)
 target_link_libraries(test_sketch2d PRIVATE bendcore_sketch2d)
 bendcore_add_test(sketch2d test_sketch2d)
 
+# P0: CAD Functionality Tests (STEP import, geometry recognition, bend detection)
+add_executable(test_cad_functionality tests/cad/test_cad_functionality.cpp)
+target_link_libraries(test_cad_functionality PRIVATE bendcore_core)
+bendcore_add_test(cad_functionality test_cad_functionality)
+
 # Комментарии и замечания (Q2 2027, Task 4)
 add_executable(test_comments tests/test_comments.cpp)
 target_link_libraries(test_comments PRIVATE bendcore_core)

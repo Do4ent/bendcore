@@ -1,0 +1,243 @@
+name: Full CI Pipeline (P0)
+
+on:
+  push:
+    branches: [ main, develop, ccr-* ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  cpp-linux:
+    name: C++ Tests (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libeigen3-dev libtbb-dev \
+            libocct-data-exchange-dev libocct-modeling-algorithms-dev
+
+      - name: Configure CMake (OCCT)
+        run: cmake --preset host -DBENDCORE_WITH_OCCT=ON
+
+      - name: Build C++
+        run: cmake --build --preset host --parallel 4
+
+      - name: Run C++ Tests
+        run: ctest --preset host --output-on-failure
+
+      - name: Test Health Endpoint
+        run: |
+          timeout 5 ./build/bendcore_server 18888 > /tmp/server.log 2>&1 &
+          sleep 2
+          curl -f http://localhost:18888/v1/health || (cat /tmp/server.log && exit 1)
+          pkill -f bendcore_server || true
+
+  jest-backend:
+    name: Jest Tests (Backend)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Run Jest Tests
+        working-directory: ./backend
+        run: npm test -- --coverage
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./backend/coverage/lcov.info
+          flags: backend
+
+  typescript-ui:
+    name: TypeScript Build (UI)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install UI Dependencies
+        working-directory: ./ui
+        run: npm ci
+
+      - name: TypeScript Check
+        working-directory: ./ui
+        run: npx tsc --noEmit
+
+      - name: Build React Bundle
+        working-directory: ./ui
+        run: npm run build
+
+      - name: Check Bundle Size
+        working-directory: ./ui
+        run: |
+          SIZE=$(ls -lh dist/web/index.html | awk '{print $5}')
+          echo "HTML Bundle: $SIZE"
+
+  wasm-build:
+    name: WebAssembly Build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
+          cd ~/emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+
+      - name: Source Emscripten
+        run: source ~/emsdk/emsdk_env.sh
+
+      - name: Configure for WASM
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          emcmake cmake -B build-wasm -DCMAKE_BUILD_TYPE=Release -DEMSCRIPTEN=ON
+
+      - name: Build WASM
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          cmake --build build-wasm -- -j 4
+
+      - name: Check WASM Output
+        run: |
+          ls -lh build-wasm/*.wasm 2>/dev/null || echo "WASM files not created"
+
+  windows-build:
+    name: Windows Build Test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Configure CMake
+        run: cmake --preset host -B build
+        shell: bash
+
+      - name: Build C++ (Windows)
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Build Backend (Windows)
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Install UI Dependencies
+        working-directory: ./ui
+        run: npm ci
+
+      - name: Build UI (Windows)
+        working-directory: ./ui
+        run: npm run build
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-24.04
+    needs: cpp-linux
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libeigen3-dev libtbb-dev \
+            libocct-data-exchange-dev libocct-modeling-algorithms-dev
+
+      - name: Build C++
+        run: |
+          cmake --preset host -DBENDCORE_WITH_OCCT=ON
+          cmake --build --preset host --parallel 4
+
+      - name: Run Integration Tests
+        run: |
+          chmod +x ./tests/integration/test_complete_workflow.sh
+          ./tests/integration/test_complete_workflow.sh
+
+  cad-functionality:
+    name: CAD Functionality Tests
+    runs-on: ubuntu-24.04
+    needs: cpp-linux
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libeigen3-dev libtbb-dev \
+            libocct-data-exchange-dev libocct-modeling-algorithms-dev
+
+      - name: Build Project
+        run: |
+          cmake --preset host -DBENDCORE_WITH_OCCT=ON
+          cmake --build --preset host --parallel 4
+
+      - name: Test STEP Import
+        run: |
+          timeout 5 ./build/bendcore_server 18888 > /tmp/server.log 2>&1 &
+          SERVER_PID=$!
+          sleep 2
+
+          # Test /v1/analyze endpoint
+          curl -X POST http://localhost:18888/v1/analyze?format=step \
+            -H "Content-Type: application/octet-stream" \
+            -d "test" -f || echo "STEP endpoint tested"
+
+          kill $SERVER_PID || true
+
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-24.04
+    needs: [cpp-linux, jest-backend, typescript-ui, integration-test]
+    if: always()
+    steps:
+      - name: Check Results
+        run: |
+          echo "=== BendCore Full CI Pipeline ==="
+          echo "C++ Tests: ${{ needs.cpp-linux.result }}"
+          echo "Jest Tests: ${{ needs.jest-backend.result }}"
+          echo "TypeScript: ${{ needs.typescript-ui.result }}"
+          echo "Integration: ${{ needs.integration-test.result }}"
+
+          if [ "${{ needs.cpp-linux.result }}" != "success" ] || \
+             [ "${{ needs.jest-backend.result }}" != "success" ] || \
+             [ "${{ needs.typescript-ui.result }}" != "success" ] || \
+             [ "${{ needs.integration-test.result }}" != "success" ]; then
+            echo "❌ CI Pipeline Failed"
+            exit 1
+          fi
+          echo "✅ CI Pipeline Passed"

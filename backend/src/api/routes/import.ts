@@ -235,15 +235,15 @@ router.post('/analyze', async (req: Request, res: Response): Promise<void> => {
         return;
       }
 
-      const analysisData = await analysisResponse.json();
+      const analysisData = (await analysisResponse.json()) as Record<string, any>;
 
       // Transform bendcore_server response to include ViewportMesh
       const transformedData = {
         ...analysisData,
-        viewportMesh: analysisData.mesh ? {
+        viewportMesh: (analysisData as any).mesh ? {
           id: `tube_${Date.now()}`,
           name: 'Imported Tube',
-          mesh: analysisData.mesh,
+          mesh: (analysisData as any).mesh,
           color: 0x1f6fc5
         } : undefined
       };
