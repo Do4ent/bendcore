@@ -1,0 +1,150 @@
+name: Windows (MSVC)
+
+# Первый шаг переноса: сборка ядра и тестов под MSVC x64 без Open CASCADE.
+# Запуск вручную, пока сборка не станет зелёной. Сервер bendcore_server (POSIX-сокеты) не собирается без OCCT.
+on:
+  push:
+    branches: [feature/windows-build]
+  workflow_dispatch:
+
+jobs:
+  msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Eigen через vcpkg
+        shell: bash
+        run: |
+          set -o pipefail
+          "$VCPKG_INSTALLATION_ROOT/vcpkg" install eigen3:x64-windows 2>&1 | tee "$GITHUB_WORKSPACE/vcpkg.log"
+
+      - name: Конфигурация CMake (MSVC x64)
+        shell: bash
+        run: |
+          set +e
+          echo "::notice title=cmake::$(which cmake) $(cmake --version 2>&1 | head -1)"
+          cmake -S . -B build -A x64 \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=x64-windows \
+            -DBENDCORE_EIGEN_DIR="$VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/eigen3" > configure.log 2>&1
+          rc=$?
+          echo "::notice title=cmake::exit $rc, log $(wc -l < configure.log) lines"
+          head -n 40 configure.log | while IFS= read -r line; do echo "::error title=cmake-head::${line:0:900}"; done
+          tail -n 60 configure.log | while IFS= read -r line; do echo "::error title=cmake-tail::${line:0:900}"; done
+          exit $rc
+
+      - name: Сборка (Release)
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --config Release --parallel 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Тесты
+        shell: bash
+        run: |
+          set -o pipefail
+          ctest --test-dir build -C Release --output-on-failure 2>&1 | tee "$GITHUB_WORKSPACE/test.log"
+
+      - name: Ошибки в аннотации (при падении)
+        if: failure()
+        shell: bash
+        run: |
+          # Логи шагов недоступны через API: ключевые строки выводятся аннотациями (читаются через check-runs).
+          for f in vcpkg.log configure.log build.log test.log; do
+            [ -f "$f" ] || continue
+            tail -n 30 "$f" | cat -n \
+              | while IFS= read -r line; do echo "::error title=$f::${line:0:900}"; done
+          done
+          echo "::notice title=eigen::$(ls "$VCPKG_INSTALLATION_ROOT/installed/x64-windows/share/eigen3" 2>&1 | tr '\n' ' ')"
+
+      - name: Логи (всегда)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bendcore-windows-logs
+          path: |
+            vcpkg.log
+            configure.log
+            build.log
+            test.log
+          if-no-files-found: warn
+
+  # Open CASCADE V8.0.1 под MSVC x64 (статически, тот же минимальный набор модулей, что в Linux-задаче).
+  # Установка кэшируется; сборка OCCT идёт только при промахе кэша.
+  msvc-occt:
+    runs-on: windows-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Eigen через vcpkg
+        shell: bash
+        run: |
+          set -o pipefail
+          "$VCPKG_INSTALLATION_ROOT/vcpkg" install eigen3:x64-windows 2>&1 | tee "$GITHUB_WORKSPACE/vcpkg.log"
+
+      - name: Кэш установки OCCT (MSVC x64)
+        id: occt-cache
+        uses: actions/cache@v4
+        with:
+          path: C:/occt-install
+          key: occt-msvc-V8.0.1-static-v1
+
+      - name: Сборка и установка OCCT V8.0.1 (MSVC x64)
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            git clone --depth 1 --branch V8.0.1 https://github.com/Open-Cascade-SAS/OCCT.git C:/occt-src
+            cmake -S C:/occt-src -B C:/occt-build -A x64 -DCMAKE_INSTALL_PREFIX=C:/occt-install \
+              -DBUILD_LIBRARY_TYPE=Static -DBUILD_MODULE_Visualization=OFF \
+              -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_Draw=OFF \
+              -DBUILD_SAMPLES=OFF -DUSE_TBB=OFF -DUSE_FREETYPE=OFF -DUSE_FREEIMAGE=OFF \
+              -DUSE_RAPIDJSON=OFF -DUSE_VTK=OFF -DUSE_OPENGL=OFF -DBUILD_Inspector=OFF
+            cmake --build C:/occt-build --config Release --parallel
+            cmake --install C:/occt-build --config Release
+            # Как в Linux-задаче: установка может не скопировать все заголовки, добираем из дерева сборки.
+            mkdir -p C:/occt-install/include/opencascade
+            cp -rn C:/occt-build/include/opencascade/. C:/occt-install/include/opencascade/ || true
+          } > "$GITHUB_WORKSPACE/occt-msvc-build.log" 2>&1
+          rc=$?
+          [ $rc -ne 0 ] && tail -n 80 "$GITHUB_WORKSPACE/occt-msvc-build.log" | while IFS= read -r l; do echo "::error title=occt::${l:0:900}"; done
+          exit $rc
+
+      - name: Конфигурация bendcore с OCCT (MSVC x64)
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -S . -B build-occt -A x64 \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=x64-windows \
+            -DBENDCORE_EIGEN_DIR="$VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/eigen3" \
+            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=C:/occt-install > "$GITHUB_WORKSPACE/configure-occt.log" 2>&1
+          rc=$?
+          [ $rc -ne 0 ] && tail -n 60 "$GITHUB_WORKSPACE/configure-occt.log" | while IFS= read -r l; do echo "::error title=cmake-occt::${l:0:900}"; done
+          exit $rc
+
+      - name: Сборка и тесты с OCCT (MSVC x64)
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build-occt --config Release --parallel > "$GITHUB_WORKSPACE/build-occt.log" 2>&1 || {
+            rc=$?; grep -E "error C|error LNK|fatal error" "$GITHUB_WORKSPACE/build-occt.log" | head -n 40 \
+              | while IFS= read -r l; do echo "::error title=build-occt::${l:0:900}"; done; exit $rc; }
+          ctest --test-dir build-occt -C Release --output-on-failure > "$GITHUB_WORKSPACE/test-occt.log" 2>&1 || {
+            rc=$?; tail -n 60 "$GITHUB_WORKSPACE/test-occt.log" | while IFS= read -r l; do echo "::error title=test-occt::${l:0:900}"; done; exit $rc; }
+
+      - name: Логи OCCT-задачи (всегда)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bendcore-windows-occt-logs
+          path: |
+            vcpkg.log
+            occt-msvc-build.log
+            configure-occt.log
+            build-occt.log
+            test-occt.log
+          if-no-files-found: warn
