@@ -2,7 +2,6 @@
 #include "bendcore/serialization/document_serializer.hpp"
 #include <algorithm>
 #include <cstring>
-#include <zlib.h>
 
 namespace BendCore::CadCore {
 

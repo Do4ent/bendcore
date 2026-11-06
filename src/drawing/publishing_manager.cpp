@@ -379,7 +379,11 @@ std::vector<DrawingVersion> getDrawingVersionHistory(
         v.file_path = entry.path().string();
         auto mtime = fs::last_write_time(entry.path(), ec);
         if (!ec) {
-            v.timestamp = std::chrono::clock_cast<std::chrono::system_clock>(mtime);
+            // C++20 compatible: convert file_time to system_clock via duration
+            auto dur = mtime.time_since_epoch();
+            v.timestamp = std::chrono::system_clock::time_point(
+                std::chrono::duration_cast<std::chrono::system_clock::duration>(dur)
+            );
         }
         versions.push_back(std::move(v));
     }

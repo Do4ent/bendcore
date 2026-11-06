@@ -2,7 +2,11 @@
 #include "nlohmann/json.hpp"
 #include <fstream>
 #include <sstream>
+#ifdef __EMSCRIPTEN__
+#include "../../third_party/zlib_stub.hpp"
+#else
 #include <zlib.h>
+#endif
 #include <cstring>
 #include <filesystem>
 

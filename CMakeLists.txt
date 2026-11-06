@@ -48,10 +48,10 @@ endif()
 # OpenSSL: ядру не нужен (SHA-256 чертежей — своя реализация в drawing.cpp). Ищется для модулей вне ядра.
 find_package(OpenSSL QUIET)
 
-# zlib (сжатие истории и сериализации документа). Под Emscripten — встроенный порт USE_ZLIB.
+# zlib (сжатие истории и сериализации документа).
+# Для WASM: zlib не требуется (не используется в bindings.cpp; только dwfx_parser,
+# который не экспортируется в WASM). Используем пустую INTERFACE library для совместимости.
 if(EMSCRIPTEN)
-  add_compile_options(-sUSE_ZLIB=1)
-  add_link_options(-sUSE_ZLIB=1)
   add_library(bendcore_zlib INTERFACE)
 else()
   find_package(ZLIB REQUIRED)
