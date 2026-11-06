@@ -143,11 +143,43 @@ endif()
 # Find OCCT on all platforms (Windows, Linux, macOS)
 set(BENDCORE_OCCT_DIR "" CACHE PATH "OCCT install directory (build with: third_party/build_occt.sh)")
 
+# Explicit OCCT toolkit set (docs/kernel/OCCT_BUILD.md). The list lives in
+# third_party/occt_toolkits.txt so that the native link line here and the WASM
+# OCCT build (third_party/build_occt_wasm.sh) use the same toolkits.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/occt_toolkits.txt" _bendcore_occt_tk_lines REGEX "^TK")
+# Editing the list re-runs the configuration.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party/occt_toolkits.txt")
+set(BENDCORE_OCCT_TOOLKITS "")
+foreach(_line IN LISTS _bendcore_occt_tk_lines)
+  string(REGEX MATCH "^TK[A-Za-z0-9_]+" _tk "${_line}")
+  list(APPEND BENDCORE_OCCT_TOOLKITS ${_tk})
+endforeach()
+if(NOT BENDCORE_OCCT_TOOLKITS)
+  message(FATAL_ERROR "third_party/occt_toolkits.txt lists no OCCT toolkits")
+endif()
+
+# Resolves BENDCORE_OCCT_TOOLKITS to static libraries under <dir>/lib; a missing
+# toolkit is a configuration error (no silent partial link).
+function(bendcore_resolve_occt_toolkits dir out_var)
+  set(_libs "")
+  foreach(_tk IN LISTS BENDCORE_OCCT_TOOLKITS)
+    set(_lib "${dir}/lib/lib${_tk}.a")
+    if(NOT EXISTS "${_lib}")
+      message(FATAL_ERROR "OCCT toolkit ${_tk} is required (third_party/occt_toolkits.txt) "
+                          "but ${_lib} does not exist. Rebuild OCCT with third_party/build_occt.sh "
+                          "(static libraries only).")
+    endif()
+    list(APPEND _libs "${_lib}")
+  endforeach()
+  set(${out_var} "${_libs}" PARENT_SCOPE)
+endfunction()
+
 if(BENDCORE_OCCT_DIR)
   # Use manually built OCCT
   set(OpenCASCADE_FOUND TRUE)
   set(OpenCASCADE_INCLUDE_DIRS "${BENDCORE_OCCT_DIR}/include/opencascade")
-  file(GLOB OpenCASCADE_LIBRARIES "${BENDCORE_OCCT_DIR}/lib/libTK*.a")
+  bendcore_resolve_occt_toolkits("${BENDCORE_OCCT_DIR}" OpenCASCADE_LIBRARIES)
   message(STATUS "Using OCCT from: ${BENDCORE_OCCT_DIR}")
   message(STATUS "  Headers: ${OpenCASCADE_INCLUDE_DIRS}")
   message(STATUS "  Libraries: ${OpenCASCADE_LIBRARIES}")
@@ -862,17 +894,17 @@ bendcore_add_test(e2e_analytics e2e_analytics)
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
 # Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
-# содержит нераскрытые переменные, поэтому библиотеки подключаются напрямую из lib/libTK*.a.
+# содержит нераскрытые переменные, поэтому библиотеки подключаются напрямую из lib/libTK<имя>.a
+# по явному списку BENDCORE_OCCT_TOOLKITS (third_party/occt_toolkits.txt).
 set(BENDCORE_OCCT_DIR "" CACHE PATH "Каталог установки Open CASCADE (include/opencascade, lib/libTK*.a)")
 option(BENDCORE_WITH_OCCT "Собрать проверку тела трубы на Open CASCADE" OFF)
 if(BENDCORE_WITH_OCCT)
   if(NOT BENDCORE_OCCT_DIR)
     message(FATAL_ERROR "BENDCORE_WITH_OCCT=ON: укажите BENDCORE_OCCT_DIR")
   endif()
-  file(GLOB BENDCORE_OCCT_LIBS "${BENDCORE_OCCT_DIR}/lib/libTK*.a")
-  if(NOT BENDCORE_OCCT_LIBS)
-    message(FATAL_ERROR "В ${BENDCORE_OCCT_DIR}/lib нет libTK*.a (только статическая сборка поддержана)")
-  endif()
+  # Тот же явный набор тулкитов (BENDCORE_OCCT_TOOLKITS), что и для bendcore_import;
+  # отсутствие любого из них — ошибка конфигурации.
+  bendcore_resolve_occt_toolkits("${BENDCORE_OCCT_DIR}" BENDCORE_OCCT_LIBS)
   add_library(bendcore_occt STATIC src/occt/tube_body_occt.cpp src/occt/geometry_backend_occt.cpp)
   target_include_directories(bendcore_occt SYSTEM PRIVATE "${BENDCORE_OCCT_DIR}/include/opencascade")
   target_link_libraries(bendcore_occt PUBLIC bendcore_core
