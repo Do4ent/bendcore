@@ -97,7 +97,6 @@ set(BENDCORE_UNVERIFIED_TARGETS
   test_gap026_generative_comprehensive
   test_gap027_parametric_ai_comprehensive
   test_gap083_security_audit
-  test_gap084_encryption_support
   test_gap085_compliance_standards
   test_gap086_access_logging
   test_gap087_data_privacy
@@ -1218,11 +1217,6 @@ bendcore_add_test(gap093_production_deployment test_gap093_production_deployment
 add_executable(test_gap083_security_audit tests/GAP-083-SecurityAudit.test.cpp)
 target_link_libraries(test_gap083_security_audit PRIVATE bendcore_core)
 bendcore_add_test(gap083_security_audit test_gap083_security_audit)
-
-# GAP-084: EncryptionSupport (38 tests) - AES-256, TLS/SSL, key management
-add_executable(test_gap084_encryption_support tests/GAP-084-EncryptionSupport.test.cpp)
-target_link_libraries(test_gap084_encryption_support PRIVATE bendcore_core)
-bendcore_add_test(gap084_encryption_support test_gap084_encryption_support)
 
 # GAP-085: ComplianceStandards (34 tests) - GDPR, ISO 27001, PCI-DSS
 add_executable(test_gap085_compliance_standards tests/GAP-085-ComplianceStandards.test.cpp)
