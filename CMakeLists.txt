@@ -894,6 +894,15 @@ if(BENDCORE_WITH_OCCT)
   target_link_libraries(test_server PRIVATE bendcore_server_core)
   target_compile_definitions(test_server PRIVATE BENDCORE_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
   bendcore_add_test(server test_server)
+
+  # Ядро CAD на OCCT (docs/ROADMAP_GENERAL_CAD.md). Каждый модуль подключается своим
+  # файлом, чтобы параллельные ветки не конфликтовали (docs/PROJECT_PROCESS.md, раздел 5).
+  include(cmake/kernel_core.cmake OPTIONAL)
+  include(cmake/kernel_healing.cmake OPTIONAL)
+  include(cmake/modeling.cmake OPTIONAL)
+  include(cmake/assembly.cmake OPTIONAL)
+  include(cmake/drawing.cmake OPTIONAL)
+  include(cmake/qa.cmake OPTIONAL)
 endif()
 
 # Phase C: Parameter Store, Dependency Graph, Rebuild Engine
