@@ -2,6 +2,26 @@
 
 Новые записи — сверху. Формат: дата, фаза, что сделано, решения, следующий шаг.
 
+## 2026-11-07 — Фаза 0, п. 1: явный набор OCCT, OCCT для WASM (инженер ядра)
+
+Сделано:
+- `file(GLOB libTK*.a)` в корневом `CMakeLists.txt` заменён списком
+  `BENDCORE_OCCT_TOOLKITS` из `third_party/occt_toolkits.txt` (29 тулкитов); отсутствие
+  тулкита — ошибка конфигурации. Результат `ctest` в `build-occt` не изменился.
+- `third_party/build_occt_wasm.sh`: OCCT 8.0.1 для Emscripten только с этими тулкитами,
+  пробная программа `tests/kernel/wasm/occt_size_probe.cpp` (STEP из памяти, BRepMesh)
+  проходит под node. `.wasm` пробной программы: 15,9 МБ / 4,6 МБ gzip (`-Oz`).
+- `docs/kernel/OCCT_BUILD.md`.
+
+Решения:
+- К списку плана добавлены TKVCAF, TKV3d, TKService: их требует TKXCAF в OCCT 8.0.1
+  (символы указаны в документе).
+- Один файл списка для native и WASM, чтобы наборы не расходились.
+- Исключения `-fexceptions`, как у существующей цели `bendcore_wasm`.
+
+Следующий шаг: job CI для WASM-сборки OCCT (инженер качества, описание в
+`docs/kernel/OCCT_BUILD.md`, раздел 4); перевод `build_occt.sh` на тот же список.
+
 ## 2026-11-06 — Фаза 0 запущена
 
 Сделано:
