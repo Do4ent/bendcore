@@ -1,20 +1,14 @@
 #include "feature_common.hpp"
 
-#include <BRepAdaptor_Curve.hxx>
-#include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepCheck_Analyzer.hxx>
-#include <BRepClass_FaceClassifier.hxx>
 #include <BRepGProp.hxx>
-#include <BRepTools.hxx>
+#include <BRepTools_History.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
-#include <GeomAPI_ProjectPointOnCurve.hxx>
-#include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <GeomLib_IsPlanarSurface.hxx>
-#include <Geom_Curve.hxx>
 #include <Geom_Surface.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp.hxx>
@@ -23,12 +17,10 @@
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <TopoDS_Wire.hxx>
-#include <gp_Pnt2d.hxx>
 
 #include <algorithm>
 #include <cmath>
 #include <map>
-#include <set>
 #include <sstream>
 
 namespace bendcore::modeling {
@@ -220,98 +212,7 @@ Result<TransformedCopy> transformCopy(const TopoDS_Shape& shape, const gp_Trsf& 
     }
 }
 
-// ---------------------------------------------------------------- восстановление истории
-
-namespace {
-
-struct InputFace {
-    TopoDS_Face face;
-    opencascade::handle<Geom_Surface> surface;
-    double u0 = 0, u1 = 0, v0 = 0, v1 = 0;
-    Bnd_Box box;
-    int input = 0;
-};
-
-struct InputEdge {
-    TopoDS_Edge edge;
-    opencascade::handle<Geom_Curve> curve;
-    double first = 0, last = 0;
-    Bnd_Box box;
-    int input = 0;
-};
-
-struct InputVertex {
-    TopoDS_Vertex vertex;
-    gp_Pnt point;
-    int input = 0;
-};
-
-enum class OnFace { Out, On, In };
-
-OnFace classifyOnFace(const gp_Pnt& p, const InputFace& f, double tol) {
-    if (f.box.IsOut(p)) return OnFace::Out;
-    const double du = 1e-3 * std::max(1.0, f.u1 - f.u0), dv = 1e-3 * std::max(1.0, f.v1 - f.v0);
-    GeomAPI_ProjectPointOnSurf proj(p, f.surface, f.u0 - du, f.u1 + du, f.v0 - dv, f.v1 + dv);
-    if (!proj.IsDone() || proj.NbPoints() == 0) return OnFace::Out;
-    if (proj.LowerDistance() > tol) return OnFace::Out;
-    double u, v;
-    proj.LowerDistanceParameters(u, v);
-    BRepClass_FaceClassifier cls(f.face, gp_Pnt2d(u, v), tol);
-    switch (cls.State()) {
-        case TopAbs_IN: return OnFace::In;
-        case TopAbs_ON: return OnFace::On;
-        default: return OnFace::Out;
-    }
-}
-
-bool onEdge(const gp_Pnt& p, const InputEdge& e, double tol) {
-    if (e.box.IsOut(p)) return false;
-    GeomAPI_ProjectPointOnCurve proj(p, e.curve, e.first, e.last);
-    if (proj.NbPoints() == 0) {
-        return e.curve->Value(e.first).Distance(p) <= tol || e.curve->Value(e.last).Distance(p) <= tol;
-    }
-    return proj.LowerDistance() <= tol;
-}
-
-// Точки строго внутри грани (сетка по параметрам + классификатор).
-std::vector<gp_Pnt> interiorSamples(const TopoDS_Face& face, double tol) {
-    std::vector<gp_Pnt> pts;
-    double u0, u1, v0, v1;
-    BRepTools::UVBounds(face, u0, u1, v0, v1);
-    BRepAdaptor_Surface surf(face, false);
-    for (int n : {7, 25, 81}) {
-        pts.clear();
-        for (int i = 0; i < n; ++i)
-            for (int j = 0; j < n; ++j) {
-                const double u = u0 + (u1 - u0) * (i + 0.5) / n;
-                const double v = v0 + (v1 - v0) * (j + 0.5) / n;
-                BRepClass_FaceClassifier cls(face, gp_Pnt2d(u, v), tol);
-                if (cls.State() == TopAbs_IN) pts.push_back(surf.Value(u, v));
-            }
-        if (!pts.empty()) break;
-    }
-    if (pts.size() > 9) {
-        std::vector<gp_Pnt> picked;
-        for (int k = 0; k < 9; ++k) picked.push_back(pts[(pts.size() - 1) * k / 8]);
-        pts = picked;
-    }
-    return pts;
-}
-
-std::vector<gp_Pnt> edgeSamples(const TopoDS_Edge& edge) {
-    BRepAdaptor_Curve c(edge);
-    const double f = c.FirstParameter(), l = c.LastParameter();
-    return {c.Value(f + 0.25 * (l - f)), c.Value(f + 0.5 * (l - f)), c.Value(f + 0.75 * (l - f))};
-}
-
-Bnd_Box boxOf(const TopoDS_Shape& s, double gap) {
-    Bnd_Box b;
-    BRepBndLib::Add(s, b, false);
-    b.Enlarge(gap);
-    return b;
-}
-
-}  // namespace
+// ---------------------------------------------------------------- история булевой операции
 
 Result<BooleanStep> booleanWithHistory(kernel::BooleanType type, const std::vector<TopoDS_Shape>& arguments,
                                        const std::vector<TopoDS_Shape>& tools, bool trackArguments,
@@ -323,205 +224,50 @@ Result<BooleanStep> booleanWithHistory(kernel::BooleanType type, const std::vect
     step.warnings = res.value().warnings;
     step.fuzzyValue = res.value().fuzzyValue;
     step.history = newHistory();
+    const History& kernelHistory = res.value().history;
 
     try {
-        const double tol = std::max(1e-5, 10.0 * step.fuzzyValue);
+        ShapeMap trackedMap, untrackedMap, resMap;
+        for (const auto& s : arguments) TopExp::MapShapes(s, trackArguments ? trackedMap : untrackedMap);
+        for (const auto& s : tools) TopExp::MapShapes(s, trackTools ? trackedMap : untrackedMap);
+        TopExp::MapShapes(step.shape, resMap);
 
-        std::vector<TopoDS_Shape> inputs(arguments);
-        inputs.insert(inputs.end(), tools.begin(), tools.end());
-        const int nArgs = static_cast<int>(arguments.size());
-        auto tracked = [&](int input) { return input < nArgs ? trackArguments : trackTools; };
-
-        // Элементы входов (без повторов между входами).
-        ShapeMap inFaceMap, inEdgeMap, inVertexMap, inSolidMap;
-        std::vector<InputFace> inFaces;
-        std::vector<InputEdge> inEdges;
-        std::vector<InputVertex> inVertices;
-        std::vector<int> solidInput;
-        for (int k = 0; k < static_cast<int>(inputs.size()); ++k) {
-            ShapeMap m;
-            TopExp::MapShapes(inputs[k], TopAbs_FACE, m);
-            for (int i = 1; i <= m.Extent(); ++i) {
-                if (inFaceMap.Contains(m(i))) continue;
-                inFaceMap.Add(m(i));
-                InputFace f;
-                f.face = TopoDS::Face(m(i));
-                f.surface = BRep_Tool::Surface(f.face);
-                BRepTools::UVBounds(f.face, f.u0, f.u1, f.v0, f.v1);
-                f.box = boxOf(f.face, tol + BRep_Tool::Tolerance(f.face));
-                f.input = k;
-                inFaces.push_back(f);
-            }
-            m.Clear();
-            TopExp::MapShapes(inputs[k], TopAbs_EDGE, m);
-            for (int i = 1; i <= m.Extent(); ++i) {
-                if (inEdgeMap.Contains(m(i))) continue;
-                const TopoDS_Edge e = TopoDS::Edge(m(i));
-                inEdgeMap.Add(e);
-                InputEdge ie;
-                ie.edge = e;
-                ie.input = k;
-                if (!BRep_Tool::Degenerated(e)) {
-                    ie.curve = BRep_Tool::Curve(e, ie.first, ie.last);
-                    ie.box = boxOf(e, tol + BRep_Tool::Tolerance(e));
-                }
-                inEdges.push_back(ie);
-            }
-            m.Clear();
-            TopExp::MapShapes(inputs[k], TopAbs_VERTEX, m);
-            for (int i = 1; i <= m.Extent(); ++i) {
-                if (inVertexMap.Contains(m(i))) continue;
-                inVertexMap.Add(m(i));
-                const TopoDS_Vertex v = TopoDS::Vertex(m(i));
-                inVertices.push_back({v, BRep_Tool::Pnt(v), k});
-            }
-            m.Clear();
-            TopExp::MapShapes(inputs[k], TopAbs_SOLID, m);
-            for (int i = 1; i <= m.Extent(); ++i) {
-                if (inSolidMap.Contains(m(i))) continue;
-                inSolidMap.Add(m(i));
-                solidInput.push_back(k);
-            }
-        }
-
-        std::vector<bool> faceHasImage(inFaces.size(), false), edgeHasImage(inEdges.size(), false),
-            vertexHasImage(inVertices.size(), false), solidHasImage(inSolidMap.Extent(), false);
-
-        ShapeMap resFaces, resEdges, resVertices, resSolids;
-        TopExp::MapShapes(step.shape, TopAbs_FACE, resFaces);
-        TopExp::MapShapes(step.shape, TopAbs_EDGE, resEdges);
-        TopExp::MapShapes(step.shape, TopAbs_VERTEX, resVertices);
-        TopExp::MapShapes(step.shape, TopAbs_SOLID, resSolids);
-
-        // Прообразы граней результата: индексы граней входа.
-        std::vector<std::vector<int>> faceOrigins(resFaces.Extent() + 1);
-        for (int r = 1; r <= resFaces.Extent(); ++r) {
-            const TopoDS_Face rf = TopoDS::Face(resFaces(r));
-            if (const int idx = inFaceMap.FindIndex(rf); idx > 0) {
-                faceHasImage[idx - 1] = true;
-                faceOrigins[r].push_back(idx - 1);
+        // История ядра, ограниченная элементами отслеживаемых входов. Пустой результат
+        // (booleanOp возвращает его без истории) — все элементы входов удалены.
+        ShapeMap fromTracked;
+        for (int i = 1; i <= trackedMap.Extent(); ++i) {
+            const TopoDS_Shape& s = trackedMap(i);
+            if (!BRepTools_History::IsSupportedType(s)) continue;
+            if (kernelHistory.IsNull()) {
+                if (!resMap.Contains(s)) step.history->Remove(s);
+                else fromTracked.Add(s);
                 continue;
             }
-            const double ftol = tol + BRep_Tool::Tolerance(rf);
-            const std::vector<gp_Pnt> pts = interiorSamples(rf, ftol);
-            if (pts.empty()) {
-                step.warnings.push_back("history: no interior sample on a result face");
-                continue;
+            if (kernelHistory->IsRemoved(s)) step.history->Remove(s);
+            for (const TopoDS_Shape& m : kernelHistory->Modified(s)) {
+                step.history->AddModified(s, m);
+                fromTracked.Add(m);
             }
-            for (int i = 0; i < static_cast<int>(inFaces.size()); ++i) {
-                bool all = true, anyIn = false;
-                for (const auto& p : pts) {
-                    const OnFace s = classifyOnFace(p, inFaces[i], ftol);
-                    if (s == OnFace::Out) { all = false; break; }
-                    anyIn = anyIn || s == OnFace::In;
-                }
-                if (!all || !anyIn) continue;
-                faceOrigins[r].push_back(i);
-                faceHasImage[i] = true;
-                if (tracked(inFaces[i].input)) step.history->AddModified(inFaces[i].face, rf);
+            for (const TopoDS_Shape& g : kernelHistory->Generated(s)) {
+                step.history->AddGenerated(s, g);
+                fromTracked.Add(g);
             }
-            if (faceOrigins[r].empty()) step.warnings.push_back("history: a result face has no origin among inputs");
-        }
-        for (int r = 1; r <= resFaces.Extent(); ++r) {
-            bool fromTracked = false;
-            for (int i : faceOrigins[r]) fromTracked = fromTracked || tracked(inFaces[i].input);
-            if (!fromTracked && !faceOrigins[r].empty()) step.untrackedImages.push_back(resFaces(r));
+            if (resMap.Contains(s)) fromTracked.Add(s);
         }
 
-        for (int r = 1; r <= resEdges.Extent(); ++r) {
-            const TopoDS_Edge re = TopoDS::Edge(resEdges(r));
-            if (const int idx = inEdgeMap.FindIndex(re); idx > 0) {
-                edgeHasImage[idx - 1] = true;
-                continue;
-            }
-            if (BRep_Tool::Degenerated(re)) continue;
-            const double etol = tol + BRep_Tool::Tolerance(re);
-            const std::vector<gp_Pnt> pts = edgeSamples(re);
-            bool found = false;
-            for (int i = 0; i < static_cast<int>(inEdges.size()); ++i) {
-                if (inEdges[i].curve.IsNull()) continue;
-                bool all = true;
-                for (const auto& p : pts)
-                    if (!onEdge(p, inEdges[i], etol)) { all = false; break; }
-                if (!all) continue;
-                found = true;
-                edgeHasImage[i] = true;
-                if (tracked(inEdges[i].input)) step.history->AddModified(inEdges[i].edge, re);
-            }
-            if (found) continue;
-            for (const auto& f : inFaces) {
-                if (!tracked(f.input)) continue;
-                bool all = true;
-                for (const auto& p : pts)
-                    if (classifyOnFace(p, f, etol) == OnFace::Out) { all = false; break; }
-                if (all) step.history->AddGenerated(f.face, re);
-            }
+        // Грани результата, происходящие только из неотслеживаемых входов.
+        ShapeMap untrackedFaces;
+        for (int i = 1; i <= untrackedMap.Extent(); ++i) {
+            const TopoDS_Shape& s = untrackedMap(i);
+            if (s.ShapeType() != TopAbs_FACE) continue;
+            ShapeList images;
+            if (resMap.Contains(s)) images.Append(s);
+            if (!kernelHistory.IsNull())
+                for (const TopoDS_Shape& m : kernelHistory->Modified(s)) images.Append(m);
+            for (const TopoDS_Shape& f : images)
+                if (!fromTracked.Contains(f)) untrackedFaces.Add(f);
         }
-
-        for (int r = 1; r <= resVertices.Extent(); ++r) {
-            const TopoDS_Vertex rv = TopoDS::Vertex(resVertices(r));
-            if (const int idx = inVertexMap.FindIndex(rv); idx > 0) {
-                vertexHasImage[idx - 1] = true;
-                continue;
-            }
-            const gp_Pnt p = BRep_Tool::Pnt(rv);
-            const double vtol = tol + BRep_Tool::Tolerance(rv);
-            bool found = false;
-            for (int i = 0; i < static_cast<int>(inVertices.size()); ++i) {
-                if (inVertices[i].point.Distance(p) > vtol) continue;
-                found = true;
-                vertexHasImage[i] = true;
-                if (tracked(inVertices[i].input)) step.history->AddModified(inVertices[i].vertex, rv);
-            }
-            if (found) continue;
-            for (const auto& e : inEdges)
-                if (!e.curve.IsNull() && tracked(e.input) && onEdge(p, e, vtol))
-                    step.history->AddGenerated(e.edge, rv);
-        }
-
-        // Тела: образ тела входа — тело результата, у которого есть грань из этого тела.
-        // Для вычитания инструменты телами-прообразами не считаются.
-        std::vector<std::set<int>> faceOwners(inFaces.size());
-        for (int s = 1; s <= inSolidMap.Extent(); ++s) {
-            ShapeMap fm;
-            TopExp::MapShapes(inSolidMap(s), TopAbs_FACE, fm);
-            for (int i = 1; i <= fm.Extent(); ++i)
-                if (const int idx = inFaceMap.FindIndex(fm(i)); idx > 0) faceOwners[idx - 1].insert(s);
-        }
-        for (int r = 1; r <= resSolids.Extent(); ++r) {
-            const TopoDS_Shape rs = resSolids(r);
-            if (const int idx = inSolidMap.FindIndex(rs); idx > 0) {
-                solidHasImage[idx - 1] = true;
-                continue;
-            }
-            std::set<int> owners;
-            ShapeMap fm;
-            TopExp::MapShapes(rs, TopAbs_FACE, fm);
-            for (int i = 1; i <= fm.Extent(); ++i) {
-                const int ri = resFaces.FindIndex(fm(i));
-                if (ri <= 0) continue;
-                for (int fi : faceOrigins[ri]) owners.insert(faceOwners[fi].begin(), faceOwners[fi].end());
-            }
-            for (int s : owners) {
-                const int input = solidInput[s - 1];
-                if (type == kernel::BooleanType::Cut && input >= nArgs) continue;
-                solidHasImage[s - 1] = true;
-                if (tracked(input)) step.history->AddModified(inSolidMap(s), rs);
-            }
-        }
-
-        for (std::size_t i = 0; i < inFaces.size(); ++i)
-            if (!faceHasImage[i] && tracked(inFaces[i].input)) step.history->Remove(inFaces[i].face);
-        for (std::size_t i = 0; i < inEdges.size(); ++i)
-            if (!edgeHasImage[i] && tracked(inEdges[i].input) &&
-                step.history->Generated(inEdges[i].edge).IsEmpty())
-                step.history->Remove(inEdges[i].edge);
-        for (std::size_t i = 0; i < inVertices.size(); ++i)
-            if (!vertexHasImage[i] && tracked(inVertices[i].input) &&
-                step.history->Generated(inVertices[i].vertex).IsEmpty())
-                step.history->Remove(inVertices[i].vertex);
-        for (int s = 1; s <= inSolidMap.Extent(); ++s)
-            if (!solidHasImage[s - 1] && tracked(solidInput[s - 1])) step.history->Remove(inSolidMap(s));
+        for (int i = 1; i <= untrackedFaces.Extent(); ++i) step.untrackedImages.push_back(untrackedFaces(i));
         return step;
     } catch (const Standard_Failure& e) {
         return Error{ErrorCode::OperationFailed, occtMessage("boolean history", e.what())};

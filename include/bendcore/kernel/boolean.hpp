@@ -5,7 +5,9 @@
 
 #include <bendcore/kernel/result.hpp>
 
+#include <BRepTools_History.hxx>
 #include <TopoDS_Shape.hxx>
+#include <Standard_Handle.hxx>
 
 #include <optional>
 #include <string>
@@ -44,6 +46,13 @@ struct BooleanResult {
     bool simplifyApplied = false;  // применён SimplifyResult
     double volume = 0.0;       // объём результата, мм³
     std::vector<std::string> warnings;  // предупреждения OCCT и причины отказа прежних попыток
+    // История удачной попытки от элементов входов (аргументов и инструментов) к shape:
+    // BRepAlgoAPI_BuilderAlgo::History() — история булевой операции (BOPAlgo_Builder), а если
+    // simplifyApplied — уже объединённая (BRepTools_History::Merge) с историей
+    // ShapeUpgrade_UnifySameDomain. Если SimplifyResult отвергнут, — история до упрощения.
+    // Элемент входа, не упомянутый в истории и присутствующий в shape, не изменился.
+    // Пустая (null), если результат не содержит граней (Cut/Common без остатка).
+    opencascade::handle<BRepTools_History> history;
 };
 
 // Ошибки: InvalidInput — пустая форма или вход не прошёл BRepAlgoAPI_Check;
