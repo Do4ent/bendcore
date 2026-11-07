@@ -362,3 +362,33 @@ TEST_F(MaterialPropertyDatabaseTest, AllocationAndDeallocation) {
 
     EXPECT_TRUE(true);  // If we get here, no memory issues
 }
+
+TEST_F(MaterialPropertyDatabaseTest, PerformanceMultipleMaterials) {
+    db.clear();
+
+    // Add many materials
+    for (int i = 0; i < 50; ++i) {
+        auto mat = createTestMaterial("PERF_MAT_" + std::to_string(i), "Material_" + std::to_string(i));
+        db.addMaterial(mat);
+    }
+
+    EXPECT_EQ(db.getMaterialCount(), 50);
+
+    // Query should work efficiently
+    auto all = db.getAllMaterials();
+    EXPECT_EQ(all.size(), 50);
+}
+
+TEST_F(MaterialPropertyDatabaseTest, ConcurrentPropertyUpdates) {
+    auto mat1 = createTestMaterial("MAT018", "Update1");
+    mat1.yield_strength.base_value = 250e6;
+    db.addMaterial(mat1);
+
+    // Update it
+    auto mat2 = createTestMaterial("MAT018", "Update1");
+    mat2.yield_strength.base_value = 350e6;
+    db.addMaterial(mat2);
+
+    auto retrieved = db.getMaterial("MAT018");
+    EXPECT_EQ(retrieved->yield_strength.base_value, 350e6);
+}

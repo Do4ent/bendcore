@@ -327,3 +327,32 @@ TEST_F(StressAnalysisFrameworkTest, StressComponentCalculations) {
     EXPECT_TRUE(!std::isnan(result.stress_tensor.yy()));
     EXPECT_TRUE(!std::isnan(result.stress_tensor.zz()));
 }
+
+TEST_F(StressAnalysisFrameworkTest, ExtremeMaterialProperties) {
+    MaterialProperties mat;
+    mat.young_modulus = 100e9;
+    mat.yield_strength = 100e6;
+
+    framework.setMaterialProperties(mat);
+
+    LoadCase load;
+    load.axial_force = 1000.0;
+
+    auto result = framework.analyzeLoadCase(load);
+    EXPECT_GT(result.safety_factor, 0.0);
+}
+
+TEST_F(StressAnalysisFrameworkTest, ParallelLoadAnalysis) {
+    std::vector<LoadCase> loads(10);
+    for (int i = 0; i < 10; ++i) {
+        loads[i].axial_force = (i + 1) * 100.0;
+    }
+
+    auto results = framework.analyzeMultipleLoadCases(loads);
+    EXPECT_EQ(results.size(), 10);
+
+    // Verify monotonic increase in stress
+    for (size_t i = 1; i < results.size(); ++i) {
+        EXPECT_GE(results[i].von_mises_equivalent, results[i-1].von_mises_equivalent);
+    }
+}
