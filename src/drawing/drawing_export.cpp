@@ -16,8 +16,6 @@ ExportResult exportDrawing(
     const ExportOptions& options) {
 
     ExportResult result;
-    auto start_time = std::chrono::system_clock::now();
-
     // Validate options
     auto [valid, error] = validateExportOptions(options);
     if (!valid) {
@@ -34,28 +32,11 @@ ExportResult exportDrawing(
     result.output_file = output_file;
     result.format_name = exportFormatToString(options.format);
 
-    // Route to format-specific export
-    switch (options.format) {
-        case ExportFormat::PDF:
-            return exportToPDF(sheet, options);
-        case ExportFormat::DWG:
-            return exportToDWG(sheet, options);
-        case ExportFormat::DXF:
-            return exportToDXF(sheet, options);
-        case ExportFormat::SVG:
-            return exportToSVG(sheet, options);
-        case ExportFormat::STEP:
-            // STEP requires assembly reference
-            result.error_message = "STEP export requires Assembly reference";
-            return result;
-        case ExportFormat::PNG:
-            return exportToPNG(sheet, options);
-        case ExportFormat::JPEG:
-            return exportToJPEG(sheet, options);
-        default:
-            result.error_message = "Unknown export format";
-            return result;
-    }
+    // No drawing format writer exists yet: report it instead of claiming success.
+    // Vector PDF/DXF/SVG export is planned in phase 4 of docs/ROADMAP_GENERAL_CAD.md.
+    result.error_message = "Drawing export to " + result.format_name +
+        " is not supported until roadmap phase 4 (drawings)";
+    return result;
 }
 
 // ============================================================================
@@ -118,97 +99,6 @@ BatchExportResult batchExportDrawings(
 
     batch_result.success = batch_result.failed_exports == 0;
     return batch_result;
-}
-
-// ============================================================================
-// Format-Specific Export Functions
-// ============================================================================
-
-ExportResult exportToPDF(
-    const DrawingSheet& sheet,
-    const ExportOptions& options) {
-
-    ExportResult result;
-    result.format_name = "PDF";
-    result.success = true;  // Placeholder implementation
-    result.page_count = sheet.getViewCount();
-    result.element_count = 0;
-
-    // Count elements
-    for (const auto& view : sheet.getViews()) {
-        result.element_count += view->getEdges().size();
-        result.element_count += view->getCircles().size();
-        result.element_count += view->getArcs().size();
-    }
-
-    return result;
-}
-
-ExportResult exportToDWG(
-    const DrawingSheet& sheet,
-    const ExportOptions& options) {
-
-    ExportResult result;
-    result.format_name = "DWG";
-    result.success = true;  // Placeholder implementation
-
-    return result;
-}
-
-ExportResult exportToDXF(
-    const DrawingSheet& sheet,
-    const ExportOptions& options) {
-
-    ExportResult result;
-    result.format_name = "DXF";
-    result.success = true;  // Placeholder implementation
-
-    return result;
-}
-
-ExportResult exportToSVG(
-    const DrawingSheet& sheet,
-    const ExportOptions& options) {
-
-    ExportResult result;
-    result.format_name = "SVG";
-    result.success = true;  // Placeholder implementation
-
-    return result;
-}
-
-ExportResult exportToSTEP(
-    const DrawingSheet& sheet,
-    const Assembly& assembly,
-    const ExportOptions& options) {
-
-    ExportResult result;
-    result.format_name = "STEP";
-    result.success = true;  // Placeholder implementation
-
-    return result;
-}
-
-ExportResult exportToPNG(
-    const DrawingSheet& sheet,
-    const ExportOptions& options) {
-
-    ExportResult result;
-    result.format_name = "PNG";
-    result.success = true;  // Placeholder implementation
-
-    return result;
-}
-
-ExportResult exportToJPEG(
-    const DrawingSheet& sheet,
-    const ExportOptions& options) {
-
-    ExportResult result;
-    result.format_name = "JPEG";
-    result.success = true;  // Placeholder implementation
-
-    return result;
 }
 
 // ============================================================================
@@ -307,18 +197,6 @@ std::pair<bool, std::string> createBackupFile(const std::string& file_path) {
     } catch (const std::exception& e) {
         return {false, e.what()};
     }
-}
-
-std::vector<ExportFormat> getSupportedFormats() {
-    return {
-        ExportFormat::PDF,
-        ExportFormat::DWG,
-        ExportFormat::DXF,
-        ExportFormat::SVG,
-        ExportFormat::STEP,
-        ExportFormat::PNG,
-        ExportFormat::JPEG
-    };
 }
 
 bool isVectorFormat(ExportFormat format) {

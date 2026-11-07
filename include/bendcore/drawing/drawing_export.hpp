@@ -1,5 +1,6 @@
 // M4 Phase - Drawing Export API (GAP-019)
-// Complete export system supporting PDF, DWG, DXF, SVG, STEP with full options
+// Export options, validation and filename utilities. No format writer is implemented:
+// exportDrawing() returns an error for every format until roadmap phase 4 (drawings).
 #pragma once
 
 #include <string>
@@ -54,8 +55,8 @@ struct BatchExportResult {
 /**
  * @brief Export a single drawing sheet to file
  *
- * Exports a DrawingSheet to the specified format with all configured options.
- * Automatically handles format-specific requirements and optimizations.
+ * Validates the options, then fails with an explicit error: no format writer
+ * is implemented until roadmap phase 4 (docs/ROADMAP_GENERAL_CAD.md).
  *
  * @param sheet The drawing sheet to export
  * @param options Export configuration options
@@ -93,108 +94,6 @@ BatchExportResult batchExportDrawings(
     const std::vector<std::shared_ptr<DrawingSheet>>& sheets,
     const ExportOptions& options,
     const std::string& output_directory
-);
-
-// ============================================================================
-// Format-Specific Export Functions
-// ============================================================================
-
-/**
- * @brief Export to PDF format
- *
- * Creates a professional PDF with vector graphics, metadata, watermarks,
- * and security options. Supports multi-page sheets.
- *
- * @param sheet The drawing sheet
- * @param options Export options (pdf field used)
- * @return ExportResult with PDF-specific details
- */
-ExportResult exportToPDF(
-    const DrawingSheet& sheet,
-    const ExportOptions& options
-);
-
-/**
- * @brief Export to DWG format (AutoCAD)
- *
- * Exports to AutoCAD DWG format with layer support and geometry preservation.
- *
- * @param sheet The drawing sheet
- * @param options Export options (cad field used)
- * @return ExportResult with DWG-specific details
- */
-ExportResult exportToDWG(
-    const DrawingSheet& sheet,
-    const ExportOptions& options
-);
-
-/**
- * @brief Export to DXF format
- *
- * Exports to Drawing Exchange Format for universal CAD compatibility.
- *
- * @param sheet The drawing sheet
- * @param options Export options (cad field used)
- * @return ExportResult with DXF-specific details
- */
-ExportResult exportToDXF(
-    const DrawingSheet& sheet,
-    const ExportOptions& options
-);
-
-/**
- * @brief Export to SVG format
- *
- * Creates a scalable vector graphic suitable for web display and editing.
- *
- * @param sheet The drawing sheet
- * @param options Export options (svg field used)
- * @return ExportResult with SVG-specific details
- */
-ExportResult exportToSVG(
-    const DrawingSheet& sheet,
-    const ExportOptions& options
-);
-
-/**
- * @brief Export to STEP format
- *
- * Creates a 3D product data exchange file preserving drawing references
- * to the 3D model for bidirectional traceability.
- *
- * @param sheet The drawing sheet
- * @param assembly The original assembly for 3D reference
- * @param options Export options (step field used)
- * @return ExportResult with STEP-specific details
- */
-ExportResult exportToSTEP(
-    const DrawingSheet& sheet,
-    const Assembly& assembly,
-    const ExportOptions& options
-);
-
-/**
- * @brief Export to PNG format (raster)
- *
- * @param sheet The drawing sheet
- * @param options Export options (raster field used)
- * @return ExportResult with PNG-specific details
- */
-ExportResult exportToPNG(
-    const DrawingSheet& sheet,
-    const ExportOptions& options
-);
-
-/**
- * @brief Export to JPEG format (raster)
- *
- * @param sheet The drawing sheet
- * @param options Export options (raster field used)
- * @return ExportResult with JPEG-specific details
- */
-ExportResult exportToJPEG(
-    const DrawingSheet& sheet,
-    const ExportOptions& options
 );
 
 // ============================================================================
@@ -260,13 +159,6 @@ std::string getFormatExtension(ExportFormat format);
  * @return pair of (success, backup_file_path)
  */
 std::pair<bool, std::string> createBackupFile(const std::string& file_path);
-
-/**
- * @brief Get supported export formats
- *
- * @return Vector of supported ExportFormat values
- */
-std::vector<ExportFormat> getSupportedFormats();
 
 /**
  * @brief Check if format is vector-based
