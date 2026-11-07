@@ -8,6 +8,7 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
+#include <BRepTools_History.hxx>
 #include <GProp_GProps.hxx>
 #include <Message_Alert.hxx>
 #include <Message_Report.hxx>
@@ -59,6 +60,14 @@ std::string alertsText(const occ::handle<Message_Report>& report, Message_Gravit
         out += alert->GetMessageKey();
     }
     return out;
+}
+
+// Независимая копия истории (слияние в пустую историю переносит Modified, Generated, Removed).
+occ::handle<BRepTools_History> copyHistory(const occ::handle<BRepTools_History>& h) {
+    if (h.IsNull()) return {};
+    occ::handle<BRepTools_History> copy = new BRepTools_History();
+    copy->Merge(h);
+    return copy;
 }
 
 bool hasSolids(const TopoDS_Shape& s) { return TopExp_Explorer(s, TopAbs_SOLID).More(); }
@@ -249,6 +258,7 @@ Result<BooleanResult> booleanOp(BooleanType type, const std::vector<TopoDS_Shape
             op->SetFuzzyValue(fuzzy);
             op->SetRunParallel(options.runParallel);
             op->SetNonDestructive(true);
+            op->SetToFillHistory(true);
             try {
                 op->Build();
             } catch (const Standard_Failure& e) {
@@ -264,6 +274,10 @@ Result<BooleanResult> booleanOp(BooleanType type, const std::vector<TopoDS_Shape
 
             double volume = 0.0;
             TopoDS_Shape shape = op->Shape();
+            // SimplifyResult объединяет историю упрощения с историей операции на месте
+            // (myHistory->Merge), поэтому история до упрощения сохраняется копией на случай,
+            // если упрощённый результат будет отвергнут.
+            occ::handle<BRepTools_History> history = copyHistory(op->History());
             std::string reason = judge(type, shape, options, argMass, toolMass, solidInputs, fuzzy, volume);
             if (!reason.empty()) {
                 failures.push_back(tag.str() + reason + (warnings.empty() ? "" : " [warnings: " + warnings + "]"));
@@ -279,6 +293,7 @@ Result<BooleanResult> booleanOp(BooleanType type, const std::vector<TopoDS_Shape
                 if (sreason.empty()) {
                     shape = unified;
                     volume = unifiedVolume;
+                    history = op->History();
                     out.simplifyApplied = true;
                 } else {
                     out.warnings.push_back(tag.str() + "SimplifyResult rejected: " + sreason);
@@ -290,6 +305,12 @@ Result<BooleanResult> booleanOp(BooleanType type, const std::vector<TopoDS_Shape
             out.shape = shape;
             out.fuzzyValue = fuzzy;
             out.volume = volume;
+            if (TopExp_Explorer(shape, TopAbs_FACE).More()) {
+                if (history.IsNull())
+                    return Error{ErrorCode::OperationFailed,
+                                 std::string(toString(type)) + ": OCCT returned no history for the result"};
+                out.history = history;
+            }
             return out;
         }
 

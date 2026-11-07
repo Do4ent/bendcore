@@ -60,12 +60,12 @@ struct TransformedCopy {
 };
 Result<TransformedCopy> transformCopy(const TopoDS_Shape& shape, const gp_Trsf& trsf);
 
-// Булева операция через kernel::booleanOp с историей, восстановленной геометрически:
-// элемент результата, совпадающий с элементом входа, — без изменений; лежащий на элементе
-// входа — Modified; ребро результата на двух гранях входа без ребра-прообраза —
-// Generated из этих граней; элемент входа без образов — Remove.
-// Записываются только элементы входов из tracked; untrackedImages получает грани
-// результата, полученные только из входов вне tracked.
+// Булева операция через kernel::booleanOp с историей ядра (BooleanResult::history —
+// BRepAlgoAPI_BuilderAlgo::History(), объединённая с историей SimplifyResult).
+// В history переносятся записи (Modified/Generated/IsRemoved) только для элементов входов
+// из отслеживаемых групп (trackArguments/trackTools); untrackedImages получает грани
+// результата, которые являются неизменёнными гранями или Modified-образами граней
+// неотслеживаемых входов и не являются образами отслеживаемых.
 struct BooleanStep {
     TopoDS_Shape shape;
     History history;
