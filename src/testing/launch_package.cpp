@@ -249,18 +249,6 @@ std::string LaunchPackage::generate_api_documentation() const {
   api << "};\n";
   api << "```\n\n";
 
-  api << "#### BRepBuilder\n";
-  api << "```cpp\n";
-  api << "class BRepBuilder {\n";
-  api << "  SolidId create_box(double width, double height, double depth);\n";
-  api << "  SolidId create_cylinder(double radius, double height);\n";
-  api << "  SolidId create_sphere(double radius);\n";
-  api << "  std::optional<SolidId> boolean_union(SolidId a, SolidId b);\n";
-  api << "  std::optional<SolidId> boolean_difference(SolidId a, SolidId b);\n";
-  api << "  std::optional<SolidId> boolean_intersection(SolidId a, SolidId b);\n";
-  api << "};\n";
-  api << "```\n\n";
-
   api << "## Error Handling\n\n";
   api << "The API uses C++20 `std::optional<T>` for optional results and exceptions for errors.\n\n";
 

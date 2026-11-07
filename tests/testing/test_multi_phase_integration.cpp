@@ -2,7 +2,6 @@
 #include "bendcore/document/entity_id.hpp"
 #include "bendcore/dependencies/dependency_graph.hpp"
 #include "bendcore/geometry/geometry_kernel.hpp"
-#include "bendcore/geometry/brep_builder.hpp"
 
 #include <iostream>
 #include <cassert>
@@ -48,11 +47,6 @@ int main() {
     assert(dist_01 > 0.99 && dist_01 < 1.01);
     assert(dist_02 > 0.99 && dist_02 < 1.01);
     assert(dist_03 > 0.99 && dist_03 < 1.01);
-
-    // Create B-Rep geometry
-    BRepBuilder builder;
-    auto box = builder.create_box(1.0, 1.0, 1.0);
-    auto sphere = builder.create_sphere(0.5);
 
     std::cout << "OK\n";
 

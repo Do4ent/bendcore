@@ -51,7 +51,9 @@ class PublishingManagerTest : public ::testing::Test {
 // Local Publishing Tests
 // ============================================================================
 
-TEST_F(PublishingManagerTest, PublishToLocalDirectory) {
+// Export has no format writer until roadmap phase 4; publishing must surface
+// that error rather than report published files.
+TEST_F(PublishingManagerTest, PublishToLocalReportsExportError) {
   std::string test_dir = "/tmp/bendcore_test_publish";
   fs::remove_all(test_dir);
   fs::create_directories(test_dir);
@@ -61,11 +63,10 @@ TEST_F(PublishingManagerTest, PublishToLocalDirectory) {
 
   auto result = publishToLocal(job);
 
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.destination, PublishDestination::LocalDirectory);
-  EXPECT_EQ(result.sheets_published, 1);
+  EXPECT_FALSE(result.success);
+  EXPECT_EQ(result.sheets_published, 0);
+  EXPECT_NE(result.error_message.find("not supported"), std::string::npos);
 
-  // Clean up
   fs::remove_all(test_dir);
 }
 
@@ -88,25 +89,6 @@ TEST_F(PublishingManagerTest, PublishToLocalMissingDirectory) {
 // Cloud Publishing Tests
 // ============================================================================
 
-TEST_F(PublishingManagerTest, PublishToCloud) {
-  auto job = createTestPublishingJob();
-
-  CloudPublishSettings cloud_settings;
-  cloud_settings.provider = CloudProvider::AmazonS3;
-  cloud_settings.bucket_name = "test-bucket";
-  cloud_settings.api_key = "test-key";
-  cloud_settings.folder_prefix = "drawings";
-
-  job.cloud_settings = cloud_settings;
-
-  auto result = publishToCloud(job);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.destination, PublishDestination::CloudStorage);
-  EXPECT_EQ(result.sheets_published, 1);
-  EXPECT_GT(result.published_urls.size(), 0);
-}
-
 TEST_F(PublishingManagerTest, PublishToCloudMissingCredentials) {
   auto job = createTestPublishingJob();
 
@@ -127,23 +109,6 @@ TEST_F(PublishingManagerTest, PublishToCloudMissingCredentials) {
 // Email Publishing Tests
 // ============================================================================
 
-TEST_F(PublishingManagerTest, PublishViaEmail) {
-  auto job = createTestPublishingJob();
-
-  EmailPublishSettings email_settings;
-  email_settings.recipients = {"test@example.com"};
-  email_settings.subject_template = "{title} - Rev {revision}";
-  email_settings.message_body = "Please find the attached drawing.";
-
-  job.email_settings = email_settings;
-
-  auto result = publishViaEmail(job);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.destination, PublishDestination::EmailRecipients);
-  EXPECT_TRUE(result.email_sent);
-}
-
 TEST_F(PublishingManagerTest, PublishViaEmailNoRecipients) {
   auto job = createTestPublishingJob();
 
@@ -156,97 +121,6 @@ TEST_F(PublishingManagerTest, PublishViaEmailNoRecipients) {
 
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.error_message.empty());
-}
-
-// ============================================================================
-// Archival Tests
-// ============================================================================
-
-TEST_F(PublishingManagerTest, ArchiveDrawings) {
-  std::string archive_dir = "/tmp/bendcore_test_archive";
-  fs::remove_all(archive_dir);
-  fs::create_directories(archive_dir);
-
-  auto job = createTestPublishingJob();
-
-  ArchivalSettings archival_settings;
-  archival_settings.archive_directory = archive_dir;
-  archival_settings.compress_files = false;
-  archival_settings.maintain_history = true;
-
-  job.archival_settings = archival_settings;
-
-  auto result = archiveDrawings(job);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.destination, PublishDestination::ArchivalRepository);
-  EXPECT_EQ(result.sheets_published, 1);
-  EXPECT_FALSE(result.archive_id.empty());
-
-  // Clean up
-  fs::remove_all(archive_dir);
-}
-
-// ============================================================================
-// Multi-Destination Publishing Tests
-// ============================================================================
-
-TEST_F(PublishingManagerTest, PublishToMultipleDestinations) {
-  std::string test_dir = "/tmp/bendcore_test_multi";
-  fs::remove_all(test_dir);
-  fs::create_directories(test_dir);
-
-  auto job = createTestPublishingJob();
-  job.local_settings = LocalPublishSettings{test_dir};
-
-  CloudPublishSettings cloud_settings;
-  cloud_settings.bucket_name = "test-bucket";
-  cloud_settings.api_key = "test-key";
-  job.cloud_settings = cloud_settings;
-
-  std::vector<PublishDestination> destinations = {
-    PublishDestination::LocalDirectory,
-    PublishDestination::CloudStorage
-  };
-
-  auto results = publishToMultiple(job, destinations);
-
-  EXPECT_EQ(results.size(), 2);
-  EXPECT_TRUE(results[0].success);  // Local should succeed
-  EXPECT_TRUE(results[1].success);  // Cloud should succeed
-
-  // Clean up
-  fs::remove_all(test_dir);
-}
-
-// ============================================================================
-// Batch Export Multiple Formats Tests
-// ============================================================================
-
-TEST_F(PublishingManagerTest, BatchExportMultipleFormats) {
-  std::string test_dir = "/tmp/bendcore_test_batch";
-  fs::remove_all(test_dir);
-  fs::create_directories(test_dir);
-
-  std::vector<std::shared_ptr<DrawingSheet>> sheets;
-  sheets.push_back(createTestSheet());
-  sheets.push_back(createTestSheet());
-
-  std::vector<ExportFormat> formats = {
-    ExportFormat::PDF,
-    ExportFormat::DXF,
-    ExportFormat::SVG
-  };
-
-  auto result = batchExportMultipleFormats(sheets, formats, test_dir);
-
-  EXPECT_EQ(result.total_drawings, 6);  // 2 sheets * 3 formats
-  EXPECT_EQ(result.successful_exports, 6);
-  EXPECT_EQ(result.failed_exports, 0);
-  EXPECT_TRUE(result.success);
-
-  // Clean up
-  fs::remove_all(test_dir);
 }
 
 // ============================================================================

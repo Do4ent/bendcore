@@ -71,7 +71,6 @@ set(BENDCORE_UNVERIFIED_TARGETS
   phase_f_test_suite
   test_ab_testing
   test_analytics_event
-  test_brep_builder
   test_cad_core_037_fea
   test_cad_core_038_gcode
   test_cad_core_039_bom
@@ -106,7 +105,6 @@ set(BENDCORE_UNVERIFIED_TARGETS
   test_history_stack
   test_integration_e2e
   test_layers
-  test_m2_feature_operations
   test_m5_optimization
   test_manufacturing_constraints
   test_multi_phase_integration
@@ -266,10 +264,6 @@ set(BENDCORE_SOURCES
   src/sketch/constraint_diagnostics.cpp
   src/sketch/primitives.cpp
   src/sketch/edit_tools.cpp
-
-  # M2 Phase: Feature Operations (GAP-006, GAP-007, GAP-008)
-  src/geometry/feature_operations.cpp
-  src/topology/topological_reference.cpp
 
   # M5 Phase: Advanced Feature Operations (GAP-020) - Loft, Sweep, Revolve
   src/features/loft.cpp
@@ -965,10 +959,6 @@ add_executable(test_geometry_kernel tests/geometry/test_geometry_kernel.cpp)
 target_link_libraries(test_geometry_kernel PRIVATE bendcore_core)
 bendcore_add_test(geometry_kernel test_geometry_kernel)
 
-add_executable(test_brep_builder tests/geometry/test_brep_builder.cpp)
-target_link_libraries(test_brep_builder PRIVATE bendcore_core)
-bendcore_add_test(brep_builder test_brep_builder)
-
 add_executable(test_curve_operations tests/geometry/test_curve_operations.cpp)
 target_link_libraries(test_curve_operations PRIVATE bendcore_core)
 bendcore_add_test(curve_operations test_curve_operations)
@@ -976,11 +966,6 @@ bendcore_add_test(curve_operations test_curve_operations)
 add_executable(test_surface_operations tests/geometry/test_surface_operations.cpp)
 target_link_libraries(test_surface_operations PRIVATE bendcore_core)
 bendcore_add_test(surface_operations test_surface_operations)
-
-# M2 Phase: Feature Operations (GAP-006, GAP-007, GAP-008)
-add_executable(test_m2_feature_operations tests/test_m2_feature_operations.cpp)
-target_link_libraries(test_m2_feature_operations PRIVATE bendcore_core)
-bendcore_add_test(m2_feature_operations test_m2_feature_operations)
 
 # M5 Phase: Advanced Feature Operations (GAP-020) - Loft, Sweep, Revolve
 add_executable(test_advanced_features_m5 tests/features/test_advanced_features_m5.cpp)

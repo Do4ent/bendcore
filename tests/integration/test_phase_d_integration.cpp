@@ -3,7 +3,6 @@
 #include <cmath>
 
 #include "bendcore/geometry/geometry_kernel.hpp"
-#include "bendcore/geometry/brep_builder.hpp"
 #include "bendcore/geometry/curve_operations.hpp"
 #include "bendcore/geometry/surface_operations.hpp"
 #include "bendcore/document/cad_document.hpp"
@@ -26,36 +25,6 @@ int main() {
         double dist = kernel.point_distance(p1, p2);
         assert(std::abs(dist - std::sqrt(3.0)) < 1e-10);
         std::cout << "✓ test_geometry_kernel_with_document\n";
-    }
-
-    // Test 2: BRepBuilder with geometry primitives
-    {
-        BRepBuilder builder;
-        SolidId box = builder.create_box(1, 2, 3);
-        SolidId cylinder = builder.create_cylinder(0.5, 2);
-
-        auto box_solid = builder.get_solid(box);
-        auto cyl_solid = builder.get_solid(cylinder);
-
-        assert(box_solid.has_value() && box_solid->is_valid());
-        assert(cyl_solid.has_value() && cyl_solid->is_valid());
-        std::cout << "✓ test_brep_with_primitives\n";
-    }
-
-    // Test 3: Boolean operations workflow
-    {
-        BRepBuilder builder;
-        SolidId s1 = builder.create_box(2, 2, 2);
-        SolidId s2 = builder.create_box(1, 1, 1);
-
-        auto union_result = builder.boolean_union(s1, s2);
-        auto diff_result = builder.boolean_difference(s1, s2);
-        auto isect_result = builder.boolean_intersection(s1, s2);
-
-        assert(union_result.has_value());
-        assert(diff_result.has_value());
-        assert(isect_result.has_value());
-        std::cout << "✓ test_boolean_operations_workflow\n";
     }
 
     // Test 4: Tube creation workflow (NURBS curve → tube)
@@ -143,37 +112,6 @@ int main() {
         auto intersections = ops.curve_surface_intersection(line, surface, 50);
         // Intersections may be 0 depending on surface
         std::cout << "✓ test_curve_surface_intersection\n";
-    }
-
-    // Test 9: B-Rep topology validation
-    {
-        BRepBuilder builder;
-        SolidId solid = builder.create_box(1, 1, 1);
-
-        assert(builder.validate_solid(solid));
-        assert(builder.vertex_count() == 8);   // 8 vertices
-        assert(builder.edge_count() == 12);    // 12 edges
-        assert(builder.face_count() == 6);     // 6 faces
-        int ec = builder.euler_characteristic(solid);
-        assert(ec == 2);  // Euler characteristic for closed solid
-        std::cout << "✓ test_brep_topology_validation\n";
-    }
-
-    // Test 10: Complex tube modeling workflow
-    {
-        BRepBuilder builder;
-
-        // Create a cylinder (tube body)
-        SolidId tube_body = builder.create_cylinder(0.5, 2.0);
-
-        // Create holes/cavities
-        SolidId hole = builder.create_cylinder(0.1, 2.1);
-
-        // Boolean difference to create hole
-        auto result = builder.boolean_difference(tube_body, hole);
-        assert(result.has_value());
-
-        std::cout << "✓ test_complex_tube_modeling\n";
     }
 
     // Test 11: Arc length and parametrization

@@ -2,7 +2,6 @@
 #include "bendcore/document/cad_document.hpp"
 #include "bendcore/document/entity_id.hpp"
 #include "bendcore/geometry/geometry_kernel.hpp"
-#include "bendcore/geometry/brep_builder.hpp"
 #include "bendcore/geometry/curve_operations.hpp"
 #include "bendcore/dependencies/dependency_graph.hpp"
 
@@ -326,10 +325,6 @@ TestResult MultiPhaseIntegrationTest::run() {
 
     // Phase D: Geometry
     geometry::GeometryKernel kernel(1e-10);
-    geometry::BRepBuilder builder;
-
-    // Create a box
-    auto box_id = builder.create_box(1.0, 2.0, 3.0);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);

@@ -49,94 +49,45 @@ class DrawingExportTest : public ::testing::Test {
 };
 
 // ============================================================================
-// Basic Export Tests
+// Export Without Format Writers
 // ============================================================================
 
-TEST_F(DrawingExportTest, ExportToPDF) {
+// No format writer exists until roadmap phase 4: every format must report an
+// explicit error instead of claiming success.
+TEST_F(DrawingExportTest, ExportReportsUnsupportedFormat) {
   auto sheet = createTestSheet();
+  const ExportFormat formats[] = {ExportFormat::PDF, ExportFormat::DWG, ExportFormat::DXF,
+                                  ExportFormat::SVG, ExportFormat::STEP, ExportFormat::PNG,
+                                  ExportFormat::JPEG};
+  for (auto format : formats) {
+    ExportOptions opts;
+    opts.format = format;
+    opts.output_path = "/tmp/bendcore_unsupported_export";
+    auto result = exportDrawing(*sheet, opts);
+    EXPECT_FALSE(result.success) << exportFormatToString(format);
+    EXPECT_NE(result.error_message.find("not supported"), std::string::npos)
+        << exportFormatToString(format);
+  }
+}
 
+TEST_F(DrawingExportTest, ExportViewReportsUnsupportedFormat) {
+  auto sheet = createTestSheet();
   ExportOptions opts;
   opts.format = ExportFormat::PDF;
-  opts.output_path = "/tmp/test_export.pdf";
-  opts.auto_filename = true;
-
-  auto result = exportDrawing(*sheet, opts);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.format_name, "PDF");
-  EXPECT_EQ(result.page_count, 1);
-  EXPECT_GT(result.element_count, 0);
+  opts.output_path = "/tmp/bendcore_unsupported_export";
+  auto result = exportView(*sheet->getView(0), opts);
+  EXPECT_FALSE(result.success);
+  EXPECT_FALSE(result.error_message.empty());
 }
 
-TEST_F(DrawingExportTest, ExportToDXF) {
+TEST_F(DrawingExportTest, InvalidOptionsReportedBeforeUnsupported) {
   auto sheet = createTestSheet();
-
   ExportOptions opts;
-  opts.format = ExportFormat::DXF;
-  opts.output_path = "/tmp/test_export.dxf";
-  opts.auto_filename = true;
-
+  opts.format = ExportFormat::PDF;
+  opts.output_path = "";
   auto result = exportDrawing(*sheet, opts);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.format_name, "DXF");
-}
-
-TEST_F(DrawingExportTest, ExportToDWG) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.format = ExportFormat::DWG;
-  opts.output_path = "/tmp/test_export.dwg";
-  opts.auto_filename = true;
-
-  auto result = exportDrawing(*sheet, opts);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.format_name, "DWG");
-}
-
-TEST_F(DrawingExportTest, ExportToSVG) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.format = ExportFormat::SVG;
-  opts.output_path = "/tmp/test_export.svg";
-  opts.auto_filename = true;
-
-  auto result = exportDrawing(*sheet, opts);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.format_name, "SVG");
-}
-
-TEST_F(DrawingExportTest, ExportToPNG) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.format = ExportFormat::PNG;
-  opts.output_path = "/tmp/test_export.png";
-  opts.auto_filename = true;
-
-  auto result = exportDrawing(*sheet, opts);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.format_name, "PNG");
-}
-
-TEST_F(DrawingExportTest, ExportToJPEG) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.format = ExportFormat::JPEG;
-  opts.output_path = "/tmp/test_export.jpg";
-  opts.auto_filename = true;
-  opts.raster.jpeg_quality = 90;
-
-  auto result = exportDrawing(*sheet, opts);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.format_name, "JPEG");
+  EXPECT_FALSE(result.success);
+  EXPECT_EQ(result.error_message, "Output path is empty");
 }
 
 // ============================================================================
@@ -310,164 +261,6 @@ TEST_F(DrawingExportTest, ConvertUnits) {
 
   // Same unit
   EXPECT_DOUBLE_EQ(convertUnits(100, UnitType::Millimeter, UnitType::Millimeter), 100.0);
-}
-
-// ============================================================================
-// Batch Export Tests
-// ============================================================================
-
-TEST_F(DrawingExportTest, BatchExportMultipleSheets) {
-  std::vector<std::shared_ptr<DrawingSheet>> sheets;
-  sheets.push_back(createTestSheet());
-  sheets.push_back(createTestSheet());
-  sheets.push_back(createTestSheet());
-
-  ExportOptions opts;
-  opts.format = ExportFormat::PDF;
-  opts.auto_filename = true;
-
-  auto result = batchExportDrawings(sheets, opts, "/tmp");
-
-  EXPECT_EQ(result.total_drawings, 3);
-  EXPECT_EQ(result.successful_exports, 3);
-  EXPECT_EQ(result.failed_exports, 0);
-  EXPECT_TRUE(result.success);
-}
-
-// ============================================================================
-// Supported Formats Tests
-// ============================================================================
-
-TEST_F(DrawingExportTest, GetSupportedFormats) {
-  auto formats = getSupportedFormats();
-
-  EXPECT_EQ(formats.size(), 7);  // PDF, DWG, DXF, SVG, STEP, PNG, JPEG
-  EXPECT_TRUE(std::find(formats.begin(), formats.end(), ExportFormat::PDF) != formats.end());
-  EXPECT_TRUE(std::find(formats.begin(), formats.end(), ExportFormat::DWG) != formats.end());
-  EXPECT_TRUE(std::find(formats.begin(), formats.end(), ExportFormat::DXF) != formats.end());
-  EXPECT_TRUE(std::find(formats.begin(), formats.end(), ExportFormat::SVG) != formats.end());
-  EXPECT_TRUE(std::find(formats.begin(), formats.end(), ExportFormat::STEP) != formats.end());
-  EXPECT_TRUE(std::find(formats.begin(), formats.end(), ExportFormat::PNG) != formats.end());
-  EXPECT_TRUE(std::find(formats.begin(), formats.end(), ExportFormat::JPEG) != formats.end());
-}
-
-// ============================================================================
-// Export View Tests
-// ============================================================================
-
-TEST_F(DrawingExportTest, ExportSingleView) {
-  auto sheet = createTestSheet();
-  auto view = sheet->getView(0);
-
-  ExportOptions opts;
-  opts.format = ExportFormat::PDF;
-  opts.output_path = "/tmp/view_export.pdf";
-  opts.auto_filename = true;
-
-  auto result = exportView(*view, opts);
-
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(result.format_name, "PDF");
-}
-
-// ============================================================================
-// Quality Settings Tests
-// ============================================================================
-
-TEST_F(DrawingExportTest, QualitySettingsDraft) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.output_path = "/tmp/test_qualitysettingsdraft.png";
-  opts.format = ExportFormat::PNG;
-  opts.raster.level = QualityLevel::Draft;
-  opts.raster.dpi = 150;
-
-  auto result = exportDrawing(*sheet, opts);
-  EXPECT_TRUE(result.success);
-}
-
-TEST_F(DrawingExportTest, QualitySettingsMaximum) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.output_path = "/tmp/test_qualitysettingsmaximum.png";
-  opts.format = ExportFormat::PNG;
-  opts.raster.level = QualityLevel::Maximum;
-  opts.raster.dpi = 600;
-
-  auto result = exportDrawing(*sheet, opts);
-  EXPECT_TRUE(result.success);
-}
-
-// ============================================================================
-// Color Settings Tests
-// ============================================================================
-
-TEST_F(DrawingExportTest, ColorSettingsFullColor) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.output_path = "/tmp/test_colorsettingsfullcolor.png";
-  opts.format = ExportFormat::PNG;
-  opts.raster.mode = ColorMode::FullColor;
-
-  auto result = exportDrawing(*sheet, opts);
-  EXPECT_TRUE(result.success);
-}
-
-TEST_F(DrawingExportTest, ColorSettingsGrayscale) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.output_path = "/tmp/test_colorsettingsgrayscale.png";
-  opts.format = ExportFormat::PNG;
-  opts.raster.mode = ColorMode::Grayscale;
-
-  auto result = exportDrawing(*sheet, opts);
-  EXPECT_TRUE(result.success);
-}
-
-TEST_F(DrawingExportTest, ColorSettingsMonochrome) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.output_path = "/tmp/test_colorsettingsmonochrome.png";
-  opts.format = ExportFormat::PNG;
-  opts.raster.mode = ColorMode::Monochrome;
-
-  auto result = exportDrawing(*sheet, opts);
-  EXPECT_TRUE(result.success);
-}
-
-// ============================================================================
-// PDF-Specific Tests
-// ============================================================================
-
-TEST_F(DrawingExportTest, PDFWithMetadata) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.output_path = "/tmp/test_pdfwithmetadata.pdf";
-  opts.format = ExportFormat::PDF;
-  opts.pdf.add_metadata = true;
-  opts.pdf.dpi = 300;
-
-  auto result = exportDrawing(*sheet, opts);
-  EXPECT_TRUE(result.success);
-}
-
-TEST_F(DrawingExportTest, PDFWithWatermark) {
-  auto sheet = createTestSheet();
-
-  ExportOptions opts;
-  opts.output_path = "/tmp/test_pdfwithwatermark.pdf";
-  opts.format = ExportFormat::PDF;
-  opts.pdf.add_watermark = true;
-  opts.pdf.watermark_text = "DRAFT";
-
-  auto result = exportDrawing(*sheet, opts);
-  EXPECT_TRUE(result.success);
 }
 
 // ============================================================================

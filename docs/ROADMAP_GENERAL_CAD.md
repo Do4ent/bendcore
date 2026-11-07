@@ -24,13 +24,13 @@ SolidWorks, Inventor, Siemens NX, CATIA, Creo и КОМПАС-3D, с оформ�
 | Импорт STEP/IGES | Рабочий (с OCCT) | `src/step_reader.cpp` — STEPCAF/IGESCAF + XCAF |
 | Импорт DXF | Рабочий (чтение) | `src/dxf_reader.cpp` |
 | Документ, транзакции, параметры, граф перестроения | Частично | Пересчитывает параметры, но не геометрию (`src/rebuild`, `src/document`) |
-| Топологические ссылки | Каркас | `TopologicalReferenceManager` есть, реального B-rep под ним нет |
-| Собственный B-rep (`src/geometry/brep_builder.cpp`) | Заглушка | Цилиндр/сфера/конус — box, площадь/объём = `1.0`, булевы операции не реализованы |
-| Операции (`src/geometry/feature_operations.cpp`) | Заглушка | Скругление/фаска/оболочка возвращают вход без изменений |
+| Топологические ссылки | Отсутствуют | `TopologicalReferenceManager` работал поверх заглушечного B-rep; удалён (`docs/STUB_REMOVAL.md`) |
+| Собственный B-rep (`src/geometry/brep_builder.cpp`) | Удалён | Был заглушкой: цилиндр/сфера/конус — box, площадь/объём = `1.0`, булевы операции не реализованы (`docs/STUB_REMOVAL.md`) |
+| Операции (`src/geometry/feature_operations.cpp`) | Удалены | Были заглушкой: скругление/фаска/оболочка возвращали вход без изменений |
 | `src/features/modeling`, `/advanced` | Только UI | React-панели без ядра |
 | Решатель сборок | Заглушка | `assembly_constraint_system.cpp` только валидирует, положения не решает |
-| Проекция видов, HLR | Отсутствует | `drawing_extraction.cpp` — placeholder |
-| Экспорт PDF/DXF/DWG/SVG | Заглушка | `drawing_export.cpp` — `success = true; // Placeholder` |
+| Проекция видов, HLR | Отсутствует | Фиктивное «извлечение видов» из `drawing_extraction.cpp` удалено; осталась 2D-модель вида и листа |
+| Экспорт PDF/DXF/DWG/SVG | Отсутствует | Заглушки удалены; `exportDrawing` возвращает ошибку «не поддерживается до фазы 4» |
 | Листовой металл | Только TS | Формула развёртки в `SheetMetalCalculator.ts` |
 | Вьюпорт | Веб | React + three.js 0.128; Qt в сборке отсутствует |
 | WASM API | Узкое | Эскиз и трубы; моделирования тел нет |
