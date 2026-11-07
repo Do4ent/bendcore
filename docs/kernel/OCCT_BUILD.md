@@ -15,8 +15,8 @@
   `cmake/kernel_*.cmake`). Если библиотеки нет — `FATAL_ERROR` на этапе конфигурации
   с именем тулкита и путём. Изменение файла перезапускает конфигурацию
   (`CMAKE_CONFIGURE_DEPENDS`);
-- `third_party/build_occt_wasm.sh`: список передаётся в OCCT как
-  `BUILD_ADDITIONAL_TOOLKITS`.
+- `third_party/build_occt.sh` (native) и `third_party/build_occt_wasm.sh`: список
+  передаётся в OCCT как `BUILD_ADDITIONAL_TOOLKITS` при выключенных модулях.
 
 Раньше обе переменные заполнялись `file(GLOB …/libTK*.a)`: состав линковки зависел от
 того, что лежит в каталоге установки (48 тулкитов, включая TKXml*, TKBin*, TKStd*,
@@ -46,7 +46,7 @@ TKTObj, TKDEVRML/OBJ/PLY, TKRWMesh, TKXMesh, TKExpress, TKHelix, TKDECascade).
 | TKCDF, TKLCAF, TKCAF | OCAF: `TDocStd_Document`, `TDF_Label`, `TDataStd_Name`, `TNaming` | документ XCAF при импорте STEP/IGES со структурой и именами |
 | TKXSBase | `XSControl`, `IFSelect`, `Interface`, `Transfer` | общая основа трансляторов STEP/IGES |
 | TKDE | `DE_*` (провайдеры обмена) | зависимость TKDESTEP/TKDEIGES/TKDESTL |
-| TKXCAF | `XCAFDoc_*`, `XCAFApp_Application` | структура сборки, имена, цвета в STEP (`src/step_reader.cpp`) |
+| TKXCAF | `XCAFDoc_*`, `XCAFApp_Application` | структура сборки, имена, цвета в STEP (`src/step_reader.cpp`, `bendcore_kernel_xcaf`, docs/kernel/XCAF_IO.md) |
 | TKVCAF | `TPrsStd_DriverTable` | **добавлен по требованию линковщика**, см. ниже |
 | TKV3d | `AIS_*`, `Prs3d_*`, `SelectMgr_*` | **добавлен по требованию линковщика**, см. ниже |
 | TKService | `Graphic3d_*`, `Aspect_*`, `Image_*` | **добавлен по требованию линковщика**, см. ниже |
@@ -90,7 +90,7 @@ TKService, TKV3d, TKVCAF), её нельзя убрать без патча OCCT
 ## 2. Native
 
 ```bash
-# OCCT (один раз; ~232 МБ статических библиотек, 48 тулкитов, см. «Известные проблемы»)
+# OCCT (один раз; 29 тулкитов из occt_toolkits.txt, 215 МБ статических библиотек)
 third_party/build_occt.sh            # -> third_party/occt-install
 
 cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -107,6 +107,47 @@ ctest --test-dir build-occt --output-on-failure
 `test_import_workflow`, `e2e_import`), `bendcore_occt` (+ `test_tube_occt`,
 `test_geometry_analyzer_occt`), `bendcore_server_core` (+ `bendcore_server`,
 `test_server`), модули `cmake/kernel_*.cmake`.
+
+### `build_occt.sh`
+
+Скрипт собирает OCCT 8.0.1 (`Release`, `BUILD_LIBRARY_TYPE=Static`) по тому же списку
+`third_party/occt_toolkits.txt`, что и `build_occt_wasm.sh`: все `BUILD_MODULE_*=OFF`,
+`BUILD_ADDITIONAL_TOOLKITS=<список>` (зависимости из `EXTERNLIB` OCCT добавляет сам),
+`USE_TK/TCL/FREETYPE/FREEIMAGE/FFMPEG/OPENVR/RAPIDJSON/DRACO/TBB/VTK/EIGEN/OPENGL/GLES2=OFF`,
+документация, тесты и Inspector выключены. После установки проверяет заголовки и наличие
+каждого тулкита списка и печатает размеры `.a` с пометкой «listed» / «dependency added by
+OCCT». Пути переопределяются переменными окружения (по умолчанию — рядом со скриптом):
+
+| Переменная | По умолчанию |
+|---|---|
+| `OCCT_VERSION` | `8.0.1` (тег `V8.0.1`) |
+| `OCCT_SOURCE` | `third_party/occt-<версия>`; если нет `CMakeLists.txt` — `git clone --depth 1` |
+| `OCCT_BUILD` | `third_party/occt-build` (логи — `<OCCT_BUILD>/logs`) |
+| `OCCT_INSTALL` | `third_party/occt-install` |
+| `OCCT_JOBS` | `nproc` |
+
+Раньше скрипт включал модули FoundationClasses, ModelingData, ModelingAlgorithms и
+DataExchange целиком (48 тулкитов, 232 МБ).
+
+Проверка (2026-11-07): сборка в отдельный каталог, не трогая основную установку,
+
+```bash
+OCCT_SOURCE=/home/user/bendcore/third_party/occt-8.0.1 \
+OCCT_BUILD=/home/user/bendcore/third_party/occt-build-min \
+OCCT_INSTALL=/home/user/bendcore/third_party/occt-install-min OCCT_JOBS=3 \
+  third_party/build_occt.sh
+```
+
+— 5112 единиц трансляции, около 28 минут на 3 потоках, 1 предупреждение компилятора
+(`-Warray-bounds` в заголовке libstdc++), ошибок нет. Установлено ровно 29 тулкитов
+списка (OCCT ничего не добавил: TKService/TKV3d/TKVCAF уже в списке), 224 923 268 байт
+`.a` (215 МБ против 232 МБ у прежней установки). Затем bendcore (`RelWithDebInfo`,
+`-DBENDCORE_OCCT_DIR=…/occt-install-min`): все 397 шагов сборки без ошибок, `ctest -j3` —
+101 тест, 100 проходят, `performance` падает под параллельной нагрузкой и проходит
+отдельно (как и с прежней установкой, см. ниже). Среди прошедших — все OCCT-зависимые:
+`occt_init`, `step_reader`, `import_workflow`, `e2e_import`, `tube_occt`,
+`geometry_analyzer_occt`, `server`, `kernel_*` (включая `kernel_xcaf*`),
+`corpus_step_committed`, `corpus_step_fresh`, `corpus_generate`.
 
 Проверка замены (2026-11-06, `build-occt`, RelWithDebInfo): полная сборка всех целей
 без ошибок; `ctest` — 84 теста, результат по каждому совпадает с исходным (до замены
@@ -205,7 +246,10 @@ bendcore с этим флагом и не делалась.
 
 1. Job `occt` в `wasm.yml`: ничего не менять в сборке OCCT; конфигурация bendcore
    теперь сама проверяет наличие каждого тулкита из `third_party/occt_toolkits.txt`.
-   Ключ кэша `occt-build-…` можно оставить: native-скрипт `build_occt.sh` не менялся.
+   Native-скрипт `build_occt.sh` теперь собирает только список: ключ кэша
+   `occt-build-…` нужно сменить на зависящий от
+   `hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt.sh')`, иначе
+   останется старая установка из 48 тулкитов (она тоже работает, но больше).
 2. Новый job (или шаг в WASM-job) «OCCT для WASM»: установить emsdk 6.0.12; кэш
    `third_party/occt-build-wasm` и `third_party/occt-install-wasm` с ключом от
    `hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt_wasm.sh')` и версии
@@ -220,10 +264,10 @@ bendcore с этим флагом и не делалась.
 
 ## 5. Известные проблемы и ограничения
 
-- **Native-скрипт `build_occt.sh` собирает надмножество** (модули целиком, 48
-  тулкитов). Линкуется только явный список, поэтому на бинарники это не влияет, но
-  установка больше нужной. Перевод `build_occt.sh` на `BUILD_ADDITIONAL_TOOLKITS` из
-  того же списка — отдельный шаг (требует пересборки OCCT и смены ключа кэша CI).
+- **Основная установка `third_party/occt-install`** собрана прежним скриптом (48
+  тулкитов). Она остаётся рабочей: линкуется только явный список. Пересборка
+  `build_occt.sh` в тот же каталог даст установку из 29 тулкитов (лишние `.a` прежней
+  установки при этом не удаляются — для чистой установки удалить каталог заранее).
 - **TKXCAF тянет визуализацию** (TKVCAF, TKV3d, TKService) — свойство OCCT 8.0.1, см.
   раздел 1.
 - **Размер пробной программы — нижняя граница.** `wasm-ld` удаляет неиспользуемый код,
