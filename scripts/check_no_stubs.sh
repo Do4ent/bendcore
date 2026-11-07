@@ -58,10 +58,13 @@ if ! command -v perl >/dev/null 2>&1; then
 fi
 
 # Каталоги нового кода (docs/ROADMAP_GENERAL_CAD.md, фаза 0); отсутствующие пропускаются.
+# src/wasm — привязки ядра (kernel_bindings.cpp) и JS API; src/ui/kernel и web/kernel-viewer —
+# вьюпорт ядра (docs/ui/KERNEL_VIEWPORT.md); tests/wasm, tests/e2e-kernel — их тесты.
 default_dirs=(
-  src/kernel src/modeling src/assembly_v2 src/drawing_v2
+  src/kernel src/modeling src/assembly_v2 src/drawing_v2 src/wasm src/ui/kernel
   include/bendcore/kernel include/bendcore/modeling include/bendcore/assembly_v2 include/bendcore/drawing_v2
-  tests/kernel tests/modeling tests/assembly_v2 tests/drawing_v2
+  tests/kernel tests/modeling tests/assembly_v2 tests/drawing_v2 tests/corpus tests/wasm tests/e2e-kernel
+  web/kernel-viewer
 )
 [[ ${#paths[@]} -gt 0 ]] || paths=("${default_dirs[@]}")
 
@@ -81,7 +84,7 @@ is_code_file() {
   case "$1" in
     *.c|*.cc|*.cpp|*.cxx|*.h|*.hh|*.hpp|*.hxx|*.ipp|*.inl|*.tpp) return 0 ;;
     *.cmake|*/CMakeLists.txt|CMakeLists.txt) return 0 ;;
-    *.sh|*.bash|*.py|*.js|*.mjs|*.cjs|*.ts|*.tsx|*.jsx) return 0 ;;
+    *.sh|*.bash|*.py|*.js|*.mjs|*.cjs|*.ts|*.mts|*.cts|*.tsx|*.jsx) return 0 ;;
   esac
   return 1
 }
@@ -158,7 +161,7 @@ my @line_rules = (
   ['fake-value', 'фиктивное/зашитое значение вместо вычисления',
    qr/\b(?:dummy|fake|hard-?coded|mock(?:ed)?|canned|arbitrary)\s+(?:value|values|result|results|data|implementation|response|output|return|number)\b|\breturn\b[^;]*;\s*(?:\/\/|\/\*).*\b(?:assume[sd]?|dummy|fake|hard-?coded|for\s+now|pretend)\b/i, 'nontest'],
   ['trivial-assert', 'проверка, которая не может упасть',
-   qr/\b(?:EXPECT|ASSERT)_TRUE\s*\(\s*(?:true|1)\s*\)|\b(?:EXPECT|ASSERT)_FALSE\s*\(\s*(?:false|0)\s*\)|\bassert\s*\(\s*(?:true|1|!0)\s*\)|\bSUCCEED\s*\(\s*\)|\b(?:EXPECT|ASSERT)_(?:EQ|NE|NEAR|DOUBLE_EQ|FLOAT_EQ|LE|GE)\s*\(\s*([A-Za-z_][\w.:>-]*)\s*,\s*\1\s*[,)]/, 'all'],
+   qr/\b(?:EXPECT|ASSERT)_TRUE\s*\(\s*(?:true|1)\s*\)|\b(?:EXPECT|ASSERT)_FALSE\s*\(\s*(?:false|0)\s*\)|\bassert\s*\(\s*(?:true|1|!0)\s*\)|\bSUCCEED\s*\(\s*\)|\b(?:EXPECT|ASSERT)_(?:EQ|NE|NEAR|DOUBLE_EQ|FLOAT_EQ|LE|GE)\s*\(\s*([A-Za-z_][\w.:>-]*)\s*,\s*\1\s*[,)]|\bexpect\s*\(\s*(?:true|false|null|undefined|-?\d+(?:\.\d+)?)\s*\)\s*\.\s*(?:not\s*\.\s*)?(?:toBe\w*|toEqual|toStrictEqual)\s*\(|\bexpect\s*\(\s*([A-Za-z_\$][\w.\$]*)\s*\)\s*\.\s*(?:toBe|toEqual|toStrictEqual)\s*\(\s*\2\s*\)|\bassert(?:\.ok)?\s*\(\s*(?:true|1)\s*[,)]|\bassert\.(?:equal|strictEqual|deepEqual|deepStrictEqual)\s*\(\s*([A-Za-z_\$][\w.\$]*)\s*,\s*\3\s*[,)]/, 'all'],
 );
 
 my %rule_ids = map { $_->[0] => 1 } @line_rules;
@@ -217,7 +220,8 @@ if (-s $ENV{CNS_DIFF}) {
 
 # ---------------------------------------------------------------- вспомогательные функции
 my @violations;
-my $is_test_path = qr/(?:^|\/)tests?\//;
+# Тесты: каталоги tests/, test/, __tests__/, e2e*/ и файлы *.test.* / *.spec.* (Jest, node:test, Playwright).
+my $is_test_path = qr/(?:^|\/)(?:tests?|__tests__|e2e[\w-]*)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/;
 
 sub suppressed {
   my ($lines, $idx, $rule) = @_;   # $idx — индекс с 0
@@ -252,6 +256,78 @@ sub line_of_offset {
   return (substr($text, 0, $off) =~ tr/\n//);
 }
 
+# ---------------------------------------------------------------- JS/TS (многострочные правила)
+# Те же требования раздела 2 для фронтенда и JS API ядра: пустые именованные функции и функции
+# с параметрами, возвращающие литерал (в т. ч. { ok: true }), — только в коде продукта;
+# тестовый файл (test/it) без единой проверки (expect/assert/throw) — в тестах.
+my %js_kw = map { $_ => 1 } qw(if for while switch catch return function typeof await new
+  constructor super import export else do try finally with yield delete void in of);
+
+sub check_js {
+  my ($file, $text, $lines, $is_test, $want) = @_;
+  # Комментарии и строки (включая шаблонные без вложенности) заменяются пробелами.
+  my $code = $text;
+  $code =~ s{(/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)}{
+    my $m = $1; (my $k = $m) =~ s/[^\n]/ /g;
+    ($m =~ /^["'`]/) ? substr($m, 0, 1) . substr($k, 1, -1) . substr($m, 0, 1) : $k
+  }gse;
+  my $type = qr/(?:\s*:\s*[\w\$<>\[\]|&.,\s]+?)?/;   # необязательная аннотация типа результата
+
+  if (!$is_test) {
+    # empty-body: function f(...) {}, метод класса m(...) {}, const f = (...) => {}.
+    my @empty;
+    while ($code =~ /\bfunction\s*\*?\s*([\w\$]+)\s*(?:<[^>]*>)?\s*\([^()]*\)$type\s*\{\s*\}/g) {
+      push @empty, [$-[0], $1];
+    }
+    while ($code =~ /^[ \t]*(?:(?:public|private|protected|static|async|override|readonly)\s+)*([\w\$]+)\s*(?:<[^>]*>)?\s*\([^()]*\)$type\s*\{\s*\}/mg) {
+      push @empty, [$-[1], $1] unless $js_kw{$1};
+    }
+    while ($code =~ /\b(?:const|let|var)\s+([\w\$]+)\s*(?::[^=]+)?=\s*(?:async\s*)?(?:\([^()]*\)|[\w\$]+)$type\s*=>\s*\{\s*\}/g) {
+      push @empty, [$-[0], $1];
+    }
+    my %seen_off;
+    for my $e (@empty) {
+      my $ni = line_of_offset($code, $e->[0]);
+      next if $seen_off{$ni}++;
+      report($file, $lines, $ni, 'empty-body', "пустое тело функции '$e->[1]'", $want);
+    }
+
+    # literal-return: функция с параметрами, тело которой — только return литерала.
+    my $lit = qr/(?:true|false|null|undefined|-?\d+(?:\.\d*)?|""|''|``|\[\s*\]|\{\s*\}|\{\s*(?:ok|success|valid|passed)\s*:\s*true\s*,?\s*\})/;
+    # Тело стрелочной функции без скобок: `=> {}` — это блок, а не объект-литерал.
+    my $lit_expr = qr/(?:true|false|null|undefined|-?\d+(?:\.\d*)?|""|''|``|\[\s*\])/;
+    my @lr;
+    while ($code =~ /\bfunction\s*\*?\s*([\w\$]+)\s*(?:<[^>]*>)?\s*\(([^()]*)\)$type\s*\{\s*return\s+$lit\s*;?\s*\}/g) {
+      push @lr, [$-[0], $1, $2];
+    }
+    while ($code =~ /^[ \t]*(?:(?:public|private|protected|static|async|override)\s+)*([\w\$]+)\s*(?:<[^>]*>)?\s*\(([^()]*)\)$type\s*\{\s*return\s+$lit\s*;?\s*\}/mg) {
+      push @lr, [$-[1], $1, $2] unless $js_kw{$1};
+    }
+    while ($code =~ /\b(?:const|let|var)\s+([\w\$]+)\s*(?::[^=]+)?=\s*(?:async\s*)?\(([^()]*)\)$type\s*=>\s*(?:\{\s*return\s+$lit\s*;?\s*\}|\(\s*$lit\s*\)\s*;|$lit_expr\s*;)/g) {
+      push @lr, [$-[0], $1, $2];
+    }
+    my %seen_lr;
+    for my $e (@lr) {
+      (my $p = $e->[2]) =~ s/\s+//g;
+      next if $p eq '';
+      my $ri = line_of_offset($code, $e->[0]);
+      next if $seen_lr{$ri}++;
+      report($file, $lines, $ri, 'literal-return',
+             "функция '$e->[1]' с параметрами возвращает только литерал", $want);
+    }
+  }
+
+  # no-assertions: файл с тестами (test/it) без единой проверки.
+  if ($is_test && $file =~ /\.(?:test|spec)\.[cm]?[jt]sx?$|(?:^|\/)tests?\/.*\.[cm]?[jt]sx?$/ &&
+      (!defined $want || $diff_added_file{$file})) {
+    if ($code =~ /\b(?:test|it)(?:\.\w+)?\s*\(/ &&
+        $code !~ /\b(?:expect|assert)\w*\s*[.(]|\bthrow\b|\bprocess\.exit(?:Code)?\s*(?:=\s*|\(\s*)[1-9]/) {
+      push @violations, "$file:1: [no-assertions] тестовый файл без единой проверки"
+        unless suppressed($lines, 0, 'no-assertions') || suppressed($lines, 1, 'no-assertions');
+    }
+  }
+}
+
 # ---------------------------------------------------------------- проверка файла
 for my $file (sort keys %targets) {
   my $want = $targets{$file};
@@ -264,6 +340,7 @@ for my $file (sort keys %targets) {
   my @lines = split /\n/, $text, -1;
   my $is_test = $file =~ $is_test_path;
   my $is_cpp = $file =~ /\.(?:c|cc|cpp|cxx|h|hh|hpp|hxx|ipp|inl|tpp)$/;
+  my $is_js = $file =~ /\.(?:[cm]?js|jsx|[cm]?ts|tsx)$/ && $file !~ /\.d\.[cm]?ts$/;
 
   for my $i (0 .. $#lines) {
     next if defined $want && !$want->{$i + 1};
@@ -285,6 +362,7 @@ for my $file (sort keys %targets) {
     }
   }
 
+  check_js($file, $text, \@lines, $is_test, $want) if $is_js;
   next unless $is_cpp;
 
   # Тексты без комментариев и строковых литералов (длина и переводы строк сохраняются),

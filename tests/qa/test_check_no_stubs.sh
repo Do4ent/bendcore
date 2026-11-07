@@ -73,6 +73,11 @@ cat >"$tmp/repo/src/legacy/new_feature.cpp" <<'EOF'
 // Placeholder for the new feature
 int feature(int x) { int y = x - 1; return y; }
 EOF
+mkdir -p "$tmp/repo/src/ui/kernel"
+cat >"$tmp/repo/src/ui/kernel/panel.tsx" <<'EOF2'
+// Viewer panel
+export function onPick(face: number): void {}
+EOF2
 echo '// TODO another fixture marker' >>"$tmp/repo/tests/qa/fixtures/sample.cpp"
 echo 'TODO in documentation is not code' >"$tmp/repo/docs/notes.md"
 g add -A && g commit -q -m change
@@ -87,7 +92,8 @@ normalize <"$tmp/out3" >"$tmp/got3"
 printf '%s\n' \
   'src/legacy/new_feature.cpp:1:placeholder' \
   'src/legacy/old.cpp:4:todo' \
-  'src/legacy/old.cpp:5:stub' | sort >"$tmp/want3"
+  'src/legacy/old.cpp:5:stub' \
+  'src/ui/kernel/panel.tsx:2:empty-body' | sort >"$tmp/want3"
 if [[ $rc -ne 1 ]]; then fail "--diff: код выхода $rc, ожидался 1"; cat "$tmp/err3" >&2; fi
 if diff -u "$tmp/want3" "$tmp/got3" >"$tmp/d3"; then
   pass "--diff: только добавленные строки, старые нарушения и фикстуры пропущены"
@@ -107,6 +113,33 @@ if [[ $rc -eq 0 && ! -s "$tmp/out4" ]]; then
   pass "--diff: чистое изменение проходит (старый TODO в базе не сообщается)"
 else
   fail "--diff: чистое изменение: код выхода $rc"; cat "$tmp/out4" "$tmp/err4" >&2
+fi
+
+# --- 3б. каталоги полной проверки и типы файлов ---------------------------------------
+# Каждый каталог нового кода (включая WASM-привязки и вьюпорт ядра) входит в полную проверку;
+# .mts и .tsx — файлы кода; каталог вне списка не сканируется.
+full="$tmp/full"
+for f in src/wasm/kernel_bindings.cpp src/wasm/bendcore_kernel_api.mjs src/wasm/api.d.mts \
+         src/ui/kernel/KernelViewport.tsx src/modeling/features/extrude.cpp \
+         src/assembly_v2/solver.cpp src/drawing_v2/model.cpp src/kernel/shape.cpp \
+         tests/wasm/kernel_corpus.test.mjs tests/e2e-kernel/kernel_viewport.spec.ts \
+         web/kernel-viewer/playwright.config.ts src/legacy/old_code.cpp; do
+  mkdir -p "$full/$(dirname "$f")"
+  printf '%s\n' '// TODO marker for the directory check' >"$full/$f"
+done
+set +e
+bash "$checker" --root "$full" >"$tmp/out5" 2>"$tmp/err5"
+rc=$?
+set -e
+normalize <"$tmp/out5" >"$tmp/got5"
+printf '%s:1:todo\n' src/wasm/kernel_bindings.cpp src/wasm/bendcore_kernel_api.mjs src/wasm/api.d.mts \
+  src/ui/kernel/KernelViewport.tsx src/modeling/features/extrude.cpp src/assembly_v2/solver.cpp \
+  src/drawing_v2/model.cpp src/kernel/shape.cpp tests/wasm/kernel_corpus.test.mjs \
+  tests/e2e-kernel/kernel_viewport.spec.ts web/kernel-viewer/playwright.config.ts | sort >"$tmp/want5"
+if [[ $rc -eq 1 ]] && diff -u "$tmp/want5" "$tmp/got5" >"$tmp/d5"; then
+  pass "полная проверка: все каталоги нового кода (wasm, ui/kernel, modeling, assembly_v2, drawing_v2, ...)"
+else
+  fail "полная проверка каталогов: код $rc, расхождение (- ожидалось, + получено)"; cat "$tmp/d5" >&2 || true
 fi
 
 # --- 4. ошибки запуска -------------------------------------------------------------------

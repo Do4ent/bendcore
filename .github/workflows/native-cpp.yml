@@ -3,7 +3,7 @@ name: Native C++
 # Ядро C++ без OCCT: полная сборка и все тесты (включая GoogleTest-наборы).
 # До появления этого workflow нативные GTest-наборы нигде не собирались,
 # поэтому ошибки компиляции и падения в них оставались незамеченными.
-# Сборка с OCCT — job "occt" в wasm.yml.
+# Сборка с OCCT — job "occt-native" в qa.yml, ядро WASM — job "kernel-wasm" в wasm.yml.
 on:
   push:
     branches: [main, develop]
