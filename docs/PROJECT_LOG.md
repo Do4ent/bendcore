@@ -2,6 +2,17 @@
 
 Новые записи — сверху. Формат: дата, фаза, что сделано, решения, следующий шаг.
 
+## 2026-11-07 — Принято обновление CI
+
+- `qa.yml`: ключ кэша OCCT от версии и `occt_toolkits.txt`/`build_occt.sh`, полный ctest с
+  OCCT, `performance` — отдельным последовательным шагом.
+- `wasm.yml`: задача `kernel-wasm` (OCCT для WASM с кэшем, `bendcore_kernel_wasm`,
+  `wasm_kernel_corpus`, размеры в сводке) и `kernel-viewer-e2e` (Playwright).
+- `check_no_stubs.sh` сканирует также `src/wasm`, `src/ui/kernel`, тесты корпуса/WASM/e2e,
+  правила для JS/TS; самотест и полная проверка — 0 нарушений (122 файла).
+- Снимки экрана Playwright при падении включены (`screenshot: 'only-on-failure'`).
+- Проверяется только в CI: кэши, сборка OCCT из исходников, установка emsdk/Playwright.
+
 ## 2026-11-07 — Принята настоящая история булевых операций
 
 - `kernel::booleanOp` возвращает `BRepTools_History` OCCT (с учётом `SimplifyResult`);
