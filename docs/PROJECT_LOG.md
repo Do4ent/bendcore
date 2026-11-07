@@ -2,6 +2,26 @@
 
 Новые записи — сверху. Формат: дата, фаза, что сделано, решения, следующий шаг.
 
+## 2026-11-07 — Приняты WASM-ядро с вьюпортом и импорт сборок STEP
+
+- `bendcore_kernel_wasm` + `src/ui/kernel/` (`docs/ui/KERNEL_VIEWPORT.md`): STEP → свойства и
+  тесселяция в браузере, вьюпорт three.js с выбором граней; .wasm 12,0 МиБ / 3,8 МиБ gzip.
+  Проверено при приёмке: корпус в node (ctest `wasm_kernel_corpus`) и 4 сценария Playwright.
+- `bendcore_kernel_xcaf` (`docs/kernel/XCAF_IO.md`): дерево сборки, имена, цвета, слои,
+  чтение и запись AP214/AP242 из памяти; `build_occt.sh` собирает только 29 тулкитов
+  (проверено отдельной установкой: 100/101, `performance` — известная нестабильность под нагрузкой).
+- Итог в `build-occt`: 110/110 (без WASM-теста), `check_no_stubs.sh` — 0 нарушений.
+
+Открытые задачи:
+- `third_party/eigen-5.0.0` — не Eigen, а «Minimal Eigen Mock» (заглушка). Нативная сборка
+  берёт системный Eigen, но WASM-сборка, вероятно, собиралась с заглушкой: прежний
+  результат «59 WASM-тестов» нужно перепроверить с настоящим Eigen, заглушку — удалить;
+- WASM-модуль работает в главном потоке (чтение ~0,4 с блокирует страницу) — вынести в Web Worker;
+- вьюпорт: выбор рёбер и вершин, имена и цвета XCAF во вьюпорте;
+- CI: новый ключ кэша OCCT после перехода `build_occt.sh` на 29 тулкитов
+  (`docs/kernel/OCCT_BUILD.md`, раздел 4); Playwright требует
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE`.
+
 ## 2026-11-07 — Фаза 1: приняты профили эскиза и операции детали
 
 - `bendcore_modeling_sketch` (`docs/modeling/SKETCH_PROFILE.md`, `REFERENCE_GEOMETRY.md`):
