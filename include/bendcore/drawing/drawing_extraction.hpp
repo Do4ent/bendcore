@@ -1,5 +1,5 @@
 // M3 Phase - Drawing data model (GAP-014): 2D views, sheets, dimensions, layout.
-// Projection of 3D models into views (HLR) is not implemented: roadmap phase 4.
+// Projection of 3D models into views (HLR) is absent here; it is planned in roadmap phase 4.
 #pragma once
 
 #include <memory>
