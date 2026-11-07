@@ -925,10 +925,15 @@ if(BENDCORE_WITH_OCCT)
   # файлом, чтобы параллельные ветки не конфликтовали (docs/PROJECT_PROCESS.md, раздел 5).
   include(cmake/kernel_core.cmake OPTIONAL)
   include(cmake/kernel_healing.cmake OPTIONAL)
+  include(cmake/kernel_xcaf.cmake OPTIONAL)
   include(cmake/modeling.cmake OPTIONAL)
+  include(cmake/modeling_sketch.cmake OPTIONAL)
+  include(cmake/modeling_features.cmake OPTIONAL)
+  include(cmake/modeling_document.cmake OPTIONAL)
   include(cmake/assembly.cmake OPTIONAL)
   include(cmake/drawing.cmake OPTIONAL)
   include(cmake/qa.cmake OPTIONAL)
+  include(cmake/wasm_kernel.cmake OPTIONAL)
 endif()
 
 # Phase C: Parameter Store, Dependency Graph, Rebuild Engine
