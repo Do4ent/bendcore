@@ -1,0 +1,73 @@
+.kv-root {
+  --kv-bg: #ffffff;
+  --kv-fg: #1d2733;
+  --kv-muted: #5b6878;
+  --kv-border: #d8dee6;
+  --kv-error-bg: #fdecec;
+  --kv-error-fg: #a11d1d;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--kv-fg);
+  background: var(--kv-bg);
+}
+
+.kv-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--kv-border);
+}
+
+.kv-title { font-weight: 600; }
+
+.kv-file {
+  position: relative;
+  padding: 4px 10px;
+  border: 1px solid var(--kv-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.kv-file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.kv-param { display: inline-flex; align-items: center; gap: 6px; color: var(--kv-muted); }
+.kv-param input { width: 72px; }
+.kv-status { margin-left: auto; color: var(--kv-muted); }
+
+.kv-error {
+  padding: 6px 12px;
+  background: var(--kv-error-bg);
+  color: var(--kv-error-fg);
+}
+
+.kv-main { display: flex; flex: 1; min-height: 0; }
+
+.kernel-viewport { flex: 1; min-width: 0; position: relative; overflow: hidden; }
+.kernel-viewport canvas { display: block; }
+
+.kv-panel {
+  width: 300px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border-left: 1px solid var(--kv-border);
+}
+
+.kv-panel h2 { font-size: 13px; margin: 8px 0 4px; }
+.kv-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 0; }
+.kv-panel dt { color: var(--kv-muted); }
+.kv-panel dd { margin: 0; word-break: break-word; }
+.kv-hint { color: var(--kv-muted); margin: 0; }
+
+@media (max-width: 720px) {
+  .kv-main { flex-direction: column; }
+  .kv-panel { width: auto; max-height: 40vh; border-left: none; border-top: 1px solid var(--kv-border); }
+}
