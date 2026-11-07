@@ -1157,6 +1157,59 @@ target_link_libraries(test_gap027_parametric_ai_comprehensive PRIVATE bendcore_c
 bendcore_add_test(gap027_parametric_ai_comprehensive test_gap027_parametric_ai_comprehensive)
 
 # ============================================================================
+# M12 Phase: FEA & Analysis (GAP-050 to GAP-053) - 172 tests
+# ============================================================================
+
+# GAP-050: StressAnalysisFramework (42 tests) - FEA solver, von Mises stress
+add_executable(test_gap050_stress_analysis tests/GAP-050-StressAnalysisFramework.test.cpp)
+target_link_libraries(test_gap050_stress_analysis PRIVATE bendcore_core)
+bendcore_add_test(gap050_stress_analysis test_gap050_stress_analysis)
+
+# GAP-051: BendRadiusSimulation (39 tests) - Radius validation, springback
+add_executable(test_gap051_bend_radius tests/GAP-051-BendRadiusSimulation.test.cpp)
+target_link_libraries(test_gap051_bend_radius PRIVATE bendcore_core)
+bendcore_add_test(gap051_bend_radius test_gap051_bend_radius)
+
+# GAP-052: MaterialPropertyDatabase (43 tests) - Material library, properties
+add_executable(test_gap052_material_database tests/GAP-052-MaterialPropertyDatabase.test.cpp)
+target_link_libraries(test_gap052_material_database PRIVATE bendcore_core)
+bendcore_add_test(gap052_material_database test_gap052_material_database)
+
+# GAP-053: LoadCaseHandling (48 tests) - Load cases, boundary conditions
+add_executable(test_gap053_load_cases tests/GAP-053-LoadCaseHandling.test.cpp)
+target_link_libraries(test_gap053_load_cases PRIVATE bendcore_core)
+bendcore_add_test(gap053_load_cases test_gap053_load_cases)
+
+# ============================================================================
+# M13 Phase: Advanced Rendering (GAP-054 to GAP-058) - 172 tests
+# ============================================================================
+
+# GAP-054: RealTime3DViewport (36 tests) - Three.js optimizations, FPS
+add_executable(test_gap054_viewport tests/GAP-054-RealTime3DViewport.test.cpp)
+target_link_libraries(test_gap054_viewport PRIVATE bendcore_core)
+bendcore_add_test(gap054_viewport test_gap054_viewport)
+
+# GAP-055: MaterialTextureSupport (34 tests) - Textures, materials, PBR
+add_executable(test_gap055_materials tests/GAP-055-MaterialTextureSupport.test.cpp)
+target_link_libraries(test_gap055_materials PRIVATE bendcore_core)
+bendcore_add_test(gap055_materials test_gap055_materials)
+
+# GAP-056: LightingShadows (37 tests) - Lighting, shadows, global illumination
+add_executable(test_gap056_lighting tests/GAP-056-LightingShadows.test.cpp)
+target_link_libraries(test_gap056_lighting PRIVATE bendcore_core)
+bendcore_add_test(gap056_lighting test_gap056_lighting)
+
+# GAP-057: HighQualityImageGeneration (30 tests) - Render, ray tracing
+add_executable(test_gap057_image_gen tests/GAP-057-HighQualityImageGeneration.test.cpp)
+target_link_libraries(test_gap057_image_gen PRIVATE bendcore_core)
+bendcore_add_test(gap057_image_gen test_gap057_image_gen)
+
+# GAP-058: PerformanceOptimization (35 tests) - Cache, parallel rendering
+add_executable(test_gap058_perf_opt tests/GAP-058-PerformanceOptimization.test.cpp)
+target_link_libraries(test_gap058_perf_opt PRIVATE bendcore_core)
+bendcore_add_test(gap058_perf_opt test_gap058_perf_opt)
+
+# ============================================================================
 # M20: Production Hardening (GAP-088 to GAP-093) - 220 tests
 # ============================================================================
 
