@@ -1,5 +1,5 @@
-// M3 Phase - Drawing Extraction (GAP-014): View generation from 3D assemblies
-// Supports standard views, isometric views, dimensioning, and multi-format export
+// M3 Phase - Drawing data model (GAP-014): 2D views, sheets, dimensions, layout.
+// Projection of 3D models into views (HLR) is not implemented: roadmap phase 4.
 #pragma once
 
 #include <memory>
@@ -242,69 +242,13 @@ private:
 };
 
 // ============================================================================
-// Forward declarations for assembly types
+// Dimensioning API
 // ============================================================================
-
-// These would be actual BendCore types - for now using placeholders
-// In real integration, these should be from bendcore/assembly/assembly.hpp
-class Assembly {
-public:
-    virtual ~Assembly() = default;
-};
-
-// ============================================================================
-// Drawing Extraction API
-// ============================================================================
-
-/**
- * @brief Extract 2D views from 3D assembly
- *
- * Generates standard orthographic views (Front, Top, Right, etc.)
- * and isometric views from a 3D assembly model.
- *
- * @param assembly The 3D assembly to extract views from
- * @param view_types Vector of view types to generate
- * @return Vector of extracted DrawingView objects
- */
-std::vector<std::shared_ptr<DrawingView>> extractViewsFromAssembly(
-    const Assembly& assembly,
-    const std::vector<ViewType>& view_types
-);
-
-/**
- * @brief Generate a single view with custom viewing angle
- *
- * @param assembly The 3D assembly
- * @param view_direction Custom viewing direction (normalized)
- * @param up_direction Up direction for the view plane
- * @return Extracted DrawingView
- */
-std::shared_ptr<DrawingView> generateCustomView(
-    const Assembly& assembly,
-    const Vec3& view_direction,
-    const Vec3& up_direction
-);
-
-/**
- * @brief Create a complete drawing sheet with multiple views
- *
- * Automatically arranges views on the sheet according to
- * orthographic projection standards (first/third angle).
- *
- * @param assembly The 3D assembly
- * @param views Vector of views to place on sheet
- * @return Pointer to created DrawingSheet
- */
-std::shared_ptr<DrawingSheet> createDrawingSheet(
-    const Assembly& assembly,
-    const std::vector<std::shared_ptr<DrawingView>>& views
-);
 
 /**
  * @brief Auto-dimension a drawing view
  *
- * Extracts key dimensions from the assembly and adds them
- * to the view with intelligent placement and formatting.
+ * Adds overall width and height dimensions of the view's 2D bounding box.
  *
  * @param view The view to dimension
  * @param precision Decimal places for dimensions
@@ -328,7 +272,7 @@ void addReferenceDimensions(
 );
 
 // ============================================================================
-// Export Functions
+// Export format identifiers (writers: see drawing_export.hpp)
 // ============================================================================
 
 enum class ExportFormat {
@@ -340,100 +284,6 @@ enum class ExportFormat {
     PNG,    // Raster image format
     JPEG    // Raster image format
 };
-
-/**
- * @brief Export drawing sheet to file
- *
- * @param sheet The drawing sheet to export
- * @param file_path Path where to save the file
- * @param format Export format
- * @return true if export was successful
- */
-bool exportDrawing(
-    const DrawingSheet& sheet,
-    const std::string& file_path,
-    ExportFormat format
-);
-
-/**
- * @brief Export single view to file
- *
- * @param view The view to export
- * @param file_path Path where to save the file
- * @param format Export format
- * @return true if export was successful
- */
-bool exportView(
-    const DrawingView& view,
-    const std::string& file_path,
-    ExportFormat format
-);
-
-/**
- * @brief Export to DWG format (AutoCAD)
- *
- * @param sheet The drawing sheet
- * @param file_path Output file path
- * @return true if successful
- */
-bool exportToDWG(const DrawingSheet& sheet, const std::string& file_path);
-
-/**
- * @brief Export to DXF format (Drawing Exchange Format)
- *
- * @param sheet The drawing sheet
- * @param file_path Output file path
- * @return true if successful
- */
-bool exportToDXF(const DrawingSheet& sheet, const std::string& file_path);
-
-/**
- * @brief Export to PDF format
- *
- * @param sheet The drawing sheet
- * @param file_path Output file path
- * @return true if successful
- */
-bool exportToPDF(const DrawingSheet& sheet, const std::string& file_path);
-
-/**
- * @brief Export to SVG format (Scalable Vector Graphics)
- *
- * @param sheet The drawing sheet
- * @param file_path Output file path
- * @return true if successful
- */
-bool exportToSVG(const DrawingSheet& sheet, const std::string& file_path);
-
-/**
- * @brief Export to PNG format (raster)
- *
- * @param sheet The drawing sheet
- * @param file_path Output file path
- * @param dpi Resolution in dots per inch (default 300)
- * @return true if successful
- */
-bool exportToPNG(
-    const DrawingSheet& sheet,
-    const std::string& file_path,
-    int dpi = 300
-);
-
-/**
- * @brief Export to JPEG format (raster)
- *
- * @param sheet The drawing sheet
- * @param file_path Output file path
- * @param dpi Resolution in dots per inch (default 300)
- * @param quality JPEG quality 1-100 (default 85)
- * @return true if successful
- */
-bool exportToJPEG(
-    const DrawingSheet& sheet,
-    const std::string& file_path,
-    int dpi = 300,
-    int quality = 85
-);
 
 // ============================================================================
 // View Layout and Arrangement

@@ -27,12 +27,6 @@ bool near(double a, double b, double eps = 1e-6) {
     return std::abs(a - b) <= eps;
 }
 
-// Dummy Assembly implementation for testing
-class TestAssembly : public Assembly {
-public:
-    TestAssembly() = default;
-};
-
 // ============================================================================
 // DrawingView Tests
 // ============================================================================
@@ -329,88 +323,6 @@ void test_sheet_dimensions() {
 }
 
 // ============================================================================
-// View Extraction Tests
-// ============================================================================
-
-void test_extract_views_from_assembly() {
-    TestAssembly assembly;
-    std::vector<ViewType> view_types = {ViewType::Front, ViewType::Top, ViewType::Right};
-
-    auto views = extractViewsFromAssembly(assembly, view_types);
-
-    test(views.size() == 3, "Three views extracted");
-    test(views[0]->getType() == ViewType::Front, "First view is Front");
-    test(views[1]->getType() == ViewType::Top, "Second view is Top");
-    test(views[2]->getType() == ViewType::Right, "Third view is Right");
-}
-
-void test_extract_isometric_views() {
-    TestAssembly assembly;
-    std::vector<ViewType> view_types = {
-        ViewType::IsoTR, ViewType::IsoTL, ViewType::IsoBR, ViewType::IsoBL
-    };
-
-    auto views = extractViewsFromAssembly(assembly, view_types);
-
-    test(views.size() == 4, "Four isometric views extracted");
-    test(views[0]->getType() == ViewType::IsoTR, "Isometric TR extracted");
-    test(views[3]->getType() == ViewType::IsoBL, "Isometric BL extracted");
-}
-
-void test_custom_view_generation() {
-    TestAssembly assembly;
-    Vec3 view_dir = {1.0, 0.0, 0.0};
-    Vec3 up_dir = {0.0, 1.0, 0.0};
-
-    auto view = generateCustomView(assembly, view_dir, up_dir);
-
-    test(view != nullptr, "Custom view generated");
-    test(view->getType() == ViewType::Custom, "View type is Custom");
-}
-
-void test_custom_view_invalid_direction() {
-    TestAssembly assembly;
-    Vec3 zero_dir = {0.0, 0.0, 0.0};
-    Vec3 up_dir = {0.0, 1.0, 0.0};
-
-    bool threw = false;
-    try {
-        generateCustomView(assembly, zero_dir, up_dir);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-
-    test(threw, "Zero direction throws exception");
-}
-
-void test_custom_view_parallel_up_direction() {
-    TestAssembly assembly;
-    Vec3 view_dir = {1.0, 0.0, 0.0};
-    Vec3 up_dir = {1.0, 0.0, 0.0};  // Parallel to view direction
-
-    bool threw = false;
-    try {
-        generateCustomView(assembly, view_dir, up_dir);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-
-    test(threw, "Parallel up direction throws exception");
-}
-
-void test_create_drawing_sheet() {
-    TestAssembly assembly;
-    auto view1 = std::make_shared<DrawingView>("v1", ViewType::Front);
-    auto view2 = std::make_shared<DrawingView>("v2", ViewType::Top);
-
-    std::vector<std::shared_ptr<DrawingView>> views = {view1, view2};
-    auto sheet = createDrawingSheet(assembly, views);
-
-    test(sheet != nullptr, "Drawing sheet created");
-    test(sheet->getViewCount() == 2, "Sheet contains 2 views");
-}
-
-// ============================================================================
 // Dimensioning Tests
 // ============================================================================
 
@@ -447,31 +359,6 @@ void test_add_reference_dimensions() {
     addReferenceDimensions(view, refs);
 
     test(view.getAnnotations().size() >= 2, "Reference dimensions added");
-}
-
-// ============================================================================
-// Export Tests
-// ============================================================================
-
-void test_export_drawing_formats() {
-    DrawingSheet sheet;
-    auto view = std::make_shared<DrawingView>("v1", ViewType::Front);
-    sheet.addView(view);
-
-    // These are basic placeholder tests - real implementations would verify file contents
-    test(exportDrawing(sheet, "/tmp/test.dxf", ExportFormat::DXF), "DXF export returns success");
-    test(exportDrawing(sheet, "/tmp/test.svg", ExportFormat::SVG), "SVG export returns success");
-}
-
-void test_export_to_svg() {
-    DrawingSheet sheet;
-    auto view = std::make_shared<DrawingView>("v1", ViewType::Front);
-    view->addEdge({{0, 0}, {100, 100}});
-
-    sheet.addView(view);
-
-    bool result = exportToSVG(sheet, "/tmp/test.svg");
-    test(result, "SVG export successful");
 }
 
 // ============================================================================
@@ -569,22 +456,10 @@ int main() {
     test_sheet_size_to_string();
     test_sheet_dimensions();
 
-    // View extraction tests
-    test_extract_views_from_assembly();
-    test_extract_isometric_views();
-    test_custom_view_generation();
-    test_custom_view_invalid_direction();
-    test_custom_view_parallel_up_direction();
-    test_create_drawing_sheet();
-
     // Dimensioning tests
     test_add_dimensions_to_view();
     test_add_dimensions_precision();
     test_add_reference_dimensions();
-
-    // Export tests
-    test_export_drawing_formats();
-    test_export_to_svg();
 
     // Layout tests
     test_auto_arrange_single_view();
