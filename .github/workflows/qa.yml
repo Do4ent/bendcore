@@ -1,0 +1,107 @@
+name: QA
+
+# Проверка правила «никаких заглушек» (docs/PROJECT_PROCESS.md, раздел 2) и native-сборка
+# с OCCT с регрессией импорта корпуса STEP (docs/qa/QA.md).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  no-stubs:
+    name: Проверка заглушек
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Режиму --diff нужен общий предок с базовой веткой.
+          fetch-depth: 0
+
+      - name: Самотест check_no_stubs
+        run: bash tests/qa/test_check_no_stubs.sh
+
+      - name: Каталоги нового кода и добавленные строки
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [[ "$EVENT" == "pull_request" ]]; then
+            git fetch --no-tags origin "$BASE_REF"
+            args=(--diff "origin/$BASE_REF")
+          elif [[ "$EVENT" == "push" && -n "$BEFORE" && ! "$BEFORE" =~ ^0+$ ]] \
+               && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            args=(--diff "$BEFORE")
+          else
+            echo "Нет базы для --diff (новая ветка или ручной запуск): только полная проверка каталогов."
+          fi
+          set +e
+          bash scripts/check_no_stubs.sh "${args[@]}" | tee no-stubs.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          # Нарушения — аннотациями на строках изменений.
+          sed -E -n 's/^([^:]+):([0-9]+): \[([a-z-]+)\] (.*)$/::error file=\1,line=\2,title=no-stubs \3::\4/p' no-stubs.txt | head -n 50
+          exit "$rc"
+
+  occt-native:
+    name: Native + OCCT 8.0.1 (корпус, ядро, импорт)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Зависимости (Ninja, Eigen, GTest, Python3)
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev libgtest-dev python3
+
+      # Тот же ключ, что у job "occt" в wasm.yml: сборка OCCT переиспользуется обоими workflow.
+      - name: Кэш сборки OCCT V8.0.1
+        id: occt-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/occt-build
+            third_party/occt-install
+          key: occt-build-V8.0.1-static-dataexchange-ubuntu-24.04-v3
+
+      - name: Сборка OCCT V8.0.1 из исходников (статически)
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -o pipefail
+          cd third_party
+          OCCT_VERSION=8.0.1 ./build_occt.sh 2>&1 | tee "$GITHUB_WORKSPACE/occt-build.log"
+
+      - name: Конфигурация (BENDCORE_WITH_OCCT=ON)
+        run: |
+          cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install" \
+            -DBENDCORE_EIGEN_DIR=/usr/include/eigen3
+
+      - name: Сборка
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build-occt --parallel 2>&1 | tee build-occt.log
+
+      - name: Тесты OCCT, ядра, корпуса и импорта
+        run: ctest --test-dir build-occt -R 'occt|kernel|corpus|import' --output-on-failure --timeout 600
+
+      - name: Ошибки в аннотации (только при падении)
+        if: failure()
+        shell: bash
+        run: |
+          for f in occt-build.log build-occt.log; do
+            [ -f "$f" ] || continue
+            grep -n -E "error:|FAILED|undefined reference" "$f" | head -n 20 | \
+              while IFS= read -r line; do echo "::error title=$f::${line:0:900}"; done
+          done
+
+      - name: Свежесгенерированный корпус (при любом результате)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bendcore-corpus-fresh
+          path: build-occt/corpus-fresh/
+          if-no-files-found: warn
