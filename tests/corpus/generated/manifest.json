@@ -1,0 +1,417 @@
+{
+  "generator": "tests/corpus/generate_corpus.cpp",
+  "models": [
+    {
+      "area": 18400.0,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        100.0,
+        60.0,
+        20.0
+      ],
+      "bbox_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "description": "Прямоугольный параллелепипед a x b x c",
+      "faces": 6,
+      "file": "box_100x60x20.step",
+      "formula": "V = a*b*c; S = 2(ab+bc+ca); граней 6",
+      "free_shapes": 1,
+      "name": "box_100x60x20",
+      "schema": "AP203",
+      "schema_keyword": "CONFIG_CONTROL_DESIGN",
+      "solids": 1,
+      "top_name": "box_100x60x20",
+      "volume": 120000.0,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 8796.45943005142,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        20.0,
+        20.0,
+        50.0
+      ],
+      "bbox_min": [
+        -20.0,
+        -20.0,
+        0.0
+      ],
+      "description": "Круговой цилиндр радиуса r и высоты h",
+      "faces": 3,
+      "file": "cylinder_r20_h50.step",
+      "formula": "V = pi r^2 h; S = 2 pi r^2 + 2 pi r h; граней 3",
+      "free_shapes": 1,
+      "name": "cylinder_r20_h50",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 1,
+      "top_name": "cylinder_r20_h50",
+      "volume": 62831.853071795864,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 15079.644737231007,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        30.0,
+        30.0,
+        40.0
+      ],
+      "bbox_min": [
+        -30.0,
+        -30.0,
+        0.0
+      ],
+      "description": "Цилиндр с соосным сквозным отверстием (булева разность)",
+      "faces": 4,
+      "file": "tube_R30_r10_h40.step",
+      "formula": "V = pi (R^2 - r^2) h; S = 2 pi (R^2 - r^2) + 2 pi (R + r) h; граней 4",
+      "free_shapes": 1,
+      "name": "tube_R30_r10_h40",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 1,
+      "top_name": "tube_R30_r10_h40",
+      "volume": 100530.96491487339,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 23200.0,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        120.0,
+        80.0,
+        10.0
+      ],
+      "bbox_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "description": "Пластина с центральным сквозным отверстием",
+      "faces": 7,
+      "file": "plate_120x80x10_hole_d20.step",
+      "formula": "V = abc - pi r^2 c; S = 2(ab+bc+ca) - 2 pi r^2 + 2 pi r c; граней 7",
+      "free_shapes": 1,
+      "name": "plate_120x80x10_hole_d20",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 1,
+      "top_name": "plate_120x80x10_hole_d20",
+      "volume": 92858.40734641021,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 19739.208802178717,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        60.0,
+        60.0,
+        10.0
+      ],
+      "bbox_min": [
+        -60.0,
+        -60.0,
+        -10.0
+      ],
+      "description": "Тор: радиус осевой окружности R, радиус трубки r",
+      "faces": 1,
+      "file": "torus_R50_r10.step",
+      "formula": "V = 2 pi^2 R r^2; S = 4 pi^2 R r; граней 1",
+      "free_shapes": 1,
+      "name": "torus_R50_r10",
+      "schema": "AP242",
+      "schema_keyword": "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING",
+      "solids": 1,
+      "top_name": "torus_R50_r10",
+      "volume": 98696.04401089359,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 7853.981633974483,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        25.0,
+        25.0,
+        25.0
+      ],
+      "bbox_min": [
+        -25.0,
+        -25.0,
+        -25.0
+      ],
+      "description": "Шар радиуса R",
+      "faces": 1,
+      "file": "sphere_R25.step",
+      "formula": "V = 4/3 pi R^3; S = 4 pi R^2; граней 1",
+      "free_shapes": 1,
+      "name": "sphere_R25",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 1,
+      "top_name": "sphere_R25",
+      "volume": 65449.84694978735,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 8761.444438422373,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        30.0,
+        30.0,
+        40.0
+      ],
+      "bbox_min": [
+        -30.0,
+        -30.0,
+        0.0
+      ],
+      "description": "Усечённый конус: радиусы оснований R1, R2, высота h",
+      "faces": 3,
+      "file": "frustum_R30_R10_h40.step",
+      "formula": "V = pi h/3 (R1^2 + R1 R2 + R2^2); S = pi (R1^2 + R2^2) + pi (R1 + R2) sqrt(h^2 + (R1-R2)^2); граней 3",
+      "free_shapes": 1,
+      "name": "frustum_R30_R10_h40",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 1,
+      "top_name": "frustum_R30_R10_h40",
+      "volume": 54454.272662223084,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 14952.778684233861,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        100.0,
+        60.0,
+        10.0
+      ],
+      "bbox_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "description": "Пластина со скруглёнными вертикальными рёбрами (BRepFilletAPI_MakeFillet)",
+      "faces": 10,
+      "file": "plate_100x60x10_corner_fillets_r8.step",
+      "formula": "V = c (ab - (4 - pi) r^2); S = 2 (ab - (4 - pi) r^2) + c (2(a+b) - 8r + 2 pi r); граней 10",
+      "free_shapes": 1,
+      "name": "plate_100x60x10_corner_fillets_r8",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 1,
+      "top_name": "plate_100x60x10_corner_fillets_r8",
+      "volume": 59450.61929829747,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 19226.54824574367,
+      "area_rel_tol": 0.0001,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        80.0,
+        60.0,
+        40.0
+      ],
+      "bbox_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "description": "Коробка со скруглением всех 12 рёбер радиусом r (сумма Минковского внутренней коробки a'b'c' и шара r)",
+      "faces": 26,
+      "file": "box_80x60x40_all_fillets_r5.step",
+      "formula": "a'=a-2r...; V = a'b'c' + 2r(a'b'+b'c'+c'a') + pi r^2 (a'+b'+c') + 4/3 pi r^3; S = 2(a'b'+b'c'+c'a') + 2 pi r (a'+b'+c') + 4 pi r^2; граней 6+12+8=26",
+      "free_shapes": 1,
+      "name": "box_80x60x40_all_fillets_r5",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 1,
+      "top_name": "box_80x60x40_all_fillets_r5",
+      "volume": 188304.57122656005,
+      "volume_rel_tol": 0.0001
+    },
+    {
+      "area": 7472.0,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        60.0,
+        40.0,
+        30.0
+      ],
+      "bbox_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "description": "Уголок: выдавливание L-профиля (полки L и H, толщина t) на ширину w",
+      "faces": 8,
+      "file": "l_bracket_60x40x8_w30.step",
+      "formula": "A = L t + (H - t) t; P = 2(L + H); V = A w; S = 2A + P w; граней 8",
+      "free_shapes": 1,
+      "name": "l_bracket_60x40x8_w30",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 1,
+      "top_name": "l_bracket_60x40x8_w30",
+      "volume": 22080.0,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 1300.0,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        50.0,
+        10.0,
+        10.0
+      ],
+      "bbox_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "description": "Одна деталь из двух несвязанных тел (compound): куб 10 и брус 20x10x5 со смещением",
+      "faces": 12,
+      "file": "multibody_two_boxes.step",
+      "formula": "V = 10^3 + 20*10*5; S = 6*10^2 + 2(200+50+100); тел 2, граней 12",
+      "free_shapes": 1,
+      "name": "multibody_two_boxes",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 2,
+      "top_name": "multibody_two_boxes",
+      "volume": 2000.0,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 11526.90242331594,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        80.0,
+        40.0,
+        40.0
+      ],
+      "bbox_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "components": [
+        {
+          "color": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "instances": 1,
+          "name": "BASE_PLATE"
+        },
+        {
+          "color": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "instances": 2,
+          "name": "PIN"
+        },
+        {
+          "color": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "instances": 1,
+          "name": "SPACER"
+        }
+      ],
+      "description": "Сборка XCAF: BASE_PLATE (1 вхождение), PIN (2 вхождения), SPACER (1 вхождение); имена и цвета деталей",
+      "faces": 16,
+      "file": "assembly_bracket_pins_ap214.step",
+      "formula": "V = abc + 2 pi rp^2 hp + pi (Rs^2 - rs^2) hs; S = 2(ab+bc+ca) + 2(2 pi rp^2 + 2 pi rp hp) + 2 pi (Rs^2 - rs^2) + 2 pi (Rs + rs) hs; тел 4, граней 6 + 2*3 + 4",
+      "free_shapes": 1,
+      "name": "assembly_bracket_pins_ap214",
+      "schema": "AP214",
+      "schema_keyword": "AUTOMOTIVE_DESIGN",
+      "solids": 4,
+      "top_name": "assembly_bracket_pins_ap214",
+      "volume": 36288.27397215006,
+      "volume_rel_tol": 1e-06
+    },
+    {
+      "area": 11526.90242331594,
+      "area_rel_tol": 1e-06,
+      "bbox_abs_tol": 0.0001,
+      "bbox_max": [
+        80.0,
+        40.0,
+        40.0
+      ],
+      "bbox_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "components": [
+        {
+          "color": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "instances": 1,
+          "name": "BASE_PLATE"
+        },
+        {
+          "color": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "instances": 2,
+          "name": "PIN"
+        },
+        {
+          "color": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "instances": 1,
+          "name": "SPACER"
+        }
+      ],
+      "description": "Сборка XCAF: BASE_PLATE (1 вхождение), PIN (2 вхождения), SPACER (1 вхождение); имена и цвета деталей",
+      "faces": 16,
+      "file": "assembly_bracket_pins_ap242.step",
+      "formula": "V = abc + 2 pi rp^2 hp + pi (Rs^2 - rs^2) hs; S = 2(ab+bc+ca) + 2(2 pi rp^2 + 2 pi rp hp) + 2 pi (Rs^2 - rs^2) + 2 pi (Rs + rs) hs; тел 4, граней 6 + 2*3 + 4",
+      "free_shapes": 1,
+      "name": "assembly_bracket_pins_ap242",
+      "schema": "AP242",
+      "schema_keyword": "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING",
+      "solids": 4,
+      "top_name": "assembly_bracket_pins_ap242",
+      "volume": 36288.27397215006,
+      "volume_rel_tol": 1e-06
+    }
+  ],
+  "note": "Ожидаемые значения вычислены по формулам из размеров, не измерением OCCT",
+  "schema_version": 1,
+  "units": "mm"
+}

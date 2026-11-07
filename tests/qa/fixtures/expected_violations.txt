@@ -1,0 +1,25 @@
+# Ожидаемые нарушения фикстур tests/qa/fixtures/violations: <файл>:<строка>:<правило>.
+# Каждая строка проверена вручную; самотест требует точного совпадения множества.
+src/kernel/bad_shape.cpp:10:todo
+src/kernel/bad_shape.cpp:13:todo
+src/kernel/bad_shape.cpp:16:placeholder
+src/kernel/bad_shape.cpp:19:real-implementation
+src/kernel/bad_shape.cpp:19:would
+src/kernel/bad_shape.cpp:22:would
+src/kernel/bad_shape.cpp:25:stub
+src/kernel/bad_shape.cpp:29:not-implemented
+src/kernel/bad_shape.cpp:33:simplified
+src/kernel/bad_shape.cpp:36:temporary
+src/kernel/bad_shape.cpp:41:fake-value
+src/kernel/bad_shape.cpp:41:temporary
+src/kernel/bad_shape.cpp:46:literal-success
+src/kernel/bad_shape.cpp:50:literal-return
+src/kernel/bad_shape.cpp:52:empty-body
+src/kernel/bad_shape.cpp:55:literal-return
+src/kernel/bad_shape.cpp:58:bad-suppression
+src/kernel/bad_shape.cpp:60:bad-suppression
+tests/kernel/test_bad.cpp:9:trivial-assert
+tests/kernel/test_bad.cpp:11:trivial-assert
+tests/kernel/test_bad.cpp:12:trivial-assert
+tests/kernel/test_bad.cpp:13:trivial-assert
+tests/kernel/test_no_checks.cpp:1:no-assertions
