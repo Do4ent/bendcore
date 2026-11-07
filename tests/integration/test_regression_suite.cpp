@@ -23,7 +23,6 @@
 #include "bendcore/dependencies/dependency_graph.hpp"
 #include "bendcore/rebuild/rebuild_engine.hpp"
 #include "bendcore/geometry/geometry_kernel.hpp"
-#include "bendcore/geometry/brep_builder.hpp"
 #include "bendcore/geometry/curve_operations.hpp"
 #include "bendcore/geometry/surface_operations.hpp"
 

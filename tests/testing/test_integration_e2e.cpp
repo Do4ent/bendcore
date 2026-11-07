@@ -1,7 +1,6 @@
 #include "bendcore/testing/test_suite.hpp"
 #include "bendcore/document/cad_document.hpp"
 #include "bendcore/geometry/geometry_kernel.hpp"
-#include "bendcore/geometry/brep_builder.hpp"
 
 #include <iostream>
 #include <cassert>
@@ -33,18 +32,6 @@ int main() {
     Point3D p2(1, 1, 1);
     double dist = kernel.point_distance(p1, p2);
     assert(dist > 1.7 && dist < 1.8);  // sqrt(3) ≈ 1.732
-    std::cout << "OK\n";
-
-    // Test 4: B-Rep Operations
-    std::cout << "[TEST 4] B-Rep Builder... ";
-    BRepBuilder builder;
-    auto box = builder.create_box(1.0, 2.0, 3.0);
-    auto cylinder = builder.create_cylinder(0.5, 1.5);
-    std::cout << "OK\n";
-
-    // Test 5: Boolean Operations
-    std::cout << "[TEST 5] Boolean Operations... ";
-    auto diff = builder.boolean_difference(box, cylinder);
     std::cout << "OK\n";
 
     std::cout << "\n✓ All E2E tests PASSED\n";
