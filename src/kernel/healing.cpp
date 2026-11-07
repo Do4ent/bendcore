@@ -206,7 +206,8 @@ public:
         return true;
     }
 
-    bool NewPoint(const TopoDS_Vertex&, gp_Pnt&, double&) override { return false; }
+    // Vertices keep their position: only surfaces and curves are replaced by analytic ones.
+    bool NewPoint(const TopoDS_Vertex&, gp_Pnt&, double&) override { return false; }  // qa-allow(literal-return): BRepTools_Modification contract, false = vertex unchanged
 
     bool NewParameter(const TopoDS_Vertex& V, const TopoDS_Edge& E, double& P, double& Tol) override {
         const CurveInfo* info = curveInfo(E);
