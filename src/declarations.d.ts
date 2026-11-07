@@ -53,6 +53,12 @@ declare module 'three' {
     boundingBox: Box3 | null;
     setAttribute(name: string, attribute: BufferAttribute): this;
     setIndex(index: number[] | BufferAttribute): this;
+    index: BufferAttribute | null;
+    groups: Array<{ start: number; count: number; materialIndex?: number }>;
+    boundingSphere: Sphere | null;
+    addGroup(start: number, count: number, materialIndex?: number): void;
+    clearGroups(): void;
+    computeBoundingSphere(): void;
     setFromPoints(points: Vector3[]): this;
     computeBoundingBox(): void;
     computeVertexNormals(): void;
@@ -78,6 +84,30 @@ declare module 'three' {
     dispose(): void;
   }
 
+  export interface MaterialParameters {
+    color?: number | string;
+    side?: number;
+    transparent?: boolean;
+    opacity?: number;
+    polygonOffset?: boolean;
+    polygonOffsetFactor?: number;
+    polygonOffsetUnits?: number;
+    depthTest?: boolean;
+  }
+
+  export class Sphere {
+    center: Vector3;
+    radius: number;
+    constructor(center?: Vector3, radius?: number);
+  }
+
+  export interface Intersection {
+    distance: number;
+    point: Vector3;
+    object: Object3D;
+    faceIndex?: number;
+  }
+
   export class LineBasicMaterial extends Material {
     constructor(params?: { color?: number | string; linewidth?: number });
   }
@@ -85,7 +115,7 @@ declare module 'three' {
   export class MeshPhongMaterial extends Material {
     emissive: Color;
     shininess: number;
-    constructor(params?: { color?: number | string; transparent?: boolean; opacity?: number; side?: number; emissive?: number | string; shininess?: number });
+    constructor(params?: MaterialParameters & { emissive?: number | string; shininess?: number });
   }
 
   export class MeshBasicMaterial extends Material {
@@ -128,9 +158,9 @@ declare module 'three' {
   }
 
   export class Mesh extends Object3D {
-    constructor(geometry?: BufferGeometry, material?: Material);
+    constructor(geometry?: BufferGeometry, material?: Material | Material[]);
     geometry: BufferGeometry;
-    material: Material;
+    material: Material | Material[];
     matrixWorld: Matrix4;
     castShadow: boolean;
     receiveShadow: boolean;
@@ -200,6 +230,7 @@ declare module 'three' {
     shadowMap: { enabled: boolean; type: number };
     setSize(width: number, height: number): void;
     setPixelRatio(ratio: number): void;
+    setClearColor(color: number | string, alpha?: number): void;
     render(scene: Scene, camera: Camera): void;
     dispose(): void;
   }
@@ -252,7 +283,8 @@ declare module 'three' {
     constructor();
     ray: Ray;
     setFromCamera(coords: { x: number; y: number }, camera: Camera): void;
-    intersectObjects(objects: Object3D[], recursive?: boolean): Array<{ object: Object3D; point: Vector3; distance: number }>;
+    intersectObjects(objects: Object3D[], recursive?: boolean): Intersection[];
+    intersectObject(object: Object3D, recursive?: boolean): Intersection[];
   }
 
   export class Vector2 {
@@ -287,5 +319,20 @@ declare module 'three' {
     constructor();
     addLevel(object: Object3D, distance: number): this;
     update(camera: Camera): void;
+  }
+}
+
+// OrbitControls from the three.js examples (three/examples/jsm/controls/OrbitControls.js).
+declare module 'three/examples/jsm/controls/OrbitControls' {
+  import { Camera, Vector3 } from 'three';
+  export class OrbitControls {
+    constructor(camera: Camera, domElement: HTMLElement);
+    target: Vector3;
+    enableDamping: boolean;
+    screenSpacePanning: boolean;
+    update(): boolean;
+    addEventListener(type: 'change' | 'start' | 'end', listener: () => void): void;
+    removeEventListener(type: 'change' | 'start' | 'end', listener: () => void): void;
+    dispose(): void;
   }
 }
