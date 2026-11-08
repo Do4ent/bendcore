@@ -85,6 +85,27 @@ Status validateGeometry(const Entity& e, const LineTypeSpec& spec) {
                 }
             } else if constexpr (std::is_same_v<T, Text>) {
                 return validateText(g);
+            } else if constexpr (std::is_same_v<T, SolidFill>) {
+                if (g.points.size() < 3 || g.points.size() > 64) {
+                    return invalid("solid fill: needs 3..64 points");
+                }
+                for (const auto& p : g.points) {
+                    if (!finite(p)) return invalid("solid fill: non-finite point");
+                }
+                // Выпуклость: все векторные произведения соседних рёбер одного знака.
+                const std::size_t n = g.points.size();
+                double area2 = 0.0;
+                int sign = 0;
+                for (std::size_t i = 0; i < n; ++i) {
+                    const Point2 a = g.points[i], b = g.points[(i + 1) % n], c = g.points[(i + 2) % n];
+                    area2 += a.x * b.y - b.x * a.y;
+                    const double cr = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+                    if (std::abs(cr) < 1e-12) continue;
+                    const int sg = cr > 0 ? 1 : -1;
+                    if (sign != 0 && sg != sign) return invalid("solid fill: polygon must be convex");
+                    sign = sg;
+                }
+                if (std::abs(area2) < 1e-9) return invalid("solid fill: zero area");
             } else if constexpr (std::is_same_v<T, Hatch>) {
                 if (e.lineType != LineType::SolidThin) {
                     return invalid("GOST 2.306: hatch lines are solid thin lines");

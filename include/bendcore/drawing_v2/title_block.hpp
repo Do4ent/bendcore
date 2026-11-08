@@ -1,7 +1,8 @@
 #pragma once
 
 // Рамка листа (ГОСТ 2.301, ГОСТ 2.104) и основная надпись ГОСТ 2.104-2006:
-// форма 1 (185×55, первый лист чертежа) и форма 2а (185×15, последующие листы).
+// форма 1 (185×55, первый лист чертежа), форма 2 (185×40, первый лист текстового
+// документа — спецификации ГОСТ 2.106) и форма 2а (185×15, последующие листы).
 
 #include <bendcore/drawing_v2/model.hpp>
 #include <bendcore/drawing_v2/truetype_font.hpp>
@@ -11,7 +12,7 @@
 
 namespace bendcore::drawing_v2 {
 
-enum class TitleBlockForm { Form1, Form2a };
+enum class TitleBlockForm { Form1, Form2, Form2a };
 
 struct SignatureRow {
     std::string surname;

@@ -372,6 +372,17 @@ Result<std::string> writeDxf(const Drawing& drawing) {
             auto segs = hatchSegments(*ht);
             if (!segs) return segs.error();
             for (const auto& s : segs.value()) writeLine(e, s.a, s.b);
+        } else if (const auto* f = std::get_if<SolidFill>(&e.geometry)) {
+            // SOLID — треугольник (четвёртая точка совпадает с третьей); выпуклый
+            // многоугольник выводится веером треугольников от первой вершины.
+            for (std::size_t i = 1; i + 1 < f->points.size(); ++i) {
+                common("SOLID", e, e.lineType);
+                body.pair(100, "AcDbTrace");
+                body.point(10, f->points[0]);
+                body.point(11, f->points[i]);
+                body.point(12, f->points[i + 1]);
+                body.point(13, f->points[i + 1]);
+            }
         }
     }
     body.pair(0, "ENDSEC");

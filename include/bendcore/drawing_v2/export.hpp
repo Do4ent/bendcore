@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace bendcore::drawing_v2 {
 
@@ -41,6 +42,11 @@ struct PdfOptions {
 // PDF: одна страница, MediaBox = размер листа в мм · 72 / 25,4; координаты содержимого —
 // в пунктах, без дополнительного преобразования.
 Result<std::string> writePdf(const Drawing& drawing, const PdfOptions& options = {});
+
+// Многостраничный PDF: каждая страница — свой лист (размер MediaBox — по листу страницы),
+// шрифт встраивается один раз. Используется для спецификации ГОСТ 2.106 на нескольких
+// листах. Ошибка InvalidInput — пустой список или нулевой указатель.
+Result<std::string> writePdfPages(const std::vector<const Drawing*>& drawings, const PdfOptions& options = {});
 
 // Запись буфера в файл (двоичный режим). Возвращает число записанных байт.
 Result<std::size_t> saveToFile(const std::string& path, const std::string& bytes);

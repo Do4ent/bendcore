@@ -1,4 +1,4 @@
-// PDF 1.4, одна страница. Координаты содержимого — пункты (1 мм = 72/25,4 pt), начало —
+// PDF 1.4, одна или несколько страниц. Координаты содержимого — пункты (1 мм = 72/25,4 pt), начало —
 // левый нижний угол листа, как в модели. Текст — шрифт TrueType, встроенный целиком
 // (FontFile2), CIDFontType2 + Type0 с кодировкой Identity-H (CID = индекс глифа),
 // массив ширин W и карта ToUnicode для извлечения текста.
@@ -97,12 +97,11 @@ private:
 
 }  // namespace
 
-Result<std::string> writePdf(const Drawing& drawing, const PdfOptions& options) {
-    const double W = drawing.sheet().widthMm, H = drawing.sheet().heightMm;
-    const TrueTypeFont* font = options.font;
+namespace {
 
-    // Сбор используемых глифов и проверка, что шрифт содержит все символы.
-    std::map<std::uint16_t, char32_t> usedGlyphs;
+// Сбор используемых глифов всех страниц и проверка, что шрифт содержит все символы.
+Status collectGlyphs(const Drawing& drawing, const TrueTypeFont* font,
+                     std::map<std::uint16_t, char32_t>& usedGlyphs) {
     for (const Entity& e : drawing.entities()) {
         const auto* t = std::get_if<Text>(&e.geometry);
         if (!t) continue;
@@ -123,7 +122,11 @@ Result<std::string> writePdf(const Drawing& drawing, const PdfOptions& options) 
             usedGlyphs.emplace(g, cp);
         }
     }
+    return okStatus();
+}
 
+// Поток содержимого одной страницы.
+Result<std::string> pageContent(const Drawing& drawing, const TrueTypeFont* font) {
     std::ostringstream cs;
     cs << "0 G 0 g 0 J 1 j\n";
     std::string lastStyle;
@@ -167,6 +170,11 @@ Result<std::string> writePdf(const Drawing& drawing, const PdfOptions& options) 
             cs << P(p->points[0]) << " m\n";
             for (std::size_t i = 1; i < p->points.size(); ++i) cs << P(p->points[i]) << " l\n";
             cs << (p->closed ? "h S\n" : "S\n");
+        } else if (const auto* f = std::get_if<SolidFill>(&e.geometry)) {
+            // Заливка цветом заливки (0 g), без обводки.
+            cs << P(f->points[0]) << " m\n";
+            for (std::size_t i = 1; i < f->points.size(); ++i) cs << P(f->points[i]) << " l\n";
+            cs << "h f\n";
         } else if (const auto* ht = std::get_if<Hatch>(&e.geometry)) {
             auto segs = hatchSegments(*ht);
             if (!segs) return segs.error();
@@ -188,12 +196,34 @@ Result<std::string> writePdf(const Drawing& drawing, const PdfOptions& options) 
             cs << "> Tj ET\n";
         }
     }
+    return cs.str();
+}
+
+}  // namespace
+
+Result<std::string> writePdf(const Drawing& drawing, const PdfOptions& options) {
+    return writePdfPages({&drawing}, options);
+}
+
+Result<std::string> writePdfPages(const std::vector<const Drawing*>& drawings, const PdfOptions& options) {
+    if (drawings.empty()) return Error{ErrorCode::InvalidInput, "PDF: no pages"};
+    const TrueTypeFont* font = options.font;
+    std::map<std::uint16_t, char32_t> usedGlyphs;
+    std::vector<std::string> contents;
+    for (const Drawing* d : drawings) {
+        if (!d) return Error{ErrorCode::InvalidInput, "PDF: null page"};
+        if (auto st = collectGlyphs(*d, font, usedGlyphs); !st) return st.error();
+        auto c = pageContent(*d, font);
+        if (!c) return c.error();
+        contents.push_back(std::move(c).value());
+    }
 
     PdfBuilder pdf;
     const int catalog = pdf.reserve();
     const int pages = pdf.reserve();
-    const int page = pdf.reserve();
-    const int contents = pdf.add(PdfBuilder::stream("", cs.str()));
+    std::vector<int> pageIds, contentIds;
+    for (std::size_t i = 0; i < drawings.size(); ++i) pageIds.push_back(pdf.reserve());
+    for (const auto& c : contents) contentIds.push_back(pdf.add(PdfBuilder::stream("", c)));
 
     std::string resources = "<< >>";
     if (!usedGlyphs.empty()) {
@@ -242,15 +272,20 @@ Result<std::string> writePdf(const Drawing& drawing, const PdfOptions& options) 
         resources = "<< /Font << /F1 " + std::to_string(type0) + " 0 R >> >>";
     }
 
-    auto title = decodeUtf8(options.title.empty() ? drawing.sheet().name : options.title);
+    auto title = decodeUtf8(options.title.empty() ? drawings.front()->sheet().name : options.title);
     if (!title) return title.error();
     const int info = pdf.add("<< /Title " + pdfTextString(title.value()) +
                              " /Producer (bendcore drawing_v2) >>");
     pdf.set(catalog, "<< /Type /Catalog /Pages " + std::to_string(pages) + " 0 R >>");
-    pdf.set(pages, "<< /Type /Pages /Kids [" + std::to_string(page) + " 0 R] /Count 1 >>");
-    pdf.set(page, "<< /Type /Page /Parent " + std::to_string(pages) + " 0 R /MediaBox [0 0 " + pt(W) +
-                      " " + pt(H) + "] /Resources " + resources + " /Contents " +
-                      std::to_string(contents) + " 0 R >>");
+    std::string kids;
+    for (int id : pageIds) kids += (kids.empty() ? "" : " ") + std::to_string(id) + " 0 R";
+    pdf.set(pages, "<< /Type /Pages /Kids [" + kids + "] /Count " + std::to_string(pageIds.size()) + " >>");
+    for (std::size_t i = 0; i < drawings.size(); ++i) {
+        const double W = drawings[i]->sheet().widthMm, H = drawings[i]->sheet().heightMm;
+        pdf.set(pageIds[i], "<< /Type /Page /Parent " + std::to_string(pages) + " 0 R /MediaBox [0 0 " + pt(W) +
+                                " " + pt(H) + "] /Resources " + resources + " /Contents " +
+                                std::to_string(contentIds[i]) + " 0 R >>");
+    }
     return pdf.finish(catalog, info);
 }
 
