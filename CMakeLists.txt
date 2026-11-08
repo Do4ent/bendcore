@@ -18,31 +18,80 @@ if(EMSCRIPTEN)
   add_link_options(-fexceptions)
 endif()
 
-# Eigen (MPL-2.0): системный или stub для облачной среды
-find_package(Eigen3 3.3 QUIET NO_MODULE)
-if(NOT TARGET Eigen3::Eigen)
-  set(BENDCORE_EIGEN_DIR "" CACHE PATH "Каталог Eigen (внутри папка Eigen/), если нет системного Eigen")
-  find_path(BENDCORE_EIGEN_INCLUDE Eigen/Core HINTS ${BENDCORE_EIGEN_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/third_party/eigen-5.0.0 ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/eigen-5.0.0 ${CMAKE_CURRENT_SOURCE_DIR}/third_party_stubs NO_CMAKE_FIND_ROOT_PATH)
+# Eigen (MPL-2.0, header-only) — только настоящий Eigen >= 3.3. Порядок поиска:
+#   1. каталог BENDCORE_EIGEN_DIR (переменная CMake или окружения; внутри — папка Eigen/);
+#   2. пакет Eigen3 (find_package; при кросс-компиляции Emscripten системный пакет не виден);
+#   3. системные каталоги заголовков /usr/include/eigen3, /usr/local/include/eigen3,
+#      /opt/homebrew/include/eigen3 (заголовки не зависят от платформы, годятся и для WASM);
+#   4. при BENDCORE_FETCH_EIGEN=ON — архив Eigen 3.4.0 с gitlab.com с проверкой SHA-256.
+# Если ничего не найдено — ошибка конфигурации (заглушки Eigen в проекте нет).
+set(BENDCORE_EIGEN_DIR "$ENV{BENDCORE_EIGEN_DIR}" CACHE PATH "Каталог Eigen (внутри папка Eigen/)")
+option(BENDCORE_FETCH_EIGEN "Загрузить Eigen 3.4.0 (MPL-2.0) с gitlab.com, если он не найден" OFF)
+# Прежняя переменная кэша могла указывать на удалённую заглушку third_party/eigen-5.0.0.
+unset(BENDCORE_EIGEN_INCLUDE CACHE)
 
-  # Fallback to stub if not found
-  if(NOT BENDCORE_EIGEN_INCLUDE)
-    set(BENDCORE_EIGEN_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/third_party_stubs)
-    message(STATUS "Using Eigen stub from third_party_stubs/")
+# Версия Eigen по заголовкам каталога dir (Eigen 3.x: Macros.h; Eigen 5: Eigen/Version).
+function(bendcore_eigen_version dir out)
+  set(_ver "")
+  foreach(_f "${dir}/Eigen/Version" "${dir}/Eigen/src/Core/util/Macros.h")
+    if(EXISTS "${_f}" AND _ver STREQUAL "")
+      file(STRINGS "${_f}" _lines REGEX "^#define EIGEN_(WORLD|MAJOR|MINOR)_VERSION[ \t]+[0-9]+")
+      if(_lines)
+        string(REGEX REPLACE ".*EIGEN_WORLD_VERSION[ \t]+([0-9]+).*" "\\1" _w "${_lines}")
+        string(REGEX REPLACE ".*EIGEN_MAJOR_VERSION[ \t]+([0-9]+).*" "\\1" _ma "${_lines}")
+        string(REGEX REPLACE ".*EIGEN_MINOR_VERSION[ \t]+([0-9]+).*" "\\1" _mi "${_lines}")
+        set(_ver "${_w}.${_ma}.${_mi}")
+      endif()
+    endif()
+  endforeach()
+  set(${out} "${_ver}" PARENT_SCOPE)
+endfunction()
+
+set(_bendcore_eigen_inc "")
+if(BENDCORE_EIGEN_DIR)
+  bendcore_eigen_version("${BENDCORE_EIGEN_DIR}" _bendcore_eigen_ver)
+  if(NOT EXISTS "${BENDCORE_EIGEN_DIR}/Eigen/Dense" OR _bendcore_eigen_ver VERSION_LESS 3.3)
+    message(FATAL_ERROR "BENDCORE_EIGEN_DIR='${BENDCORE_EIGEN_DIR}' is not an Eigen >= 3.3 include "
+                        "directory (expected Eigen/Dense and a version header, found version "
+                        "'${_bendcore_eigen_ver}').")
   endif()
-
-  # third_party/eigen-5.0.0 and third_party_stubs are header stubs, not Eigen:
-  # sketch.cpp / PlaneGCS / the thermal solver do not compile against them.
-  if(NOT EXISTS "${BENDCORE_EIGEN_INCLUDE}/Eigen/src/Core/Matrix.h")
-    message(WARNING "Eigen at '${BENDCORE_EIGEN_INCLUDE}' is a stub, the build will fail. "
-                    "Install real Eigen (apt install libeigen3-dev / brew install eigen) "
-                    "or pass -DBENDCORE_EIGEN_DIR=<dir containing Eigen/>.")
-  endif()
-
-  add_library(bendcore_eigen INTERFACE)
-  target_include_directories(bendcore_eigen SYSTEM INTERFACE ${BENDCORE_EIGEN_INCLUDE})
+  set(_bendcore_eigen_inc "${BENDCORE_EIGEN_DIR}")
 else()
+  find_package(Eigen3 3.3 QUIET NO_MODULE)
+endif()
+
+if(NOT _bendcore_eigen_inc AND TARGET Eigen3::Eigen)
   add_library(bendcore_eigen INTERFACE)
   target_link_libraries(bendcore_eigen INTERFACE Eigen3::Eigen)
+  message(STATUS "Eigen ${Eigen3_VERSION}: package Eigen3 (${Eigen3_DIR})")
+else()
+  if(NOT _bendcore_eigen_inc)
+    foreach(_d /usr/include/eigen3 /usr/local/include/eigen3 /opt/homebrew/include/eigen3)
+      bendcore_eigen_version("${_d}" _bendcore_eigen_ver)
+      if(NOT _bendcore_eigen_inc AND EXISTS "${_d}/Eigen/Dense" AND _bendcore_eigen_ver VERSION_GREATER_EQUAL 3.3)
+        set(_bendcore_eigen_inc "${_d}")
+      endif()
+    endforeach()
+  endif()
+  if(NOT _bendcore_eigen_inc AND BENDCORE_FETCH_EIGEN)
+    include(FetchContent)
+    # Только загрузка заголовков: CMakeLists.txt Eigen не подключается (SOURCE_SUBDIR).
+    FetchContent_Declare(bendcore_eigen_src
+      URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
+      URL_HASH SHA256=8586084f71f9bde545ee7fa6d00288b264a2b7ac3607b974e54d13e7162c1c72
+      SOURCE_SUBDIR bendcore-headers-only)
+    FetchContent_MakeAvailable(bendcore_eigen_src)
+    set(_bendcore_eigen_inc "${bendcore_eigen_src_SOURCE_DIR}")
+  endif()
+  if(NOT _bendcore_eigen_inc)
+    message(FATAL_ERROR "Eigen >= 3.3 not found. Install it (apt install libeigen3-dev / "
+                        "brew install eigen), pass -DBENDCORE_EIGEN_DIR=<dir containing Eigen/>, "
+                        "or configure with -DBENDCORE_FETCH_EIGEN=ON to download Eigen 3.4.0.")
+  endif()
+  bendcore_eigen_version("${_bendcore_eigen_inc}" _bendcore_eigen_ver)
+  message(STATUS "Eigen ${_bendcore_eigen_ver}: headers in ${_bendcore_eigen_inc}")
+  add_library(bendcore_eigen INTERFACE)
+  target_include_directories(bendcore_eigen SYSTEM INTERFACE "${_bendcore_eigen_inc}")
 endif()
 
 # OpenSSL: ядру не нужен (SHA-256 чертежей — своя реализация в drawing.cpp). Ищется для модулей вне ядра.
@@ -421,7 +470,7 @@ set(BENDCORE_SOURCES
 add_library(bendcore_core STATIC
   ${BENDCORE_SOURCES}
 )
-target_include_directories(bendcore_core PUBLIC include third_party third_party_stubs)  # third_party: nlohmann/json.hpp (MIT), third_party_stubs: Eigen/Dense (fallback)
+target_include_directories(bendcore_core PUBLIC include third_party)  # third_party: nlohmann/json.hpp (MIT)
 target_link_libraries(bendcore_core PRIVATE bendcore_eigen bendcore_zlib)
 
 # BC-015: Link LibDWG if available
