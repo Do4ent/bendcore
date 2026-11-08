@@ -9,6 +9,9 @@
 | Инструменты | `include/bendcore/modeling/sketch_tools.hpp`, `src/modeling/sketch/sketch_tools.cpp` | обрезка, удлинение, эквидистанта, зеркало, массивы, скругление и фаска угла |
 
 Узел `Sketch` документа детали строит `BoundSketch` из `SketchData` (`PART_DOCUMENT.md`).
+WASM-модуль документа (`src/wasm/modeling_bindings.cpp`) передаёт новые поля `SketchData`
+(`focus`, поля сплайна, `driven`) и `sketchResult` (`definition`, `redundant`,
+`pointDefined`, `entityDefined`, `constraintValues`); прежние поля не менялись.
 
 ## Сущности
 
