@@ -272,7 +272,11 @@ TEST(ModelingDocumentSketch, MigratesVersion2PrismCut) {
     EXPECT_EQ(doc.value().featureIds(), (std::vector<std::string>{"Body", "PocketSketch", "Pocket", "Rim"}));
     EXPECT_TRUE(rep.failed.empty());
     FeatureInfo rim = info(doc.value(), "Rim");
-    EXPECT_NE(rim.state, FeatureState::Error) << messages(rim);
+    // The rim edge is now named after the sketch line ("PocketSketch:E3"): the reference is
+    // recovered by its stored signature once, with a warning, and follows the new name.
+    EXPECT_EQ(rim.state, FeatureState::Warning) << messages(rim);
+    EXPECT_EQ(rim.referenceReports.at(0).resolution.method, ResolveMethod::Signature);
+    EXPECT_EQ(rim.references.at("edges").at(0).name, "PocketSketch:E3");
     EXPECT_NEAR(volume(doc.value().finalShape().shape()), 40 * 30 * 20 - 10 * 8 * 6 - filletLoss(1, 10), 1e-6);
     EXPECT_TRUE(hasCylinder(doc.value().finalShape().shape(), 1, 0, 20, 19)) << "fillet on the +Y rim edge";
     auto saved = nlohmann::json::parse(doc.value().toJson().value());
