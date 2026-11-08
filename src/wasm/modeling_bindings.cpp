@@ -217,6 +217,22 @@ val toJs(const m::SketchData& d) {
         o.set("counterClockwise", g.counterClockwise);
         o.set("construction", g.construction);
         o.set("projection", g.projection);
+        if (g.type == m::SketchGeometryType::Ellipse || g.type == m::SketchGeometryType::EllipticalArc) {
+            o.set("focus", g.focus);
+        }
+        if (g.type == m::SketchGeometryType::BSpline) {
+            val poles = val::array(), knots = val::array(), mults = val::array(), weights = val::array();
+            for (int q : g.poles) poles.call<void>("push", q);
+            for (double k : g.knots) knots.call<void>("push", k);
+            for (int k : g.multiplicities) mults.call<void>("push", k);
+            for (double w : g.weights) weights.call<void>("push", w);
+            o.set("poles", poles);
+            o.set("degree", g.degree);
+            o.set("knots", knots);
+            o.set("multiplicities", mults);
+            o.set("weights", weights);
+            o.set("periodic", g.periodic);
+        }
         geometry.call<void>("push", o);
     }
     val constraints = val::array();
@@ -227,6 +243,7 @@ val toJs(const m::SketchData& d) {
         o.set("b", c.b);
         o.set("c", c.c);
         o.set("value", c.value);
+        if (c.driven) o.set("driven", true);
         constraints.call<void>("push", o);
     }
     val regions = val::array();
@@ -254,7 +271,7 @@ m::SketchData sketchFromJs(const val& v) {
         m::SketchGeometryDef def;
         const std::string type = requireString(g["type"], what + ".type");
         const auto t = m::sketchGeometryTypeFromString(type);
-        if (!t) throw InputError(what + ".type: unknown curve type '" + type + "' (line, circle, arc)");
+        if (!t) throw InputError(what + ".type: unknown curve type '" + type + "' (line, circle, arc, ellipse, elliptical-arc, bspline)");
         def.type = *t;
         def.start = optionalInt(g, "start", -1, what);
         def.end = optionalInt(g, "end", -1, what);
@@ -263,6 +280,25 @@ m::SketchData sketchFromJs(const val& v) {
         def.counterClockwise = optionalBool(g, "counterClockwise", true, what);
         def.construction = optionalBool(g, "construction", false, what);
         def.projection = optionalInt(g, "projection", -1, what);
+        def.focus = optionalInt(g, "focus", -1, what);
+        def.degree = optionalInt(g, "degree", 3, what);
+        def.periodic = optionalBool(g, "periodic", false, what);
+        if (present(g["poles"])) {
+            for (const val& q : arrayItems(g["poles"], what + ".poles")) def.poles.push_back(requireInt(q, what + ".poles[]"));
+        }
+        if (present(g["multiplicities"])) {
+            for (const val& q : arrayItems(g["multiplicities"], what + ".multiplicities")) {
+                def.multiplicities.push_back(requireInt(q, what + ".multiplicities[]"));
+            }
+        }
+        for (const char* field : {"knots", "weights"}) {
+            if (!present(g[field])) continue;
+            auto& out = std::string(field) == "knots" ? def.knots : def.weights;
+            for (const val& q : arrayItems(g[field], what + "." + field)) {
+                if (!q.isNumber()) throw InputError(what + "." + field + "[] must be a number");
+                out.push_back(q.as<double>());
+            }
+        }
         d.geometry.push_back(std::move(def));
     }
     i = 0;
@@ -279,6 +315,7 @@ m::SketchData sketchFromJs(const val& v) {
             def.b = optionalInt(c, "b", -1, what);
             def.c = optionalInt(c, "c", -1, what);
             if (present(c["value"])) def.value = expression(c["value"], what + ".value");
+            def.driven = optionalBool(c, "driven", false, what);
             d.constraints.push_back(std::move(def));
         }
     }
@@ -443,6 +480,16 @@ val featureView(const m::FeatureInfo& f, std::size_t index) {
         s.set("regions", static_cast<double>(f.sketchResult->regions.size()));
         s.set("standalonePoints", static_cast<double>(f.sketchResult->standalonePoints.size()));
         s.set("hasFaces", static_cast<bool>(f.sketchResult->faces));
+        s.set("definition", f.sketchResult->definition);
+        val redundant = val::array(), pointDefined = val::array(), entityDefined = val::array(), values = val::array();
+        for (int k : f.sketchResult->redundant) redundant.call<void>("push", k);
+        for (bool b : f.sketchResult->pointDefined) pointDefined.call<void>("push", b);
+        for (bool b : f.sketchResult->entityDefined) entityDefined.call<void>("push", b);
+        for (double v : f.sketchResult->constraintValues) values.call<void>("push", v);
+        s.set("redundant", redundant);
+        s.set("pointDefined", pointDefined);
+        s.set("entityDefined", entityDefined);
+        s.set("constraintValues", values);
         o.set("sketchResult", s);
     }
     if (f.datum) {

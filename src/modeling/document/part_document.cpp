@@ -289,6 +289,22 @@ Status checkSketch(const SketchData& s) {
                 if (!(st = point(g.start, where))) return st;
                 if (!(st = point(g.end, where))) return st;
                 break;
+            case SketchGeometryType::Ellipse:
+                if (!(st = point(g.center, where))) return st;
+                if (!(st = point(g.focus, where))) return st;
+                break;
+            case SketchGeometryType::EllipticalArc:
+                if (!(st = point(g.center, where))) return st;
+                if (!(st = point(g.focus, where))) return st;
+                if (!(st = point(g.start, where))) return st;
+                if (!(st = point(g.end, where))) return st;
+                break;
+            case SketchGeometryType::BSpline:
+                if (g.poles.size() < 2) return fail(ErrorCode::InvalidInput, where + ": a B-spline needs at least 2 poles");
+                for (int p : g.poles) {
+                    if (!(st = point(p, where))) return st;
+                }
+                break;
         }
     }
     for (std::size_t k = 0; k < s.constraints.size(); ++k) {
@@ -300,10 +316,33 @@ Status checkSketch(const SketchData& s) {
             case SketchConstraintType::Horizontal:
             case SketchConstraintType::Vertical:
             case SketchConstraintType::Distance:
+            case SketchConstraintType::DistanceX:
+            case SketchConstraintType::DistanceY:
                 if (!(st = point(c.a, where)) || !(st = point(c.b, where))) return st;
                 break;
             case SketchConstraintType::Radius:
+            case SketchConstraintType::Diameter:
+            case SketchConstraintType::ArcLength:
+            case SketchConstraintType::MajorRadius:
+            case SketchConstraintType::MinorRadius:
                 if (!(st = entity(c.a, where))) return st;
+                break;
+            case SketchConstraintType::Fix:
+                if (!(st = point(c.a, where))) return st;
+                break;
+            case SketchConstraintType::SymmetricPoint:
+            case SketchConstraintType::Rotation:
+                if (!(st = point(c.a, where)) || !(st = point(c.b, where)) || !(st = point(c.c, where))) return st;
+                break;
+            case SketchConstraintType::Tangent:
+            case SketchConstraintType::Equal:
+            case SketchConstraintType::Concentric:
+                if (!(st = entity(c.a, where)) || !(st = entity(c.b, where))) return st;
+                break;
+            case SketchConstraintType::Midpoint:
+            case SketchConstraintType::PointOn:
+            case SketchConstraintType::PointCurveDistance:
+                if (!(st = point(c.a, where)) || !(st = entity(c.b, where))) return st;
                 break;
             case SketchConstraintType::Parallel:
             case SketchConstraintType::Perpendicular:
@@ -675,7 +714,13 @@ void hashSketch(Hasher& h, const SketchData& s) {
     h.add(std::uint64_t(s.geometry.size()));
     for (const auto& g : s.geometry) {
         h.add(toString(g.type));
-        for (int v : {g.start, g.end, g.center, g.projection}) h.add(std::uint64_t(static_cast<std::int64_t>(v)));
+        for (int v : {g.start, g.end, g.center, g.projection, g.focus}) h.add(std::uint64_t(static_cast<std::int64_t>(v)));
+        for (int v : g.poles) h.add(std::uint64_t(static_cast<std::int64_t>(v)));
+        h.add(std::uint64_t(static_cast<std::int64_t>(g.degree)));
+        for (double v : g.knots) h.add(v);
+        for (int v : g.multiplicities) h.add(std::uint64_t(static_cast<std::int64_t>(v)));
+        for (double v : g.weights) h.add(v);
+        h.add(g.periodic ? "periodic" : "open");
         h.add(g.counterClockwise ? "ccw" : "cw");
         h.add(g.construction ? "construction" : "profile");
     }
@@ -683,6 +728,7 @@ void hashSketch(Hasher& h, const SketchData& s) {
     for (const auto& c : s.constraints) {
         h.add(toString(c.type));
         for (int v : {c.a, c.b, c.c}) h.add(std::uint64_t(static_cast<std::int64_t>(v)));
+        h.add(c.driven ? "driven" : "driving");
     }
     h.add(std::uint64_t(s.regions.size()));
     for (SketchEntityId r : s.regions) h.add(std::uint64_t(r));

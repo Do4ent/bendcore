@@ -252,25 +252,28 @@ private:
 // Binding to the PlaneGCS sketch (src/sketch2d.cpp)
 // ---------------------------------------------------------------------------------------------
 
-// Records which sketch2d points form lines, circles and arcs, so that the solved sketch can be
-// turned into SketchCurve values. Entity ids are 1, 2, 3, ... in creation order.
+// Entity layer over the PlaneGCS sketch (docs/modeling/SKETCH.md): profile entity ids 1, 2, 3, ...
+// in creation order (never reused; removed entities keep their id), each mapped to a
+// sketch2d geometry. Arcs are native PlaneGCS arcs, ellipses/elliptical arcs native PlaneGCS
+// conics, B-splines have sketch points as poles. The construction flag lives in sketch2d.
 class BoundSketch {
 public:
-    enum class EntityKind { Line, Circle, Arc };
+    enum class EntityKind { Line, Circle, Arc, Ellipse, EllipticalArc, BSpline };
 
     struct Entity {
         SketchEntityId id = 0;
         EntityKind kind = EntityKind::Line;
         bool construction = false;
+        bool removed = false;
+        sketch2d::Geo geo;         // the sketch2d geometry
         sketch2d::Id line = -1;    // Line: sketch2d line id
-        sketch2d::Id circle = -1;  // Circle and Arc: sketch2d circle id
-        sketch2d::Id start = -1;   // Line, Arc: start point
-        sketch2d::Id end = -1;     // Line, Arc: end point
-        sketch2d::Id center = -1;  // Circle, Arc: centre point
+        sketch2d::Id circle = -1;  // Circle: sketch2d circle id
+        sketch2d::Id arc = -1;     // Arc: sketch2d arc id
+        sketch2d::Id start = -1;   // Line, Arc, EllipticalArc: start point
+        sketch2d::Id end = -1;     // Line, Arc, EllipticalArc: end point
+        sketch2d::Id center = -1;  // Circle, Arc, Ellipse, EllipticalArc: centre point
+        sketch2d::Id focus = -1;   // Ellipse, EllipticalArc: focus point (major axis direction)
         bool counterClockwise = true;
-        // Arc: constraints that keep start and end on the circle.
-        sketch2d::Id startOnCircle = 0;
-        sketch2d::Id endOnCircle = 0;
     };
 
     sketch2d::Sketch& sketch() noexcept { return sketch_; }
@@ -278,24 +281,37 @@ public:
 
     SketchEntityId addLine(sketch2d::Id start, sketch2d::Id end, bool construction = false);
     SketchEntityId addCircle(sketch2d::Id center, double radius, bool construction = false);
-    // Adds a sketch2d circle (radius = current |start - center|) and point-on-circle constraints
-    // for start and end.
+    // Native PlaneGCS arc (radius = current |start - center|).
     SketchEntityId addArc(sketch2d::Id center, sketch2d::Id start, sketch2d::Id end,
                           bool counterClockwise, bool construction = false);
+    SketchEntityId addEllipse(sketch2d::Id center, sketch2d::Id focus, double minorRadius,
+                              bool construction = false);
+    SketchEntityId addEllipticalArc(sketch2d::Id center, sketch2d::Id focus, double minorRadius,
+                                    sketch2d::Id start, sketch2d::Id end, bool counterClockwise,
+                                    bool construction = false);
+    SketchEntityId addBSpline(const sketch2d::BSplineData& data, bool construction = false);
     // Throws std::out_of_range for an unknown id (programming error, like sketch2d itself).
     void setConstruction(SketchEntityId id, bool construction);
+    // Removes the entity and the constraints that reference its geometry (not its points).
+    void removeEntity(SketchEntityId id);
+    // Replace the end points of a line or an arc (editing tools).
+    void setEndPoints(SketchEntityId id, sketch2d::Id start, sketch2d::Id end);
 
     const std::vector<Entity>& entities() const noexcept { return entities_; }
     const Entity& entity(SketchEntityId id) const;
+    std::optional<SketchEntityId> entityOf(const sketch2d::Geo& geo) const;
 
     sketch2d::Report solve() { return sketch_.solve(); }
 
-    // Curves from the current point coordinates and radii. Error when an arc end point is off its
-    // circle by more than `tolerance` (sketch not solved). Degenerate curves are reported later by
-    // checkSketchCurves / SketchProfile::build.
+    // Curve of one entity from the current point coordinates and radii. Error when an arc end point
+    // is off its circle/ellipse by more than `tolerance` (sketch not solved), or the entity is removed.
+    Result<SketchCurve> curve(SketchEntityId id, double tolerance = 1e-6) const;
+    // Curves of all live entities. Degenerate curves are reported later by checkSketchCurves /
+    // SketchProfile::build.
     Result<std::vector<SketchCurve>> curves(double tolerance = 1e-6) const;
 
 private:
+    SketchEntityId push(Entity e);
     sketch2d::Sketch sketch_;
     std::vector<Entity> entities_;
 };
