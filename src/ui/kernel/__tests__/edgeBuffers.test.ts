@@ -10,6 +10,7 @@ describe('packEdgePolylines', () => {
     expect(Array.from(b.positions)).toEqual([0, 0, 0, 1, 0, 0, 2, 0, 0, 5, 5, 5, 5, 6, 5]);
     // Polyline 1: vertices 0-1, 1-2; polyline 2: vertices 3-4. No segment 2-3 across edges.
     expect(Array.from(b.indices)).toEqual([0, 1, 1, 2, 3, 4]);
+    expect(Array.from(b.segmentEdges)).toEqual([4, 4, 7]);
   });
 
   it('keeps single-point polylines as vertices without segments', () => {
