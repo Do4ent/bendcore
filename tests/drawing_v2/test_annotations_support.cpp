@@ -40,8 +40,8 @@ BlockPart::BlockPart(double L, double W, double H, double hx, double hy, double 
     if (!top) throw std::runtime_error("no Body:Top");
     auto ref = makeReference(s, s.element(ElementKind::Face, *top));
     if (!ref) throw std::runtime_error("reference to top face");
-    FeatureSpec hole{"PrismCut", "Hole", "", {{"centerX", "hx"}, {"centerY", "hy"}, {"centerZ", "H"}, {"radius", "r"}},
-                     {{"face", {ref.value()}}}, {{"profile", "circle"}, {"extent", "through"}}, false};
+    FeatureSpec hole{"Hole", "Hole", "", {{"diameter", "2*r"}, {"x", "hx"}, {"y", "hy"}, {"z", "H"}},
+                     {{"face", {ref.value()}}}, {{"type", "simple"}, {"end", "through"}, {"drillPoint", "false"}}, false};
     if (!doc.addFeature(hole)) throw std::runtime_error("add Hole");
     doc.rebuild();
 }
