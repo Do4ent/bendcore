@@ -135,12 +135,20 @@ doc.undo();                          // W = 40, прежние результа�
 - точки `SketchPointDef{x, y, fixed}` — выражения; закреплённая точка стоит в этой позиции
   (её координаты — размеры), свободная — только начальное приближение решателя;
 - кривые `SketchGeometryDef`: `Line(start, end)`, `Circle(center, radius)`,
-  `Arc(center, start, end, counterClockwise)`, флаг вспомогательной (`construction`);
+  `Arc(center, start, end, counterClockwise)` (нативная дуга PlaneGCS),
+  `Ellipse(center, focus, radius = малая полуось)`, `EllipticalArc(center, focus, radius,
+  start, end, counterClockwise)`, `BSpline(poles, degree, knots, multiplicities, weights,
+  periodic)`, флаг вспомогательной (`construction`); поля `focus` и сплайна пишутся в JSON
+  только у этих видов, поэтому файлы с отрезками, окружностями и дугами не меняются;
   `projection >= 0` — проекция ребра модели номер `projection` из слота ссылок `projected`;
   идентификатор сущности = номер в списке + 1;
-- ограничения `SketchConstraintDef{type, a, b, c, value}`: Coincident, Horizontal, Vertical,
-  Distance (мм), Radius, Parallel, Perpendicular, EqualLength, Angle (градусы), PointOnLine,
-  PointOnCircle, EqualRadius, Symmetric; операнды — номера точек (с 0) или сущностей (с 1);
+- ограничения `SketchConstraintDef{type, a, b, c, value, driven}`: Coincident, Horizontal,
+  Vertical, Distance (мм), Radius, Parallel, Perpendicular, EqualLength, Angle (градусы),
+  PointOnLine, PointOnCircle, EqualRadius, Symmetric, Tangent, Equal, Concentric, Midpoint,
+  PointOn, Fix, DistanceX, DistanceY, PointCurveDistance, Diameter, ArcLength, MajorRadius,
+  MinorRadius, SymmetricPoint, Rotation (смысл — `SKETCH.md`); операнды — номера точек (с 0)
+  или сущностей (с 1); `driven = true` — справочный размер (в JSON `"driven": true` только у
+  таких);
 - выбор областей `regions`: пусто — «материальные» области (внешние контуры и острова),
   иначе каждая сущность выбирает область, внешний контур которой её содержит (при двух —
   меньшую по площади).
@@ -161,9 +169,15 @@ doc.undo();                          // W = 40, прежние результа�
    ребро проецируется (`projectEdge`), точки проецированной кривой закрепляются (прямая
    ориентируется от меньшего x, затем y), окружность получает размер радиуса.
 3. **Решение** — `BoundSketch` (PlaneGCS, `src/sketch2d.cpp`), после решения каждое
-   ограничение проверяется по невязке (≤ 1e-6 × масштаб эскиза): решатель, не сошедшийся
-   без сообщения, даёт ошибку с номером ограничения. Конфликт — ошибка со списком
-   ограничений; избыточность — `Warning`.
+   ограничение проверяется по невязке `Sketch::residual` (≤ 1e-6 × масштаб эскиза):
+   решатель, не сошедшийся без сообщения, даёт ошибку с номером ограничения. Неверные
+   операнды (касание двух отрезков, справочное не-размерное ограничение, радиус отрезка) —
+   ошибка «sketch constraint N (тип): причина». Конфликт — ошибка со списком ограничений;
+   избыточность — `Warning`. `SketchResult` содержит `dof`, `definition`
+   (`fully-defined | under-defined | over-defined`), `redundant`, `partiallyRedundant`
+   (номера ограничений с 1), `pointDefined` и `entityDefined` (определённость каждой точки и
+   сущности для цветовой индикации) и `constraintValues` (значение каждого размера; у
+   справочного — измеренное).
 4. **Профиль** — `SketchProfile::build` (контуры, вложенность, области), выбор областей,
    грани областей с именами (ниже). Эскиз без профильных кривых допустим (точки для
    отверстий, оси); выдавливание такого эскиза — ошибка «has no closed profile».

@@ -289,3 +289,147 @@ TEST(ModelingDocumentSketch, MigratesVersion2PrismCut) {
     EXPECT_EQ(info(doc.value(), "Rim").state, FeatureState::Ok) << messages(info(doc.value(), "Rim"));
     EXPECT_NEAR(volume(doc.value().finalShape().shape()), 40 * 30 * 26 - 10 * 8 * 6 - filletLoss(1, 10), 1e-6);
 }
+
+TEST(ModelingDocumentSketch, TangentSlotWithReferenceDimension) {
+    // Obround of two lines tangent to two native arcs; R and L are variables. A reference
+    // (driven) diameter reports 2R; definition status of every element is "defined".
+    PartDocument doc(partRegistry());
+    setVar(doc, "R", 8);
+    setVar(doc, "L", 30);
+    SketchBuilder b;
+    const int c1 = b.point("0", "0", true);
+    const int c2 = b.point("L + 1", "0.5");
+    const int pa = b.point("0.3", "-R"), pb = b.point("L", "-R - 0.4"), pc = b.point("L + 0.2", "R"), pd = b.point("-0.5", "R");
+    const auto bottom = b.line(pa, pb);
+    const auto right = b.arc(c2, pb, pc);
+    const auto top = b.line(pc, pd);
+    const auto left = b.arc(c1, pd, pa);
+    b.constrain(SketchConstraintType::Horizontal, c1, c2);
+    b.constrain(SketchConstraintType::Distance, c1, c2, "L");
+    b.constrain(SketchConstraintType::Radius, static_cast<int>(left), -1, "R");
+    b.constrain(SketchConstraintType::Equal, static_cast<int>(left), static_cast<int>(right));
+    for (auto [l, a] : {std::pair{bottom, right}, {bottom, left}, {top, right}, {top, left}}) {
+        b.constrain(SketchConstraintType::Tangent, static_cast<int>(l), static_cast<int>(a));
+    }
+    const int ref = b.reference(SketchConstraintType::Diameter, static_cast<int>(right));
+    add(doc, sketchOn("Profile", "XY", b.build()));
+    add(doc, extrudeOf("Body", "Profile", "10"));
+    for (double r : {8.0, 5.0, 11.0}) {
+        setVar(doc, "R", r);
+        setVar(doc, "L", 4 * r);
+        doc.rebuild();
+        FeatureInfo fi = info(doc, "Profile");
+        ASSERT_EQ(fi.state, FeatureState::Ok) << messages(fi);
+        const SketchResult& sr = *fi.sketchResult;
+        EXPECT_EQ(sr.dof, 0);
+        EXPECT_EQ(sr.definition, "fully-defined");
+        EXPECT_NEAR(sr.constraintValues.at(static_cast<std::size_t>(ref - 1)), 2 * r, 1e-7);
+        EXPECT_EQ(std::count(sr.entityDefined.begin(), sr.entityDefined.end(), true), 4);
+        EXPECT_EQ(std::count(sr.pointDefined.begin(), sr.pointDefined.end(), true), 6);
+        const NamedShape s = doc.finalShape();
+        EXPECT_NEAR(volume(s.shape()), (2 * r * 4 * r + kPi * r * r) * 10, 1e-5);
+        // The flat side from line 1 keeps its name through the dimension changes.
+        EXPECT_EQ(nameOf(s, ElementKind::Face, planarFace(s.shape(), gp::DY().Reversed(), r)), "G[Body](Profile:E1)");
+    }
+    // The driven dimension is saved and read back.
+    auto json = nlohmann::json::parse(doc.toJson().value());
+    const auto& constraints = json.at("features").at(0).at("sketch").at("constraints");
+    EXPECT_EQ(constraints.at(static_cast<std::size_t>(ref - 1)).at("driven"), true);
+    EXPECT_FALSE(constraints.at(0).contains("driven"));
+}
+
+TEST(ModelingDocumentSketch, ArcSketchFilesKeepTheirFormatAndReferences) {
+    // Sketches of lines and arcs (format v3) are written exactly as before: native arcs change
+    // only the solver, so saved documents load with the same names and references.
+    PartDocument doc(partRegistry());
+    setVar(doc, "W", 40);
+    SketchBuilder b;
+    const int p0 = b.point("0", "0", true), p1 = b.point("W", "0", true), pc = b.point("W", "10", true);
+    const int p3 = b.point("W", "20", true), p4 = b.point("0", "20", true);
+    b.line(p0, p1);
+    b.arc(pc, p1, p3);
+    b.line(p3, p4);
+    b.line(p4, p0);
+    add(doc, sketchOn("Profile", "XY", b.build()));
+    add(doc, extrudeOf("Body", "Profile", "5"));
+    doc.rebuild();
+    const NamedShape s = doc.finalShape();
+    ASSERT_FALSE(s.isNull());
+    EXPECT_NEAR(volume(s.shape()), (800 + 50 * kPi) * 5, 1e-6);
+    add(doc, {"Fillet", "Round", "", {{"radius", "2"}}, {{"edges", {refTo(s, singleLine(s.shape(), 2, 0, 0))}}}, {}, false});
+    doc.rebuild();
+    ASSERT_EQ(info(doc, "Round").state, FeatureState::Ok) << messages(info(doc, "Round"));
+
+    const std::string text = doc.toJson().value();
+    auto json = nlohmann::json::parse(text);
+    EXPECT_EQ(json.at("version"), 3);
+    for (const auto& g : json.at("features").at(0).at("sketch").at("geometry")) {
+        for (const char* key : {"focus", "poles", "knots", "degree"}) EXPECT_FALSE(g.contains(key)) << key;
+    }
+    RebuildReport rep;
+    auto loaded = PartDocument::fromJson(text, partRegistry(), &rep);
+    ASSERT_TRUE(loaded.ok()) << loaded.error().message;
+    EXPECT_TRUE(rep.failed.empty());
+    setVar(loaded.value(), "W", 55);
+    loaded.value().rebuild();
+    FeatureInfo round = info(loaded.value(), "Round");
+    ASSERT_EQ(round.state, FeatureState::Ok) << messages(round);
+    EXPECT_EQ(round.referenceReports.at(0).resolution.method, ResolveMethod::Exact);
+    EXPECT_NEAR(volume(loaded.value().finalShape().shape()), (55 * 20 + 50 * kPi) * 5 - filletLoss(2, 5), 1e-6);
+}
+
+TEST(ModelingDocumentSketch, EllipseAndSplineProfiles) {
+    PartDocument doc(partRegistry());
+    SketchBuilder e;
+    const int c = e.point("0", "0", true);
+    const int f = e.point("3", "0");
+    e.ellipse(c, f, "2");
+    e.constrain(SketchConstraintType::Horizontal, c, f);
+    e.constrain(SketchConstraintType::MajorRadius, 1, -1, "5");
+    e.constrain(SketchConstraintType::MinorRadius, 1, -1, "3");
+    add(doc, sketchOn("Oval", "XY", e.build()));
+    add(doc, extrudeOf("OvalBody", "Oval", "2"));
+    doc.rebuild();
+    ASSERT_EQ(info(doc, "OvalBody").state, FeatureState::Ok) << messages(info(doc, "Oval")) << messages(info(doc, "OvalBody"));
+    EXPECT_NEAR(volume(doc.finalShape().shape()), kPi * 5 * 3 * 2, 1e-4);
+    EXPECT_EQ(info(doc, "Oval").sketchResult->dof, 0);
+
+    // Clamped cubic spline closed by a line (area 630, see test_modeling_sketch_tools).
+    PartDocument spline(partRegistry());
+    SketchBuilder s;
+    std::vector<int> poles{s.point("0", "0", true), s.point("10", "30", true), s.point("30", "30", true),
+                           s.point("40", "0", true)};
+    s.bspline(poles, 3, {0, 1}, {4, 4});
+    s.line(poles.back(), poles.front());
+    add(spline, sketchOn("Hump", "XY", s.build()));
+    add(spline, extrudeOf("HumpBody", "Hump", "1"));
+    spline.rebuild();
+    ASSERT_EQ(info(spline, "HumpBody").state, FeatureState::Ok) << messages(info(spline, "Hump"));
+    EXPECT_NEAR(volume(spline.finalShape().shape()), 630, 1e-4);
+
+    // Round trip of the conic and spline fields.
+    auto text = spline.toJson().value();
+    auto back = PartDocument::fromJson(text, partRegistry());
+    ASSERT_TRUE(back.ok()) << back.error().message;
+    EXPECT_EQ(back.value().toJson().value(), text);
+    auto oval = PartDocument::fromJson(doc.toJson().value(), partRegistry());
+    ASSERT_TRUE(oval.ok());
+    EXPECT_EQ(oval.value().toJson().value(), doc.toJson().value());
+}
+
+TEST(ModelingDocumentSketch, InvalidNewConstraintsAreReported) {
+    PartDocument doc(partRegistry());
+    SketchBuilder b;
+    const auto l1 = b.line(b.point("0", "0", true), b.point("10", "0", true));
+    const auto l2 = b.line(b.point("0", "5", true), b.point("10", "5", true));
+    b.constrain(SketchConstraintType::Tangent, static_cast<int>(l1), static_cast<int>(l2));
+    add(doc, sketchOn("Bad", "XY", b.build()));
+    SketchBuilder r;
+    const int p = r.point("0", "0", true), q = r.point("1", "0");
+    r.line(p, q);
+    r.reference(SketchConstraintType::Horizontal, p, q);
+    add(doc, sketchOn("BadRef", "XY", r.build()));
+    doc.rebuild();
+    EXPECT_NE(messages(info(doc, "Bad")).find("sketch constraint 1 (tangent)"), std::string::npos) << messages(info(doc, "Bad"));
+    EXPECT_NE(messages(info(doc, "BadRef")).find("only a dimension"), std::string::npos) << messages(info(doc, "BadRef"));
+}

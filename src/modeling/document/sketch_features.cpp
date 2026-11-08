@@ -26,12 +26,16 @@ const char* toString(SketchGeometryType type) noexcept {
         case SketchGeometryType::Line: return "line";
         case SketchGeometryType::Circle: return "circle";
         case SketchGeometryType::Arc: return "arc";
+        case SketchGeometryType::Ellipse: return "ellipse";
+        case SketchGeometryType::EllipticalArc: return "elliptical-arc";
+        case SketchGeometryType::BSpline: return "bspline";
     }
     return "unknown";
 }
 
 std::optional<SketchGeometryType> sketchGeometryTypeFromString(std::string_view text) noexcept {
-    for (auto t : {SketchGeometryType::Line, SketchGeometryType::Circle, SketchGeometryType::Arc}) {
+    for (auto t : {SketchGeometryType::Line, SketchGeometryType::Circle, SketchGeometryType::Arc,
+                   SketchGeometryType::Ellipse, SketchGeometryType::EllipticalArc, SketchGeometryType::BSpline}) {
         if (text == toString(t)) return t;
     }
     return std::nullopt;
@@ -44,7 +48,12 @@ constexpr SketchConstraintType kConstraintTypes[] = {
     SketchConstraintType::Distance,      SketchConstraintType::Radius,      SketchConstraintType::Parallel,
     SketchConstraintType::Perpendicular, SketchConstraintType::EqualLength, SketchConstraintType::Angle,
     SketchConstraintType::PointOnLine,   SketchConstraintType::PointOnCircle, SketchConstraintType::EqualRadius,
-    SketchConstraintType::Symmetric,
+    SketchConstraintType::Symmetric,     SketchConstraintType::Tangent,     SketchConstraintType::Equal,
+    SketchConstraintType::Concentric,    SketchConstraintType::Midpoint,    SketchConstraintType::PointOn,
+    SketchConstraintType::Fix,           SketchConstraintType::DistanceX,   SketchConstraintType::DistanceY,
+    SketchConstraintType::PointCurveDistance, SketchConstraintType::Diameter, SketchConstraintType::ArcLength,
+    SketchConstraintType::MajorRadius,   SketchConstraintType::MinorRadius, SketchConstraintType::SymmetricPoint,
+    SketchConstraintType::Rotation,
 };
 
 }  // namespace
@@ -64,6 +73,21 @@ const char* toString(SketchConstraintType type) noexcept {
         case SketchConstraintType::PointOnCircle: return "point-on-circle";
         case SketchConstraintType::EqualRadius: return "equal-radius";
         case SketchConstraintType::Symmetric: return "symmetric";
+        case SketchConstraintType::Tangent: return "tangent";
+        case SketchConstraintType::Equal: return "equal";
+        case SketchConstraintType::Concentric: return "concentric";
+        case SketchConstraintType::Midpoint: return "midpoint";
+        case SketchConstraintType::PointOn: return "point-on";
+        case SketchConstraintType::Fix: return "fix";
+        case SketchConstraintType::DistanceX: return "distance-x";
+        case SketchConstraintType::DistanceY: return "distance-y";
+        case SketchConstraintType::PointCurveDistance: return "point-curve-distance";
+        case SketchConstraintType::Diameter: return "diameter";
+        case SketchConstraintType::ArcLength: return "arc-length";
+        case SketchConstraintType::MajorRadius: return "major-radius";
+        case SketchConstraintType::MinorRadius: return "minor-radius";
+        case SketchConstraintType::SymmetricPoint: return "symmetric-point";
+        case SketchConstraintType::Rotation: return "rotation";
     }
     return "unknown";
 }
@@ -123,6 +147,48 @@ SketchEntityId SketchBuilder::arc(int center, int start, int end, bool counterCl
     return static_cast<SketchEntityId>(data_.geometry.size());
 }
 
+SketchEntityId SketchBuilder::ellipse(int center, int focus, std::string minorRadius, bool construction) {
+    SketchGeometryDef g;
+    g.type = SketchGeometryType::Ellipse;
+    g.center = center;
+    g.focus = focus;
+    g.radius = std::move(minorRadius);
+    g.construction = construction;
+    data_.geometry.push_back(g);
+    return static_cast<SketchEntityId>(data_.geometry.size());
+}
+
+SketchEntityId SketchBuilder::ellipticalArc(int center, int focus, std::string minorRadius, int start, int end,
+                                            bool counterClockwise, bool construction) {
+    SketchGeometryDef g;
+    g.type = SketchGeometryType::EllipticalArc;
+    g.center = center;
+    g.focus = focus;
+    g.radius = std::move(minorRadius);
+    g.start = start;
+    g.end = end;
+    g.counterClockwise = counterClockwise;
+    g.construction = construction;
+    data_.geometry.push_back(g);
+    return static_cast<SketchEntityId>(data_.geometry.size());
+}
+
+SketchEntityId SketchBuilder::bspline(std::vector<int> poles, int degree, std::vector<double> knots,
+                                      std::vector<int> multiplicities, std::vector<double> weights, bool periodic,
+                                      bool construction) {
+    SketchGeometryDef g;
+    g.type = SketchGeometryType::BSpline;
+    g.poles = std::move(poles);
+    g.degree = degree;
+    g.knots = std::move(knots);
+    g.multiplicities = std::move(multiplicities);
+    g.weights = std::move(weights);
+    g.periodic = periodic;
+    g.construction = construction;
+    data_.geometry.push_back(g);
+    return static_cast<SketchEntityId>(data_.geometry.size());
+}
+
 SketchEntityId SketchBuilder::projected(SketchGeometryType type, int referenceIndex, bool construction) {
     SketchGeometryDef g;
     g.type = type;
@@ -139,6 +205,9 @@ SketchEntityId SketchBuilder::projected(SketchGeometryType type, int referenceIn
             g.start = point("1", "0");
             g.end = point("0", "1");
             break;
+        case SketchGeometryType::Ellipse:
+        case SketchGeometryType::EllipticalArc:
+        case SketchGeometryType::BSpline: break;  // rejected at rebuild: only lines, circles, arcs are projected
     }
     data_.geometry.push_back(g);
     return static_cast<SketchEntityId>(data_.geometry.size());
@@ -146,6 +215,11 @@ SketchEntityId SketchBuilder::projected(SketchGeometryType type, int referenceIn
 
 int SketchBuilder::constrain(SketchConstraintType type, int a, int b, std::string value, int c) {
     data_.constraints.push_back({type, a, b, c, std::move(value)});
+    return static_cast<int>(data_.constraints.size());
+}
+
+int SketchBuilder::reference(SketchConstraintType type, int a, int b, int c) {
+    data_.constraints.push_back({type, a, b, c, "0", true});
     return static_cast<int>(data_.constraints.size());
 }
 
@@ -188,73 +262,6 @@ namespace {
 
 using detail::fail;
 using detail::num;
-
-double wrapAngle(double a) {
-    while (a > M_PI) a -= 2 * M_PI;
-    while (a < -M_PI) a += 2 * M_PI;
-    return a;
-}
-
-// Residual of a constraint at the solved positions (mm or rad).
-double residual(const SketchConstraintDef& c, double value, const BoundSketch& bs) {
-    const auto& s = bs.sketch();
-    auto P = [&](int p) { return s.point(p); };
-    auto dir = [&](int e) {
-        const auto& ent = bs.entity(static_cast<SketchEntityId>(e));
-        const auto a = s.point(ent.start), b = s.point(ent.end);
-        return std::pair<double, double>{b.x - a.x, b.y - a.y};
-    };
-    auto radius = [&](int e) { return s.circle_radius(bs.entity(static_cast<SketchEntityId>(e)).circle); };
-    auto center = [&](int e) { return s.point(bs.entity(static_cast<SketchEntityId>(e)).center); };
-    auto lineDistance = [&](const sketch2d::Point2& p, int e) {
-        const auto& ent = bs.entity(static_cast<SketchEntityId>(e));
-        const auto a = s.point(ent.start);
-        const auto [dx, dy] = dir(e);
-        const double len = std::hypot(dx, dy);
-        return len > 0 ? std::abs((p.x - a.x) * dy - (p.y - a.y) * dx) / len : std::hypot(p.x - a.x, p.y - a.y);
-    };
-    switch (c.type) {
-        case SketchConstraintType::Coincident: return std::hypot(P(c.a).x - P(c.b).x, P(c.a).y - P(c.b).y);
-        case SketchConstraintType::Horizontal: return std::abs(P(c.a).y - P(c.b).y);
-        case SketchConstraintType::Vertical: return std::abs(P(c.a).x - P(c.b).x);
-        case SketchConstraintType::Distance:
-            return std::abs(std::hypot(P(c.a).x - P(c.b).x, P(c.a).y - P(c.b).y) - value);
-        case SketchConstraintType::Radius: return std::abs(radius(c.a) - value);
-        case SketchConstraintType::Parallel:
-        case SketchConstraintType::Perpendicular: {
-            const auto [ax, ay] = dir(c.a);
-            const auto [bx, by] = dir(c.b);
-            const double la = std::hypot(ax, ay), lb = std::hypot(bx, by);
-            if (la == 0 || lb == 0) return 1.0;
-            const double v = c.type == SketchConstraintType::Parallel ? (ax * by - ay * bx) : (ax * bx + ay * by);
-            return std::abs(v) / (la * lb);
-        }
-        case SketchConstraintType::EqualLength: {
-            const auto [ax, ay] = dir(c.a);
-            const auto [bx, by] = dir(c.b);
-            return std::abs(std::hypot(ax, ay) - std::hypot(bx, by));
-        }
-        case SketchConstraintType::Angle: {
-            const auto [ax, ay] = dir(c.a);
-            const auto [bx, by] = dir(c.b);
-            return std::abs(wrapAngle(std::atan2(by, bx) - std::atan2(ay, ax) - value * M_PI / 180.0));
-        }
-        case SketchConstraintType::PointOnLine: return lineDistance(P(c.a), c.b);
-        case SketchConstraintType::PointOnCircle: {
-            const auto o = center(c.b);
-            return std::abs(std::hypot(P(c.a).x - o.x, P(c.a).y - o.y) - radius(c.b));
-        }
-        case SketchConstraintType::EqualRadius: return std::abs(radius(c.a) - radius(c.b));
-        case SketchConstraintType::Symmetric: {
-            const sketch2d::Point2 mid{(P(c.a).x + P(c.b).x) / 2, (P(c.a).y + P(c.b).y) / 2};
-            const auto [dx, dy] = dir(c.c);
-            const double len = std::hypot(dx, dy);
-            const double along = len > 0 ? std::abs((P(c.b).x - P(c.a).x) * dx + (P(c.b).y - P(c.a).y) * dy) / len : 0;
-            return std::max(lineDistance(mid, c.c), along);
-        }
-    }
-    return 0.0;
-}
 
 gp_Pln basePlane(const std::string& name) {
     if (name == "XZ") return gp_Pln(gp_Ax3(gp::Origin(), -gp::DY(), gp::DX()));
@@ -395,18 +402,43 @@ public:
         }
         for (std::size_t g = 0; g < ng; ++g) {
             const SketchGeometryDef& def = data->geometry[g];
-            switch (def.type) {
-                case SketchGeometryType::Line: bs.addLine(def.start, def.end, def.construction); break;
-                case SketchGeometryType::Circle:
-                    if (!(radii[g] > 0)) {
-                        return fail(ErrorCode::InvalidInput,
-                                    "sketch entity " + std::to_string(g + 1) + ": radius must be positive, is " + num(radii[g]));
+            const std::string where = "sketch entity " + std::to_string(g + 1);
+            try {
+                switch (def.type) {
+                    case SketchGeometryType::Line: bs.addLine(def.start, def.end, def.construction); break;
+                    case SketchGeometryType::Circle:
+                        if (!(radii[g] > 0)) return fail(ErrorCode::InvalidInput, where + ": radius must be positive, is " + num(radii[g]));
+                        bs.addCircle(def.center, radii[g], def.construction);
+                        break;
+                    case SketchGeometryType::Arc:
+                        bs.addArc(def.center, def.start, def.end, def.projection >= 0 || def.counterClockwise, def.construction);
+                        break;
+                    case SketchGeometryType::Ellipse:
+                    case SketchGeometryType::EllipticalArc:
+                        if (!(radii[g] > 0)) {
+                            return fail(ErrorCode::InvalidInput, where + ": minor radius must be positive, is " + num(radii[g]));
+                        }
+                        if (def.type == SketchGeometryType::Ellipse) {
+                            bs.addEllipse(def.center, def.focus, radii[g], def.construction);
+                        } else {
+                            bs.addEllipticalArc(def.center, def.focus, radii[g], def.start, def.end, def.counterClockwise,
+                                                def.construction);
+                        }
+                        break;
+                    case SketchGeometryType::BSpline: {
+                        sketch2d::BSplineData sd;
+                        sd.poles = def.poles;
+                        sd.degree = def.degree;
+                        sd.knots = def.knots;
+                        sd.multiplicities = def.multiplicities;
+                        sd.weights = def.weights;
+                        sd.periodic = def.periodic;
+                        bs.addBSpline(sd, def.construction);
+                        break;
                     }
-                    bs.addCircle(def.center, radii[g], def.construction);
-                    break;
-                case SketchGeometryType::Arc:
-                    bs.addArc(def.center, def.start, def.end, def.projection >= 0 || def.counterClockwise, def.construction);
-                    break;
+                }
+            } catch (const std::exception& e) {
+                return fail(ErrorCode::InvalidInput, where + " (" + toString(def.type) + "): " + e.what());
             }
         }
         for (std::size_t g = 0; g < ng; ++g) {
@@ -419,68 +451,111 @@ public:
         for (std::size_t k = 0; k < data->constraints.size(); ++k) {
             const SketchConstraintDef& c = data->constraints[k];
             const double val = v[c0 + k];
-            auto ent = [&](int e) -> const BoundSketch::Entity& { return bs.entity(static_cast<SketchEntityId>(e)); };
-            auto needs = [&](int e, BoundSketch::EntityKind kind1, std::optional<BoundSketch::EntityKind> kind2) -> Status {
-                const auto k1 = ent(e).kind;
-                if (k1 == kind1 || (kind2 && k1 == *kind2)) return std::monostate{};
-                return Status::failure(ErrorCode::InvalidInput, "sketch constraint " + std::to_string(k + 1) + " (" +
-                                                                    toString(c.type) + "): entity " + std::to_string(e) +
-                                                                    " has the wrong kind");
-            };
+            const std::string where = "sketch constraint " + std::to_string(k + 1) + " (" + toString(c.type) + ")";
             using K = BoundSketch::EntityKind;
-            Status st = std::monostate{};
+            auto ent = [&](int e) -> const BoundSketch::Entity& {
+                if (e < 1 || static_cast<std::size_t>(e) > ng) throw std::out_of_range("no sketch entity " + std::to_string(e));
+                return bs.entity(static_cast<SketchEntityId>(e));
+            };
+            auto geo = [&](int e) { return ent(e).geo; };
+            auto lineOf = [&](int e) {
+                if (ent(e).kind != K::Line) throw std::invalid_argument("entity " + std::to_string(e) + " is not a line");
+                return ent(e).line;
+            };
+            auto circular = [&](int e) {
+                if (ent(e).kind != K::Circle && ent(e).kind != K::Arc) {
+                    throw std::invalid_argument("entity " + std::to_string(e) + " is not a circle or an arc");
+                }
+                return ent(e).geo;
+            };
+            auto positive = [&](const char* what, bool allowZero = false) {
+                if (c.driven) return;
+                if (!(val > 0) && !(allowZero && val == 0)) {
+                    throw std::invalid_argument(std::string(what) + " must be positive, is " + num(val));
+                }
+            };
             sketch2d::Sketch& s = bs.sketch();
             int tag = 0;
-            switch (c.type) {
-                case SketchConstraintType::Coincident: tag = s.constrain_coincident(c.a, c.b); break;
-                case SketchConstraintType::Horizontal: tag = s.constrain_horizontal(c.a, c.b); break;
-                case SketchConstraintType::Vertical: tag = s.constrain_vertical(c.a, c.b); break;
-                case SketchConstraintType::Distance:
-                    if (!(val > 0)) return fail(ErrorCode::InvalidInput, "sketch constraint " + std::to_string(k + 1) +
-                                                                             ": distance must be positive, is " + num(val));
-                    tag = s.constrain_distance(c.a, c.b, val);
-                    break;
-                case SketchConstraintType::Radius:
-                    if (!(st = needs(c.a, K::Circle, K::Arc))) return st.error();
-                    if (!(val > 0)) return fail(ErrorCode::InvalidInput, "sketch constraint " + std::to_string(k + 1) +
-                                                                             ": radius must be positive, is " + num(val));
-                    tag = s.constrain_radius(ent(c.a).circle, val);
-                    break;
-                case SketchConstraintType::Parallel:
-                case SketchConstraintType::Perpendicular:
-                case SketchConstraintType::EqualLength:
-                case SketchConstraintType::Angle:
-                    if (!(st = needs(c.a, K::Line, std::nullopt)) || !(st = needs(c.b, K::Line, std::nullopt))) return st.error();
-                    if (c.type == SketchConstraintType::Parallel) tag = s.constrain_parallel(ent(c.a).line, ent(c.b).line);
-                    if (c.type == SketchConstraintType::Perpendicular) tag = s.constrain_perpendicular(ent(c.a).line, ent(c.b).line);
-                    if (c.type == SketchConstraintType::EqualLength) tag = s.constrain_equal_length(ent(c.a).line, ent(c.b).line);
-                    if (c.type == SketchConstraintType::Angle) tag = s.constrain_angle(ent(c.a).line, ent(c.b).line, val);
-                    break;
-                case SketchConstraintType::PointOnLine:
-                    if (!(st = needs(c.b, K::Line, std::nullopt))) return st.error();
-                    tag = s.constrain_point_on_line(c.a, ent(c.b).line);
-                    break;
-                case SketchConstraintType::PointOnCircle:
-                    if (!(st = needs(c.b, K::Circle, K::Arc))) return st.error();
-                    tag = s.constrain_point_on_circle(c.a, ent(c.b).circle);
-                    break;
-                case SketchConstraintType::EqualRadius:
-                    if (!(st = needs(c.a, K::Circle, K::Arc)) || !(st = needs(c.b, K::Circle, K::Arc))) return st.error();
-                    tag = s.constrain_equal_radius(ent(c.a).circle, ent(c.b).circle);
-                    break;
-                case SketchConstraintType::Symmetric:
-                    if (!(st = needs(c.c, K::Line, std::nullopt))) return st.error();
-                    tag = s.constrain_symmetric(c.a, c.b, ent(c.c).line);
-                    break;
+            try {
+                switch (c.type) {
+                    case SketchConstraintType::Coincident: tag = s.constrain_coincident(c.a, c.b); break;
+                    case SketchConstraintType::Horizontal: tag = s.constrain_horizontal(c.a, c.b); break;
+                    case SketchConstraintType::Vertical: tag = s.constrain_vertical(c.a, c.b); break;
+                    case SketchConstraintType::Distance:
+                        positive("distance");
+                        tag = s.constrain_distance(c.a, c.b, val);
+                        break;
+                    case SketchConstraintType::DistanceX: tag = s.constrain_distance_x(c.a, c.b, val); break;
+                    case SketchConstraintType::DistanceY: tag = s.constrain_distance_y(c.a, c.b, val); break;
+                    case SketchConstraintType::PointCurveDistance:
+                        positive("distance", true);
+                        tag = s.constrain_point_curve_distance(c.a, geo(c.b), val);
+                        break;
+                    case SketchConstraintType::Radius:
+                        positive("radius");
+                        tag = s.constrain_radius_of(circular(c.a), val);
+                        break;
+                    case SketchConstraintType::Diameter:
+                        positive("diameter");
+                        tag = s.constrain_diameter(circular(c.a), val);
+                        break;
+                    case SketchConstraintType::ArcLength:
+                        positive("arc length");
+                        if (ent(c.a).kind != K::Arc) throw std::invalid_argument("entity " + std::to_string(c.a) + " is not an arc");
+                        tag = s.constrain_arc_length(ent(c.a).arc, val);
+                        break;
+                    case SketchConstraintType::MajorRadius:
+                        positive("major radius");
+                        tag = s.constrain_major_radius(geo(c.a), val);
+                        break;
+                    case SketchConstraintType::MinorRadius:
+                        positive("minor radius");
+                        tag = s.constrain_minor_radius(geo(c.a), val);
+                        break;
+                    case SketchConstraintType::Parallel: tag = s.constrain_parallel(lineOf(c.a), lineOf(c.b)); break;
+                    case SketchConstraintType::Perpendicular: tag = s.constrain_perpendicular(lineOf(c.a), lineOf(c.b)); break;
+                    case SketchConstraintType::EqualLength: tag = s.constrain_equal_length(lineOf(c.a), lineOf(c.b)); break;
+                    case SketchConstraintType::Angle: tag = s.constrain_angle(lineOf(c.a), lineOf(c.b), val); break;
+                    case SketchConstraintType::PointOnLine: tag = s.constrain_point_on_line(c.a, lineOf(c.b)); break;
+                    case SketchConstraintType::PointOnCircle: tag = s.constrain_point_on(c.a, circular(c.b)); break;
+                    case SketchConstraintType::EqualRadius: tag = s.constrain_equal(circular(c.a), circular(c.b)); break;
+                    case SketchConstraintType::Symmetric: tag = s.constrain_symmetric(c.a, c.b, lineOf(c.c)); break;
+                    case SketchConstraintType::Tangent: tag = s.constrain_tangent(geo(c.a), geo(c.b)); break;
+                    case SketchConstraintType::Equal: tag = s.constrain_equal(geo(c.a), geo(c.b)); break;
+                    case SketchConstraintType::Concentric: tag = s.constrain_concentric(geo(c.a), geo(c.b)); break;
+                    case SketchConstraintType::Midpoint: tag = s.constrain_midpoint(c.a, geo(c.b)); break;
+                    case SketchConstraintType::PointOn: tag = s.constrain_point_on(c.a, geo(c.b)); break;
+                    case SketchConstraintType::Fix: tag = s.constrain_fix(c.a); break;
+                    case SketchConstraintType::SymmetricPoint: tag = s.constrain_symmetric_point(c.a, c.b, c.c); break;
+                    case SketchConstraintType::Rotation: tag = s.constrain_rotation(c.a, c.b, c.c, val); break;
+                }
+                if (c.driven) {
+                    if (!sketch2d::is_dimension(s.constraint(tag).kind)) {
+                        throw std::invalid_argument("only a dimension can be a reference (driven) constraint");
+                    }
+                    s.set_driving(tag, false);
+                }
+            } catch (const std::exception& e) {
+                return fail(ErrorCode::InvalidInput, where + ": " + e.what());
             }
             tags.push_back(tag);
         }
 
-        const sketch2d::Report report = bs.solve();
-        auto constraintOfTag = [&](int tag) {
+        sketch2d::Report report;
+        try {
+            report = bs.solve();
+        } catch (const std::exception& e) {
+            return fail(ErrorCode::InvalidInput, std::string("sketch cannot be solved: ") + e.what());
+        }
+        auto indexOfTag = [&](int tag) -> int {
             for (std::size_t k = 0; k < tags.size(); ++k) {
-                if (tags[k] == tag) return "#" + std::to_string(k + 1) + " (" + toString(data->constraints[k].type) + ")";
+                if (tags[k] == tag) return static_cast<int>(k) + 1;
             }
+            return 0;
+        };
+        auto constraintOfTag = [&](int tag) {
+            const int k = indexOfTag(tag);
+            if (k > 0) return "#" + std::to_string(k) + " (" + toString(data->constraints[k - 1].type) + ")";
             return std::string("#internal");
         };
         if (!report.conflicting.empty()) {
@@ -491,7 +566,7 @@ public:
         double scale = 1.0;
         for (std::size_t k = 0; k < np; ++k) scale = std::max({scale, std::abs(pos[k].x), std::abs(pos[k].y)});
         for (std::size_t k = 0; k < data->constraints.size(); ++k) {
-            const double r = residual(data->constraints[k], v[c0 + k], bs);
+            const double r = bs.sketch().residual(tags[k]);
             if (!(r <= 1e-6 * scale)) {
                 return fail(ErrorCode::OperationFailed, "sketch solver did not satisfy constraint #" + std::to_string(k + 1) +
                                                             " (" + toString(data->constraints[k].type) +
@@ -505,15 +580,32 @@ public:
         result->curves = curves.value();
         result->dof = report.dof;
         result->solverStatus = report.status;
+        result->definition = sketch2d::to_string(report.definition);
+        for (int t : report.redundant) {
+            if (int k = indexOfTag(t)) result->redundant.push_back(k);
+        }
+        for (int t : report.partially_redundant) {
+            if (int k = indexOfTag(t)) result->partiallyRedundant.push_back(k);
+        }
+        for (const auto& e : bs.entities()) result->entityDefined.push_back(report.fully_defined(e.geo));
+        for (std::size_t k = 0; k < data->constraints.size(); ++k) {
+            const auto& info = bs.sketch().constraint(tags[k]);
+            result->constraintValues.push_back(sketch2d::is_dimension(info.kind) ? bs.sketch().constraint_value(tags[k])
+                                                                                : v[c0 + k]);
+        }
         std::vector<bool> used(np, false);
         for (const auto& g : data->geometry) {
-            for (int p : {g.start, g.end, g.center}) {
+            for (int p : {g.start, g.end, g.center, g.focus}) {
                 if (p >= 0) used[static_cast<std::size_t>(p)] = true;
+            }
+            for (int p : g.poles) {
+                if (p >= 0 && static_cast<std::size_t>(p) < np) used[static_cast<std::size_t>(p)] = true;
             }
         }
         for (std::size_t k = 0; k < np; ++k) {
             const auto p = bs.sketch().point(static_cast<sketch2d::Id>(k));
             result->points.push_back({p.x, p.y});
+            result->pointDefined.push_back(report.fully_defined(sketch2d::point_geo(static_cast<sketch2d::Id>(k))));
             if (!used[k]) result->standalonePoints.push_back(k);
         }
 

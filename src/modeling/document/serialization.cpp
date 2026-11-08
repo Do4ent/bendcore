@@ -276,18 +276,32 @@ json sketchToJson(const SketchData& s) {
     for (const auto& p : s.points) points.push_back(json{{"x", p.x}, {"y", p.y}, {"fixed", p.fixed}});
     json geometry = json::array();
     for (const auto& g : s.geometry) {
-        geometry.push_back(json{{"type", toString(g.type)},
-                                {"start", g.start},
-                                {"end", g.end},
-                                {"center", g.center},
-                                {"radius", g.radius},
-                                {"counterClockwise", g.counterClockwise},
-                                {"construction", g.construction},
-                                {"projection", g.projection}});
+        json e{{"type", toString(g.type)},
+               {"start", g.start},
+               {"end", g.end},
+               {"center", g.center},
+               {"radius", g.radius},
+               {"counterClockwise", g.counterClockwise},
+               {"construction", g.construction},
+               {"projection", g.projection}};
+        // Fields of the conics and splines are written only for them: files of lines, circles and
+        // arcs stay as before (format v3 readers ignore unknown fields).
+        if (g.type == SketchGeometryType::Ellipse || g.type == SketchGeometryType::EllipticalArc) e["focus"] = g.focus;
+        if (g.type == SketchGeometryType::BSpline) {
+            e["poles"] = g.poles;
+            e["degree"] = g.degree;
+            e["knots"] = g.knots;
+            e["multiplicities"] = g.multiplicities;
+            e["weights"] = g.weights;
+            e["periodic"] = g.periodic;
+        }
+        geometry.push_back(std::move(e));
     }
     json constraints = json::array();
     for (const auto& c : s.constraints) {
-        constraints.push_back(json{{"type", toString(c.type)}, {"a", c.a}, {"b", c.b}, {"c", c.c}, {"value", c.value}});
+        json e{{"type", toString(c.type)}, {"a", c.a}, {"b", c.b}, {"c", c.c}, {"value", c.value}};
+        if (c.driven) e["driven"] = true;
+        constraints.push_back(std::move(e));
     }
     return json{{"points", points}, {"geometry", geometry}, {"constraints", constraints}, {"regions", s.regions}};
 }
@@ -309,6 +323,13 @@ SketchData sketchFromJson(const json& j) {
         d.counterClockwise = g.value("counterClockwise", true);
         d.construction = g.value("construction", false);
         d.projection = g.value("projection", -1);
+        d.focus = g.value("focus", -1);
+        d.poles = g.value("poles", std::vector<int>());
+        d.degree = g.value("degree", 3);
+        d.knots = g.value("knots", std::vector<double>());
+        d.multiplicities = g.value("multiplicities", std::vector<int>());
+        d.weights = g.value("weights", std::vector<double>());
+        d.periodic = g.value("periodic", false);
         s.geometry.push_back(std::move(d));
     }
     for (const auto& c : j.at("constraints")) {
@@ -320,6 +341,7 @@ SketchData sketchFromJson(const json& j) {
         d.b = c.value("b", -1);
         d.c = c.value("c", -1);
         d.value = c.value("value", std::string("0"));
+        d.driven = c.value("driven", false);
         s.constraints.push_back(std::move(d));
     }
     s.regions = j.value("regions", std::vector<SketchEntityId>());
