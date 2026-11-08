@@ -69,7 +69,15 @@ struct Hatch {
     double spacing = 2.0;  // 1…10 мм (ГОСТ 2.306)
 };
 
-using Geometry = std::variant<LineSeg, Arc, Circle, Polyline, Text, Hatch>;
+// Залитый выпуклый многоугольник: стрелки размерных линий (ГОСТ 2.307), треугольник
+// обозначения базы (ГОСТ 2.308), точка на конце линии-выноски (ГОСТ 2.316). 3…64 вершины,
+// выпуклый, ненулевой площади. DXF — SOLID (веером треугольников), SVG — polygon с заливкой,
+// PDF — оператор f.
+struct SolidFill {
+    std::vector<Point2> points;
+};
+
+using Geometry = std::variant<LineSeg, Arc, Circle, Polyline, Text, Hatch, SolidFill>;
 
 struct Entity {
     Geometry geometry;

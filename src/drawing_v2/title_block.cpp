@@ -99,7 +99,9 @@ Result<TitleBlockLayout> addFrameAndTitleBlock(Drawing& drawing, const TitleBloc
                                                const FrameOptions& options) {
     const Sheet& sh = drawing.sheet();
     const double W = sh.widthMm, H = sh.heightMm;
-    const double tbH = options.form == TitleBlockForm::Form1 ? 55.0 : 15.0;
+    const double tbH = options.form == TitleBlockForm::Form1   ? 55.0
+                       : options.form == TitleBlockForm::Form2 ? 40.0
+                                                               : 15.0;
     if (W < kLeftMargin + kOtherMargin + kTitleWidth - 1e-9 || H < 2 * kOtherMargin + tbH + 1e-9) {
         return Error{ErrorCode::InvalidInput, "sheet " + sh.name + " is too small for the title block"};
     }
@@ -214,6 +216,70 @@ Result<TitleBlockLayout> addFrameAndTitleBlock(Drawing& drawing, const TitleBloc
         BC_TRY(b.text(L.graphs[6], data.scale, 5.0, HAlign::Center, false, "scale"));
         BC_TRY(b.text(L.graphs[7], "Лист " + std::to_string(data.sheet), 2.5, HAlign::Left, false, "sheet"));
         BC_TRY(b.text(L.graphs[8], "Листов " + std::to_string(data.sheets), 2.5, HAlign::Left, false, "sheets"));
+        BC_TRY(b.text(L.graphs[9], data.organization, 5.0, HAlign::Center, false, "organization"));
+    } else if (options.form == TitleBlockForm::Form2) {
+        // Форма 2 (185×40, первый лист текстовых документов): левая часть — 8 строк по 5 мм:
+        // две строки изменений (30…40), заголовок (25…30), подписи (0…25: Разраб., Пров.,
+        // резерв, Н.контр., Утв.). Правая часть: графа 2 — 65…185 × 25…40; графа 1 —
+        // 65…135 × 0…25; «Лит.» (3 клетки по 5), «Лист» 15, «Листов» 20 — заголовки 20…25,
+        // значения 15…20; графа 9 — 135…185 × 0…15.
+        BC_TRY(vl(7, 25, 40, true));
+        for (double x : {17.0, 40.0, 55.0, 65.0}) BC_TRY(vl(x, 0, 40, true));
+        for (int i = 1; i < 8; ++i) {
+            const double y = 5.0 * i;
+            BC_TRY(hl(0, 65, y, y == 25.0 || y == 30.0));
+        }
+        BC_TRY(hl(65, 185, 25, true));
+        BC_TRY(hl(135, 185, 20, true));
+        BC_TRY(hl(135, 185, 15, true));
+        BC_TRY(vl(135, 0, 25, true));
+        BC_TRY(vl(150, 15, 25, true));
+        BC_TRY(vl(165, 15, 25, true));
+        BC_TRY(vl(140, 15, 20, false));
+        BC_TRY(vl(145, 15, 20, false));
+
+        L.graphs[1] = R(65, 0, 135, 25);
+        L.graphs[2] = R(65, 25, 185, 40);
+        L.graphs[4] = R(135, 15, 150, 20);
+        L.graphs[7] = R(150, 15, 165, 20);
+        L.graphs[8] = R(165, 15, 185, 20);
+        L.graphs[9] = R(135, 0, 185, 15);
+        L.graphs[10] = R(0, 0, 17, 25);
+        L.graphs[11] = R(17, 0, 40, 25);
+        L.graphs[12] = R(40, 0, 55, 25);
+        L.graphs[13] = R(55, 0, 65, 25);
+        for (int k = 0; k < 5; ++k) L.graphs[14 + k] = R(colX[k], 30, colX[k + 1], 40);
+
+        for (int k = 0; k < 5; ++k) BC_TRY(b.text(R(colX[k], 25, colX[k + 1], 30), headers[k], 2.5, HAlign::Center, false, headers[k]));
+        BC_TRY(b.text(R(135, 20, 150, 25), "Лит.", 2.5, HAlign::Center));
+        BC_TRY(b.text(R(150, 20, 165, 25), "Лист", 2.5, HAlign::Center));
+        BC_TRY(b.text(R(165, 20, 185, 25), "Листов", 2.5, HAlign::Center));
+
+        struct Row {
+            const char* label;
+            const SignatureRow* sig;
+        };
+        const Row rows[5] = {{"Разраб.", &data.developer}, {"Пров.", &data.checker}, {"", nullptr},
+                             {"Н.контр.", &data.normControl}, {"Утв.", &data.approver}};
+        for (int i = 0; i < 5; ++i) {
+            const double y1 = 25.0 - 5.0 * i, y0 = y1 - 5.0;
+            BC_TRY(b.text(R(0, y0, 17, y1), rows[i].label, 2.5, HAlign::Left, false, rows[i].label));
+            if (rows[i].sig) {
+                BC_TRY(b.text(R(17, y0, 40, y1), rows[i].sig->surname, 2.5, HAlign::Left, false, "surname"));
+                BC_TRY(b.text(R(55, y0, 65, y1), rows[i].sig->date, 2.5, HAlign::Center, false, "date"));
+            }
+        }
+        BC_TRY(b.text(L.graphs[2], data.designation, 7.0, HAlign::Center, false, "designation"));
+        BC_TRY(b.text(L.graphs[1], data.name, 7.0, HAlign::Center, false, "name"));
+        if (!data.litera.empty()) {
+            const auto lit = decodeUtf8(data.litera).value();
+            for (std::size_t i = 0; i < lit.size(); ++i) {
+                BC_TRY(b.text(R(135 + 5.0 * double(i), 15, 140 + 5.0 * double(i), 20),
+                              encodeUtf8(std::u32string(1, lit[i])), 2.5, HAlign::Center, false, "litera"));
+            }
+        }
+        BC_TRY(b.text(L.graphs[7], std::to_string(data.sheet), 2.5, HAlign::Center, false, "sheet"));
+        BC_TRY(b.text(L.graphs[8], std::to_string(data.sheets), 2.5, HAlign::Center, false, "sheets"));
         BC_TRY(b.text(L.graphs[9], data.organization, 5.0, HAlign::Center, false, "organization"));
     } else {
         // Форма 2а: 185×15; левая часть — две строки изменений и заголовок снизу.

@@ -12,6 +12,8 @@ export interface EdgeBuffers {
   positions: Float32Array;
   /** Pairs of vertex indices: (k, k+1) for consecutive points of the same polyline. */
   indices: Uint32Array;
+  /** Kernel edgeIndex of each segment (segment k = indices[2k], indices[2k+1]). */
+  segmentEdges: Uint32Array;
 }
 
 export function packEdgePolylines(edges: readonly EdgePolylineData[]): EdgeBuffers {
@@ -27,6 +29,7 @@ export function packEdgePolylines(edges: readonly EdgePolylineData[]): EdgeBuffe
   }
   const positions = new Float32Array(pointCount * 3);
   const indices = new Uint32Array(segmentCount * 2);
+  const segmentEdges = new Uint32Array(segmentCount);
   let vertex = 0;
   let segment = 0;
   for (const e of edges) {
@@ -35,9 +38,10 @@ export function packEdgePolylines(edges: readonly EdgePolylineData[]): EdgeBuffe
     for (let k = 0; k + 1 < n; ++k) {
       indices[segment * 2] = vertex + k;
       indices[segment * 2 + 1] = vertex + k + 1;
+      segmentEdges[segment] = e.edgeIndex;
       ++segment;
     }
     vertex += n;
   }
-  return { positions, indices };
+  return { positions, indices, segmentEdges };
 }

@@ -119,7 +119,7 @@ declare module 'three' {
   }
 
   export class MeshBasicMaterial extends Material {
-    constructor(params?: { color?: number | string; map?: Texture; transparent?: boolean });
+    constructor(params?: MaterialParameters & { map?: Texture; depthWrite?: boolean });
   }
 
   export class Texture {
