@@ -45,7 +45,7 @@ bool hasTorus(const TopoDS_Shape& shape, double major, double minor, double x, d
 }
 
 struct Model {
-    PartDocument doc{basic::basicRegistry()};
+    PartDocument doc{partRegistry()};
 
     void set(const Values& v) {
         for (const auto& [name, value] : v) setVar(doc, name, value);
@@ -56,14 +56,11 @@ struct Model {
         add(doc, {"Box", "Body", "", {{"length", "L"}, {"width", "W"}, {"height", "H"}}, {}, {}, false});
         doc.rebuild();
         NamedShape s = doc.finalShape();
-        FeatureSpec pocket{"PrismCut", "Pocket", "", {}, {}, {}, false};
-        pocket.references["face"] = {refTo(s, planarFace(s.shape(), gp::DZ(), 30))};
-        pocket.parameters = {{"centerX", "L/2 + px"}, {"centerY", "W/2 + py"}, {"sizeU", "a"}, {"sizeV", "b"}, {"depth", "d"}};
-        add(doc, pocket);
-        FeatureSpec hole{"PrismCut", "Hole", "", {}, {}, {{"profile", "circle"}}, false};
-        hole.references["face"] = {refTo(s, planarFace(s.shape(), gp::DY().Reversed(), 0))};
-        hole.parameters = {{"centerX", "L/2 + hx"}, {"centerZ", "hz"}, {"radius", "rho"}, {"depth", "hd"}};
-        add(doc, hole);
+        // Pocket and round hole: sketches on the top and front faces, cut extrusions.
+        addSketchCut(doc, "Pocket", refTo(s, planarFace(s.shape(), gp::DZ(), 30)), "L/2 + px", "W/2 + py", "H",
+                     centredRectangle("a", "b"), "d");
+        addSketchCut(doc, "Hole", refTo(s, planarFace(s.shape(), gp::DY().Reversed(), 0)), "L/2 + hx", "0", "hz",
+                     centredCircle("rho"), "hd");
         doc.rebuild();
         s = doc.finalShape();
 
@@ -105,12 +102,15 @@ void check(const PartDocument& doc, const Values& v, const std::string& scenario
         {"Bevel", planarFacesWithNormal(s, gp_Dir(1, 1, 0), (L + W - v.at("c")) / std::sqrt(2.0)) == 1},
     };
     for (const auto& [id, geomOk] : geometry) {
-        FeatureInfo fi = info(doc, id);
+        // The pocket and the hole refer to their faces through their sketches.
+        const bool sketched = id == "Pocket" || id == "Hole";
+        FeatureInfo fi = info(doc, sketched ? id + "Sketch" : id);
         ASSERT_EQ(fi.referenceReports.size(), 1u) << scenario << " " << id;
         const ResolveMethod m = fi.referenceReports[0].resolution.method;
         ++tally.methods[m];
         ++tally.total;
-        const bool ok = fi.state == FeatureState::Ok && m != ResolveMethod::Broken && geomOk;
+        const bool built = !sketched || info(doc, id).state == FeatureState::Ok;
+        const bool ok = fi.state == FeatureState::Ok && built && m != ResolveMethod::Broken && geomOk;
         if (ok) {
             ++tally.survived;
         } else {

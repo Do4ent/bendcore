@@ -1,5 +1,5 @@
-// JSON persistence of PartDocument: format "bendcore-part" v2, migration from v1,
-// optional BRep cache keyed by input hash (docs/modeling/PART_DOCUMENT.md).
+// JSON persistence of PartDocument: format "bendcore-part" v3 (links, sketches), migration
+// v1 -> v2 -> v3, optional BRep cache keyed by input hash (docs/modeling/PART_DOCUMENT.md).
 
 #include "part_document_internal.hpp"
 
@@ -7,6 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstdio>
 #include <stdexcept>
 
@@ -227,8 +228,9 @@ json migrateV1(const json& v1, const FeatureRegistry& registry) {
     }
     for (const auto& op : v1.at("operations")) {
         const std::string type = op.at("type").get<std::string>();
+        // v1 knew the v2 types; PrismCut is migrated further by migrateV2 and has one slot "face".
         auto feature = registry.create(type);
-        if (!feature) throw std::domain_error("unknown feature type '" + type + "'");
+        if (!feature && type != "PrismCut") throw std::domain_error("unknown feature type '" + type + "'");
         json f{{"id", op.at("id")}, {"type", type}, {"suppressed", op.value("suppressed", false)}};
         json params = json::object();
         if (op.contains("params")) {
@@ -243,10 +245,15 @@ json migrateV1(const json& v1, const FeatureRegistry& registry) {
             for (const auto& [slot, names] : op.at("refs").items()) {
                 ElementKind kind = ElementKind::Edge;
                 bool known = false;
-                for (const auto& s : feature->referenceSlots()) {
-                    if (s.name == slot) {
-                        kind = s.kind;
-                        known = true;
+                if (!feature) {
+                    kind = ElementKind::Face;
+                    known = slot == "face";
+                } else {
+                    for (const auto& s : feature->referenceSlots()) {
+                        if (s.name == slot) {
+                            kind = s.kind;
+                            known = true;
+                        }
                     }
                 }
                 if (!known) throw std::invalid_argument(type + " has no reference slot '" + slot + "'");
@@ -262,6 +269,196 @@ json migrateV1(const json& v1, const FeatureRegistry& registry) {
     }
     v2["rollback"] = v1.value("rollback", json());
     return v2;
+}
+
+json sketchToJson(const SketchData& s) {
+    json points = json::array();
+    for (const auto& p : s.points) points.push_back(json{{"x", p.x}, {"y", p.y}, {"fixed", p.fixed}});
+    json geometry = json::array();
+    for (const auto& g : s.geometry) {
+        geometry.push_back(json{{"type", toString(g.type)},
+                                {"start", g.start},
+                                {"end", g.end},
+                                {"center", g.center},
+                                {"radius", g.radius},
+                                {"counterClockwise", g.counterClockwise},
+                                {"construction", g.construction},
+                                {"projection", g.projection}});
+    }
+    json constraints = json::array();
+    for (const auto& c : s.constraints) {
+        constraints.push_back(json{{"type", toString(c.type)}, {"a", c.a}, {"b", c.b}, {"c", c.c}, {"value", c.value}});
+    }
+    return json{{"points", points}, {"geometry", geometry}, {"constraints", constraints}, {"regions", s.regions}};
+}
+
+SketchData sketchFromJson(const json& j) {
+    SketchData s;
+    for (const auto& p : j.at("points")) {
+        s.points.push_back({p.at("x").get<std::string>(), p.at("y").get<std::string>(), p.value("fixed", false)});
+    }
+    for (const auto& g : j.at("geometry")) {
+        SketchGeometryDef d;
+        auto type = sketchGeometryTypeFromString(g.at("type").get<std::string>());
+        if (!type) throw std::invalid_argument("unknown sketch geometry '" + g.at("type").get<std::string>() + "'");
+        d.type = *type;
+        d.start = g.value("start", -1);
+        d.end = g.value("end", -1);
+        d.center = g.value("center", -1);
+        d.radius = g.value("radius", std::string("1"));
+        d.counterClockwise = g.value("counterClockwise", true);
+        d.construction = g.value("construction", false);
+        d.projection = g.value("projection", -1);
+        s.geometry.push_back(std::move(d));
+    }
+    for (const auto& c : j.at("constraints")) {
+        SketchConstraintDef d;
+        auto type = sketchConstraintTypeFromString(c.at("type").get<std::string>());
+        if (!type) throw std::invalid_argument("unknown sketch constraint '" + c.at("type").get<std::string>() + "'");
+        d.type = *type;
+        d.a = c.value("a", -1);
+        d.b = c.value("b", -1);
+        d.c = c.value("c", -1);
+        d.value = c.value("value", std::string("0"));
+        s.constraints.push_back(std::move(d));
+    }
+    s.regions = j.value("regions", std::vector<SketchEntityId>());
+    return s;
+}
+
+// Splits "<a>|<b>|..." at the top level (outside brackets and parentheses).
+std::vector<std::string> splitTopLevel(const std::string& text) {
+    std::vector<std::string> out;
+    int depth = 0;
+    std::string cur;
+    for (char c : text) {
+        if (c == '(' || c == '[') ++depth;
+        if (c == ')' || c == ']') --depth;
+        if (c == '|' && depth == 0) {
+            out.push_back(cur);
+            cur.clear();
+        } else {
+            cur += c;
+        }
+    }
+    out.push_back(cur);
+    return out;
+}
+
+// Derived names list their components in sorted order (element_map.cpp, joinSorted); after a
+// component is renamed the order is restored so that the name stays the one the map builds.
+std::string resortDerived(const std::string& name) {
+    if (name.size() < 4 || (name[0] != 'E' && name[0] != 'V' && name[0] != 'F') || name[1] != '(') return name;
+    int depth = 0;
+    std::size_t close = std::string::npos;
+    for (std::size_t i = 1; i < name.size(); ++i) {
+        if (name[i] == '(' || name[i] == '[') ++depth;
+        if (name[i] == ')' || name[i] == ']') {
+            if (--depth == 0 && name[i] == ')') {
+                close = i;
+                break;
+            }
+        }
+    }
+    if (close == std::string::npos) return name;
+    auto parts = splitTopLevel(name.substr(2, close - 2));
+    std::sort(parts.begin(), parts.end());
+    std::string joined;
+    for (const auto& p : parts) joined += (joined.empty() ? "" : "|") + p;
+    return name.substr(0, 2) + joined + name.substr(close);
+}
+
+std::string replaceAll(std::string text, const std::string& from, const std::string& to) {
+    for (std::size_t pos = text.find(from); pos != std::string::npos; pos = text.find(from, pos + to.size())) {
+        text.replace(pos, from.size(), to);
+    }
+    return text;
+}
+
+// v2 had a parametric prism cut ("PrismCut": rectangle or circle on a planar face). v3 builds
+// it from a sketch on that face and a cut extrusion; the extrusion keeps the id, the sketch is
+// "<id>Sketch", and element names of the old roles are rewritten to the names the extrusion
+// gives the same faces.
+json migrateV2(json doc) {
+    json features = json::array();
+    std::vector<std::pair<std::string, std::string>> renames;
+    for (const auto& f : doc.at("features")) {
+        if (f.at("type").get<std::string>() != "PrismCut") {
+            features.push_back(f);
+            continue;
+        }
+        const std::string id = f.at("id").get<std::string>();
+        const std::string sid = id + "Sketch";
+        const auto params = f.value("parameters", std::map<std::string, std::string>());
+        auto param = [&](const char* name, const char* def) {
+            auto it = params.find(name);
+            return "(" + (it == params.end() ? std::string(def) : it->second) + ")";
+        };
+        const auto options = f.value("options", std::map<std::string, std::string>());
+        const bool circle = options.count("profile") && options.at("profile") == "circle";
+        const bool through = options.count("extent") && options.at("extent") == "through";
+        SketchBuilder b;
+        if (circle) {
+            b.fixedCircle("0", "0", param("radius", "2"));
+            renames.emplace_back(id + ":Side", "G[" + id + "](" + sid + ":E1)");
+        } else {
+            const std::string u = param("sizeU", "5") + " / 2", v = param("sizeV", "5") + " / 2";
+            b.fixedPolygon({{"-" + u, "-" + v}, {u, "-" + v}, {u, v}, {"-" + u, v}});
+            const char* sides[4] = {"Side-V", "Side+U", "Side+V", "Side-U"};
+            for (int k = 0; k < 4; ++k) {
+                renames.emplace_back(id + ":" + sides[k], "G[" + id + "](" + sid + ":E" + std::to_string(k + 1) + ")");
+            }
+        }
+        renames.emplace_back(id + ":Start", sid + ":R1");
+        renames.emplace_back(id + ":Floor", "G[" + id + "](" + sid + ":R1)");
+        json sketch{{"id", sid},
+                    {"type", "Sketch"},
+                    {"label", sid},
+                    {"suppressed", f.value("suppressed", false)},
+                    {"parameters",
+                     {{"originX", param("centerX", "0")}, {"originY", param("centerY", "0")}, {"originZ", param("centerZ", "0")}}},
+                    {"options", {{"plane", "face"}}},
+                    {"references", {{"face", f.value("references", json::object()).value("face", json::array())}}},
+                    {"links", json::object()},
+                    {"sketch", sketchToJson(b.build())}};
+        json extrude{{"id", id},
+                     {"type", "Extrude"},
+                     {"label", f.value("label", id)},
+                     {"suppressed", f.value("suppressed", false)},
+                     {"parameters", {{"distance", params.count("depth") ? params.at("depth") : std::string("5")}}},
+                     {"options", {{"mode", "cut"}, {"extent", through ? "throughAll" : "blind"}, {"reversed", "true"}}},
+                     {"references", json::object()},
+                     {"links", {{"sketch", sid}}}};
+        features.push_back(sketch);
+        features.push_back(extrude);
+    }
+    // Rewrite names that referred to the old roles; a reference whose name no longer matches
+    // falls back to its stored signature at the first rebuild.
+    for (auto& f : features) {
+        if (!f.contains("references")) continue;
+        for (auto& [slot, arr] : f.at("references").items()) {
+            for (auto& r : arr) {
+                std::string name = r.at("name").get<std::string>();
+                const std::string before = name;
+                for (const auto& [from, to] : renames) name = replaceAll(name, from, to);
+                if (name != before) r["name"] = resortDerived(name);
+            }
+        }
+    }
+    // The rollback marker counted the old features: each PrismCut became two nodes.
+    if (doc.contains("rollback") && !doc.at("rollback").is_null()) {
+        const std::size_t rb = doc.at("rollback").get<std::size_t>();
+        std::size_t extra = 0, k = 0;
+        for (const auto& f : doc.at("features")) {
+            if (k++ >= rb) break;
+            if (f.at("type").get<std::string>() == "PrismCut") ++extra;
+        }
+        doc["rollback"] = rb + extra;
+    }
+    doc["features"] = features;
+    doc["version"] = 3;
+    doc.erase("cache");  // cached shapes of v2 carry the old names
+    return doc;
 }
 
 }  // namespace
@@ -282,13 +479,16 @@ Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
                 for (const auto& r : list) arr.push_back(referenceToJson(r));
                 refs[slot] = arr;
             }
-            features.push_back(json{{"id", n->id},
-                                    {"type", n->type},
-                                    {"label", n->label},
-                                    {"suppressed", n->suppressed},
-                                    {"parameters", n->parameters},
-                                    {"options", n->options},
-                                    {"references", refs}});
+            json f{{"id", n->id},
+                   {"type", n->type},
+                   {"label", n->label},
+                   {"suppressed", n->suppressed},
+                   {"parameters", n->parameters},
+                   {"options", n->options},
+                   {"references", refs},
+                   {"links", n->links}};
+            if (n->sketch) f["sketch"] = sketchToJson(*n->sketch);
+            features.push_back(std::move(f));
             if (options.includeCache && n->output && n->hash) {
                 auto bytes = kernel::writeBrepBinary(kernel::Shape(n->output->shape()));
                 if (!bytes) return Result<std::string>::failure(bytes.error().code, "cache of " + n->id + ": " + bytes.error().message);
@@ -301,6 +501,15 @@ Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
                 entry["values"] = n->values;
                 entry["reports"] = reports;
                 entry["brep"] = base64Encode(bytes.value());
+                if (!n->tool.IsNull() && n->toolMode) {
+                    auto toolBytes = kernel::writeBrepBinary(kernel::Shape(n->tool));
+                    if (!toolBytes) {
+                        return Result<std::string>::failure(toolBytes.error().code,
+                                                            "tool cache of " + n->id + ": " + toolBytes.error().message);
+                    }
+                    entry["tool"] = base64Encode(toolBytes.value());
+                    entry["toolMode"] = toString(*n->toolMode);
+                }
                 cache[n->id] = std::move(entry);
             }
         }
@@ -334,6 +543,7 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
         }
         if (version < 1) return R::failure(ErrorCode::ParseError, "invalid format version " + std::to_string(version));
         if (version == 1) doc = migrateV1(doc, *registry);
+        if (doc.at("version").get<int>() == 2) doc = migrateV2(std::move(doc));
 
         PartDocument part(registry);
         for (const auto& v : doc.at("variables")) {
@@ -354,6 +564,8 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
                     for (const auto& r : arr) list.push_back(referenceFromJson(r));
                 }
             }
+            spec.links = f.value("links", std::map<std::string, std::string>());
+            if (f.contains("sketch")) spec.sketch = sketchFromJson(f.at("sketch"));
             if (!registry->contains(spec.type)) {
                 return R::failure(ErrorCode::Unsupported, "unknown feature type '" + spec.type + "'");
             }
@@ -380,9 +592,21 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
                 c.values = entry.at("values").get<std::map<std::string, double>>();
                 for (const auto& rep : entry.at("reports")) c.reports.push_back(resolutionFromJson(rep));
                 c.output = std::make_shared<const NamedShape>(std::move(named).value());
+                if (entry.contains("tool")) {
+                    auto toolBytes = base64Decode(entry.at("tool").get<std::string>());
+                    if (!toolBytes) continue;
+                    auto tool = kernel::readBrepBinary(*toolBytes);
+                    if (!tool) continue;
+                    auto toolNamed = nameTool(n->id, tool.value().occt());
+                    if (!toolNamed) continue;
+                    c.tool = tool.value().occt();
+                    c.toolMode = entry.at("toolMode").get<std::string>() == "cut" ? FeatureMode::Cut : FeatureMode::Boss;
+                    c.toolNamed = std::make_shared<const NamedShape>(std::move(toolNamed).value());
+                }
                 n->cache = std::move(c);
             }
         }
+        part.clearHistory();
         RebuildReport r = part.rebuild();
         if (report) *report = std::move(r);
         return R(std::move(part));

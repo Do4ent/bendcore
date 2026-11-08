@@ -16,7 +16,7 @@ bool contains(const std::vector<std::string>& v, const std::string& s) {
 
 // Box L x W x H (variables L, W, H) with a fillet of radius R on the top-front edge.
 struct BoxFillet {
-    PartDocument doc{basic::basicRegistry()};
+    PartDocument doc{partRegistry()};
     std::string box, fillet;
 
     BoxFillet(double l, double w, double h, double r) {
@@ -32,14 +32,11 @@ struct BoxFillet {
     }
 };
 
-FeatureSpec pocketOnTop(const NamedShape& s, double h, double cx, double cy, double a, double b, double depth) {
-    FeatureSpec spec;
-    spec.type = "PrismCut";
-    spec.references["face"] = {refTo(s, planarFace(s.shape(), gp::DZ(), h))};
-    spec.parameters = {{"centerX", std::to_string(cx)}, {"centerY", std::to_string(cy)},
-                       {"sizeU", std::to_string(a)},    {"sizeV", std::to_string(b)},
-                       {"depth", std::to_string(depth)}};
-    return spec;
+// Rectangular pocket a x b centred at (cx, cy) on the top face z = h: sketch + cut extrusion.
+SketchCut pocketOnTop(PartDocument& doc, const NamedShape& s, double h, double cx, double cy, double a, double b,
+                      double depth, std::optional<std::size_t> pos = std::nullopt, const std::string& id = "Pocket") {
+    return addSketchCut(doc, id, refTo(s, planarFace(s.shape(), gp::DZ(), h)), num(cx), num(cy), num(h),
+                        centredRectangle(num(a), num(b)), num(depth), pos);
 }
 
 }  // namespace
@@ -94,10 +91,10 @@ TEST(ModelingDocumentTree, CutInsertedUpstreamKeepsReferences) {
     BoxFillet m(40, 30, 20, 3);
     m.doc.rebuild();
     NamedShape boxShape = info(m.doc, m.box).output ? *info(m.doc, m.box).output : NamedShape{};
-    std::string pocket = add(m.doc, pocketOnTop(boxShape, 20, 20, 15, 10, 8, 6), 1);
+    SketchCut pocket = pocketOnTop(m.doc, boxShape, 20, 20, 15, 10, 8, 6, 1);
     RebuildReport rep = m.doc.rebuild();
     EXPECT_TRUE(rep.failed.empty());
-    EXPECT_EQ(m.doc.featureIds(), (std::vector<std::string>{m.box, pocket, m.fillet}));
+    EXPECT_EQ(m.doc.featureIds(), (std::vector<std::string>{m.box, pocket.sketch, pocket.cut, m.fillet}));
     FeatureInfo fi = info(m.doc, m.fillet);
     EXPECT_EQ(fi.state, FeatureState::Ok) << messages(fi);
     EXPECT_EQ(fi.referenceReports.at(0).resolution.method, ResolveMethod::Exact);
@@ -119,7 +116,7 @@ TEST(ModelingDocumentTree, NotchSplitsReferencedEdgeAndFilletFollowsBothParts) {
     m.doc.rebuild();
     NamedShape boxShape = *info(m.doc, m.box).output;
     // Notch 10 wide (x), across the front edge (y in [-5, 5]), 6 deep.
-    std::string notch = add(m.doc, pocketOnTop(boxShape, 20, 20, 0, 10, 10, 6), 1);
+    std::string notch = pocketOnTop(m.doc, boxShape, 20, 20, 0, 10, 10, 6, 1, "Notch").cut;
     m.doc.rebuild();
     EXPECT_EQ(info(m.doc, notch).state, FeatureState::Ok) << messages(info(m.doc, notch));
     FeatureInfo fi = info(m.doc, m.fillet);
@@ -135,7 +132,7 @@ TEST(ModelingDocumentTree, DeletedReferencedEdgeBreaksOnlyThatFeature) {
     m.doc.rebuild();
     NamedShape boxShape = *info(m.doc, m.box).output;
     // A later pocket on the top face, independent of the fillet.
-    std::string pocket = add(m.doc, pocketOnTop(boxShape, 20, 20, 15, 10, 8, 6));
+    std::string pocket = pocketOnTop(m.doc, boxShape, 20, 20, 15, 10, 8, 6).cut;
     // A chamfer inserted before the fillet consumes the edge the fillet refers to.
     TopoReference edge = refTo(boxShape, singleLine(boxShape.shape(), 0, 0, 20));
     std::string chamfer = add(m.doc, {"Chamfer", "", "", {{"distance", "2"}}, {{"edges", {edge}}}, {}, false}, 1);
@@ -169,14 +166,15 @@ TEST(ModelingDocumentTree, ReorderingFeatures) {
     BoxFillet m(40, 30, 20, 3);
     m.doc.rebuild();
     NamedShape boxShape = *info(m.doc, m.box).output;
-    std::string pocket = add(m.doc, pocketOnTop(boxShape, 20, 20, 15, 10, 8, 6));
+    SketchCut pocket = pocketOnTop(m.doc, boxShape, 20, 20, 15, 10, 8, 6);
     m.doc.rebuild();
     const double expected = 40 * 30 * 20 - filletLoss(3, 40) - 10 * 8 * 6;
     EXPECT_NEAR(volume(m.doc.finalShape().shape()), expected, 1e-6);
 
-    ASSERT_TRUE(m.doc.moveFeature(pocket, 1).ok());
+    ASSERT_TRUE(m.doc.moveFeature(pocket.sketch, 1).ok());
+    ASSERT_TRUE(m.doc.moveFeature(pocket.cut, 2).ok());
     RebuildReport rep = m.doc.rebuild();
-    EXPECT_EQ(m.doc.featureIds(), (std::vector<std::string>{m.box, pocket, m.fillet}));
+    EXPECT_EQ(m.doc.featureIds(), (std::vector<std::string>{m.box, pocket.sketch, pocket.cut, m.fillet}));
     EXPECT_TRUE(contains(rep.reused, m.box));
     EXPECT_TRUE(rep.failed.empty());
     EXPECT_NEAR(volume(m.doc.finalShape().shape()), expected, 1e-6);
@@ -198,7 +196,7 @@ TEST(ModelingDocumentTree, SuppressionPassesTheShapeThrough) {
     BoxFillet m(40, 30, 20, 3);
     m.doc.rebuild();
     NamedShape boxShape = *info(m.doc, m.box).output;
-    std::string pocket = add(m.doc, pocketOnTop(boxShape, 20, 20, 15, 10, 8, 6), 1);
+    std::string pocket = pocketOnTop(m.doc, boxShape, 20, 20, 15, 10, 8, 6, 1).cut;
     m.doc.rebuild();
     ASSERT_TRUE(m.doc.setSuppressed(pocket, true).ok());
     m.doc.rebuild();
@@ -221,9 +219,9 @@ TEST(ModelingDocumentTree, RollbackMarker) {
 
     // New features go to the marker, which moves after them.
     NamedShape boxShape = m.doc.finalShape();
-    std::string pocket = add(m.doc, pocketOnTop(boxShape, 20, 20, 15, 10, 8, 6));
-    EXPECT_EQ(m.doc.featureIds(), (std::vector<std::string>{m.box, pocket, m.fillet}));
-    EXPECT_EQ(m.doc.rollback(), std::optional<std::size_t>(2));
+    SketchCut pocket = pocketOnTop(m.doc, boxShape, 20, 20, 15, 10, 8, 6);
+    EXPECT_EQ(m.doc.featureIds(), (std::vector<std::string>{m.box, pocket.sketch, pocket.cut, m.fillet}));
+    EXPECT_EQ(m.doc.rollback(), std::optional<std::size_t>(3));
     m.doc.rebuild();
     EXPECT_NEAR(volume(m.doc.finalShape().shape()), 40 * 30 * 20 - 10 * 8 * 6, 1e-6);
 
@@ -238,7 +236,7 @@ TEST(ModelingDocumentTree, FailingFeatureDoesNotBreakTheTree) {
     BoxFillet m(40, 30, 20, 3);
     m.doc.rebuild();
     NamedShape boxShape = *info(m.doc, m.box).output;
-    std::string pocket = add(m.doc, pocketOnTop(boxShape, 20, 20, 15, 10, 8, 6));
+    std::string pocket = pocketOnTop(m.doc, boxShape, 20, 20, 15, 10, 8, 6).cut;
     setVar(m.doc, "R", 45);  // larger than the box
     RebuildReport rep = m.doc.rebuild();
     FeatureInfo fi = info(m.doc, m.fillet);
@@ -255,7 +253,7 @@ TEST(ModelingDocumentTree, FailingFeatureDoesNotBreakTheTree) {
 }
 
 TEST(ModelingDocumentTree, VariablesAndExpressions) {
-    PartDocument doc(basic::basicRegistry());
+    PartDocument doc(partRegistry());
     ASSERT_TRUE(doc.setVariable("W", "30").ok());
     ASSERT_TRUE(doc.setVariable("L", "2 * W - 5").ok());
     ASSERT_TRUE(doc.setVariable("H", "sqrt(W * 4 + 4) - 1").ok());  // sqrt(124) - 1
@@ -290,18 +288,19 @@ TEST(ModelingDocumentTree, VariablesAndExpressions) {
 }
 
 TEST(ModelingDocumentTree, ReplacedBaseFeatureResolvesBySignatureWithWarning) {
-    PartDocument doc(basic::basicRegistry());
+    PartDocument doc(partRegistry());
     std::string box = add(doc, {"Box", "", "", {{"length", "40"}, {"width", "30"}, {"height", "20"}}, {}, {}, false});
     doc.rebuild();
-    std::string pocket = add(doc, pocketOnTop(doc.finalShape(), 20, 20, 15, 10, 8, 6));
+    SketchCut pocket = pocketOnTop(doc, doc.finalShape(), 20, 20, 15, 10, 8, 6);
     doc.rebuild();
-    ASSERT_EQ(info(doc, pocket).state, FeatureState::Ok);
+    ASSERT_EQ(info(doc, pocket.cut).state, FeatureState::Ok);
 
     // The user deletes the box and creates a new one: all names change.
     ASSERT_TRUE(doc.removeFeature(box).ok());
     std::string box2 = add(doc, {"Box", "Base", "", {{"length", "40"}, {"width", "30"}, {"height", "22"}}, {}, {}, false}, 0);
     doc.rebuild();
-    FeatureInfo fi = info(doc, pocket);
+    // The sketch on the top face follows the new face by its signature.
+    FeatureInfo fi = info(doc, pocket.sketch);
     EXPECT_EQ(fi.state, FeatureState::Warning) << messages(fi);
     EXPECT_EQ(fi.referenceReports.at(0).resolution.method, ResolveMethod::Signature);
     EXPECT_EQ(fi.references.at("face").at(0).name, "Base:Top") << "the reference now follows the new face";
@@ -313,22 +312,32 @@ TEST(ModelingDocumentTree, ReplacedBaseFeatureResolvesBySignatureWithWarning) {
     EXPECT_TRUE(rep.recomputed.empty());
     ASSERT_TRUE(doc.setParameter(box2, "height", "25").ok());
     doc.rebuild();
-    EXPECT_EQ(info(doc, pocket).state, FeatureState::Ok);
-    EXPECT_EQ(info(doc, pocket).referenceReports.at(0).resolution.method, ResolveMethod::Exact);
+    EXPECT_EQ(info(doc, pocket.sketch).state, FeatureState::Ok);
+    EXPECT_EQ(info(doc, pocket.sketch).referenceReports.at(0).resolution.method, ResolveMethod::Exact);
+    EXPECT_EQ(info(doc, pocket.cut).state, FeatureState::Ok);
 }
 
 TEST(ModelingDocumentTree, EditingErrors) {
-    PartDocument doc(basic::basicRegistry());
+    PartDocument doc(partRegistry());
     EXPECT_EQ(doc.addFeature({"Sweep", "", "", {}, {}, {}, false}).error().code, ErrorCode::Unsupported);
     EXPECT_FALSE(doc.addFeature({"Box", "", "", {{"depth", "1"}}, {}, {}, false}).ok());
-    EXPECT_FALSE(doc.addFeature({"PrismCut", "", "", {}, {}, {{"profile", "hexagon"}}, false}).ok());
+    EXPECT_FALSE(doc.addFeature({"Extrude", "", "", {}, {}, {{"extent", "hexagon"}}, false}).ok());
     std::string id = add(doc, {"Box", "", "", {}, {}, {}, false});
     EXPECT_EQ(id, "Box001");
     EXPECT_FALSE(doc.addFeature({"Box", "Box001", "", {}, {}, {}, false}).ok()) << "duplicate id";
     EXPECT_FALSE(doc.setOption(id, "profile", "circle").ok());
     EXPECT_FALSE(doc.setReferences(id, "edges", {}).ok());
-    // A cut without its face reference fails with an explanation.
-    std::string cut = add(doc, {"PrismCut", "", "", {}, {}, {}, false});
+    EXPECT_FALSE(doc.addFeature({"Extrude", "", "", {}, {}, {}, false, {{"nolink", "Box001"}}}).ok());
+    EXPECT_FALSE(doc.setLink(id, "sketch", "Box001").ok()) << "Box has no link slots";
+    // A hole without its face reference fails with an explanation.
+    std::string hole = add(doc, {"Hole", "", "", {}, {}, {}, false});
+    // An extrusion without a sketch link fails too.
+    std::string ext = add(doc, {"Extrude", "", "", {}, {}, {}, false});
+    // ... and with a link to a feature that is not a sketch.
+    std::string ext2 = add(doc, {"Extrude", "", "", {}, {}, {}, false, {{"sketch", "Box001"}}});
     doc.rebuild();
-    EXPECT_NE(messages(info(doc, cut)).find("needs exactly one face"), std::string::npos);
+    EXPECT_NE(messages(info(doc, hole)).find("needs exactly one face"), std::string::npos) << messages(info(doc, hole));
+    EXPECT_NE(messages(info(doc, ext)).find("link 'sketch' is not set"), std::string::npos) << messages(info(doc, ext));
+    EXPECT_NE(messages(info(doc, ext2)).find("is a Box, expected one of Sketch"), std::string::npos)
+        << messages(info(doc, ext2));
 }
