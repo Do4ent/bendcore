@@ -123,6 +123,12 @@ Result<std::string> writeSvg(const Drawing& drawing, const SvgOptions& options) 
                    << num(fontSize) << "\" text-anchor=\"" << anchor
                    << "\" fill=\"#000000\" stroke=\"none\" data-cap-height=\"" << num(t->height)
                    << "\">" << xmlEscape(t->utf8) << "</text>\n";
+            } else if (const auto* f = std::get_if<SolidFill>(&e.geometry)) {
+                os << "<polygon points=\"";
+                for (std::size_t i = 0; i < f->points.size(); ++i) {
+                    os << (i ? " " : "") << num(f->points[i].x) << ',' << num(Y(f->points[i].y));
+                }
+                os << "\" fill=\"#000000\" stroke=\"none\" data-linetype=\"fill\"/>\n";
             } else if (const auto* ht = std::get_if<Hatch>(&e.geometry)) {
                 auto segs = hatchSegments(*ht);
                 if (!segs) return segs.error();
