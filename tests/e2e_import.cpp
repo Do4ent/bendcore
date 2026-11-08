@@ -132,19 +132,23 @@ int main() {
     // Test 5: DXF file handling
     {
         std::cout << "Test 5: DXF file handling... ";
-        
+
         std::string test_file = "test_e2e.dxf";
         std::ofstream file(test_file);
-        file << "  0\nSECTION\n  2\nHEADER\n  0\nENDSEC\n";
-        file << "  0\nSECTION\n  2\nENTITIES\n  0\nEOF\n";
+        file << "  0\nSECTION\n  2\nHEADER\n  9\n$INSUNITS\n 70\n4\n  0\nENDSEC\n";
+        file << "  0\nSECTION\n  2\nENTITIES\n";
+        file << "  0\nLINE\n  8\n0\n 10\n10.5\n 20\n-4\n 11\n30\n 21\n2.25\n";
+        file << "  0\nENDSEC\n  0\nEOF\n";
         file.close();
-        
-        DXFReader dxf_reader;
-        auto geom = dxf_reader.read(test_file);
-        
+
+        auto geom = readDxfFile(test_file);
         std::remove(test_file.c_str());
-        
-        assert(geom.entity_count >= 0);
+
+        assert(geom.ok());
+        assert(geom.value().insunits == 4);
+        assert(geom.value().lines.size() == 1);
+        assert(geom.value().lines[0].start.x == 10.5);
+        assert(geom.value().lines[0].end.y == 2.25);
         std::cout << "PASS\n";
     }
 

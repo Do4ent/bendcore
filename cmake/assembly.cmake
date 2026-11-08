@@ -1,11 +1,6 @@
 # Решатель сопряжений сборки (docs/assembly/SOLVER.md). Подключается из корневого CMakeLists.txt
 # через include(cmake/assembly.cmake OPTIONAL) внутри BENDCORE_WITH_OCCT. От OCCT не зависит.
 
-if(NOT TARGET Eigen3::Eigen AND BENDCORE_EIGEN_INCLUDE MATCHES "third_party_stubs")
-  message(WARNING "bendcore_assembly_v2: Eigen из third_party_stubs не содержит нужных модулей — модуль пропущен")
-  return()
-endif()
-
 add_library(bendcore_assembly_v2 STATIC
   src/assembly_v2/geometry.cpp
   src/assembly_v2/mate.cpp

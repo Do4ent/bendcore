@@ -80,28 +80,36 @@
 
 ## 5. Найдено, не удалено
 
-Явные заглушки C++ вне задачи. Список получен поиском по `Placeholder`,
-`In a real implementation`, `в реальной реализации`, `not implemented`, `would send/upload/use`
-(без `src/ui`, `src/kernel`); строки — после удаления. Подтверждено чтением кода:
+Пересчитано 2026-11-08 после раздела 6. Явные заглушки C++ вне задачи. Список получен
+поиском по `Placeholder`, `In a real implementation`, `in real implementation`,
+`в реальной реализации`, `not implemented`, `would send/upload/use`, `In production, would`
+(без `src/ui`, `src/kernel`); строки — по текущему коду. Дополнительно
+`scripts/check_no_stubs.sh --paths src include tests` (все правила по всему старому коду):
+1058 нарушений до раздела 6, 1047 после (ушли 10 в `src/dxf_reader.cpp` и
+`no-assertions` в удалённом `tests/test_dxf_reader_comprehensive.cpp`; в изменённых файлах
+нарушений нет). Подтверждено чтением кода:
 
-- `src/drawing/publishing_manager.cpp:121` — облачная выгрузка не выполняется
-  (`in real implementation, would upload`), формируется только адрес `s3://…`;
-  `:187-188` — `email_sent = true` без отправки; также `:433`, `:457-459`.
 - `src/drawing/print_manager.cpp:28, 170, 351, 356`; `src/drawing/file_handler.cpp:135-136`;
   `src/drawing/annotation_dimension.cpp:288, 347`.
 - `src/testing/test_suite.cpp:351, 373, 448, 497, 521` — тесты (`CrashRecoveryTest` и др.)
   возвращают успех без проверок, `// In real implementation, would …`.
 - Решатель сборок `src/assembly/assembly_constraint_system.cpp` — только валидирует
   (раздел 1 плана).
+- `third_party_stubs/glm/` — самодельная замена GLM (не библиотека GLM), используется
+  только несобираемыми `src/bendcore/{camera_manager,snap_system,viewport_manager}`;
+  `third_party_stubs/include/nlohmann/json.hpp` — 133-строчная замена nlohmann/json, не
+  подключается ни одной целью (настоящая библиотека — `third_party/nlohmann`). Каталог
+  `third_party_stubs` убран из путей включения `bendcore_core`.
+- `third_party/zlib_stub.hpp` — замена zlib для WASM (только `crc32`) — отдельная задача.
 
 Остальные совпадения (требуют разбора владельцами модулей; часть может оказаться
 текстом интерфейса, а не отсутствующей логикой):
 `include/bendcore/geometry/boolean_operations.h:16`, `include/bendcore/performance_advanced.hpp:124`,
 `include/bendcore/simulation/cfd_solver.hpp:134`, `src/analytics_event.cpp:49`,
-`src/bend_calculator.cpp:152`, `src/bendcore/shortcuts.cpp:159`,
+`src/bend_calculator.cpp:152`, `src/bendcore/import_filter.cpp:249`, `src/bendcore/shortcuts.cpp:159`,
 `src/constraint_system.cpp:39, 48, 104`, `src/cost_analysis.cpp:575`,
 `src/deployment/LicenseManagement.cpp:219, 220, 268, 323, 324, 329`,
-`src/deployment/ProductionBuild.cpp:110`, `src/dxf_reader.cpp:97, 101, 116, 131, 147, 208`,
+`src/deployment/ProductionBuild.cpp:110`,
 `src/editing/direct_editing_manager.cpp:313, 381, 402, 625, 651, 662`,
 `src/event_batch_sender.cpp:63`, `src/generative/constraint_handler.cpp:240`,
 `src/generative/design_generator.cpp:193, 197, 201, 205, 251, 257, 263`,
@@ -115,10 +123,63 @@
 `src/performance_advanced.cpp:24, 73, 103, 119, 125, 268, 416`,
 `src/plugins/plugin_loader.cpp:25`, `src/production/crash_recovery.cpp:117`,
 `src/production/logging_monitoring.cpp:173`, `src/production/performance_tuning.cpp:69`,
-`src/production/production_deployment.cpp:108`, `src/security.cpp:402`,
+`src/production/production_deployment.cpp:108`, `src/security.cpp:302, 402, 406, 464`,
 `src/serializer.cpp:21, 27`, `src/simulation/result_visualization.cpp:293`,
 `src/simulation/simulation_manager.cpp:378`, `src/sketch/constraint_diagnostics.cpp:116, 217`,
 `src/surfaces/surface_operations.cpp:143`, `src/testing/launch_package.cpp:608`,
 `src/topology_optimization/constraint_handling.cpp:185, 190`,
 `src/topology_optimization/sensitivity_analysis.cpp:29`,
-`src/topology_optimization/topology_optimizer.cpp:63, 182, 183`.
+`src/topology_optimization/topology_optimizer.cpp:63, 182, 183`;
+TypeScript: `src/analytics.ts:294`, `src/features/enterprise/BOM.tsx:160`,
+`src/features/sheetmetal/SheetMetalDesign.tsx:205`,
+`src/modules/collaboration/CollaborationManager.tsx:222`,
+`src/modules/formats/DWGDXFHandler.ts:143`.
+
+Сняты с учёта (раздел 6): `src/drawing/publishing_manager.cpp` (облако, почта,
+`embedMetadata`, нумерация, проверка назначений), `src/dxf_reader.cpp`,
+`src/import_workflow.cpp:243-244`.
+
+## 6. Вторая очередь (2026-11-08): Eigen-заглушка, читатель DXF, публикация
+
+Номера строк — по коммиту `f5583b3` (до изменений).
+
+| Файл / функция | Доказательство (файл:строка до удаления) | Что сделано | Чем заменено |
+|---|---|---|---|
+| `third_party/eigen-5.0.0/Eigen/{Core,Dense,Eigen}`, `third_party/eigen-stub/Eigen/{Core,Dense}`, `third_party_stubs/include/Eigen/Dense` | `eigen-5.0.0/Eigen/Core:1` — `// Minimal Eigen Mock for Phase 4 Testing`; `CMakeLists.txt:25-31` — путь к заглушке в `find_path`, при неудаче `third_party_stubs` (только `WARNING`) | Каталоги удалены; поиск переписан (`CMakeLists.txt`, блок Eigen); проверка заглушки в `cmake/assembly.cmake:4-7` удалена; `third_party_stubs` убран из путей `bendcore_core` | Настоящий Eigen ≥ 3.3: `BENDCORE_EIGEN_DIR` → пакет `Eigen3` → `/usr/include/eigen3` и др. (видны и при кросс-компиляции WASM) → `BENDCORE_FETCH_EIGEN=ON` (3.4.0, SHA-256); иначе `FATAL_ERROR`. `docs/WASM_BUILD_GUIDE.md` |
+| `DXFReader::extract_lines/circles/polylines/splines` | `src/dxf_reader.cpp:96-160` — на каждое вхождение подстроки `LINE`/`CIRCLE`/… добавляется примитив с фиксированными координатами (`{0,0}→{100,0}`, `r = 25`), `// Simple placeholder`; `POLYLINE` также считается `LINE` | Класс `DXFReader` и структуры удалены, API заменено | `parseDxf`/`readDxfFile` → `Result<Document>`: разбор групповых кодов (HEADER, LAYER, LINE, ARC, CIRCLE, LWPOLYLINE с выпуклостью, POLYLINE/VERTEX, TEXT, MTEXT), `bulgeToArc`, `scaleToMillimeters`; библиотека `bendcore_dxf` без OCCT. `docs/drawing/DXF_IMPORT.md` |
+| `DXFReader::extract_dimensions` | `dxf_reader.cpp:208-211` — `// Set placeholder coordinates`, точки `{0,0}`, `{100,0}` | Удалено | DIMENSION учитывается в `Document::skipped` (не читается) |
+| `DXFReader::extract_layers` | `dxf_reader.cpp:258-272` — слои `Layer0…LayerN` по числу вхождений подстроки `LAYER` | Удалено | Таблица LAYER: имя, цвет, тип линии, флаги |
+| `ImportWorkflow::import_dxf_file` | `src/import_workflow.cpp:243-244` — `// In production, would extract dimensions` | Комментарий удалён; ошибки и `skipped` читателя переносятся в `warnings` | `readDxfFile` |
+| `publishToCloud` | `src/drawing/publishing_manager.cpp:121-136` — `// in real implementation, would upload`, формируется `s3://…` без выгрузки | Функция, `CloudProvider`, `CloudPublishSettings`, `PublishingJob::cloud_settings`, `PublishingResult::published_urls` удалены | `publishToMultiple(CloudStorage)` → `success = false`, `"Publishing to cloud storage is not supported: …"` |
+| `publishViaEmail` | `publishing_manager.cpp:187-188` — `email_sent = true` без отправки | Функция, `EmailPublishSettings`, `email_settings`, `email_sent`, `notify_on_completion`/`notification_email` удалены | `publishToMultiple(EmailRecipients)` → `"Publishing via e-mail is not supported: …"` |
+| `embedMetadata` | `publishing_manager.cpp:457-462` — `// In real implementation, would write metadata`, `return {true, ""}` | Функция и объявление удалены | — (метаданные PDF пишет `drawing_v2::writePdf`) |
+| `generateDrawingNumber` | `publishing_manager.cpp:432-434` — `// In real implementation, would check existing files`, всегда `sequential_start`; `date_format` не используется | Реализовано | max(номер в `archive_directory`) + 1, но не меньше `sequential_start`; `date_format` (YYYY, YY, MM, DD) |
+| `validatePublishingDestination` | `publishing_manager.cpp:501` — `NetworkShare`: `// Would validate network connection`, всегда `true`; облако и почта — `true` при непустых полях | Исправлено | `NetworkShare` — проверка записи в каталог; облако и почта — `{false, "… is not supported …"}` |
+
+Удалённые тесты:
+
+| Тест | Причина |
+|---|---|
+| `tests/test_dxf_reader_comprehensive.cpp` (ctest `dxf_reader_comprehensive`, нативная и WASM) | Только печать строк, ни одной проверки |
+| Старый `tests/test_dxf_reader.cpp` (ctest `dxf_reader`, только с OCCT) | `assert(geom.lines.size() >= 0)` и подобные; заменён новым с тем же именем |
+| `test_publishing_manager_m4`: `PublishToCloudMissingCredentials`, `PublishViaEmailNoRecipients`, `EmbedMetadata`, `ValidatePublishingDestinationCloud`, `ValidatePublishingDestinationEmail` | Проверяли удалённые функции или фиктивный успех |
+| `e2e_import`, тест 5 | `assert(geom.entity_count >= 0)` — заменён проверкой координат |
+
+Добавлены: `test_dxf_reader` (11 случаев, все нативные конфигурации),
+`test_dxf_reader_roundtrip` (лист из `bendcore_drawing_v2`; при `BENDCORE_PYTHON_EZDXF` —
+файлы R12/R2000/R2018 от ezdxf), `PublishingManagerTest.PublishToMultipleReportsUnsupportedCloudAndEmail`,
+`ValidateRejectsCloudAndEmail`, усилены `GenerateDrawingNumber`, `GenerateDrawingNumberWithDate`,
+`test_import_workflow` (тест 2: `success`, число примитивов, предупреждение о SPLINE).
+
+Проверка:
+
+| Конфигурация | До (`f5583b3`) | После |
+|---|---|---|
+| `build`, Release, без OCCT | ctest 74/74 | ctest 74/74 (+`dxf_reader`, −`dxf_reader_comprehensive`) |
+| `build-occt`, Release, OCCT, `BENDCORE_PYTHON_EZDXF` задан | ctest 110/110 | ctest 110/110 (+`dxf_reader_roundtrip`; `dxf_reader` заменён; −`dxf_reader_comprehensive`) |
+| WASM, `cmake --preset wasm` без параметров | Eigen = заглушка: 8 объектов не компилируются, ctest 2/60 | Eigen 3.4.0 найден автоматически: сборка OK, ctest 59/59 |
+| WASM, `BENDCORE_EIGEN_DIR=/usr/include/eigen3` (`build_wasm.sh`, CI) | ctest 60/60 | то же, что строкой выше |
+
+Заявление «59 WASM-тестов проходят» (`BUILD_STATUS_2026-11-06.md`) с заглушкой получено
+быть не могло; оно соответствует `scripts/build_wasm.sh`, который передаёт настоящий Eigen.
+Точное число 59 на той версии не перепроверялось; на `f5583b3` таких тестов 60.

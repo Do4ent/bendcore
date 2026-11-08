@@ -1,5 +1,7 @@
 // M4 Phase - Publishing Manager (GAP-019)
-// Batch export, cloud publishing, email, archival, and versioning
+// Batch export, local/network publishing, archival, and versioning.
+// Cloud storage and e-mail destinations are not supported: bendcore has no upload or
+// mail client, and publishing to them returns an explicit error.
 #pragma once
 
 #include <string>
@@ -20,17 +22,9 @@ namespace BendCore::Drawing {
 enum class PublishDestination {
     LocalDirectory,         // Local file system
     NetworkShare,           // Network shared folder
-    CloudStorage,           // Cloud storage (S3, etc.)
-    EmailRecipients,        // Email distribution
+    CloudStorage,           // Not supported: publishing returns an error
+    EmailRecipients,        // Not supported: publishing returns an error
     ArchivalRepository      // Archival/versioning system
-};
-
-enum class CloudProvider {
-    AmazonS3,
-    GoogleCloud,
-    AzureBlob,
-    MinIO,
-    CustomHTTP
 };
 
 // ============================================================================
@@ -69,29 +63,6 @@ struct NetworkPublishSettings : public LocalPublishSettings {
     bool preserve_permissions = true;
 };
 
-struct CloudPublishSettings {
-    CloudProvider provider;
-    std::string bucket_name;
-    std::string api_key;
-    std::string api_secret;
-    std::string endpoint_url;       // For custom HTTP
-    std::string folder_prefix;      // Prefix in cloud storage
-    bool use_versioning = true;     // Enable cloud versioning
-    int retention_days = 0;         // 0 = infinite
-};
-
-struct EmailPublishSettings {
-    std::vector<std::string> recipients;
-    std::string subject_template;   // e.g., "{title} - Rev {revision}"
-    std::string message_body;
-    std::vector<std::string> cc;
-    std::vector<std::string> bcc;
-    bool include_pdf = true;
-    bool include_dwg = false;
-    bool include_thumbnail = true;
-    int max_attachment_size_mb = 25;
-};
-
 struct ArchivalSettings {
     std::string archive_directory;
     bool compress_files = true;     // ZIP archive
@@ -114,15 +85,11 @@ struct PublishingJob {
 
     // Destination-specific settings
     std::optional<LocalPublishSettings> local_settings;
-    std::optional<CloudPublishSettings> cloud_settings;
-    std::optional<EmailPublishSettings> email_settings;
     std::optional<ArchivalSettings> archival_settings;
 
     // Job control
     bool high_priority = false;
     int max_retries = 3;
-    bool notify_on_completion = false;
-    std::string notification_email;
 };
 
 // ============================================================================
@@ -134,7 +101,6 @@ struct PublishingResult {
     bool success = false;
     PublishDestination destination;
     std::vector<std::string> published_files;
-    std::vector<std::string> published_urls;  // For cloud storage
     std::chrono::system_clock::time_point publish_time;
     double publish_duration_seconds = 0.0;
     std::string error_message;
@@ -144,7 +110,6 @@ struct PublishingResult {
     int sheets_published = 0;
     long total_bytes_published = 0;
     std::string archive_id;         // For archival
-    bool email_sent = false;        // For email distribution
 };
 
 // ============================================================================
@@ -168,26 +133,6 @@ PublishingResult publishToLocal(const PublishingJob& job);
 PublishingResult publishToNetwork(const PublishingJob& job);
 
 /**
- * @brief Publish drawings to cloud storage
- *
- * Uploads drawings to cloud provider with metadata and versioning.
- *
- * @param job The publishing job configuration
- * @return PublishingResult with cloud URLs
- */
-PublishingResult publishToCloud(const PublishingJob& job);
-
-/**
- * @brief Publish drawings via email
- *
- * Sends drawing exports to email recipients with optional compression.
- *
- * @param job The publishing job configuration
- * @return PublishingResult with email delivery status
- */
-PublishingResult publishViaEmail(const PublishingJob& job);
-
-/**
  * @brief Archive drawings with versioning
  *
  * Stores drawings in archival repository with version tracking and
@@ -200,6 +145,9 @@ PublishingResult archiveDrawings(const PublishingJob& job);
 
 /**
  * @brief Publish to multiple destinations simultaneously
+ *
+ * CloudStorage and EmailRecipients produce a failed result with an
+ * "is not supported" error message.
  *
  * @param job The publishing job configuration
  * @param destinations Vector of destinations to publish to
@@ -285,6 +233,11 @@ struct NumberingScheme {
 /**
  * @brief Generate next drawing number
  *
+ * Scans archive_directory for files named "<prefix><separator><number>..." and
+ * returns max(number) + 1, but not less than sequential_start. With include_date,
+ * "<separator><date>" is appended; date_format tokens YYYY, YY, MM, DD are replaced
+ * (empty format = YYYYMMDD).
+ *
  * @param scheme The numbering scheme configuration
  * @param archive_directory Directory containing existing drawings
  * @return Generated drawing number
@@ -297,22 +250,6 @@ std::string generateDrawingNumber(
 // ============================================================================
 // Publishing Utilities
 // ============================================================================
-
-/**
- * @brief Embed metadata in exported file
- *
- * Adds metadata to the exported drawing (PDF, DWG properties, etc.)
- *
- * @param file_path Path to exported file
- * @param metadata The metadata to embed
- * @param format The export format
- * @return pair of (success, error_message)
- */
-std::pair<bool, std::string> embedMetadata(
-    const std::string& file_path,
-    const PublishingMetadata& metadata,
-    ExportFormat format
-);
 
 /**
  * @brief Create document digest/summary
@@ -331,7 +268,8 @@ std::string createDocumentDigest(
 /**
  * @brief Validate publishing destination
  *
- * Checks if destination is accessible and writable.
+ * Checks if destination is accessible and writable. CloudStorage and
+ * EmailRecipients are reported as not supported.
  *
  * @param destination Type of destination
  * @param settings Destination-specific settings

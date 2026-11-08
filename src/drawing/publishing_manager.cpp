@@ -1,7 +1,9 @@
 // M4 Phase - Publishing Manager Implementation
 #include "bendcore/drawing/publishing_manager.hpp"
 #include "bendcore/drawing/file_handler.hpp"
+#include <cctype>
 #include <chrono>
+#include <ctime>
 #include <sstream>
 #include <algorithm>
 #include <filesystem>
@@ -10,15 +12,15 @@ namespace BendCore::Drawing {
 
 namespace {
 
-// Cloud upload and e-mail attach files exported to a staging location;
-// use the system temp directory unless the job names one.
-ExportOptions withStagingPath(ExportOptions opts) {
-    if (opts.output_path.empty()) {
-        std::error_code ec;
-        auto tmp = std::filesystem::temp_directory_path(ec);
-        opts.output_path = ec ? std::string(".") : tmp.string();
+std::string unsupportedDestinationMessage(PublishDestination destination) {
+    switch (destination) {
+        case PublishDestination::CloudStorage:
+            return "Publishing to cloud storage is not supported: bendcore has no cloud upload client";
+        case PublishDestination::EmailRecipients:
+            return "Publishing via e-mail is not supported: bendcore has no mail client";
+        default:
+            return "";
     }
-    return opts;
 }
 
 }  // namespace
@@ -83,117 +85,15 @@ PublishingResult publishToNetwork(const PublishingJob& job) {
     result.job_id = job.job_id;
     result.destination = PublishDestination::NetworkShare;
 
-    // For network shares, we can use similar approach to local but with network path
+    // A network share is published through its mount point in local_settings.directory.
     if (!job.local_settings.has_value()) {
         result.error_message = "Network publishing settings not provided";
         return result;
     }
 
-    // Treat network path as local directory for this implementation
-    PublishingJob local_job = job;
-    return publishToLocal(local_job);
-}
-
-// ============================================================================
-// Cloud Publishing
-// ============================================================================
-
-PublishingResult publishToCloud(const PublishingJob& job) {
-    PublishingResult result;
-    result.job_id = job.job_id;
-    result.destination = PublishDestination::CloudStorage;
-
-    auto start_time = std::chrono::system_clock::now();
-
-    if (!job.cloud_settings.has_value()) {
-        result.error_message = "Cloud publishing settings not provided";
-        return result;
-    }
-
-    const auto& cloud_settings = job.cloud_settings.value();
-
-    // Validate cloud credentials
-    if (cloud_settings.bucket_name.empty() || cloud_settings.api_key.empty()) {
-        result.error_message = "Invalid cloud credentials";
-        return result;
-    }
-
-    // Export sheets (in real implementation, would upload to cloud)
-    for (const auto& sheet : job.sheets) {
-        ExportOptions export_opts = withStagingPath(job.export_options);
-        auto export_result = exportDrawing(*sheet, export_opts);
-
-        if (export_result.success) {
-            result.sheets_published++;
-            result.total_bytes_published += static_cast<long>(export_result.file_size_bytes);
-
-            // Generate cloud URL
-            std::stringstream url;
-            url << "s3://" << cloud_settings.bucket_name << "/"
-                << cloud_settings.folder_prefix << "/"
-                << export_result.output_file;
-            result.published_urls.push_back(url.str());
-        }
-    }
-
-    auto end_time = std::chrono::system_clock::now();
-    result.publish_duration_seconds =
-        std::chrono::duration<double>(end_time - start_time).count();
-    result.success = result.sheets_published == job.sheets.size();
-    result.publish_time = end_time;
-
-    return result;
-}
-
-// ============================================================================
-// Email Publishing
-// ============================================================================
-
-PublishingResult publishViaEmail(const PublishingJob& job) {
-    PublishingResult result;
-    result.job_id = job.job_id;
-    result.destination = PublishDestination::EmailRecipients;
-
-    auto start_time = std::chrono::system_clock::now();
-
-    if (!job.email_settings.has_value()) {
-        result.error_message = "Email publishing settings not provided";
-        return result;
-    }
-
-    const auto& email_settings = job.email_settings.value();
-
-    // Check recipients
-    if (email_settings.recipients.empty()) {
-        result.error_message = "No email recipients specified";
-        return result;
-    }
-
-    // Export sheets to temporary location
-    std::vector<std::string> export_files;
-    for (const auto& sheet : job.sheets) {
-        ExportOptions export_opts = withStagingPath(job.export_options);
-        auto export_result = exportDrawing(*sheet, export_opts);
-
-        if (export_result.success) {
-            export_files.push_back(export_result.output_file);
-            result.sheets_published++;
-        } else {
-            result.error_message = export_result.error_message;
-            return result;
-        }
-    }
-
-    // In real implementation, would send email here
-    result.email_sent = true;
-
-    auto end_time = std::chrono::system_clock::now();
-    result.publish_duration_seconds =
-        std::chrono::duration<double>(end_time - start_time).count();
-    result.success = true;
-    result.publish_time = end_time;
-
-    return result;
+    PublishingResult local = publishToLocal(job);
+    local.destination = PublishDestination::NetworkShare;
+    return local;
 }
 
 // ============================================================================
@@ -265,10 +165,10 @@ std::vector<PublishingResult> publishToMultiple(
                 result = publishToNetwork(dest_job);
                 break;
             case PublishDestination::CloudStorage:
-                result = publishToCloud(dest_job);
-                break;
             case PublishDestination::EmailRecipients:
-                result = publishViaEmail(dest_job);
+                result.job_id = job.job_id;
+                result.destination = dest;
+                result.error_message = unsupportedDestinationMessage(dest);
                 break;
             case PublishDestination::ArchivalRepository:
                 result = archiveDrawings(dest_job);
@@ -422,45 +322,52 @@ std::string generateDrawingNumber(
     const NumberingScheme& scheme,
     const std::string& archive_directory) {
 
-    std::stringstream ss;
-    ss << scheme.prefix;
+    namespace fs = std::filesystem;
 
-    if (!scheme.separator.empty()) {
-        ss << scheme.separator;
+    // Next sequential number: one past the largest "<prefix><separator><digits>" found.
+    const std::string stem_prefix = scheme.prefix + scheme.separator;
+    long next_number = scheme.sequential_start;
+    std::error_code ec;
+    if (fs::is_directory(archive_directory, ec)) {
+        for (const auto& entry : fs::directory_iterator(archive_directory, ec)) {
+            const std::string name = entry.path().filename().string();
+            if (name.size() <= stem_prefix.size() || name.compare(0, stem_prefix.size(), stem_prefix) != 0) {
+                continue;
+            }
+            std::size_t end = stem_prefix.size();
+            while (end < name.size() && std::isdigit(static_cast<unsigned char>(name[end]))) ++end;
+            if (end == stem_prefix.size() || end - stem_prefix.size() > 9) continue;
+            const long n = std::stol(name.substr(stem_prefix.size(), end - stem_prefix.size()));
+            next_number = std::max(next_number, n + 1);
+        }
     }
 
-    // Get next sequential number
-    // In real implementation, would check existing files
-    int next_number = scheme.sequential_start;
-    ss << next_number;
+    std::string number = stem_prefix + std::to_string(next_number);
 
     if (scheme.include_date) {
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
-        char buffer[16];
-        std::strftime(buffer, sizeof(buffer), "%Y%m%d", std::localtime(&time));
-        ss << scheme.separator << buffer;
+        const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        std::tm tm{};
+        localtime_r(&now, &tm);
+        auto two = [](int v) { return (v < 10 ? "0" : "") + std::to_string(v); };
+        std::string date = scheme.date_format.empty() ? "YYYYMMDD" : scheme.date_format;
+        auto replace = [&date](const std::string& token, const std::string& value) {
+            for (std::size_t pos = date.find(token); pos != std::string::npos; pos = date.find(token, pos + value.size())) {
+                date.replace(pos, token.size(), value);
+            }
+        };
+        replace("YYYY", std::to_string(tm.tm_year + 1900));
+        replace("YY", two((tm.tm_year + 1900) % 100));
+        replace("MM", two(tm.tm_mon + 1));
+        replace("DD", two(tm.tm_mday));
+        number += scheme.separator + date;
     }
 
-    return ss.str();
+    return number;
 }
 
 // ============================================================================
 // Publishing Utilities
 // ============================================================================
-
-std::pair<bool, std::string> embedMetadata(
-    const std::string& file_path,
-    const PublishingMetadata& metadata,
-    ExportFormat format) {
-
-    // In real implementation, would write metadata to file based on format
-    // For PDF, would use PDF properties
-    // For DWG, would use DWG properties
-    // etc.
-
-    return {true, ""};
-}
 
 std::string createDocumentDigest(
     const DrawingSheet& sheet,
@@ -495,28 +402,20 @@ std::pair<bool, std::string> validatePublishingDestination(
             }
 
         case PublishDestination::NetworkShare:
+            // publishToNetwork writes to local_settings.directory (a mounted share).
             if (!job.local_settings.has_value()) {
                 return {false, "Network settings not provided"};
+            } {
+                auto [exists, writable] = checkDirectoryWritable(job.local_settings.value().directory);
+                if (!exists || !writable) {
+                    return {false, "Network directory not accessible or not writable"};
+                }
+                return {true, ""};
             }
-            return {true, ""};  // Would validate network connection in real impl
 
         case PublishDestination::CloudStorage:
-            if (!job.cloud_settings.has_value()) {
-                return {false, "Cloud settings not provided"};
-            }
-            if (job.cloud_settings.value().api_key.empty()) {
-                return {false, "Cloud API key is empty"};
-            }
-            return {true, ""};
-
         case PublishDestination::EmailRecipients:
-            if (!job.email_settings.has_value()) {
-                return {false, "Email settings not provided"};
-            }
-            if (job.email_settings.value().recipients.empty()) {
-                return {false, "No email recipients specified"};
-            }
-            return {true, ""};
+            return {false, unsupportedDestinationMessage(destination)};
 
         case PublishDestination::ArchivalRepository:
             if (!job.archival_settings.has_value()) {
