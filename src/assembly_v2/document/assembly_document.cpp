@@ -192,6 +192,9 @@ Result<OccurrenceId> AssemblyDocument::addOccurrence(DefinitionId definition, co
     if (!hasDefinition(p)) return Error{ErrorCode::InvalidInput, "unknown parent definition " + std::to_string(p)};
     if (definitions_[p].kind != DefinitionKind::Assembly)
         return Error{ErrorCode::InvalidInput, "parent '" + definitions_[p].name + "' is not an assembly"};
+    if (isReadOnlyAssembly(p))
+        return Error{ErrorCode::InvalidInput, "subassembly '" + definitions_[p].name +
+                                                  "' comes from an external document and is read-only"};
     if (definition == root()) return Error{ErrorCode::InvalidInput, "the root assembly cannot be inserted"};
     if (definitions_[definition].kind == DefinitionKind::Assembly && containsDefinition(definition, p))
         return Error{ErrorCode::InvalidInput, "inserting '" + definitions_[definition].name + "' into '" +
@@ -233,9 +236,24 @@ std::optional<DefinitionId> AssemblyDocument::parentOf(OccurrenceId id) const {
     return std::nullopt;
 }
 
-Status AssemblyDocument::removeOccurrence(OccurrenceId id) {
+bool AssemblyDocument::isReadOnlyAssembly(DefinitionId id) const {
+    if (!hasDefinition(id)) return false;
+    const Definition& d = definitions_[id];
+    return d.kind == DefinitionKind::Assembly && (d.external || !d.source.empty());
+}
+
+Status AssemblyDocument::checkEditable(OccurrenceId id) const {
     const auto parent = parentOf(id);
     if (!parent) return fail(ErrorCode::InvalidInput, "unknown " + occName(id));
+    if (isReadOnlyAssembly(*parent))
+        return fail(ErrorCode::InvalidInput, occName(id) + " belongs to external subassembly '" +
+                                                 definitions_[*parent].name + "' and is read-only");
+    return ok();
+}
+
+Status AssemblyDocument::removeOccurrence(OccurrenceId id) {
+    if (auto e = checkEditable(id); !e) return e;
+    const auto parent = parentOf(id);
     const Occurrence* o = findOccurrence(id);
     if (o->pattern) return fail(ErrorCode::InvalidInput, occName(id) + " is a pattern instance; remove the pattern");
     std::vector<PatternId> dropPatterns;
@@ -253,8 +271,8 @@ Status AssemblyDocument::removeOccurrence(OccurrenceId id) {
 }
 
 Status AssemblyDocument::setPlacement(OccurrenceId id, const Transform& placement) {
+    if (auto e = checkEditable(id); !e) return e;
     Occurrence* o = findOccurrenceMutable(id);
-    if (!o) return fail(ErrorCode::InvalidInput, "unknown " + occName(id));
     if (o->pattern) return fail(ErrorCode::InvalidInput, occName(id) + " is placed by its pattern");
     o->placement = placement;
     o->placement.rotation.normalize();
@@ -270,9 +288,27 @@ Status AssemblyDocument::setFixed(OccurrenceId id, bool fixed) {
 }
 
 Status AssemblyDocument::setOccurrenceColor(OccurrenceId id, std::optional<kernel::AssemblyColor> color) {
-    Occurrence* o = findOccurrenceMutable(id);
-    if (!o) return fail(ErrorCode::InvalidInput, "unknown " + occName(id));
-    o->color = color;
+    if (auto e = checkEditable(id); !e) return e;
+    findOccurrenceMutable(id)->color = color;
+    return ok();
+}
+
+Status AssemblyDocument::setOccurrenceSuppressed(OccurrenceId id, bool suppressed) {
+    if (auto e = checkEditable(id); !e) return e;
+    findOccurrenceMutable(id)->suppressed = suppressed;
+    return ok();
+}
+
+Status AssemblyDocument::setOccurrenceName(OccurrenceId id, std::string name) {
+    if (auto e = checkEditable(id); !e) return e;
+    if (name.empty()) return fail(ErrorCode::InvalidInput, "occurrence name must not be empty");
+    findOccurrenceMutable(id)->name = std::move(name);
+    return ok();
+}
+
+Status AssemblyDocument::setOccurrenceDesignation(OccurrenceId id, std::string designation) {
+    if (auto e = checkEditable(id); !e) return e;
+    findOccurrenceMutable(id)->designation = std::move(designation);
     return ok();
 }
 
@@ -311,6 +347,8 @@ Result<std::uint32_t> AssemblyDocument::resolveIndex(const GeometryRef& ref) con
     const Definition& d = definitions_[def.value()];
     if (d.kind != DefinitionKind::Part)
         return Error{ErrorCode::InvalidInput, "path ends at assembly '" + d.name + "', not at a part"};
+    if (!d.topology)
+        return Error{ErrorCode::InvalidInput, "part '" + d.name + "' has no geometry: " + d.loadError};
     const std::size_t n = elementCount(*d.topology, ref.element.kind);
     if (ref.element.index) {
         if (*ref.element.index >= n)
@@ -340,6 +378,8 @@ Result<Entity> AssemblyDocument::entityForBound(const GeometryRef& ref, const Bo
     const Definition& d = definitions_[def.value()];
     if (d.kind != DefinitionKind::Part)
         return Error{ErrorCode::InvalidInput, "path ends at assembly '" + d.name + "', not at a part"};
+    if (!d.topology)
+        return Error{ErrorCode::InvalidInput, "part '" + d.name + "' has no geometry: " + d.loadError};
     auto e = entityFromIndex(*d.topology, ref.element.kind, bound.index, ref.use);
     if (!e) return e;
     auto t = placementInTopLevel(ref.path);
@@ -379,6 +419,37 @@ Status AssemblyDocument::bindSide(const GeometryRef& ref, BoundElement& bound, b
     bound.signature = sig ? sig.value() : modeling::GeometricSignature{};
     if (auto e = entityForBound(ref, bound); !e) return e.error();
     return ok();
+}
+
+Status AssemblyDocument::editMate(MateId id, MateSpec spec) {
+    auto it = std::find_if(mates_.begin(), mates_.end(), [&](const DocumentMate& m) { return m.id == id; });
+    if (it == mates_.end()) return fail(ErrorCode::InvalidInput, "unknown mate " + std::to_string(id));
+    // Проверка и привязка — как при добавлении, на копии без изменения документа.
+    const std::size_t pos = static_cast<std::size_t>(it - mates_.begin());
+    DocumentMate old = *it;
+    const MateId savedNext = nextMate_;
+    mates_.erase(mates_.begin() + static_cast<std::ptrdiff_t>(pos));
+    auto added = addMate(std::move(spec));
+    nextMate_ = savedNext;
+    if (!added) {
+        mates_.insert(mates_.begin() + static_cast<std::ptrdiff_t>(pos), std::move(old));
+        return added.error();
+    }
+    DocumentMate fresh = std::move(mates_.back());
+    mates_.pop_back();
+    fresh.id = id;
+    fresh.suppressed = old.suppressed;
+    mates_.insert(mates_.begin() + static_cast<std::ptrdiff_t>(pos), std::move(fresh));
+    return ok();
+}
+
+Status AssemblyDocument::setMateSuppressed(MateId id, bool suppressed) {
+    for (DocumentMate& m : mates_)
+        if (m.id == id) {
+            m.suppressed = suppressed;
+            return ok();
+        }
+    return fail(ErrorCode::InvalidInput, "unknown mate " + std::to_string(id));
 }
 
 Result<Mate> AssemblyDocument::solverMate(const DocumentMate& mate, ComponentId a, ComponentId b) const {
@@ -450,11 +521,17 @@ Result<AssemblyDocument::SolverModel> AssemblyDocument::buildSolverModel() const
     SolverModel model;
     std::map<OccurrenceId, ComponentId> comp;
     for (const Occurrence& o : topLevel()) {
-        if (o.pattern) continue;
+        if (o.pattern || o.suppressed) continue;
         comp[o.id] = model.assembly.addComponent(o.name, o.placement, o.fixed);
         model.occurrenceOf.push_back(o.id);
     }
     for (const DocumentMate& m : mates_) {
+        const Occurrence* oa = findOccurrence(m.spec.a.path[0]);
+        const Occurrence* ob = findOccurrence(m.spec.b.path[0]);
+        if (m.suppressed || (oa && oa->suppressed) || (ob && ob->suppressed)) {
+            model.suppressedMates.push_back(m.id);
+            continue;
+        }
         if (m.broken()) {
             model.brokenMates.push_back(m.id);
             continue;
@@ -501,6 +578,7 @@ DocumentSolveReport translate(const AssemblyDocument::SolverModel& model, SolveR
         rep.subsystems.push_back(std::move(d));
     }
     rep.brokenMates = model.brokenMates;
+    rep.suppressedMates = model.suppressedMates;
     for (const auto& r : model.rejected) rep.brokenMates.push_back(r.first);
     rep.totalDof = result.totalDof;
     rep.residualNorm = result.residualNorm;
@@ -550,6 +628,8 @@ Result<BoundElement> AssemblyDocument::remapSide(const GeometryRef& ref, const B
     const Definition& d = definitions_[newDefinition];
     if (d.kind != DefinitionKind::Part)
         return Error{ErrorCode::InvalidInput, "path ends at assembly '" + d.name + "', not at a part"};
+    if (!d.topology)
+        return Error{ErrorCode::InvalidInput, "part '" + d.name + "' has no geometry: " + d.loadError};
     const ElementKind kind = ref.element.kind;
     const std::size_t n = elementCount(*d.topology, kind);
     std::optional<std::uint32_t> found;
@@ -670,8 +750,8 @@ void AssemblyDocument::revalidateMates(ReplaceReport& report) {
 }
 
 Result<ReplaceReport> AssemblyDocument::replaceOccurrenceDefinition(OccurrenceId id, DefinitionId definition) {
+    if (auto e = checkEditable(id); !e) return e.error();
     Occurrence* o = findOccurrenceMutable(id);
-    if (!o) return Error{ErrorCode::InvalidInput, "unknown " + occName(id)};
     if (o->pattern) return Error{ErrorCode::InvalidInput, occName(id) + " is a pattern instance; replace the seed"};
     if (!hasDefinition(definition) || definition == root())
         return Error{ErrorCode::InvalidInput, "invalid replacement definition " + std::to_string(definition)};
@@ -733,6 +813,7 @@ void AssemblyDocument::collectPlaced(DefinitionId def, const Transform& world, O
                                      const std::string& prefix, const std::map<OccurrenceId, Transform>* overrides,
                                      std::vector<PlacedOccurrence>& out) const {
     for (const Occurrence& o : definitions_[def].occurrences) {
+        if (o.suppressed) continue;
         Transform w = world * o.placement;
         if (path.empty() && overrides) {
             auto it = overrides->find(o.id);
@@ -742,6 +823,10 @@ void AssemblyDocument::collectPlaced(DefinitionId def, const Transform& world, O
         const std::string name = prefix.empty() ? o.name : prefix + "/" + o.name;
         const Definition& d = definitions_[o.definition];
         if (d.kind == DefinitionKind::Part) {
+            if (d.shape.IsNull()) {  // источник не загрузился (Definition::loadError)
+                path.pop_back();
+                continue;
+            }
             PlacedOccurrence p;
             p.path = path;
             p.definition = d.id;
@@ -771,6 +856,12 @@ Result<std::vector<PlacedOccurrence>> AssemblyDocument::placedParts(
 std::size_t AssemblyDocument::addExplodedView(ExplodedView view) {
     views_.push_back(std::move(view));
     return views_.size() - 1;
+}
+
+Status AssemblyDocument::removeExplodedView(std::size_t index) {
+    if (index >= views_.size()) return fail(ErrorCode::InvalidInput, "unknown exploded view " + std::to_string(index));
+    views_.erase(views_.begin() + static_cast<std::ptrdiff_t>(index));
+    return ok();
 }
 
 Result<std::map<OccurrenceId, Transform>> explodedPlacements(const AssemblyDocument& document,

@@ -30,8 +30,8 @@ Result<std::vector<PlacedPart>> parts = flattenAssembly(doc.value());
 | Тип | Поля |
 |---|---|
 | `AssemblyDocument` | `definitions` (прототипы), `roots` (индексы свободных форм в порядке файла), `fileLengthUnits` (имена единиц длины файла, как их сообщает OCCT: `millimetre`, `metre`, `INCH`…), `fileUnitMm` (мм на единицу файла, если единица одна и известна), `warnings` (что было в файле, но не помещается в структуру) |
-| `AssemblyDefinition` | `kind` (`Part`/`Assembly`), `name` (имя PRODUCT), `shape` (только деталь, в собственной СК), `components` (только сборка), `color` (цвет поверхности всего прототипа), `faceColors` (только деталь), `layers` |
-| `AssemblyComponent` | вхождение: `name` (имя NEXT_ASSEMBLY_USAGE_OCCURRENCE), `definition` (индекс прототипа), `location` (`TopLoc_Location` относительно родительской сборки), `color` (переопределяет цвет прототипа), `layers` (только чтение, см. ограничения) |
+| `AssemblyDefinition` | `kind` (`Part`/`Assembly`), `name` (имя PRODUCT), `shape` (только деталь, в собственной СК), `components` (только сборка), `color` (цвет поверхности всего прототипа), `faceColors` (только деталь), `layers`, `productId` (PRODUCT `id` — обозначение; при записи `nullopt` → `id` = имя, при чтении заполнено всегда), `description` (PRODUCT `description` — наименование) |
+| `AssemblyComponent` | вхождение: `name` (имя NEXT_ASSEMBLY_USAGE_OCCURRENCE), `definition` (индекс прототипа), `location` (`TopLoc_Location` относительно родительской сборки), `color` (переопределяет цвет прототипа), `layers` (только чтение, см. ограничения), `instanceId` (NAUO `id`; пустой при записи — нумерация OCCT `1`, `2`, …), `description` (NAUO `description`), `referenceDesignator` (NAUO `reference_designator`, необязательный; `$` в файле, если не задан) |
 | `FaceColor` | `faceIndex` — индекс грани по `TopologyIndex` формы детали (`shape.hpp`), `color` |
 | `AssemblyColor` | `r, g, b` — компоненты sRGB в [0, 1] (пространство `COLOUR_RGB` в STEP), `alpha` (1 — непрозрачный) |
 | `PlacedPart` | вхождение детали в мировой СК: `root`, `componentPath`, `definition`, `path` (имена через `/`), `location` (произведение положений по пути), `shape` (форма детали, сдвинутая на `location`), `color` (действующий цвет), `faceColors` |
@@ -74,14 +74,28 @@ Result<std::vector<PlacedPart>> parts = flattenAssembly(doc.value());
 - слои — `XCAFDoc_LayerTool::GetLayers`;
 - единицы — `STEPControl_Reader::FileUnits`; `fileUnitMm` — по таблице имён (SI-единицы
   `<приставка>metre`, `inch`, `foot`, `yard`, `mile`, `mil`);
+- атрибуты PRODUCT и NAUO: после `Transfer` обходятся сущности модели STEP
+  (`reader.ChangeReader().WS()->Model()`): для `PRODUCT_DEFINITION` метка находится как в
+  `STEPCAFControl_Reader::ReadNames` (`TransientProcess::Find` → форма → `GetShapeLabelMap`
+  или `ShapeTool::Search`), для NAUO — `STEPCAFControl_Reader::FindInstance`; берутся `id`,
+  `name`, `description`, `reference_designator`. Строки декодируются как UTF-8, если кодовая
+  страница модели не `NoConversion`. Имя вхождения — NAUO `name` (OCCT предпочитает
+  `description`, но здесь это отдельный атрибут), пустое — как у OCCT (`description`, затем `id`);
 - SHUO (стиль, привязанный к пути вхождений в глубину) в структуру не помещается: для
   каждого вхождения с SHUO добавляется строка в `warnings`.
 
 **Запись.** Проверка структуры (как у `flattenAssembly`), новый документ XCAF в мм,
 прототипы создаются от корней в глубину, дети раньше родителей: деталь —
 `AddShape(shape, makeAssembly=false)`, цвета граней — `AddSubShape` + `SetColor(…,
-ColorSurf)`; сборка — `NewShape` + `AddComponent(label, ref, location)`; имена, цвета, слои;
-`UpdateAssemblies`. Корни создаются в порядке `roots`, поэтому свободные формы в файле идут
+ColorSurf)`; сборка — `NewShape` + `AddComponent(label, ref, location)`; цвета, слои;
+`UpdateAssemblies`. Меткам прототипов и вхождений даются временные уникальные имена-маркеры
+(`bendcore-xcaf-definition-<i>`, `bendcore-xcaf-component-<i>-<k>`): `STEPCAFControl_Writer`
+пишет имя метки в PRODUCT `name` и `id` и в NAUO `name`. После `Transfer` в модели STEP
+сущность с маркером получает настоящие `name`, `id` (`productId` или имя), `description`, у
+NAUO — `id` (если задан), `description`, `reference_designator` (`Init` заново, поля-флаги
+необязательных атрибутов выставляются). Маркеры дают точное соответствие и при одинаковых
+именах прототипов; если для прототипа не нашёлся PRODUCT или для вхождения не ровно один
+NAUO — `OperationFailed` (маркеры в файл не попадают — тест проверяет). Корни создаются в порядке `roots`, поэтому свободные формы в файле идут
 в том же порядке. `STEPCAFControl_Writer` с режимами имён, цветов и слоёв,
 `DESTEP_Parameters` (`WriteSchema` = AP214IS или AP242DIS, `WriteUnit` = мм/м/дюйм),
 `Transfer(doc, params, AsIs)`, `WriteStream(std::ostringstream)`.
@@ -115,7 +129,9 @@ ColorSurf)`; сборка — `NewShape` + `AddComponent(label, ref, location)`;
   такие цвета пишутся на грани (визуально то же, в файле — другие сущности).
 - Внешние ссылки STEP (многофайловые сборки) не поддерживаются: `WriteStream` OCCT их не
   пишет, при чтении внешние файлы недоступны (нет файловой системы).
-- PMI/GD&T, виды, метаданные (свойства PRODUCT) не читаются.
+- PMI/GD&T, виды, прочие метаданные PRODUCT (категории, версии `PRODUCT_DEFINITION_FORMATION`,
+  пользовательские свойства) не читаются и не пишутся; из PRODUCT переносятся `name`, `id`,
+  `description`, из NAUO — `id`, `name`, `description`, `reference_designator`.
 - `XCAFApp_Application` — глобальный объект OCCT; одновременные вызовы из разных потоков
   требуют внешней синхронизации.
 
@@ -144,4 +160,8 @@ ctest --test-dir build-occt -R '^kernel_xcaf' --output-on-failure
   вхождений против посчитанных вручную и действующие цвета; круговой проход AP214/AP242
   (окрашенная грань находится заново по геометрии); единицы м и дюйм (токен единицы в файле,
   `fileUnitMm`, габариты снова в мм); несколько корней сохраняют порядок; `Unsupported` для
-  слоёв сборки/вхождения; все ошибки `InvalidInput` проверки структуры.
+  слоёв сборки/вхождения; все ошибки `InvalidInput` проверки структуры; атрибуты PRODUCT и
+  NAUO в AP214 и AP242 (кириллица в `id`, `description`, `reference_designator`; два
+  прототипа с одинаковым именем получают свои `id`; `id` по умолчанию = имя; нумерация NAUO
+  OCCT; ASCII-атрибуты видны в тексте файла, маркеры — нет); атрибуты файла корпуса
+  (`id` = имя, NAUO `1…4`, нет `reference_designator`).

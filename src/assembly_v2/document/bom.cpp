@@ -34,6 +34,8 @@ public:
         const Definition& d = doc_.definition(id);
         Unit u;
         if (d.kind == DefinitionKind::Part) {
+            if (d.shape.IsNull())
+                return Error{ErrorCode::InvalidInput, "part '" + d.name + "' has no geometry: " + d.loadError};
             auto v = kernel::Shape(d.shape).volumeProperties();
             if (!v) return Error{v.error().code, "part '" + d.name + "': " + v.error().message};
             u.volume = std::abs(v.value().volume);
@@ -44,6 +46,7 @@ public:
         } else {
             u.mass = 0.0;
             for (const Occurrence& o : d.occurrences) {
+                if (o.suppressed) continue;
                 auto c = unit(o.definition);
                 if (!c) return c;
                 u.volume += c.value().volume;
@@ -75,6 +78,7 @@ public:
     static std::vector<std::pair<DefinitionId, int>> groups(const Definition& d) {
         std::vector<std::pair<DefinitionId, int>> out;
         for (const Occurrence& o : d.occurrences) {
+            if (o.suppressed) continue;
             auto it = std::find_if(out.begin(), out.end(), [&](const auto& g) { return g.first == o.definition; });
             if (it == out.end()) out.emplace_back(o.definition, 1);
             else ++it->second;

@@ -7,7 +7,8 @@
 // document and converts it into AssemblyDocument, a plain value structure that does not
 // depend on OCAF: part and assembly definitions (prototypes), components (occurrences)
 // with TopLoc_Location, names, colours of definitions, components and faces, layers and
-// the length units of the file. writeStepAssembly() builds an XCAF document from such a
+// the length units of the file, PRODUCT id and description of the definitions, NAUO id,
+// description and reference designator of the components. writeStepAssembly() builds an XCAF document from such a
 // structure and writes it with STEPCAFControl_Writer as AP214 or AP242.
 //
 // Lengths are millimetres inside bendcore; colours are sRGB components in [0, 1], the
@@ -50,6 +51,12 @@ struct AssemblyComponent {
     // Read only: STEPCAFControl_Writer cannot write layers of an occurrence, so
     // writeStepAssembly() rejects a non-empty list with Unsupported.
     std::vector<std::string> layers;
+    // NAUO id. On write an empty id lets OCCT number the occurrences ('1', '2', ...);
+    // readStepAssembly() always fills it from the file.
+    std::string instanceId;
+    std::string description;  // NAUO description
+    // NAUO reference_designator (optional attribute; '$' in the file when absent).
+    std::optional<std::string> referenceDesignator;
 };
 
 enum class DefinitionKind { Part, Assembly };
@@ -63,6 +70,10 @@ struct AssemblyDefinition {
     std::optional<AssemblyColor> color;         // surface colour of the whole definition
     std::vector<FaceColor> faceColors;          // Part only; ascending faceIndex, unique
     std::vector<std::string> layers;            // written for parts only (see writeStepAssembly)
+    // PRODUCT id (designation, part number). On write nullopt gives id = name (the OCCT
+    // default); readStepAssembly() always fills it from the file.
+    std::optional<std::string> productId;
+    std::string description;  // PRODUCT description
 };
 
 struct AssemblyDocument {

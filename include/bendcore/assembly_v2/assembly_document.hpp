@@ -83,6 +83,12 @@ struct Occurrence {
     bool fixed = false;   // только верхний уровень
     std::optional<kernel::AssemblyColor> color;
     std::optional<PatternId> pattern;  // экземпляр массива: положение задаёт массив
+    // Подавлено: не решается, не попадает в развёртку, BOM, пересечения и STEP.
+    bool suppressed = false;
+    std::string designation;  // позиционное обозначение (STEP: NAUO reference_designator)
+    // Вхождение из файла внешней подсборки: его ID в том файле (ссылки сопряжений
+    // сохраняются через этот ID, docs/assembly/ASSEMBLY_DOCUMENT.md, раздел 10).
+    std::optional<OccurrenceId> sourceId;
 };
 
 struct Definition {
@@ -100,6 +106,12 @@ struct Definition {
     std::vector<kernel::FaceColor> faceColors;
     // Сборка:
     std::vector<Occurrence> occurrences;
+    // Сборка с непустым source — внешняя подсборка (документ сборки в отдельном файле):
+    // её состав только для чтения. external — определение создано при загрузке внешней
+    // подсборки (принадлежит её файлу).
+    bool external = false;
+    // Деталь: источник не загрузился и встроенной геометрии нет (shape пуст) — причина.
+    std::string loadError;
 };
 
 // ---- ссылки на геометрию и сопряжения
@@ -155,6 +167,7 @@ struct DocumentMate {
     std::array<BoundElement, 2> bound;
     std::optional<Transform> rigidRelative;  // Rigid: положение b в СК a
     std::string brokenReason;                // не пусто: ссылка не разрешилась, сопряжение не решается
+    bool suppressed = false;                 // подавлено пользователем: не решается
     bool broken() const { return !brokenReason.empty(); }
 };
 
@@ -174,6 +187,7 @@ struct DocumentSolveReport {
     SolveResult solver;  // ID компонентов и сопряжений — внутренние ID решателя
     std::vector<DocumentSubsystem> subsystems;
     std::vector<MateId> brokenMates;  // пропущены
+    std::vector<MateId> suppressedMates;  // подавлены сами или через подавленное вхождение
     int totalDof = 0;
     double residualNorm = 0.0;
     bool success = false;
@@ -263,6 +277,70 @@ struct ExplodedView {
     std::vector<ExplodeStep> steps;
 };
 
+// ---- собственный формат (JSON, docs/assembly/ASSEMBLY_DOCUMENT.md, раздел 10)
+
+struct SaveOptions {
+    // Встроить BRep деталей (и карту имён) — документ открывается и без файлов деталей.
+    bool embedGeometry = true;
+    int indent = 1;  // < 0 — в одну строку
+};
+
+// Текст документа внешней подсборки по её пути (относительно документа).
+using AssemblySourceReader = std::function<kernel::Result<std::string>(const std::string& source)>;
+
+struct LoadOptions {
+    PartResolver parts;               // детали с source; пусто — источники не загружаются
+    AssemblySourceReader assemblies;  // внешние подсборки
+};
+
+// Загрузка из файлов: детали — filePartResolver(registry, baseDirectory), подсборки — чтение
+// файла относительно baseDirectory.
+LoadOptions fileLoadOptions(std::shared_ptr<const modeling::FeatureRegistry> registry, std::string baseDirectory);
+
+enum class SourceStatus {
+    Embedded,          // деталь без источника: встроенная геометрия
+    Loaded,            // источник загружен, геометрия совпала с сохранённой
+    Changed,           // источник загружен, геометрия изменилась: сопряжения перепроверены
+    MissingEmbedded,   // источник не загрузился: взята встроенная геометрия
+    Missing,           // источник не загрузился, встроенной геометрии нет: деталь пуста
+    AssemblyLoaded,    // внешняя подсборка загружена
+    AssemblyMissing,   // внешняя подсборка не загрузилась: состав пуст
+};
+
+const char* toString(SourceStatus status) noexcept;
+
+struct SourceDiagnostic {
+    DefinitionId definition = 0;
+    std::string name;
+    std::string source;
+    SourceStatus status = SourceStatus::Embedded;
+    std::string message;
+};
+
+enum class MateOutcome { Kept, Remapped, Broken };
+
+const char* toString(MateOutcome outcome) noexcept;
+
+// Сопряжение, затронутое изменённым/отсутствующим источником или не разрешившееся при загрузке.
+struct MateLoadDiagnostic {
+    MateId mate = 0;
+    std::string name;
+    MateOutcome outcome = MateOutcome::Kept;
+    std::vector<DefinitionId> definitions;  // затронутые определения
+    std::string message;
+};
+
+struct LoadReport {
+    int fileVersion = 0;
+    bool migrated = false;  // файл старой версии, при сохранении будет текущая
+    std::vector<SourceDiagnostic> sources;
+    std::vector<MateLoadDiagnostic> mates;
+    std::vector<std::string> warnings;
+};
+
+class AssemblyDocument;
+struct LoadedAssembly;
+
 class AssemblyDocument {
 public:
     explicit AssemblyDocument(std::string name = "Assembly");
@@ -293,6 +371,11 @@ public:
     Status setPlacement(OccurrenceId id, const Transform& placement);
     Status setFixed(OccurrenceId id, bool fixed);  // только верхний уровень
     Status setOccurrenceColor(OccurrenceId id, std::optional<kernel::AssemblyColor> color);
+    Status setOccurrenceSuppressed(OccurrenceId id, bool suppressed);
+    Status setOccurrenceName(OccurrenceId id, std::string name);
+    Status setOccurrenceDesignation(OccurrenceId id, std::string designation);
+    // Состав сборки только для чтения: внешняя подсборка или её часть.
+    bool isReadOnlyAssembly(DefinitionId id) const;
 
     const Occurrence* findOccurrence(OccurrenceId id) const;
     // Сборка, в которой лежит вхождение.
@@ -308,6 +391,9 @@ public:
     // (геометрия элемента), ошибки prepareMate решателя.
     kernel::Result<MateId> addMate(MateSpec spec);
     Status removeMate(MateId id);
+    // Новое описание сопряжения с тем же ID (ссылки разрешаются заново). При ошибке не меняется.
+    Status editMate(MateId id, MateSpec spec);
+    Status setMateSuppressed(MateId id, bool suppressed);
     const std::vector<DocumentMate>& mates() const { return mates_; }
     const DocumentMate* findMate(MateId id) const;
 
@@ -326,6 +412,7 @@ public:
         std::vector<OccurrenceId> occurrenceOf;
         std::map<MateId, MateId> documentMateOf;  // ID решателя → ID документа
         std::vector<MateId> brokenMates;  // помечены сломанными и пропущены
+        std::vector<MateId> suppressedMates;  // подавлены (или вхождение подавлено)
         // Отвергнуты решателем при построении (геометрия перестала подходить сопряжению).
         std::vector<std::pair<MateId, std::string>> rejected;
     };
@@ -357,7 +444,23 @@ public:
 
     // ---- разнесённые виды
     std::size_t addExplodedView(ExplodedView view);
+    Status removeExplodedView(std::size_t index);
     const std::vector<ExplodedView>& explodedViews() const { return views_; }
+
+    // ---- внешние подсборки и собственный формат
+    // Определение-сборка, состав которой загружается из документа сборки source (его
+    // сопряжения не решаются: подсборка — жёсткое тело с сохранёнными положениями).
+    // Ошибки: IoError/ParseError чтения, цикл внешних подсборок (InvalidInput).
+    kernel::Result<DefinitionId> addSubassemblyFromSource(std::string name, std::string source,
+                                                          const LoadOptions& options, PartProperties properties = {});
+    kernel::Result<std::string> toJson(const SaveOptions& options = {}) const;
+    // Ошибки: ParseError (не JSON, чужой формат, нет полей), Unsupported (версия новее).
+    // Неразрешимые источники и ссылки — не ошибка, а диагностика LoadReport.
+    static kernel::Result<LoadedAssembly> fromJson(std::string_view json, const LoadOptions& options);
+    Status saveFile(const std::string& path, const SaveOptions& options = {}) const;
+    static kernel::Result<LoadedAssembly> loadFile(const std::string& path,
+                                                   std::shared_ptr<const modeling::FeatureRegistry> registry);
+    static constexpr int kFormatVersion = 2;
 
     // ---- обмен STEP (структура, имена, цвета, положения; сопряжения в STEP не пишутся)
     kernel::Result<kernel::AssemblyDocument> toXcaf() const;
@@ -366,7 +469,10 @@ public:
     static kernel::Result<AssemblyDocument> importStep(std::string_view step);
 
 private:
+    friend class JsonLoader;
     Occurrence* findOccurrenceMutable(OccurrenceId id);
+    Status checkEditable(OccurrenceId id) const;
+    Status mergeExternal(DefinitionId target, const AssemblyDocument& sub, const std::string& subSource);
     bool containsDefinition(DefinitionId container, DefinitionId target) const;
     kernel::Result<DefinitionId> terminalDefinition(const OccurrencePath& path) const;
     Status bindSide(const GeometryRef& ref, BoundElement& bound, bool requireElement) const;
@@ -395,6 +501,11 @@ private:
 };
 
 // Положение ↔ TopLoc_Location. Ошибка Unsupported — масштаб или отражение.
+struct LoadedAssembly {
+    AssemblyDocument document;
+    LoadReport report;
+};
+
 TopLoc_Location toLocation(const Transform& t);
 kernel::Result<Transform> fromLocation(const TopLoc_Location& location);
 
