@@ -78,80 +78,156 @@ jobs:
           path: build-wasm/web/
           if-no-files-found: error
 
-
-
-  # Тело трубы на Open CASCADE (тесты test_tube_occt и остальные).
-  # Сборка OCCT кэшируется отдельно от установки.
-  occt:
+  # Ядро CAD для браузера (docs/ui/KERNEL_VIEWPORT.md): OCCT 8.0.1 для WASM
+  # (third_party/build_occt_wasm.sh, docs/kernel/OCCT_BUILD.md, раздел 3), модуль
+  # bendcore_kernel_wasm (cmake/wasm_kernel.cmake) и его проверка по корпусу в node.
+  # Native-сборка с OCCT — job occt-native в qa.yml.
+  kernel-wasm:
+    name: Ядро WASM (OCCT 8.0.1, bendcore_kernel_wasm, корпус)
     runs-on: ubuntu-24.04
+    # Сборка OCCT для WASM без кэша — около 25 минут на 4 ядрах (OCCT_BUILD.md, раздел 4).
+    timeout-minutes: 120
+    env:
+      OCCT_VERSION: 8.0.1
+      EMSDK_VERSION: 6.0.12
     steps:
       - uses: actions/checkout@v4
 
-      - name: Зависимости (Ninja, Eigen, Python3)
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev libgtest-dev python3
+      - name: Зависимости (Ninja)
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
 
-      - name: Кэш сборки OCCT V8.0.1
-        id: occt-build-cache
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Установка emsdk
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache-kernel
+
+      # Ключ: версии OCCT и emsdk, список тулкитов и скрипт сборки. Кэшируются установка и
+      # результаты пробной программы (sizes.txt, вывод под node), объектные файлы — нет.
+      - name: Кэш OCCT для WASM
+        id: occt-wasm-cache
         uses: actions/cache@v4
         with:
           path: |
-            third_party/occt-build
-            third_party/occt-install
-          key: occt-build-V8.0.1-static-dataexchange-ubuntu-24.04-v3
+            third_party/occt-install-wasm
+            third_party/occt-build-wasm/probe
+          key: occt-wasm-V${{ env.OCCT_VERSION }}-emsdk-${{ env.EMSDK_VERSION }}-${{ hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt_wasm.sh') }}
 
-      - name: Сборка OCCT V8.0.1 (статически, минимальный набор модулей)
-        if: steps.occt-build-cache.outputs.cache-hit != 'true'
+      # Тот же источник, что в build_occt.sh. Успех скрипта — код 0: внутри он собирает пробную
+      # программу tests/kernel/wasm/occt_size_probe.cpp и проверяет её вывод OK под node.
+      - name: Сборка OCCT для WASM
+        if: steps.occt-wasm-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -o pipefail
-          cd third_party
-          export OCCT_VERSION=8.0.1
-          ./build_occt.sh 2>&1 | tee "$GITHUB_WORKSPACE/occt-build.log"
+          git clone --depth 1 --branch "V${OCCT_VERSION}" https://github.com/Open-Cascade-SAS/OCCT.git \
+            "third_party/occt-${OCCT_VERSION}"
+          OCCT_SOURCE="$GITHUB_WORKSPACE/third_party/occt-${OCCT_VERSION}" \
+            third_party/build_occt_wasm.sh 2>&1 | tee occt-wasm-build.log
 
-      - name: Ошибки OCCT в аннотации (только при падении)
+      - name: Конфигурация bendcore (Emscripten, BENDCORE_WITH_OCCT=ON)
+        run: |
+          emcmake cmake -S . -B build-wasm-kernel -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install-wasm"
+
+      - name: Сборка bendcore_kernel_wasm
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build-wasm-kernel --target bendcore_kernel_wasm --parallel 2>&1 | tee build-wasm-kernel.log
+
+      - name: Тест wasm_kernel_corpus (node)
+        run: ctest --test-dir build-wasm-kernel -R '^wasm_kernel_corpus$' --no-tests=error --output-on-failure
+
+      - name: Размеры модуля
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=build-wasm-kernel/wasm_kernel
+          {
+            echo "### Размеры bendcore_kernel_wasm (emsdk $EMSDK_VERSION, OCCT $OCCT_VERSION)"
+            echo
+            echo "| Файл | байт | gzip -9, байт |"
+            echo "|---|---:|---:|"
+            for f in bendcore_kernel.wasm bendcore_kernel.mjs bendcore_kernel_api.mjs; do
+              printf '| `%s` | %d | %d |\n' "$f" "$(stat -c %s "$d/$f")" "$(gzip -9 -c "$d/$f" | wc -c)"
+            done
+            probe=third_party/occt-build-wasm/probe/sizes.txt
+            if [ -f "$probe" ]; then
+              echo
+              echo "Пробная программа OCCT (third_party/build_occt_wasm.sh):"
+              echo
+              echo '```'
+              cat "$probe"
+              echo '```'
+            fi
+          } | tee "$d/sizes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Модуль ядра и размеры
+        uses: actions/upload-artifact@v4
+        with:
+          name: bendcore-kernel-wasm
+          path: |
+            build-wasm-kernel/wasm_kernel/
+            third_party/occt-build-wasm/probe/sizes.txt
+          if-no-files-found: error
+
+      - name: Журналы (только при падении)
         if: failure()
-        shell: bash
-        run: |
-          [ -f occt-build.log ] || exit 0
-          grep -n -E "ERROR|error:|FATAL|undefined reference" occt-build.log | head -n 20 | \
-            while IFS= read -r line; do echo "::error title=occt-build::${line:0:900}"; done
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-wasm-logs
+          path: |
+            occt-wasm-build.log
+            build-wasm-kernel.log
+            third_party/occt-build-wasm/logs/
+            third_party/occt-build-wasm/probe/
+            build-wasm-kernel/Testing/Temporary/
+          if-no-files-found: ignore
 
-      - name: Сборка и тесты с Open CASCADE
+  # Сквозной тест вьюпорта ядра (tests/e2e-kernel, Playwright + Chromium) на модуле из kernel-wasm.
+  kernel-viewer-e2e:
+    name: Вьюпорт ядра (Playwright, Chromium)
+    needs: kernel-wasm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Модуль ядра из kernel-wasm
+        uses: actions/download-artifact@v4
+        with:
+          name: bendcore-kernel-wasm
+          path: kernel-artifact
+
+      # postinstall-скрипты (electron и т. п.) тесту не нужны (docs/ui/KERNEL_VIEWPORT.md).
+      - name: npm ci
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Сквозной тест вьюпорта
         env:
-          BENDCORE_EIGEN_DIR: /usr/include/eigen3
-        run: |
-          cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=Release -DBENDCORE_WITH_OCCT=ON \
-            -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install" -DBENDCORE_EIGEN_DIR="$BENDCORE_EIGEN_DIR"
-          cmake --build build-occt --parallel
-          ctest --test-dir build-occt --output-on-failure
+          CI: 'true'
+          BENDCORE_KERNEL_WASM_DIR: ${{ github.workspace }}/kernel-artifact/build-wasm-kernel/wasm_kernel
+        run: npm run test:e2e:kernel -- --trace off
 
-      # Образ сервиса тела трубы и проверка запросов к контейнеру (тот же OCCT, что и выше).
-      - name: Сборка образа сервиса
-        shell: bash
-        run: |
-          set -o pipefail
-          docker build --build-context occt="$GITHUB_WORKSPACE/third_party/occt-install" -f docker/Dockerfile -t bendcore-server:ci . \
-            2>&1 | tee "$GITHUB_WORKSPACE/docker-build.log"
-
-      - name: Проверка сервиса в контейнере
-        shell: bash
-        run: |
-          set -o pipefail
-          docker run -d --name bendcore-server -p 8080:8080 bendcore-server:ci
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/v1/health && break; sleep 1; done
-          curl -sf http://127.0.0.1:8080/v1/health | grep -q '"ok":true'
-          curl -sf -X POST --data-binary @examples/tube_path.json \
-            "http://127.0.0.1:8080/v1/tube?format=json&od=16&wall=0&deflection=0.05" -o tube.json
-          grep -q '"ok":true' tube.json
-          grep -q '"valid":true' tube.json
-          code=$(curl -s -o err.json -w "%{http_code}" -X POST --data-binary $'kind,length\nstraight,abc' \
-            "http://127.0.0.1:8080/v1/tube?format=csv&od=16")
-          [ "$code" = "400" ]
-          grep -q '"ok":false' err.json
-
-      - name: Логи контейнера сервиса
-        if: always()
-        shell: bash
-        run: |
-          docker logs bendcore-server 2>&1 | tail -n 50 || true
-          docker rm -f bendcore-server >/dev/null 2>&1 || true
+      - name: Снимки и контекст ошибок (только при падении)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-viewer-e2e-results
+          path: test-results/kernel-viewer/
+          if-no-files-found: warn

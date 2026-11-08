@@ -29,6 +29,7 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${port}/`,
     trace: 'off',
+    screenshot: 'only-on-failure',
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 1,
     launchOptions: {
