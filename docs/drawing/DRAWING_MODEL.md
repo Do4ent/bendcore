@@ -2,7 +2,8 @@
 
 Назначение: 2D-модель листа чертежа в миллиметрах, оформление по ЕСКД (рамка, основная
 надпись) и экспорт (см. `EXPORT.md`). Модуль не зависит от OCCT и от старого `src/drawing`;
-виды с HLR (фаза 4, п. 2) будут строиться поверх этой модели.
+виды с HLR, разрезы и осевые линии (фаза 4, пп. 2–4) строит модуль
+`bendcore_drawing_views` поверх этой модели — см. `VIEWS.md`.
 
 - Заголовки: `include/bendcore/drawing_v2/` (`sheet.hpp`, `line_types.hpp`, `model.hpp`,
   `title_block.hpp`, `truetype_font.hpp`, `export.hpp`), namespace `bendcore::drawing_v2`.
