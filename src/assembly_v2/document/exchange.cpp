@@ -57,7 +57,8 @@ Result<kernel::AssemblyDocument> AssemblyDocument::toXcaf() const {
         if (index.count(id)) return;
         index[id] = order.size();
         order.push_back(id);
-        for (const Occurrence& o : definitions_[id].occurrences) visit(o.definition);
+        for (const Occurrence& o : definitions_[id].occurrences)
+            if (!o.suppressed) visit(o.definition);
     };
     visit(root());
     kernel::AssemblyDocument out;
@@ -67,13 +68,20 @@ Result<kernel::AssemblyDocument> AssemblyDocument::toXcaf() const {
         x.kind = d.kind == DefinitionKind::Part ? kernel::DefinitionKind::Part : kernel::DefinitionKind::Assembly;
         x.name = d.name;
         x.color = d.color;
+        // Обозначение — PRODUCT id (пустое: id = имя), наименование — PRODUCT description.
+        if (!d.properties.designation.empty()) x.productId = d.properties.designation;
+        x.description = d.properties.name;
         if (d.kind == DefinitionKind::Part) {
+            if (d.shape.IsNull())
+                return Error{ErrorCode::InvalidInput, "part '" + d.name + "' has no geometry: " + d.loadError};
             x.shape = kernel::Shape(d.shape);
             x.faceColors = d.faceColors;
         }
         for (const Occurrence& o : d.occurrences) {
+            if (o.suppressed) continue;
             kernel::AssemblyComponent c;
             c.name = o.name;
+            if (!o.designation.empty()) c.referenceDesignator = o.designation;
             c.definition = index.at(o.definition);
             c.location = toLocation(o.placement);
             c.color = o.color;
@@ -90,7 +98,17 @@ Result<AssemblyDocument> AssemblyDocument::fromXcaf(const kernel::AssemblyDocume
     const bool singleAssemblyRoot =
         x.roots.size() == 1 && x.definitions[x.roots[0]].kind == kernel::DefinitionKind::Assembly;
     AssemblyDocument doc(singleAssemblyRoot ? x.definitions[x.roots[0]].name : std::string("Assembly"));
-    if (singleAssemblyRoot) doc.definitions_[0].color = x.definitions[x.roots[0]].color;
+    // PRODUCT id, совпадающий с именем, — умолчание OCCT и многих систем, а не обозначение.
+    auto propertiesOf = [](const kernel::AssemblyDefinition& d) {
+        PartProperties p;
+        if (d.productId && *d.productId != d.name) p.designation = *d.productId;
+        p.name = d.description;
+        return p;
+    };
+    if (singleAssemblyRoot) {
+        doc.definitions_[0].color = x.definitions[x.roots[0]].color;
+        doc.definitions_[0].properties = propertiesOf(x.definitions[x.roots[0]]);
+    }
     std::vector<DefinitionId> map(x.definitions.size(), 0);
     for (std::size_t i = 0; i < x.definitions.size(); ++i) {
         const kernel::AssemblyDefinition& d = x.definitions[i];
@@ -107,6 +125,7 @@ Result<AssemblyDocument> AssemblyDocument::fromXcaf(const kernel::AssemblyDocume
             map[i] = doc.addSubassembly(d.name).value();
         }
         doc.definitions_[map[i]].color = d.color;
+        doc.definitions_[map[i]].properties = propertiesOf(d);
     }
     for (std::size_t i = 0; i < x.definitions.size(); ++i) {
         const kernel::AssemblyDefinition& d = x.definitions[i];
@@ -117,6 +136,7 @@ Result<AssemblyDocument> AssemblyDocument::fromXcaf(const kernel::AssemblyDocume
             auto id = doc.addOccurrence(map[c.definition], t.value(), c.name, map[i]);
             if (!id) return id.error();
             doc.findOccurrenceMutable(id.value())->color = c.color;
+            doc.findOccurrenceMutable(id.value())->designation = c.referenceDesignator.value_or(std::string());
         }
     }
     if (!singleAssemblyRoot) {

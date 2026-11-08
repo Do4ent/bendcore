@@ -12,17 +12,26 @@
 
 #include <DESTEP_Parameters.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <Interface_InterfaceModel.hxx>
 #include <NCollection_HSequence.hxx>
 #include <NCollection_Sequence.hxx>
 #include <Quantity_Color.hxx>
 #include <Quantity_ColorRGBA.hxx>
 #include <STEPCAFControl_Reader.hxx>
 #include <STEPCAFControl_Writer.hxx>
+#include <STEPConstruct_Tool.hxx>
 #include <STEPControl_Reader.hxx>
 #include <STEPControl_StepModelType.hxx>
+#include <STEPControl_Writer.hxx>
 #include <Standard_Failure.hxx>
+#include <StepBasic_Product.hxx>
+#include <StepBasic_ProductDefinition.hxx>
+#include <StepBasic_ProductDefinitionFormation.hxx>
+#include <StepData_StepModel.hxx>
+#include <StepRepr_NextAssemblyUsageOccurrence.hxx>
 #include <TCollection_AsciiString.hxx>
 #include <TCollection_ExtendedString.hxx>
+#include <TCollection_HAsciiString.hxx>
 #include <TDF_Attribute.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_Tool.hxx>
@@ -31,6 +40,9 @@
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TransferBRep.hxx>
+#include <Transfer_Binder.hxx>
+#include <Transfer_TransientProcess.hxx>
 #include <UnitsMethods_LengthUnit.hxx>
 #include <XCAFApp_Application.hxx>
 #include <XCAFDoc_ColorTool.hxx>
@@ -38,6 +50,8 @@
 #include <XCAFDoc_DocumentTool.hxx>
 #include <XCAFDoc_LayerTool.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
+#include <XSControl_TransferReader.hxx>
+#include <XSControl_WorkSession.hxx>
 
 namespace bendcore::kernel {
 
@@ -159,6 +173,116 @@ std::optional<double> unitNameToMm(std::string name) {
         return std::nullopt;
     }
     return it->second;
+}
+
+// ------------------------------------------------------------------ PRODUCT and NAUO attributes
+
+// STEPCAFControl_Reader gives a label only one name (PRODUCT name, or its id when the name
+// is empty; NAUO description, name or id). The other attributes are read from the STEP
+// model directly and attached to the labels the reader created.
+struct ProductAttributes {
+    std::string name;
+    std::string id;
+    std::string description;
+};
+
+struct OccurrenceAttributes {
+    std::string id;
+    std::string name;
+    std::string description;
+    std::optional<std::string> referenceDesignator;
+};
+
+struct StepAttributes {
+    std::map<std::string, ProductAttributes> products;        // by prototype label entry
+    std::map<std::string, OccurrenceAttributes> occurrences;  // by component label entry
+};
+
+// STEP strings are decoded by the parser into UTF-8 unless the code page is NoConversion
+// (then every byte is one character), as STEPCAFControl_Reader::convertName does.
+std::string stepText(const Handle(TCollection_HAsciiString)& text, bool multiByte) {
+    if (text.IsNull()) {
+        return {};
+    }
+    return toUtf8(TCollection_ExtendedString(text->String(), multiByte));
+}
+
+Handle(TCollection_HAsciiString) stepString(const std::string& utf8) {
+    return new TCollection_HAsciiString(utf8.c_str());
+}
+
+StepAttributes collectStepAttributes(STEPCAFControl_Reader& reader, const Handle(XCAFDoc_ShapeTool)& shapes) {
+    StepAttributes out;
+    const Handle(XSControl_WorkSession) ws = reader.ChangeReader().WS();
+    const Handle(Interface_InterfaceModel) model = ws->Model();
+    const Handle(Transfer_TransientProcess) tp = ws->TransferReader()->TransientProcess();
+    if (model.IsNull() || tp.IsNull()) {
+        return out;
+    }
+    const Handle(StepData_StepModel) stepModel = Handle(StepData_StepModel)::DownCast(model);
+    const bool multiByte = stepModel.IsNull() || stepModel->SourceCodePage() != Resource_FormatType_NoConversion;
+    const auto& shapeLabels = reader.GetShapeLabelMap();
+    STEPConstruct_Tool tool(ws);
+    for (int i = 1; i <= model->NbEntities(); ++i) {
+        const Handle(Standard_Transient) entity = model->Value(i);
+        if (const auto nauo = Handle(StepRepr_NextAssemblyUsageOccurrence)::DownCast(entity); !nauo.IsNull()) {
+            const TDF_Label label = STEPCAFControl_Reader::FindInstance(nauo, shapes, tool, shapeLabels);
+            if (label.IsNull()) {
+                continue;
+            }
+            OccurrenceAttributes a;
+            a.id = stepText(nauo->Id(), multiByte);
+            a.name = stepText(nauo->Name(), multiByte);
+            if (nauo->HasDescription()) {
+                a.description = stepText(nauo->Description(), multiByte);
+            }
+            if (nauo->HasReferenceDesignator() && !nauo->ReferenceDesignator().IsNull()) {
+                a.referenceDesignator = stepText(nauo->ReferenceDesignator(), multiByte);
+            }
+            out.occurrences[labelEntry(label)] = std::move(a);
+            continue;
+        }
+        const auto pd = Handle(StepBasic_ProductDefinition)::DownCast(entity);
+        if (pd.IsNull() || pd->Formation().IsNull() || pd->Formation()->OfProduct().IsNull()) {
+            continue;
+        }
+        const Handle(Transfer_Binder) binder = tp->Find(pd);
+        if (binder.IsNull() || !binder->HasResult()) {
+            continue;
+        }
+        const TopoDS_Shape shape = TransferBRep::ShapeResult(tp, binder);
+        if (shape.IsNull()) {
+            continue;
+        }
+        TDF_Label label;
+        if (shapeLabels.IsBound(shape)) {
+            label = shapeLabels.Find(shape);
+        }
+        if (label.IsNull()) {
+            shapes->Search(shape, label, true, true, false);
+        }
+        if (label.IsNull()) {
+            continue;
+        }
+        const Handle(StepBasic_Product) product = pd->Formation()->OfProduct();
+        ProductAttributes a;
+        a.name = stepText(product->Name(), multiByte);
+        a.id = stepText(product->Id(), multiByte);
+        a.description = stepText(product->Description(), multiByte);
+        out.products.emplace(labelEntry(label), std::move(a));
+    }
+    return out;
+}
+
+// The writer names labels with these markers; after the transfer the PRODUCT and NAUO
+// entities carrying a marker get the real name, id, description and reference designator.
+// Markers make the match exact even when several definitions share a name.
+std::string definitionMarker(std::size_t definition) {
+    return "bendcore-xcaf-definition-" + std::to_string(definition);
+}
+
+std::string componentMarker(std::size_t definition, std::size_t component) {
+    return "bendcore-xcaf-component-" + std::to_string(definition) + "-" + std::to_string(component);
 }
 
 // ------------------------------------------------------------------ structure checks
@@ -302,8 +426,8 @@ Result<std::vector<std::size_t>> checkStructure(const AssemblyDocument& doc) {
 
 class XcafToDocument {
 public:
-    XcafToDocument(const TempXcafDocument& xcaf, AssemblyDocument& out)
-        : shapes_(xcaf.shapes()), colors_(xcaf.colors()), layers_(xcaf.layers()), out_(out) {}
+    XcafToDocument(const TempXcafDocument& xcaf, const StepAttributes& attributes, AssemblyDocument& out)
+        : shapes_(xcaf.shapes()), colors_(xcaf.colors()), layers_(xcaf.layers()), attributes_(attributes), out_(out) {}
 
     Result<std::size_t> convert(const TDF_Label& label) {
         using R = Result<std::size_t>;
@@ -318,6 +442,15 @@ public:
 
         AssemblyDefinition def;
         def.name = labelName(label);
+        if (const auto it = attributes_.products.find(entry); it != attributes_.products.end()) {
+            if (!it->second.name.empty()) {
+                def.name = it->second.name;
+            }
+            def.productId = it->second.id;
+            def.description = it->second.description;
+        } else {
+            def.productId = std::string();
+        }
         def.color = surfaceColor(colors_, label);
         def.layers = labelLayers(layers_, label);
         if (XCAFDoc_ShapeTool::IsAssembly(label)) {
@@ -338,6 +471,17 @@ public:
                 }
                 AssemblyComponent c;
                 c.name = labelName(compLabel);
+                if (const auto it = attributes_.occurrences.find(labelEntry(compLabel));
+                    it != attributes_.occurrences.end()) {
+                    // NAUO name first; the reader prefers the description, which is a separate
+                    // attribute here.
+                    if (!it->second.name.empty()) {
+                        c.name = it->second.name;
+                    }
+                    c.instanceId = it->second.id;
+                    c.description = it->second.description;
+                    c.referenceDesignator = it->second.referenceDesignator;
+                }
                 c.definition = child.value();
                 c.location = XCAFDoc_ShapeTool::GetLocation(compLabel);
                 c.color = surfaceColor(colors_, compLabel);
@@ -420,6 +564,7 @@ private:
     Handle(XCAFDoc_ShapeTool) shapes_;
     Handle(XCAFDoc_ColorTool) colors_;
     Handle(XCAFDoc_LayerTool) layers_;
+    const StepAttributes& attributes_;
     AssemblyDocument& out_;
     std::map<std::string, std::size_t> done_;
     std::map<std::string, bool> onStack_;
@@ -490,15 +635,14 @@ private:
                     return R::failure(ErrorCode::OperationFailed,
                                       defLabel(doc_, i) + ": XCAF rejected component '" + c.name + "'");
                 }
-                if (!c.name.empty()) {
-                    TDataStd_Name::Set(comp, fromUtf8(c.name));
-                }
+                const auto k = static_cast<std::size_t>(&c - d.components.data());
+                TDataStd_Name::Set(comp, fromUtf8(componentMarker(i, k)));
                 if (c.color) {
                     colors_->SetColor(comp, toOcct(*c.color), XCAFDoc_ColorSurf);
                 }
             }
         }
-        TDataStd_Name::Set(label, fromUtf8(d.name));
+        TDataStd_Name::Set(label, fromUtf8(definitionMarker(i)));
         if (d.color) {
             colors_->SetColor(label, toOcct(*d.color), XCAFDoc_ColorSurf);
         }
@@ -515,6 +659,72 @@ private:
     Handle(XCAFDoc_LayerTool) layers_;
     std::vector<TDF_Label> labels_;
 };
+
+// Replaces the markers of DocumentToXcaf in the transferred model by the attributes of the
+// document. Every definition must have produced a PRODUCT and every component a NAUO.
+Result<bool> applyStepAttributes(const Handle(Interface_InterfaceModel)& model, const AssemblyDocument& doc) {
+    using R = Result<bool>;
+    if (model.IsNull()) {
+        return R::failure(ErrorCode::OperationFailed, "STEP writer has no model after the transfer");
+    }
+    std::map<std::string, std::size_t> definitions;
+    std::map<std::string, std::pair<std::size_t, std::size_t>> components;
+    for (std::size_t i = 0; i < doc.definitions.size(); ++i) {
+        definitions[definitionMarker(i)] = i;
+        for (std::size_t k = 0; k < doc.definitions[i].components.size(); ++k) {
+            components[componentMarker(i, k)] = {i, k};
+        }
+    }
+    std::vector<bool> productSeen(doc.definitions.size(), false);
+    std::map<std::pair<std::size_t, std::size_t>, int> nauoSeen;
+    for (int e = 1; e <= model->NbEntities(); ++e) {
+        const Handle(Standard_Transient) entity = model->Value(e);
+        if (const auto nauo = Handle(StepRepr_NextAssemblyUsageOccurrence)::DownCast(entity); !nauo.IsNull()) {
+            if (nauo->Name().IsNull()) {
+                continue;
+            }
+            const auto it = components.find(nauo->Name()->String().ToCString());
+            if (it == components.end()) {
+                continue;
+            }
+            const AssemblyComponent& c = doc.definitions[it->second.first].components[it->second.second];
+            const Handle(TCollection_HAsciiString) id = c.instanceId.empty() ? nauo->Id() : stepString(c.instanceId);
+            nauo->Init(id, stepString(c.name), true, stepString(c.description), nauo->RelatingProductDefinitionAP242(),
+                       nauo->RelatedProductDefinitionAP242(), c.referenceDesignator.has_value(),
+                       c.referenceDesignator ? stepString(*c.referenceDesignator) : Handle(TCollection_HAsciiString)());
+            ++nauoSeen[it->second];
+            continue;
+        }
+        const auto product = Handle(StepBasic_Product)::DownCast(entity);
+        if (product.IsNull() || product->Name().IsNull()) {
+            continue;
+        }
+        const auto it = definitions.find(product->Name()->String().ToCString());
+        if (it == definitions.end()) {
+            continue;
+        }
+        const AssemblyDefinition& d = doc.definitions[it->second];
+        product->SetName(stepString(d.name));
+        product->SetId(stepString(d.productId.value_or(d.name)));
+        product->SetDescription(stepString(d.description));
+        productSeen[it->second] = true;
+    }
+    for (std::size_t i = 0; i < doc.definitions.size(); ++i) {
+        if (!productSeen[i]) {
+            return R::failure(ErrorCode::OperationFailed, defLabel(doc, i) + ": no PRODUCT was written for it");
+        }
+        for (std::size_t k = 0; k < doc.definitions[i].components.size(); ++k) {
+            const auto it = nauoSeen.find({i, k});
+            if (it == nauoSeen.end() || it->second != 1) {
+                return R::failure(ErrorCode::OperationFailed,
+                                  defLabel(doc, i) + ", component #" + std::to_string(k) +
+                                      ": expected one NEXT_ASSEMBLY_USAGE_OCCURRENCE, found " +
+                                      std::to_string(it == nauoSeen.end() ? 0 : it->second));
+            }
+        }
+    }
+    return true;
+}
 
 UnitsMethods_LengthUnit toOcctUnit(StepLengthUnit unit) {
     switch (unit) {
@@ -578,7 +788,8 @@ Result<AssemblyDocument> readStepAssembly(std::string_view data) {
         if (free.Length() == 0) {
             return R::failure(ErrorCode::OperationFailed, "STEP transfer produced no shapes");
         }
-        XcafToDocument converter(xcaf, out);
+        const StepAttributes attributes = collectStepAttributes(reader, xcaf.shapes());
+        XcafToDocument converter(xcaf, attributes, out);
         for (int i = 1; i <= free.Length(); ++i) {
             auto root = converter.convert(free.Value(i));
             if (!root) {
@@ -635,6 +846,9 @@ Result<std::string> writeStepAssembly(const AssemblyDocument& document, const As
         params.WriteUnit = toOcctUnit(options.fileUnit);
         if (!writer.Transfer(xcaf.doc(), params, STEPControl_AsIs)) {
             return R::failure(ErrorCode::OperationFailed, "STEPCAFControl_Writer could not transfer the document");
+        }
+        if (auto applied = applyStepAttributes(writer.ChangeWriter().WS()->Model(), document); !applied) {
+            return R(applied.error());
         }
         std::ostringstream out;
         const IFSelect_ReturnStatus status = writer.WriteStream(out);

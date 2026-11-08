@@ -17,6 +17,8 @@
 #include <gp_Trsf.hxx>
 
 #include <array>
+#include <fstream>
+#include <iterator>
 #include <cmath>
 #include <map>
 #include <numbers>
@@ -312,6 +314,104 @@ TEST(KernelXcafRoundTrip, LayersOfAssembliesAndComponentsAreUnsupported) {
     ASSERT_FALSE(w.ok());
     EXPECT_EQ(w.error().code, ErrorCode::Unsupported);
     EXPECT_NE(w.error().message.find("SUB_1"), std::string::npos) << w.error().message;
+}
+
+// ---------------------------------------------------------------- PRODUCT and NAUO attributes
+
+// PRODUCT id/description of the definitions, NAUO id/description/reference designator of
+// the components, Cyrillic text, two definitions with the same name (the attributes must
+// land on the right PRODUCT), an unset product id (written as the name) and an unset NAUO id
+// (numbered by OCCT).
+TEST(KernelXcafRoundTrip, ProductAndOccurrenceAttributes) {
+    for (StepSchema schema : {StepSchema::AP214, StepSchema::AP242}) {
+        SCOPED_TRACE(schema == StepSchema::AP214 ? "AP214" : "AP242");
+        AssemblyDocument doc = makeNested();
+        doc.definitions[1].productId = "PL-001.01";
+        doc.definitions[1].description = "Плита основания, сталь 45";
+        doc.definitions[3].name = "PLATE";  // same PRODUCT name as definition 1
+        doc.definitions[3].productId = "ШТ-02.003";
+        doc.definitions[3].description = "Штифт цилиндрический";
+        doc.definitions[2].productId = "";  // explicitly empty id
+        AssemblyComponent& plate1 = doc.definitions[0].components[0];
+        plate1.instanceId = "NAUO-PL";
+        plate1.description = "Основание (вхождение)";
+        plate1.referenceDesignator = "Поз. 1";
+        doc.definitions[2].components[1].referenceDesignator = "Поз. 7";
+        doc.definitions[2].components[1].description = "Штифт, второе вхождение";
+
+        auto text = writeStepAssembly(doc, {.schema = schema});
+        ASSERT_TRUE(text.ok()) << text.error().message;
+        // The ASCII attributes are visible in the file itself.
+        EXPECT_NE(text.value().find("PRODUCT('PL-001.01','PLATE'"), std::string::npos);
+        EXPECT_NE(text.value().find("PRODUCT('TOP','TOP'"), std::string::npos);
+        EXPECT_NE(text.value().find("NEXT_ASSEMBLY_USAGE_OCCURRENCE('NAUO-PL','PLATE_1'"), std::string::npos);
+        EXPECT_EQ(text.value().find("bendcore-xcaf-"), std::string::npos) << "temporary markers leaked";
+
+        auto back = readStepAssembly(text.value());
+        ASSERT_TRUE(back.ok()) << back.error().message;
+        const auto& defs = back.value().definitions;
+        ASSERT_EQ(defs.size(), 4u);
+        const AssemblyDefinition& top = defs[back.value().roots[0]];
+        EXPECT_EQ(top.name, "TOP");
+        EXPECT_EQ(top.productId, std::optional<std::string>("TOP"));
+        EXPECT_EQ(top.description, "");
+        ASSERT_EQ(top.components.size(), 3u);
+
+        const AssemblyComponent& c0 = top.components[0];
+        EXPECT_EQ(c0.name, "PLATE_1");
+        EXPECT_EQ(c0.instanceId, "NAUO-PL");
+        EXPECT_EQ(c0.description, "Основание (вхождение)");
+        EXPECT_EQ(c0.referenceDesignator, std::optional<std::string>("Поз. 1"));
+        const AssemblyDefinition& plate = defs[c0.definition];
+        EXPECT_EQ(plate.name, "PLATE");
+        EXPECT_EQ(plate.productId, std::optional<std::string>("PL-001.01"));
+        EXPECT_EQ(plate.description, "Плита основания, сталь 45");
+        EXPECT_NEAR(volumeOf(plate.shape.occt()), 100.0 * 50.0 * 10.0, 1e-6);
+
+        const AssemblyComponent& c1 = top.components[1];
+        EXPECT_EQ(c1.name, "SUB_1");
+        EXPECT_FALSE(c1.instanceId.empty()) << "OCCT numbers occurrences without an id";
+        EXPECT_FALSE(c1.referenceDesignator.has_value());
+        EXPECT_NE(c1.instanceId, top.components[2].instanceId);
+        const AssemblyDefinition& sub = defs[c1.definition];
+        EXPECT_EQ(sub.name, "SUB");
+        EXPECT_EQ(sub.productId, std::optional<std::string>(""));
+        ASSERT_EQ(sub.components.size(), 2u);
+        EXPECT_EQ(sub.components[1].name, "PIN_2");
+        EXPECT_EQ(sub.components[1].description, "Штифт, второе вхождение");
+        EXPECT_EQ(sub.components[1].referenceDesignator, std::optional<std::string>("Поз. 7"));
+        const AssemblyDefinition& pin = defs[sub.components[0].definition];
+        EXPECT_EQ(pin.name, "PLATE");
+        EXPECT_EQ(pin.productId, std::optional<std::string>("ШТ-02.003"));
+        EXPECT_EQ(pin.description, "Штифт цилиндрический");
+        EXPECT_NEAR(volumeOf(pin.shape.occt()), kPi * 4.0 * 15.0, 1e-6);
+        expectNestedPlacements(back.value());
+    }
+}
+
+// A file written by another system (the corpus generator): id equals the name, NAUO ids
+// are '1'...'4' in file order, no reference designators.
+TEST(KernelXcafRoundTrip, AttributesOfCorpusAssembly) {
+    std::ifstream in(std::string(BENDCORE_CORPUS_DIR) + "/assembly_bracket_pins_ap214.step", std::ios::binary);
+    ASSERT_TRUE(in.good());
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    auto doc = readStepAssembly(text);
+    ASSERT_TRUE(doc.ok()) << doc.error().message;
+    const AssemblyDefinition& top = doc.value().definitions[doc.value().roots[0]];
+    const std::map<std::string, std::string> wantIds = {
+        {"BASE_PLATE_1", "1"}, {"PIN_1", "2"}, {"PIN_2", "3"}, {"SPACER_1", "4"}};
+    std::size_t matched = 0;
+    for (const AssemblyComponent& c : top.components) {
+        const auto it = wantIds.find(c.name);
+        if (it == wantIds.end()) continue;
+        ++matched;
+        EXPECT_EQ(c.instanceId, it->second) << c.name;
+        EXPECT_FALSE(c.referenceDesignator.has_value()) << c.name;
+        const AssemblyDefinition& d = doc.value().definitions[c.definition];
+        EXPECT_EQ(d.productId, std::optional<std::string>(d.name));
+        EXPECT_EQ(d.description, "");
+    }
+    EXPECT_EQ(matched, wantIds.size());
 }
 
 // ---------------------------------------------------------------- validation

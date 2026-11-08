@@ -3,11 +3,12 @@
 Фаза 3 `docs/ROADMAP_GENERAL_CAD.md` (пп. 1, 3, 4, 6, 7): документ сборки на геометрии OCCT
 поверх решателя `bendcore_assembly_v2` (`docs/assembly/SOLVER.md`).
 
-- Код: `include/bendcore/assembly_v2/{assembly_document,occt_entities,interference,bom}.hpp`,
-  `src/assembly_v2/document/`.
+- Код: `include/bendcore/assembly_v2/{assembly_document,occt_entities,interference,bom,history}.hpp`,
+  `src/assembly_v2/document/` (`serialization.cpp` — собственный формат, `history.cpp` — отмена).
 - Сборка: `cmake/assembly_document.cmake`, цель `bendcore_assembly_document`. Зависит от
   `bendcore_assembly_v2`, `bendcore_kernel`, `bendcore_kernel_healing` (булевы операции),
-  `bendcore_kernel_xcaf` (STEP), `bendcore_modeling_document` (карта имён элементов детали).
+  `bendcore_kernel_xcaf` (STEP), `bendcore_modeling_document` (карта имён элементов детали);
+  `third_party/nlohmann/json.hpp` (MIT) — только внутри `serialization.cpp`.
 - Тесты: `tests/assembly_v2/test_assembly_document_*.cpp`.
 - Пространство имён: `bendcore::assembly_v2`. Все функции возвращают `kernel::Result`;
   исключения OCCT перехватываются и превращаются в `OperationFailed`.
@@ -20,7 +21,7 @@
 |---|---|
 | `Definition` (деталь) | `shape` в собственной СК, `topology` (`kernel::TopologyIndex`), `elementMap` (карта имён `modeling::NamedShape`, может отсутствовать), `source` (путь/ID документа детали), `revision` (растёт при замене геометрии), `color`, `faceColors`, `properties` |
 | `Definition` (сборка) | `occurrences` — вхождения в СК этой сборки |
-| `Occurrence` | `id` (уникален в документе, не переиспользуется), `name`, `definition`, `placement` (относительно родителя), `fixed` (только верхний уровень), `color`, `pattern` (экземпляр массива) |
+| `Occurrence` | `id` (уникален в документе, не переиспользуется), `name`, `definition`, `placement` (относительно родителя), `fixed` (только верхний уровень), `color`, `pattern` (экземпляр массива), `suppressed`, `designation` (позиционное обозначение), `sourceId` (ID в файле внешней подсборки) |
 | `PartProperties` | `designation` (обозначение), `name` (наименование), `material`, `density` (кг/м³) |
 
 Определение 0 — корневая сборка (`root()`), её вхождения — верхний уровень (`topLevel()`).
@@ -78,6 +79,11 @@ auto report = doc.solve();   // report.value().totalDof == 1; положения
 | `addLinearPattern`, `addCircularPattern`, `addFeaturePattern`, `removePattern`, `updatePatterns` | Массивы (раздел 5) |
 | `placedParts(overrides)` | Все детали в мировой СК (`PlacedOccurrence`: путь, имя пути `A/B/C`, положение, форма) |
 | `toXcaf`, `fromXcaf`, `exportStep`, `importStep` | Обмен (раздел 9) |
+| `editMate(id, spec)` | Новое описание сопряжения с тем же ID; при ошибке документ не меняется |
+| `setOccurrenceSuppressed`, `setMateSuppressed` | Подавление (раздел 10.4) |
+| `setOccurrenceName`, `setOccurrenceDesignation`, `removeExplodedView` | Правка вхождения, вида |
+| `toJson`, `fromJson`, `saveFile`, `loadFile`, `addSubassemblyFromSource` | Собственный формат, внешние подсборки (раздел 10) |
+| `AssemblyHistory` (`history.hpp`) | Отмена/повтор (раздел 11) |
 | `addExplodedView`, `explodedPlacements` | Разнесённый вид (раздел 7) |
 
 Ссылки на `patterns()`, `mates()`, `definitions()` действительны до следующего изменения
@@ -206,11 +212,136 @@ P_i = P_ref · L_i · P_ref⁻¹ · P_seed
 верхним уровнем; иначе (несколько корней или деталь) каждый корень — вхождение верхнего уровня
 с единичным положением. `fromLocation` отклоняет масштаб и отражение (`Unsupported`).
 
-## 10. Ограничения
+**Обозначения и наименования.** `PartProperties::designation` пишется в PRODUCT `id`
+(пустое — `id` = имя, умолчание OCCT), `PartProperties::name` — в PRODUCT `description`,
+`Occurrence::designation` — в NAUO `reference_designator` (`docs/kernel/XCAF_IO.md`). При чтении
+`id`, совпадающий с именем (так пишут OCCT и многие CAD), обозначением не считается.
+Подавленные вхождения в STEP не попадают; деталь без геометрии — `InvalidInput`.
 
-- В STEP не пишутся сопряжения, фиксация, массивы, разнесённые виды и `PartProperties`
-  (XCAF-модуль не переносит свойства PRODUCT). Собственного формата документа сборки
-  (JSON с сопряжениями) пока нет.
+## 10. Собственный формат (JSON)
+
+`toJson(SaveOptions{embedGeometry, indent})` / `saveFile(path)`;
+`fromJson(text, LoadOptions{parts, assemblies})` / `loadFile(path, registry)` возвращают
+`LoadedAssembly{document, report}`. `fileLoadOptions(registry, dir)` — источники из файлов
+относительно каталога документа (детали — `filePartResolver`).
+
+```json
+{"format": "bendcore-assembly", "version": 2, "name": "Вал во втулке",
+ "properties": {"designation": "СБ-100", "name": "...", "material": "", "density": null}, "color": null,
+ "next": {"occurrence": 3, "mate": 3, "pattern": 1},
+ "definitions": [
+   {"id": 1, "kind": "part", "name": "Втулка", "properties": {...}, "color": [r, g, b, a],
+    "source": "parts/bushing.step", "revision": 0, "faceColors": [{"face": 2, "color": [...]}],
+    "fingerprint": {"faces": 4, "edges": 6, "vertices": 4, "area": ..., "volume": ..., "box": [6 чисел]},
+    "brep": "<base64 BinTools>", "elementMap": {"face": [...], "edge": [...], "vertex": [...], "deletions": {}}},
+   {"id": 2, "kind": "assembly", "name": "Узел", "source": "sub/unit.json"},
+   {"id": 3, "kind": "assembly", "name": "Рама", "occurrences": [...]}],
+ "occurrences": [{"id": 1, "name": "Втулка:1", "definition": 1, "fixed": true, "suppressed": false,
+   "designation": "", "color": null, "pattern": 1,
+   "placement": {"position": [x, y, z], "rotation": [w, x, y, z]}}],
+ "mates": [{"id": 1, "type": "Concentric", "name": "", "value": 0, "alignment": "Closest",
+   "internalTangency": false, "suppressed": false, "broken": "<причина, если сломано>",
+   "a": {"path": [2], "kind": "face", "name": "Shaft:Side", "use": "Auto"},
+   "b": {"path": [1], "kind": "face", "index": 1, "use": "Auto"},
+   "bound": [{"index": 0, "signature": {...}}, {"index": 1, "signature": {...}}],
+   "rigidRelative": {"position": [...], "rotation": [...]}}],
+ "patterns": [{"id": 1, "kind": "Feature", "seed": 2, "reference": 1, "instances": [3, 4, 5],
+   "spec": {...}, "holeBound": {...}}],
+ "explodedViews": [{"name": "...", "steps": [{"occurrences": [2], "direction": [0, 0, 1], "distance": 40}]}]}
+```
+
+### 10.1 Компоненты и геометрия
+
+Деталь задаётся источником (`source` — относительный путь к документу детали `.json`,
+STEP или BRep) и/или встроенным BRep (`brep`, base64 бинарного BinTools, с картой имён
+`elementMap` — записи `NamedShape::fromRecords`). При `embedGeometry = false` пишется только
+источник. Числа — `double` с 17 значащими цифрами, кватернион положения — как есть, поэтому
+«сохранение → загрузка» восстанавливает положения до ulp, а «→ решение» — с той же
+невязкой (тесты: 1e-9). ID определений при загрузке перенумеровываются, ID вхождений,
+сопряжений и массивов сохраняются; счётчики `next` не дают переиспользовать ID.
+
+### 10.2 Перемещённые и изменённые файлы
+
+Для каждой детали с источником пишется `fingerprint` (числа граней/рёбер/вершин, площадь,
+объём, габарит). При загрузке (`LoadReport::sources`, `SourceStatus`):
+
+| Ситуация | Статус | Что происходит |
+|---|---|---|
+| источник загружен, отпечаток совпал (допуск 1e-6 относительный) | `Loaded` | ревизия как в файле |
+| источник загружен, отпечаток отличается | `Changed` | ревизия +1 → ссылки сопряжений ищутся заново (раздел 4) |
+| источник не загрузился, есть `brep` | `MissingEmbedded` | взята встроенная геометрия, сопряжения сохраняются |
+| источник не загрузился, `brep` нет | `Missing` | деталь пуста (`Definition::loadError`), сопряжения с ней сломаны |
+| нет источника | `Embedded` | встроенная геометрия |
+
+Кроме отпечатка проверяется сигнатура каждого привязанного элемента (`bound`): если по
+сохранённому индексу лежит элемент с другой сигнатурой (`signatureDistance` > 1e-6),
+сторона ищется заново, даже когда отпечаток совпал. **По каждому затронутому сопряжению**
+`LoadReport::mates` содержит `MateLoadDiagnostic{mate, name, outcome (Kept/Remapped/Broken),
+definitions, message}`; сообщение называет детали и их файлы, для сломанных — причину
+(«no face of 'Втулка' matches the referenced Cylinder …», «part 'Вал' has no geometry: cannot
+load 'parts/shaft.json' …»). Сломанное сопряжение сохраняется со ссылками и причиной и при
+следующей загрузке (файл вернули) восстанавливается.
+
+Деталь без геометрии не попадает в `placedParts` (и в проверку пересечений); `flatBom`,
+`structuredBom`, `toXcaf` для неё отвечают `InvalidInput` с причиной.
+
+### 10.3 Внешние подсборки (вложенные документы)
+
+`addSubassemblyFromSource(name, source, options)` загружает документ сборки `source` и
+вставляет его состав как определение-сборку (`Definition::source` = путь). Сопряжения
+вложенного документа не решаются — подсборка жёсткое тело с положениями, сохранёнными в её
+файле. Пути деталей вложенного документа пересчитываются относительно верхнего
+(`sub/../parts/x.step` → `parts/x.step`); деталь с тем же путём, что уже есть в документе,
+становится тем же определением (BOM). Состав внешней подсборки только для чтения
+(`isReadOnlyAssembly`: вставка, удаление, перемещение, замена, подавление внутри — `InvalidInput`).
+При сохранении внешняя подсборка пишется ссылкой (`source`), её внутренние определения — нет.
+Ссылки сопряжений внутрь неё хранят путь из ID вхождений **в её файле** (`sourceId`), поэтому
+они переживают перезагрузку. Пропавшее в файле подсборки вхождение — сопряжение сломано с
+причиной «occurrence N no longer exists in '…'». Цикл файлов подсборок обнаруживается
+(`cycle of external subassemblies: a.json -> b.json -> a.json`); недоступный файл подсборки —
+`AssemblyMissing` (состав пуст), диагностика вложенных источников передаётся с префиксом
+«in '<файл>': ».
+
+### 10.4 Подавление
+
+Подавленное вхождение (`setOccurrenceSuppressed`) — не переменная решателя, его сопряжения
+пропускаются (`DocumentSolveReport::suppressedMates`), оно не попадает в развёртку, BOM,
+пересечения и STEP. Подавленное сопряжение (`setMateSuppressed`) только пропускается
+решателем. Оба флага сохраняются в файле.
+
+### 10.5 Версии и миграция
+
+`AssemblyDocument::kFormatVersion = 2`. Версия новее — `Unsupported`; старее — миграция при
+загрузке (`LoadReport::migrated`), сохранение всегда в текущей версии.
+
+- **v1** (исходная раскладка): положение — `{"matrix": [r00, r01, r02, tx, r10, …, tz]}`
+  (3×4, проверяется ортонормированность и det > 0, переводится в кватернион); сопряжения без
+  `bound` — элементы привязываются заново по ссылкам (`index`/`name`) на загруженной
+  геометрии; нет `suppressed`, `designation`, `next`.
+- Ошибки: не JSON, чужой `format`, нет обязательного поля, неверный вид элемента или тип
+  сопряжения, повтор ID, цикл подсборок, деталь без источника и без `brep` → `ParseError`.
+
+## 11. Отмена и повтор
+
+`AssemblyHistory(document, HistoryOptions{maxDepth, solveAfterEdit, solver})` владеет
+документом; изменения — транзакции: `insertComponent`, `removeComponent`, `replaceComponent`,
+`moveComponent`, `setFixed`, `setComponentSuppressed`, `addMate`, `editMate`, `removeMate`,
+`setMateSuppressed`, `addLinearPattern`, `addCircularPattern`, `addFeaturePattern`,
+`removePattern`, `solve`, а также `apply(label, edit, solve)` для произвольной правки.
+Перед транзакцией запоминается снимок документа (формы OCCT, карты имён и индексы
+топологии — общие дескрипторы, копируются только значения); ошибка внутри транзакции
+возвращает документ к снимку и шаг не записывается. При `solveAfterEdit` (по умолчанию)
+изменения состава и сопряжений решаются в той же транзакции, поэтому `undo()` восстанавливает
+положения до правки побитно, `redo()` — после неё. Новое изменение очищает стек повтора;
+`maxDepth` (200) — число хранимых шагов. `undoLabel`/`redoLabel` — названия шагов.
+
+## 12. Ограничения
+
+- В STEP не пишутся сопряжения, фиксация, массивы, разнесённые виды, материал и плотность
+  (они — в собственном формате, раздел 10).
+- Внешняя подсборка только для чтения; её правка — в её собственном документе. Встроенные
+  детали без источника, встречающиеся и в документе, и во внешней подсборке, остаются
+  разными определениями (объединяются только детали с одинаковым путём источника).
 - Подсборка решается как жёсткое тело; гибкие подсборки и сопряжения внутри определения
   подсборки не поддерживаются.
 - Экземпляры массивов не участвуют в сопряжениях. Массив по отверстиям берёт смещение
@@ -221,13 +352,14 @@ P_i = P_ref · L_i · P_ref⁻¹ · P_seed
   деталей в плотной сборке время растёт с числом пар-кандидатов.
 - Разнесённый вид смещает только вхождения верхнего уровня.
 
-## 11. Как тестировать
+## 13. Как тестировать
 
 ```bash
 cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install
 cmake --build build-occt --target test_assembly_document_mates test_assembly_document_patterns \
-  test_assembly_document_interference test_assembly_document_bom test_assembly_document_exchange
+  test_assembly_document_interference test_assembly_document_bom test_assembly_document_exchange \
+  test_assembly_document_io test_assembly_document_history
 ctest --test-dir build-occt -R assembly_document --output-on-failure
 ```
 
@@ -238,3 +370,5 @@ ctest --test-dir build-occt -R assembly_document --output-on-failure
 | `assembly_document_interference` | коробки [0,20]³ и [10,30]³ → 1000 мм³; касание по грани → Touching, объём 0; зазор 0,5 → нет пары; отбор по габаритам (2 кандидата из 6); повёрнутая плита и штифт → π·r²·h; вложенный куб → его объём; детали внутри подсборки | формулы объёма |
 | `assembly_document_bom` | плоский: количества 1/2/4/4 через подсборку, массы `V·ρ`, отсутствие массы без плотности; по уровням: позиции `2.1`, количества в сборке, масса колеса; разнесённый вид (частичный шаг, суммирование шагов, документ не меняется, формы сдвинуты) | формулы |
 | `assembly_document_exchange` | `toLocation`/`fromLocation`, масштаб → Unsupported; STEP AP214/AP242: имя корня, вхождения и имена, общее определение подсборки, цвета, положения (1e-9), объёмы и габариты всех деталей, габарит повёрнутого штифта; STEP одной детали | исходный документ, геометрия |
+| `assembly_document_io` | вал (документ детали `parts/shaft.json`) во втулке (`parts/bushing.step`): сохранение → загрузка → решение — положения 1e-9, 1 степень свободы, свойства и обозначения (кириллица), со встроенной геометрией и без; кривошип (палец, рычаг, угол 30°): 0 степеней свободы, начало рычага (20, 20, 10), cos угла; правка угла 60° и подавление (1 степень свободы); плита с болтами: массив по отверстиям, подавленный экземпляр, разнесённый вид, BOM 3 болта и объём `π·5²·30 + π·8²·6`; перемещённый файл — `MissingEmbedded`/`Missing`, диагностика по обоим сопряжениям с путём файла, возврат файла восстанавливает; изменённые файлы — длинный вал (`Changed`, торец `Remapped`), втулка → коробка (соосность `Broken` с причиной «Cylinder»), торец вала на z = 30; внешняя подсборка дважды, сопряжение на грань внутри неё, только чтение, общий BOM, перезагрузка, цикл файлов; миграция v1 (матрица, привязка без сигнатур); ошибки формата; STEP: обозначения/наименования/позиционные обозначения, подавленное вхождение не экспортируется | аналитика положений, формулы объёма |
+| `assembly_document_history` | отмена двух сопряжений возвращает вал в исходное положение побитно, повтор — посаженное; правка (расстояние 5) и отмена; подавление; удаление компонента с сопряжениями и отмена (те же ID); замена на длинный вал (середина z = 70) и отмена; подавление компонента; ошибки не записываются; линейный и круговой массивы, удаление массива и отмена; предел глубины; откат частичной правки в `apply` | побитное сравнение со снимком, геометрия по построению |
