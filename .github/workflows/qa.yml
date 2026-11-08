@@ -61,7 +61,7 @@ jobs:
       # Eigen — системный libeigen3-dev; без настоящего Eigen конфигурация падает
       # (см. docs/WASM_BUILD_GUIDE.md).
       - name: Зависимости (Ninja, GTest, Eigen, Python3)
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libgtest-dev libeigen3-dev python3
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libgtest-dev libeigen3-dev libexpat1-dev zlib1g-dev python3
 
       # Ключ зависит от версии OCCT, списка тулкитов и скрипта сборки: при изменении любого из
       # них OCCT пересобирается. Прежний ключ (occt-build-…-v3, 48 тулкитов) больше не совпадает.

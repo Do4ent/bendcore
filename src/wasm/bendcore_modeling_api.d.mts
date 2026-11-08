@@ -45,7 +45,7 @@ export interface SketchPointDef {
   fixed: boolean;
 }
 export interface SketchGeometryDef {
-  type: 'line' | 'circle' | 'arc';
+  type: 'line' | 'circle' | 'arc' | 'ellipse' | 'elliptical-arc' | 'bspline';
   start: number;
   end: number;
   center: number;
@@ -53,6 +53,15 @@ export interface SketchGeometryDef {
   counterClockwise: boolean;
   construction: boolean;
   projection: number;
+  /** ellipse, elliptical-arc: focus point (major axis direction); radius is the minor radius */
+  focus?: number;
+  /** bspline: pole point indices, degree, distinct knots, multiplicities, weights, periodic */
+  poles?: number[];
+  degree?: number;
+  knots?: number[];
+  multiplicities?: number[];
+  weights?: number[];
+  periodic?: boolean;
 }
 export interface SketchConstraintDef {
   type: string;
@@ -60,6 +69,8 @@ export interface SketchConstraintDef {
   b: number;
   c: number;
   value: string;
+  /** reference (driven) dimension: measured, does not drive the sketch */
+  driven?: boolean;
 }
 export interface SketchData {
   points: SketchPointDef[];
@@ -117,6 +128,15 @@ export interface SketchResultInfo {
   regions: number;
   standalonePoints: number;
   hasFaces: boolean;
+  /** 'fully-defined' | 'under-defined' | 'over-defined' */
+  definition: string;
+  /** redundant constraint numbers (1-based) */
+  redundant: number[];
+  /** per point index / per entity (id - 1): fully determined by the constraints */
+  pointDefined: boolean[];
+  entityDefined: boolean[];
+  /** per constraint: dimension value (driven ones: measured) */
+  constraintValues: number[];
 }
 
 export interface FeatureView {
