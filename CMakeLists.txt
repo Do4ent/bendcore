@@ -995,6 +995,7 @@ if(BENDCORE_WITH_OCCT)
   include(cmake/drawing.cmake OPTIONAL)
   include(cmake/drawing_views.cmake OPTIONAL)
   include(cmake/drawing_annotations.cmake OPTIONAL)
+  include(cmake/drawing_document.cmake OPTIONAL)
   include(cmake/qa.cmake OPTIONAL)
   include(cmake/wasm_kernel.cmake OPTIONAL)
   # Читатель DXF против писателя bendcore_drawing_v2 и (при BENDCORE_PYTHON_EZDXF) ezdxf.
