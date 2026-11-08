@@ -839,20 +839,30 @@ add_executable(test_geometry_analyzer tests/test_geometry_analyzer.cpp)
 target_link_libraries(test_geometry_analyzer PRIVATE bendcore_core)
 bendcore_add_test(geometry_analyzer test_geometry_analyzer)
 
+# Чтение DXF ASCII (docs/drawing/DXF_IMPORT.md): без OCCT, во всех конфигурациях.
+add_library(bendcore_dxf STATIC src/dxf_reader.cpp)
+target_include_directories(bendcore_dxf PUBLIC include)
+target_compile_features(bendcore_dxf PUBLIC cxx_std_20)
+find_package(GTest QUIET)
+if(GTest_FOUND)
+  add_executable(test_dxf_reader tests/test_dxf_reader.cpp)
+  target_link_libraries(test_dxf_reader PRIVATE bendcore_dxf GTest::gtest GTest::gtest_main)
+  bendcore_add_test(dxf_reader test_dxf_reader)
+endif()
+
 # Import pipeline (Q3 2027, Task 1): STEP/IGES through the OCCT XCAF readers,
 # DXF, geometry cache, parametric dimensions, import workflow.
 if(OpenCASCADE_FOUND)
   add_library(bendcore_import STATIC
     src/occt_init.cpp
     src/step_reader.cpp
-    src/dxf_reader.cpp
     src/import_cache.cpp
     src/parametric_builder.cpp
     src/import_workflow.cpp)
   target_include_directories(bendcore_import PUBLIC include)
   target_include_directories(bendcore_import SYSTEM PUBLIC ${OpenCASCADE_INCLUDE_DIRS})
   target_compile_definitions(bendcore_import PRIVATE BENDCORE_WITH_OCCT=1)
-  target_link_libraries(bendcore_import PUBLIC bendcore_core bendcore_formula
+  target_link_libraries(bendcore_import PUBLIC bendcore_core bendcore_formula bendcore_dxf
     -Wl,--start-group ${OpenCASCADE_LIBRARIES} -Wl,--end-group pthread dl m)
 
   # With BENDCORE_WITH_OCCT the import workflow uses the real B-Rep
@@ -862,7 +872,7 @@ if(OpenCASCADE_FOUND)
     target_compile_definitions(bendcore_import PRIVATE BENDCORE_HAS_OCCT_GEOMETRY_BACKEND=1)
   endif()
 
-  foreach(t occt_init step_reader parametric_builder geometry_cache dxf_reader import_workflow)
+  foreach(t occt_init step_reader parametric_builder geometry_cache import_workflow)
     add_executable(test_${t} tests/test_${t}.cpp)
     target_link_libraries(test_${t} PRIVATE bendcore_import)
     bendcore_add_test(${t} test_${t})
@@ -983,6 +993,20 @@ if(BENDCORE_WITH_OCCT)
   include(cmake/drawing.cmake OPTIONAL)
   include(cmake/qa.cmake OPTIONAL)
   include(cmake/wasm_kernel.cmake OPTIONAL)
+  # Читатель DXF против писателя bendcore_drawing_v2 и (при BENDCORE_PYTHON_EZDXF) ezdxf.
+  if(TARGET bendcore_drawing_v2 AND GTest_FOUND)
+    add_executable(test_dxf_reader_roundtrip
+      tests/dxf/test_dxf_reader_roundtrip.cpp
+      tests/drawing_v2/test_support.cpp)
+    target_link_libraries(test_dxf_reader_roundtrip PRIVATE bendcore_dxf bendcore_drawing_v2
+      GTest::gtest GTest::gtest_main)
+    set(_dxf_rt_out "${CMAKE_CURRENT_BINARY_DIR}/dxf_reader_out")
+    file(MAKE_DIRECTORY "${_dxf_rt_out}")
+    target_compile_definitions(test_dxf_reader_roundtrip PRIVATE
+      BENDCORE_DRAWING_V2_OUT="${_dxf_rt_out}"
+      BENDCORE_EZDXF_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/dxf/ezdxf_fixture.py")
+    bendcore_add_test(dxf_reader_roundtrip test_dxf_reader_roundtrip)
+  endif()
 endif()
 
 # Phase C: Parameter Store, Dependency Graph, Rebuild Engine
@@ -1047,9 +1071,6 @@ add_executable(test_geometry_analyzer_comprehensive tests/test_geometry_analyzer
 target_link_libraries(test_geometry_analyzer_comprehensive PRIVATE bendcore_core)
 bendcore_add_test(geometry_analyzer_comprehensive test_geometry_analyzer_comprehensive)
 
-add_executable(test_dxf_reader_comprehensive tests/test_dxf_reader_comprehensive.cpp)
-target_link_libraries(test_dxf_reader_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(dxf_reader_comprehensive test_dxf_reader_comprehensive)
 
 # ============================================================================
 # Phase F: Production Launch (CAD-CORE-021 to 024)
