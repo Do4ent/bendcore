@@ -1,109 +1,147 @@
-// DXF File Reader (Q3 2027, Task 1, Subtask 6)
-// Reads DXF files and extracts 2D geometry elements
 #pragma once
 
-#include <string>
-#include <vector>
+// Чтение DXF (ASCII): заголовок ($ACADVER, $INSUNITS, $DWGCODEPAGE), таблица слоёв и
+// примитивы LINE, ARC, CIRCLE, LWPOLYLINE (с выпуклостью), POLYLINE/VERTEX (2D), TEXT,
+// MTEXT раздела ENTITIES. Координаты возвращаются в единицах файла; перевод в мм —
+// scaleToMillimeters. Описание, ограничения и правила: docs/drawing/DXF_IMPORT.md.
+
+#include <bendcore/kernel/result.hpp>
+
+#include <cstddef>
 #include <map>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace bendcore::dxf {
 
-// 2D point structure
+using kernel::Error;
+using kernel::ErrorCode;
+using kernel::Result;
+
 struct Point2D {
     double x = 0.0;
     double y = 0.0;
 };
 
-// DXF geometry elements
+// Общие свойства примитива. color — ACI: 256 = BYLAYER, 0 = BYBLOCK.
+struct EntityProps {
+    std::string layer = "0";
+    int color = 256;
+    std::string linetype = "BYLAYER";
+    bool paper_space = false;  // группа 67 = 1
+    std::string handle;        // группа 5
+};
+
 struct Line {
+    EntityProps props;
     Point2D start;
     Point2D end;
-    int color = 256;
 };
 
 struct Circle {
+    EntityProps props;
     Point2D center;
     double radius = 0.0;
-    int color = 256;
+};
+
+// Дуга против часовой стрелки (в мировой СК, вид сверху) от start_deg до end_deg.
+struct Arc {
+    EntityProps props;
+    Point2D center;
+    double radius = 0.0;
+    double start_deg = 0.0;
+    double end_deg = 0.0;
+};
+
+// Вершина полилинии. bulge — выпуклость сегмента от этой вершины к следующей:
+// tg(θ/4), θ — центральный угол дуги, знак «+» — против часовой стрелки; 0 — отрезок.
+struct PolylineVertex {
+    Point2D point;
+    double bulge = 0.0;
 };
 
 struct Polyline {
-    std::vector<Point2D> vertices;
+    EntityProps props;
+    std::vector<PolylineVertex> vertices;
     bool closed = false;
-    int color = 256;
+    bool lightweight = true;  // LWPOLYLINE (true) или POLYLINE/VERTEX (false)
 };
 
-struct Spline {
-    std::vector<Point2D> control_points;
-    int degree = 3;
-    int color = 256;
+struct Text {
+    EntityProps props;
+    bool multiline = false;  // MTEXT
+    // Текст в UTF-8: \U+XXXX и коды %%c/%%d/%%p раскрыты; в MTEXT абзацы \P → '\n',
+    // коды форматирования удалены.
+    std::string value;
+    Point2D insertion;            // группа 10
+    std::optional<Point2D> alignment;  // TEXT: группа 11 (только при выравнивании ≠ влево/по базе)
+    double height = 0.0;          // группа 40
+    double rotation_deg = 0.0;    // TEXT: 50; MTEXT: 50 или направление 11/21
+    double width_factor = 1.0;    // TEXT: 41
+    double oblique_deg = 0.0;     // TEXT: 51
+    int h_justify = 0;            // TEXT: 72
+    int v_justify = 0;            // TEXT: 73
+    int attachment = 1;           // MTEXT: 71 (1 — верх-лево … 9 — низ-право)
+    std::string style = "STANDARD";
 };
 
-// Dimension structure (BC-012: Drawing dimensions)
-struct Dimension {
-    Point2D start_point;          // First definition point
-    Point2D end_point;            // Second definition point
-    Point2D text_position;        // Text label position
-    std::string text_value;       // Dimension text (e.g., "125.5")
-    std::string dimension_type;   // "LINEAR", "RADIUS", "DIAMETER", "ANGULAR"
-    double measured_value = 0.0;  // Parsed numeric value in mm
-    int color = 256;
+struct Layer {
+    std::string name;
+    int color = 7;  // ACI; отрицательный — слой выключен
+    std::string linetype = "CONTINUOUS";
+    bool frozen = false;  // флаг 70 & 1
+    bool locked = false;  // флаг 70 & 4
 };
 
-// DXF geometry collection
-struct DXFGeometry {
+struct Document {
+    std::string version;   // $ACADVER, например "AC1015"
+    std::string codepage;  // $DWGCODEPAGE
+    int insunits = 0;      // $INSUNITS (0 — без единиц, если переменной нет)
+    std::vector<Layer> layers;
     std::vector<Line> lines;
     std::vector<Circle> circles;
+    std::vector<Arc> arcs;
     std::vector<Polyline> polylines;
-    std::vector<Spline> splines;
-    std::vector<Dimension> dimensions;  // Dimensions extracted from drawing
-    std::map<std::string, std::string> layers;
-    std::map<std::string, std::string> properties;
-    int entity_count = 0;
+    std::vector<Text> texts;
+    // Примитивы раздела ENTITIES, которые не читаются: тип → число (например
+    // "SPLINE", "INSERT", "ARC (OCS)" — дуга в наклонной плоскости).
+    std::map<std::string, int> skipped;
+    // Отклонения, при которых данные прочитаны с потерей (например, Z ≠ 0 отброшена).
+    std::vector<std::string> warnings;
+
+    std::size_t entity_count() const {
+        return lines.size() + circles.size() + arcs.size() + polylines.size() + texts.size();
+    }
+    const Layer* find_layer(const std::string& name) const;
 };
 
-// DXF File Reader
-class DXFReader {
-public:
-    DXFReader();
-    ~DXFReader();
+// Разбор текста DXF. Ошибки: ParseError (нечётное число строк, нечисловое значение
+// числовой группы, незакрытая секция, нет SECTION), Unsupported (двоичный DXF).
+Result<Document> parseDxf(std::string_view text);
 
-    // Read DXF file and extract geometry
-    DXFGeometry read(const std::string& file_path);
+// Чтение файла: IoError, если файл не открывается; затем parseDxf.
+Result<Document> readDxfFile(const std::string& path);
 
-    // Get entity count
-    int get_entity_count() const;
+// Расширение .dxf (без учёта регистра).
+bool isDxfPath(const std::string& path);
 
-    // Check if file is a valid DXF file
-    static bool is_dxf_file(const std::string& file_path);
+// Миллиметров в одной единице $INSUNITS; пусто для 0 (без единиц) и неизвестных кодов.
+std::optional<double> millimetersPerUnit(int insunits);
 
-private:
-    DXFGeometry geometry_;
-    int entity_count_ = 0;
+// Копия документа в мм: координаты, радиусы, высоты текста умножены на коэффициент
+// millimetersPerUnit; insunits = 4. Ошибка InvalidInput, если единицы не заданы.
+Result<Document> scaleToMillimeters(const Document& doc);
 
-    // Extract lines from DXF
-    void extract_lines(const std::string& file_content);
-
-    // Extract circles from DXF
-    void extract_circles(const std::string& file_content);
-
-    // Extract polylines from DXF
-    void extract_polylines(const std::string& file_content);
-
-    // Extract splines from DXF
-    void extract_splines(const std::string& file_content);
-
-    // Extract dimensions from DXF (BC-012: Drawing dimensions)
-    void extract_dimensions(const std::string& file_content);
-
-    // Extract layer information
-    void extract_layers(const std::string& file_content);
-
-    // Parse DXF coordinate
-    static double parse_coordinate(const std::string& value);
-
-    // Parse dimension text value to numeric value
-    static double parse_dimension_value(const std::string& text_value);
+// Дуга сегмента полилинии p1 → p2 с выпуклостью bulge ≠ 0.
+struct BulgeArc {
+    Point2D center;
+    double radius = 0.0;
+    double start_deg = 0.0;  // угол точки p1 от центра, [0, 360)
+    double sweep_deg = 0.0;  // > 0 — против часовой стрелки, < 0 — по часовой
 };
+// Ошибка InvalidInput: bulge = 0 или p1 совпадает с p2.
+Result<BulgeArc> bulgeToArc(Point2D p1, Point2D p2, double bulge);
 
 }  // namespace bendcore::dxf

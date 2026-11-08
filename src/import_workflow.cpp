@@ -229,10 +229,18 @@ ImportResult ImportWorkflow::import_dxf_file(const ImportConfig& config) {
 
     log_step("Reading DXF file");
 
-    // Read DXF file
-    auto dxf_geom = dxf_reader_.read(config.file_path);
-
-    if (dxf_geom.entity_count == 0) {
+    auto doc = bendcore::dxf::readDxfFile(config.file_path);
+    if (!doc) {
+        result.warnings.push_back(doc.error().message);
+        log_step("DXF read", false);
+        return result;
+    }
+    const auto& dxf_doc = doc.value();
+    result.warnings.insert(result.warnings.end(), dxf_doc.warnings.begin(), dxf_doc.warnings.end());
+    for (const auto& [type, count] : dxf_doc.skipped) {
+        result.warnings.push_back("DXF: " + std::to_string(count) + " " + type + " entities are not imported");
+    }
+    if (dxf_doc.entity_count() == 0) {
         result.warnings.push_back("No entities found in DXF file");
         log_step("DXF read", false);
         return result;
@@ -240,11 +248,10 @@ ImportResult ImportWorkflow::import_dxf_file(const ImportConfig& config) {
 
     log_step("DXF file read successfully");
 
-    // For DXF, we create simplified dimensions
-    // In production, would extract dimensions from DXF geometry
-
+    // Параметрические размеры строятся только по B-rep (STEP/IGES); из DXF берётся
+    // число прочитанных примитивов.
     result.success = true;
-    result.shape_count = dxf_geom.entity_count;
+    result.shape_count = static_cast<int>(dxf_doc.entity_count());
 
     log_step("Import complete");
 
