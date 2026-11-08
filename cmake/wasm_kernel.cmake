@@ -51,3 +51,6 @@ if(BENDCORE_NODE)
 else()
   message(STATUS "node not found - wasm_kernel_corpus test skipped")
 endif()
+
+# Part document module (bendcore_modeling_wasm, docs/ui/PART_MODELING_UI.md).
+include(${CMAKE_CURRENT_LIST_DIR}/wasm_modeling.cmake OPTIONAL)
