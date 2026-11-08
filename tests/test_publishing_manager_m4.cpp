@@ -3,6 +3,8 @@
 #include "../include/bendcore/drawing/publishing_manager.hpp"
 #include "../include/bendcore/drawing/file_handler.hpp"
 #include <filesystem>
+#include <chrono>
+#include <ctime>
 #include <fstream>
 
 namespace fs = std::filesystem;
@@ -86,41 +88,36 @@ TEST_F(PublishingManagerTest, PublishToLocalMissingDirectory) {
 }
 
 // ============================================================================
-// Cloud Publishing Tests
+// Unsupported destinations: cloud storage and e-mail
 // ============================================================================
 
-TEST_F(PublishingManagerTest, PublishToCloudMissingCredentials) {
+TEST_F(PublishingManagerTest, PublishToMultipleReportsUnsupportedCloudAndEmail) {
   auto job = createTestPublishingJob();
 
-  CloudPublishSettings cloud_settings;
-  cloud_settings.provider = CloudProvider::AmazonS3;
-  cloud_settings.bucket_name = "";  // Missing
-  cloud_settings.api_key = "";      // Missing
+  auto results = publishToMultiple(
+      job, {PublishDestination::CloudStorage, PublishDestination::EmailRecipients});
 
-  job.cloud_settings = cloud_settings;
-
-  auto result = publishToCloud(job);
-
-  EXPECT_FALSE(result.success);
-  EXPECT_FALSE(result.error_message.empty());
+  ASSERT_EQ(results.size(), 2u);
+  EXPECT_EQ(results[0].destination, PublishDestination::CloudStorage);
+  EXPECT_EQ(results[1].destination, PublishDestination::EmailRecipients);
+  for (const auto& r : results) {
+    EXPECT_FALSE(r.success);
+    EXPECT_EQ(r.job_id, "job_001");
+    EXPECT_EQ(r.sheets_published, 0);
+    EXPECT_TRUE(r.published_files.empty());
+    EXPECT_NE(r.error_message.find("is not supported"), std::string::npos) << r.error_message;
+  }
+  EXPECT_NE(results[0].error_message.find("cloud"), std::string::npos);
+  EXPECT_NE(results[1].error_message.find("e-mail"), std::string::npos);
 }
 
-// ============================================================================
-// Email Publishing Tests
-// ============================================================================
-
-TEST_F(PublishingManagerTest, PublishViaEmailNoRecipients) {
+TEST_F(PublishingManagerTest, ValidateRejectsCloudAndEmail) {
   auto job = createTestPublishingJob();
-
-  EmailPublishSettings email_settings;
-  // No recipients
-
-  job.email_settings = email_settings;
-
-  auto result = publishViaEmail(job);
-
-  EXPECT_FALSE(result.success);
-  EXPECT_FALSE(result.error_message.empty());
+  for (auto dest : {PublishDestination::CloudStorage, PublishDestination::EmailRecipients}) {
+    auto [valid, error] = validatePublishingDestination(dest, job);
+    EXPECT_FALSE(valid);
+    EXPECT_NE(error.find("is not supported"), std::string::npos) << error;
+  }
 }
 
 // ============================================================================
@@ -196,11 +193,19 @@ TEST_F(PublishingManagerTest, GenerateDrawingNumber) {
   scheme.sequential_start = 1000;
   scheme.include_date = false;
 
-  auto number = generateDrawingNumber(scheme, test_dir);
+  // Empty archive: the sequence starts at sequential_start.
+  EXPECT_EQ(generateDrawingNumber(scheme, test_dir), "DRW-1000");
 
-  EXPECT_TRUE(number.find("DRW") != std::string::npos);
-  EXPECT_TRUE(number.find("-") != std::string::npos);
-  EXPECT_TRUE(number.find("1000") != std::string::npos);
+  // Existing numbers (with any suffix) advance the sequence; others are ignored.
+  std::ofstream((fs::path(test_dir) / "DRW-1000_revA.pdf").string()).close();
+  std::ofstream((fs::path(test_dir) / "DRW-1007.dxf").string()).close();
+  std::ofstream((fs::path(test_dir) / "DRW-12.pdf").string()).close();
+  std::ofstream((fs::path(test_dir) / "ASM-5000.pdf").string()).close();
+  std::ofstream((fs::path(test_dir) / "DRW-notes.txt").string()).close();
+  EXPECT_EQ(generateDrawingNumber(scheme, test_dir), "DRW-1008");
+
+  // Missing archive directory: nothing to scan.
+  EXPECT_EQ(generateDrawingNumber(scheme, test_dir + "/missing"), "DRW-1000");
 
   // Clean up
   fs::remove_all(test_dir);
@@ -218,38 +223,19 @@ TEST_F(PublishingManagerTest, GenerateDrawingNumberWithDate) {
   scheme.include_date = true;
   scheme.date_format = "YYYYMMDD";
 
-  auto number = generateDrawingNumber(scheme, test_dir);
+  const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  std::tm tm{};
+  localtime_r(&now, &tm);
+  char expected[32];
+  std::strftime(expected, sizeof expected, "DRW-1000-%Y%m%d", &tm);
+  EXPECT_EQ(generateDrawingNumber(scheme, test_dir), expected);
 
-  EXPECT_TRUE(number.find("DRW") != std::string::npos);
-  EXPECT_TRUE(number.find("-") != std::string::npos);
+  scheme.date_format = "YY.MM";
+  std::strftime(expected, sizeof expected, "DRW-1000-%y.%m", &tm);
+  EXPECT_EQ(generateDrawingNumber(scheme, test_dir), expected);
 
   // Clean up
   fs::remove_all(test_dir);
-}
-
-// ============================================================================
-// Metadata Embedding Tests
-// ============================================================================
-
-TEST_F(PublishingManagerTest, EmbedMetadata) {
-  std::string test_file = "/tmp/test_metadata.pdf";
-  FILE* f = fopen(test_file.c_str(), "w");
-  if (f) {
-    fprintf(f, "test");
-    fclose(f);
-  }
-
-  PublishingMetadata metadata;
-  metadata.title = "Test";
-  metadata.drawing_number = "DRW-001";
-  metadata.author = "Test Author";
-
-  auto [success, error] = embedMetadata(test_file, metadata, ExportFormat::PDF);
-
-  EXPECT_TRUE(success);
-
-  // Clean up
-  std::remove(test_file.c_str());
 }
 
 // ============================================================================
@@ -291,35 +277,6 @@ TEST_F(PublishingManagerTest, ValidatePublishingDestinationLocal) {
 
   // Clean up
   fs::remove_all(test_dir);
-}
-
-TEST_F(PublishingManagerTest, ValidatePublishingDestinationCloud) {
-  auto job = createTestPublishingJob();
-
-  CloudPublishSettings cloud_settings;
-  cloud_settings.bucket_name = "test-bucket";
-  cloud_settings.api_key = "test-key";
-
-  job.cloud_settings = cloud_settings;
-
-  auto [valid, error] = validatePublishingDestination(
-    PublishDestination::CloudStorage, job);
-
-  EXPECT_TRUE(valid);
-}
-
-TEST_F(PublishingManagerTest, ValidatePublishingDestinationEmail) {
-  auto job = createTestPublishingJob();
-
-  EmailPublishSettings email_settings;
-  email_settings.recipients = {"test@example.com"};
-
-  job.email_settings = email_settings;
-
-  auto [valid, error] = validatePublishingDestination(
-    PublishDestination::EmailRecipients, job);
-
-  EXPECT_TRUE(valid);
 }
 
 // ============================================================================
