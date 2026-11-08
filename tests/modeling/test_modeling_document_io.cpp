@@ -13,21 +13,17 @@ namespace {
 
 // Box + pocket on top + hole in the front face + fillet on the top-front edge.
 PartDocument makeModel() {
-    PartDocument doc(basic::basicRegistry());
+    PartDocument doc(partRegistry());
     setVar(doc, "L", 60);
     setVar(doc, "W", 40);
     setVar(doc, "H", 25);
     add(doc, {"Box", "Body", "Base block", {{"length", "L"}, {"width", "W"}, {"height", "H"}}, {}, {}, false});
     doc.rebuild();
     NamedShape s = doc.finalShape();
-    FeatureSpec pocket{"PrismCut", "Pocket", "", {}, {}, {}, false};
-    pocket.references["face"] = {refTo(s, planarFace(s.shape(), gp::DZ(), 25))};
-    pocket.parameters = {{"centerX", "L/2"}, {"centerY", "W/2 + 5"}, {"sizeU", "20"}, {"sizeV", "10"}, {"depth", "8"}};
-    add(doc, pocket);
-    FeatureSpec hole{"PrismCut", "Hole", "", {}, {}, {{"profile", "circle"}}, false};
-    hole.references["face"] = {refTo(s, planarFace(s.shape(), gp::DY().Reversed(), 0))};
-    hole.parameters = {{"centerX", "L/2"}, {"centerZ", "H/2 - 3"}, {"radius", "4"}, {"depth", "12"}};
-    add(doc, hole);
+    addSketchCut(doc, "Pocket", refTo(s, planarFace(s.shape(), gp::DZ(), 25)), "L/2", "W/2 + 5", "H",
+                 centredRectangle("20", "10"), "8");
+    addSketchCut(doc, "Hole", refTo(s, planarFace(s.shape(), gp::DY().Reversed(), 0)), "L/2", "0", "H/2 - 3",
+                 centredCircle("4"), "12");
     doc.rebuild();
     s = doc.finalShape();
     add(doc, {"Fillet", "Round", "", {{"radius", "2"}}, {{"edges", {refTo(s, singleLine(s.shape(), 0, 0, 25))}}}, {}, false});
@@ -83,12 +79,12 @@ TEST(ModelingDocumentIo, RoundTripRecomputesIdenticalResults) {
     EXPECT_EQ(j.at("format"), "bendcore-part");
     EXPECT_EQ(j.at("version"), PartDocument::kFormatVersion);
     EXPECT_FALSE(j.contains("cache"));
-    EXPECT_EQ(j.at("features").at(3).at("references").at("edges").at(0).at("name"), "E(Body:Front|Body:Top)");
+    EXPECT_EQ(j.at("features").at(5).at("references").at("edges").at(0).at("name"), "E(Body:Front|Body:Top)");
 
     RebuildReport rep;
-    auto loaded = PartDocument::fromJson(text.value(), basic::basicRegistry(), &rep);
+    auto loaded = PartDocument::fromJson(text.value(), partRegistry(), &rep);
     ASSERT_TRUE(loaded.ok()) << loaded.error().message;
-    EXPECT_EQ(rep.recomputed.size(), 4u) << "results are recomputed at load";
+    EXPECT_EQ(rep.recomputed.size(), 6u) << "results are recomputed at load";
     expectSameDocument(doc, loaded.value());
     EXPECT_EQ(info(loaded.value(), "Body").label, "Base block");
 
@@ -109,29 +105,29 @@ TEST(ModelingDocumentIo, BrepCacheIsUsedWhenInputsMatch) {
     EXPECT_EQ(j.at("cache").size(), 4u);
 
     RebuildReport rep;
-    auto loaded = PartDocument::fromJson(text.value(), basic::basicRegistry(), &rep);
+    auto loaded = PartDocument::fromJson(text.value(), partRegistry(), &rep);
     ASSERT_TRUE(loaded.ok()) << loaded.error().message;
     EXPECT_EQ(rep.fromCache.size(), 4u);
-    EXPECT_TRUE(rep.recomputed.empty());
+    EXPECT_EQ(rep.recomputed, (std::vector<std::string>{"PocketSketch", "HoleSketch"})) << "sketches are not cached";
     expectSameDocument(doc, loaded.value());
 
     // A changed variable invalidates every cached result downstream of it.
     j["variables"][2]["expression"] = "27";  // H
     RebuildReport rep2;
-    auto changed = PartDocument::fromJson(j.dump(), basic::basicRegistry(), &rep2);
+    auto changed = PartDocument::fromJson(j.dump(), partRegistry(), &rep2);
     ASSERT_TRUE(changed.ok()) << changed.error().message;
     EXPECT_TRUE(rep2.fromCache.empty());
-    EXPECT_EQ(rep2.recomputed.size(), 4u);
+    EXPECT_EQ(rep2.recomputed.size(), 6u);
     EXPECT_NEAR(volume(changed.value().finalShape().shape()), expectedVolume(60, 40, 27), 1e-6);
 
     // A damaged cache entry is ignored, the feature is recomputed.
     j = nlohmann::json::parse(text.value());
     j["cache"]["Round"]["brep"] = "AAAA";
     RebuildReport rep3;
-    auto damaged = PartDocument::fromJson(j.dump(), basic::basicRegistry(), &rep3);
+    auto damaged = PartDocument::fromJson(j.dump(), partRegistry(), &rep3);
     ASSERT_TRUE(damaged.ok()) << damaged.error().message;
     EXPECT_EQ(rep3.fromCache.size(), 3u);
-    EXPECT_EQ(rep3.recomputed, std::vector<std::string>{"Round"});
+    EXPECT_EQ(rep3.recomputed, (std::vector<std::string>{"PocketSketch", "HoleSketch", "Round"}));
     EXPECT_NEAR(volume(damaged.value().finalShape().shape()), expectedVolume(60, 40, 25), 1e-6);
 }
 
@@ -146,16 +142,16 @@ TEST(ModelingDocumentIo, MigratesFormatVersion1) {
          "suppressed": true}
       ]})json";
     RebuildReport rep;
-    auto doc = PartDocument::fromJson(v1, basic::basicRegistry(), &rep);
+    auto doc = PartDocument::fromJson(v1, partRegistry(), &rep);
     ASSERT_TRUE(doc.ok()) << doc.error().message;
     EXPECT_EQ(doc.value().variables(), (std::vector<std::pair<std::string, std::string>>{{"H", "20"}}));
     EXPECT_EQ(info(doc.value(), "F").state, FeatureState::Ok) << messages(info(doc.value(), "F"));
     EXPECT_EQ(info(doc.value(), "C").state, FeatureState::Suppressed);
     EXPECT_NEAR(volume(doc.value().finalShape().shape()), 40 * 30 * 20 - filletLoss(3, 40), 1e-6);
-    // After the first resolution the reference carries a signature, saved as version 2.
+    // After the first resolution the reference carries a signature, saved as the current version.
     EXPECT_TRUE(info(doc.value(), "F").references.at("edges").at(0).signature.valid);
     auto saved = nlohmann::json::parse(doc.value().toJson().value());
-    EXPECT_EQ(saved.at("version"), 2);
+    EXPECT_EQ(saved.at("version"), PartDocument::kFormatVersion);
     EXPECT_EQ(saved.at("features").at(1).at("parameters").at("radius"), "3");
 
     ASSERT_TRUE(doc.value().setSuppressed("C", false).ok());
@@ -165,7 +161,7 @@ TEST(ModelingDocumentIo, MigratesFormatVersion1) {
 }
 
 TEST(ModelingDocumentIo, RejectsBadInput) {
-    auto reg = basic::basicRegistry();
+    auto reg = partRegistry();
     EXPECT_EQ(PartDocument::fromJson("{not json", reg).error().code, ErrorCode::ParseError);
     EXPECT_EQ(PartDocument::fromJson(R"json({"format": "other", "version": 2})json", reg).error().code, ErrorCode::ParseError);
     auto newer = PartDocument::fromJson(R"json({"format": "bendcore-part", "version": 99, "variables": [], "features": []})json", reg);

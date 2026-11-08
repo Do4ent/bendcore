@@ -3,8 +3,8 @@
 // Geometry probes for the part document tests: they locate elements by independent geometric
 // criteria (position, direction, radius), never through the element map under test.
 
-#include <bendcore/modeling/basic_features.hpp>
 #include <bendcore/modeling/part_document.hpp>
+#include <bendcore/modeling/part_features.hpp>
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
@@ -165,6 +165,57 @@ inline void setVar(PartDocument& doc, const std::string& name, double value) {
     std::snprintf(buf, sizeof(buf), "%.17g", value);
     auto st = doc.setVariable(name, buf);
     ASSERT_TRUE(st.ok()) << st.error().message;
+}
+
+inline std::string num(double v) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.17g", v);
+    return buf;
+}
+
+// A cut made of a sketch on a planar face and a cut extrusion into the material.
+struct SketchCut {
+    std::string sketch;
+    std::string cut;
+};
+
+// Sketch "<id>Sketch" on `face` with its origin at the projection of (ox, oy, oz) and the
+// given sketch data, followed by the cut extrusion `id` (blind `depth`, or through all when
+// depth is empty). Inserted at `pos` (sketch) and pos + 1 (cut) when given.
+inline SketchCut addSketchCut(PartDocument& doc, const std::string& id, const TopoReference& face, std::string ox,
+                              std::string oy, std::string oz, SketchData sketch, std::string depth,
+                              std::optional<std::size_t> pos = std::nullopt) {
+    FeatureSpec sk;
+    sk.type = "Sketch";
+    sk.id = id + "Sketch";
+    sk.options = {{"plane", "face"}};
+    sk.parameters = {{"originX", ox}, {"originY", oy}, {"originZ", oz}};
+    sk.references["face"] = {face};
+    sk.sketch = std::move(sketch);
+    SketchCut out;
+    out.sketch = add(doc, sk, pos);
+    FeatureSpec cut;
+    cut.type = "Extrude";
+    cut.id = id;
+    cut.options = {{"mode", "cut"}, {"reversed", "true"}, {"extent", depth.empty() ? "throughAll" : "blind"}};
+    if (!depth.empty()) cut.parameters = {{"distance", depth}};
+    cut.links = {{"sketch", out.sketch}};
+    out.cut = add(doc, cut, pos ? std::optional<std::size_t>(*pos + 1) : std::nullopt);
+    return out;
+}
+
+// Rectangle a x b centred at the sketch origin (corners are fixed points: dimensions).
+inline SketchData centredRectangle(const std::string& a, const std::string& b) {
+    SketchBuilder sb;
+    const std::string u = "(" + a + ") / 2", v = "(" + b + ") / 2";
+    sb.fixedPolygon({{"-" + u, "-" + v}, {u, "-" + v}, {u, v}, {"-" + u, v}});
+    return sb.build();
+}
+
+inline SketchData centredCircle(const std::string& r) {
+    SketchBuilder sb;
+    sb.fixedCircle("0", "0", r);
+    return sb.build();
 }
 
 }  // namespace bendcore::modeling::testutil
