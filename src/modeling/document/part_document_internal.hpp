@@ -60,7 +60,7 @@ struct PartDocument::Node : NodeDefinition {
     // Recent results of this node by input hash (most recent last): undo/redo and edits that
     // return to an earlier value reuse them instead of recomputing.
     std::deque<CachedResult> pool;
-    static constexpr std::size_t kPoolSize = 6;
+    static constexpr std::size_t kPoolSize = 16;
 
     CachedResult snapshot() const;
     void apply(const CachedResult& r);
