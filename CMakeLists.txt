@@ -387,6 +387,13 @@ set(BENDCORE_SOURCES
 
   # P1-02: Security & Reliability
   src/security.cpp
+
+  # M13 Phase: Advanced Rendering (GAP-054 to GAP-058) - 172 tests
+  src/rendering/viewport_renderer.cpp
+  src/rendering/material_system.cpp
+  src/rendering/lighting_engine.cpp
+  src/rendering/image_generator.cpp
+  src/rendering/performance_optimizer.cpp
 )
 
 add_library(bendcore_core STATIC
