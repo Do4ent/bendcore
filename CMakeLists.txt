@@ -313,6 +313,12 @@ set(BENDCORE_SOURCES
   src/simulation/simulation_manager.cpp
   src/simulation/result_visualization.cpp
 
+  # M12 Phase: API Integration Testing & Optimization (GAP-050 to GAP-053)
+  src/simulation/stress_analysis_framework.cpp
+  src/simulation/bend_radius_simulation.cpp
+  src/simulation/load_case_handler.cpp
+  src/materials/material_property_database.cpp
+
   # M6 Phase: FEA Integration (GAP-025)
   src/fea/mesh_generator.cpp
   src/fea/element_library.cpp
