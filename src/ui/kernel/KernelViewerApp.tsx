@@ -19,6 +19,8 @@ import type {
 import KernelViewport from './KernelViewport';
 import type { FacePick, KernelViewportHandle } from './KernelViewport';
 import { defaultKernelBaseUrl, loadKernelFrom } from './kernelLoader';
+import type { Remote, WasmClient } from '../worker/wasmClient';
+import { waitIdle } from '../worker/idle';
 import './KernelViewer.css';
 
 interface ModelSummary {
@@ -47,6 +49,8 @@ export interface KernelViewerState {
 
 export interface KernelViewerTestApi {
   getState(): KernelViewerState;
+  /** Resolves when no kernel call is in flight and the page has rendered the last result. */
+  idle(): Promise<void>;
   worldToClient(x: number, y: number, z: number): { x: number; y: number };
 }
 
@@ -92,7 +96,7 @@ function parameterValue(key: string, value: unknown): string {
 }
 
 const KernelViewerApp: React.FC = () => {
-  const [kernel, setKernel] = useState<Kernel | null>(null);
+  const [kernel, setKernel] = useState<WasmClient<Kernel> | null>(null);
   const [kernelStatus, setKernelStatus] = useState<KernelViewerState['kernelStatus']>('loading');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<KernelViewerState['error']>(null);
@@ -101,7 +105,9 @@ const KernelViewerApp: React.FC = () => {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [linearDeflection, setLinearDeflection] = useState('0.1');
   const [angularDeflection, setAngularDeflection] = useState('0.3');
-  const shapeRef = useRef<KernelShape | null>(null);
+  const shapeRef = useRef<Remote<KernelShape> | null>(null);
+  const kernelRef = useRef(kernel);
+  kernelRef.current = kernel;
   const viewRef = useRef<KernelViewportHandle | null>(null);
   const stateRef = useRef<KernelViewerState>({ kernelStatus, busy, error, model, selection });
   stateRef.current = { kernelStatus, busy, error, model, selection };
@@ -124,9 +130,12 @@ const KernelViewerApp: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => () => kernel?.dispose(), [kernel]);
+
   useEffect(() => {
     window.bendcoreKernelViewer = {
       getState: () => stateRef.current,
+      idle: () => waitIdle(() => [kernelRef.current]),
       worldToClient: (x, y, z) => {
         if (!viewRef.current) throw new Error('viewport is not mounted');
         return viewRef.current.worldToClient(x, y, z);
@@ -134,7 +143,6 @@ const KernelViewerApp: React.FC = () => {
     };
     return () => {
       delete window.bendcoreKernelViewer;
-      shapeRef.current?.dispose();
       shapeRef.current = null;
     };
   }, []);
@@ -152,26 +160,26 @@ const KernelViewerApp: React.FC = () => {
       setError(null);
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const shape = kernel.readStep(bytes);
+        const shape = await kernel.root.readStep(bytes);
         try {
-          const counts = shape.counts();
-          const tessellated = shape.tessellate(tessellationParams());
+          const counts = await shape.counts();
+          const tessellated = await shape.tessellate(tessellationParams());
           const summary: ModelSummary = {
             fileName: file.name,
             counts,
-            volume: counts.solids > 0 ? shape.volumeProperties().volume : null,
-            area: shape.surfaceProperties().area,
-            boundingBox: shape.boundingBox(),
-            faceTypes: shape.faceTypes(),
+            volume: counts.solids > 0 ? (await shape.volumeProperties()).volume : null,
+            area: (await shape.surfaceProperties()).area,
+            boundingBox: await shape.boundingBox(),
+            faceTypes: await shape.faceTypes(),
             triangles: tessellated.indices.length / 3,
           };
-          shapeRef.current?.dispose();
+          void shapeRef.current?.dispose();
           shapeRef.current = shape;
           setModel(summary);
           setMesh(tessellated);
           setSelection(null);
         } catch (e) {
-          shape.dispose();
+          void shape.dispose();
           throw e;
         }
       } catch (e) {
@@ -183,12 +191,12 @@ const KernelViewerApp: React.FC = () => {
     [kernel, tessellationParams],
   );
 
-  const retessellate = useCallback(() => {
+  const retessellate = useCallback(async () => {
     const shape = shapeRef.current;
     if (!shape) return;
     setError(null);
     try {
-      const tessellated = shape.tessellate(tessellationParams());
+      const tessellated = await shape.tessellate(tessellationParams());
       setMesh(tessellated);
       setModel((m) => (m ? { ...m, triangles: tessellated.indices.length / 3 } : m));
     } catch (e) {
@@ -196,14 +204,14 @@ const KernelViewerApp: React.FC = () => {
     }
   }, [tessellationParams]);
 
-  const onPick = useCallback((pick: FacePick | null) => {
+  const onPick = useCallback(async (pick: FacePick | null) => {
     const shape = shapeRef.current;
     if (!pick || !shape) {
       setSelection(null);
       return;
     }
     try {
-      setSelection({ face: shape.face(pick.faceIndex), point: pick.point });
+      setSelection({ face: await shape.face(pick.faceIndex), point: pick.point });
     } catch (e) {
       setError(describeError(e));
     }

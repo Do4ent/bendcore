@@ -4,8 +4,10 @@
  * in the kernel viewport, undo/redo (Ctrl+Z / Ctrl+Y), variables, mass properties and
  * save/open of the "bendcore-part" JSON file.
  *
- * Every action is a part document call; geometry shown is the kernel's tessellation of the
- * document result. window.bendcorePartModeler exposes the page state (read-only) and the view
+ * Every action is a part document call, executed in the WASM worker (docs/ui/APP_SHELL.md);
+ * geometry shown is the kernel's tessellation of the document result. A long call shows the
+ * progress indicator and can be cancelled: the worker is restarted and the document is reloaded
+ * from the snapshot taken after the last completed change outside a transaction. window.bendcorePartModeler exposes the page state (read-only) and the view
  * projection for end-to-end tests.
  */
 
@@ -36,6 +38,14 @@ import {
 } from './featureForm';
 import { FEATURE_LABELS, TOOLBAR_TYPES, label } from './labels';
 import { defaultModelingBaseUrl, loadModelingFrom } from './modelingLoader';
+import type { Remote, WasmClient } from '../worker/wasmClient';
+import { isCancelled } from '../worker/wasmClient';
+import { waitIdle } from '../worker/idle';
+import BusyIndicator from '../app/BusyIndicator';
+import { useHotkeys } from '../app/hotkeys';
+import { useI18n } from '../app/i18n';
+import { downloadText } from '../app/editorHost';
+import type { DocumentFile, EditorHostProps } from '../app/editorHost';
 import { applySketchDimensions, templateProfiles } from './sketchDimensions';
 import type { TreeAction } from './treeActions';
 import '../kernel/KernelViewer.css';
@@ -84,6 +94,8 @@ export interface PartModelerState {
 
 export interface PartModelerTestApi {
   getState(): PartModelerState;
+  /** Resolves when no kernel call is in flight and the page has rendered the last result. */
+  idle(): Promise<void>;
   worldToClient(x: number, y: number, z: number): { x: number; y: number };
 }
 
@@ -111,8 +123,14 @@ function shownTarget(panel: PanelState | null): string {
   return 'final';
 }
 
-const PartModelerApp: React.FC = () => {
-  const [kernel, setKernel] = useState<ModelingKernel | null>(null);
+type PartDoc = Remote<PartDocumentHandle>;
+
+const NEW_FILE_NAME = 'деталь.bcpart.json';
+
+const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = null, initialDirty = false, onChange, onFile, onCreateDrawing }) => {
+  const { t } = useI18n();
+  const [kernel, setKernel] = useState<WasmClient<ModelingKernel> | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<PartModelerState['status']>('loading');
   const [catalog, setCatalog] = useState<FeatureTypeSpec[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot>({ features: [], doc: null, variables: [], properties: null });
@@ -124,12 +142,25 @@ const PartModelerApp: React.FC = () => {
   const [error, setError] = useState<PartModelerState['error']>(null);
   const [density, setDensity] = useState('7850');
   const [frameKey, setFrameKey] = useState(0);
-  const [fileName, setFileName] = useState('деталь.bcpart.json');
+  const [fileName, setFileName] = useState(initial?.name ?? NEW_FILE_NAME);
   const [newVar, setNewVar] = useState({ name: '', expression: '' });
   const [sketchMode, setSketchMode] = useState<{ featureId: string; isNew: boolean; body: KernelMesh | null } | null>(null);
   const [sketchPlane, setSketchPlane] = useState('XY');
 
-  const docRef = useRef<PartDocumentHandle | null>(null);
+  const docRef = useRef<PartDoc | null>(null);
+  const kernelRef = useRef(kernel);
+  kernelRef.current = kernel;
+  /** Serialises document bodies: one runs at a time, in click order. */
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+  /** Document JSON after the last completed change outside a transaction (cancel restores it). */
+  const snapshotRef = useRef<string | null>(null);
+  /** JSON of the last saved or opened file (dirty = snapshot differs). */
+  const savedRef = useRef<string | null>(null);
+  const fileNameRef = useRef(fileName);
+  fileNameRef.current = fileName;
+  const hostRef = useRef({ onChange, onFile, onCreateDrawing });
+  hostRef.current = { onChange, onFile, onCreateDrawing };
+  const openInputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<PanelState | null>(null);
   const viewRef = useRef<KernelViewportHandle | null>(null);
   const densityRef = useRef(density);
@@ -150,81 +181,147 @@ const PartModelerApp: React.FC = () => {
   };
 
   /** Reads everything shown from the document (after every call that changes it). */
-  const refresh = useCallback((p: PanelState | null = panelRef.current, selected: string | null = selectedRef.current) => {
+  const refresh = useCallback(async (p: PanelState | null = panelRef.current, selected: string | null = selectedRef.current) => {
     const doc = docRef.current;
     if (!doc) return;
     try {
-      const features = doc.features();
-      setSnapshot({
-        features,
-        doc: doc.state(),
-        variables: doc.variables(),
-        properties: doc.properties('final', densityValue()),
-      });
-      setMesh(doc.tessellate(shownTarget(p), MESH_PARAMS));
+      const [features, state, variables, properties, shown] = await Promise.all([
+        doc.features(),
+        doc.state(),
+        doc.variables(),
+        doc.properties('final', densityValue()),
+        doc.tessellate(shownTarget(p), MESH_PARAMS),
+      ]);
       const sketchId = p?.type === 'Sketch' ? p.featureId : selected;
       const sketch = features.find((f) => f.id === sketchId && f.type === 'Sketch');
-      setOverlay(sketch?.sketchResult?.hasFaces ? doc.tessellate(`sketch:${sketch.id}`, MESH_PARAMS) : null);
+      const sketchMesh = sketch?.sketchResult?.hasFaces ? await doc.tessellate(`sketch:${sketch.id}`, MESH_PARAMS) : null;
+      if (docRef.current !== doc) return;
+      setSnapshot({ features, doc: state, variables, properties });
+      setMesh(shown);
+      setOverlay(sketchMesh);
     } catch (e) {
-      setError(describeError(e));
+      if (!isCancelled(e)) setError(describeError(e));
     }
+  }, []);
+
+  /** Takes the snapshot of the document when no transaction is open and reports it as a draft. */
+  const takeSnapshot = useCallback(async (doc: PartDoc) => {
+    if ((await doc.state()).inTransaction) return;
+    const text = await doc.save();
+    if (docRef.current !== doc) return;
+    snapshotRef.current = text;
+    hostRef.current.onChange?.({ kind: 'part', name: fileNameRef.current, text }, text !== savedRef.current);
   }, []);
 
   /** Runs a document call; errors go to the error bar, the view is refreshed either way. */
   const run = useCallback(
-    (body: (doc: PartDocumentHandle) => void, p?: PanelState | null | (() => PanelState | null)) => {
-      const doc = docRef.current;
-      if (!doc) return false;
-      setError(null);
-      let ok = true;
-      try {
-        body(doc);
-      } catch (e) {
-        setError(describeError(e));
-        ok = false;
-      }
-      setSelection(null);
-      refresh(p === undefined ? panelRef.current : typeof p === 'function' ? p() : p);
-      return ok;
+    (body: (doc: PartDoc) => Promise<void> | void, p?: PanelState | null | (() => PanelState | null)): Promise<boolean> => {
+      const task = queueRef.current.then(async () => {
+        const doc = docRef.current;
+        if (!doc) return false;
+        setError(null);
+        let ok = true;
+        try {
+          await body(doc);
+        } catch (e) {
+          if (isCancelled(e) || docRef.current !== doc) return false;
+          setError(describeError(e));
+          ok = false;
+        }
+        setSelection(null);
+        await refresh(p === undefined ? panelRef.current : typeof p === 'function' ? p() : p);
+        if (ok) await takeSnapshot(doc).catch(() => undefined);
+        return ok;
+      });
+      queueRef.current = task.catch(() => undefined);
+      return task;
     },
-    [refresh],
+    [refresh, takeSnapshot],
   );
 
   const replaceDocument = useCallback(
-    (doc: PartDocumentHandle) => {
-      docRef.current?.dispose();
+    async (doc: PartDoc, saved: string | null, disposeOld = true) => {
+      const old = docRef.current;
       docRef.current = doc;
+      if (old && disposeOld) void old.dispose().catch(() => undefined);
+      savedRef.current = saved;
+      snapshotRef.current = null;
       setPanel(null);
+      setSketchMode(null);
       setSelectedId(null);
       setSelection(null);
       setFrameKey((k) => k + 1);
-      refresh(null, null);
+      await refresh(null, null);
+      await takeSnapshot(doc).catch(() => undefined);
     },
-    [refresh],
+    [refresh, takeSnapshot],
   );
 
   useEffect(() => {
     let cancelled = false;
-    loadModelingFrom(defaultModelingBaseUrl())
-      .then((k) => {
-        if (cancelled) return;
-        setKernel(k);
-        setCatalog(k.catalog());
-        docRef.current = k.createDocument();
-        setStatus('ready');
-        refresh(null, null);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setStatus('failed');
-        setError(describeError(e));
-      });
+    let client: WasmClient<ModelingKernel> | null = null;
+    (async () => {
+      client = await loadModelingFrom(defaultModelingBaseUrl());
+      if (cancelled) {
+        client.dispose();
+        return;
+      }
+      const cat = await client.root.catalog();
+      let doc: PartDoc;
+      if (initial) {
+        doc = (await client.root.loadDocument(initial.text)).document;
+        onFile?.(initial);
+      } else {
+        doc = await client.root.createDocument();
+      }
+      if (cancelled) return;
+      setKernel(client);
+      setCatalog(cat);
+      setStatus('ready');
+      await replaceDocument(doc, initial && !initialDirty ? initial.text : null);
+      // A restored draft keeps its "modified" state: the saved file is unknown.
+      if (initial && !initialDirty) savedRef.current = snapshotRef.current;
+    })().catch((e: unknown) => {
+      if (cancelled) return;
+      setStatus('failed');
+      setError(describeError(e));
+    });
     return () => {
       cancelled = true;
-      docRef.current?.dispose();
       docRef.current = null;
+      client?.dispose();
     };
-  }, [refresh]);
+    // The kernel loads once per editor; `initial` is a mount-time choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * Cancels the running kernel call: the worker is terminated (its documents are lost), a new
+   * worker is started and the document is loaded from the last snapshot. What is lost: the
+   * cancelled change, changes of an open panel or sketch (their transaction), the undo history.
+   */
+  const cancelOperation = useCallback(async () => {
+    const old = kernelRef.current;
+    if (!old) return;
+    old.cancel('прервано пользователем');
+    setKernel(null);
+    setStatus('loading');
+    const snapshot = snapshotRef.current;
+    const saved = savedRef.current;
+    queueRef.current = Promise.resolve();
+    try {
+      const client = await loadModelingFrom(defaultModelingBaseUrl());
+      const doc = snapshot ? (await client.root.loadDocument(snapshot)).document : await client.root.createDocument();
+      setKernel(client);
+      setStatus('ready');
+      await replaceDocument(doc, saved, false);
+      savedRef.current = saved;
+      setNotice(t('busy.cancelled'));
+    } catch (e) {
+      setStatus('failed');
+      setError({ code: 'Cancelled', message: t('busy.restoreFailed', { reason: describeError(e).message }) });
+    }
+  }, [replaceDocument, t]);
 
   // ------------------------------------------------------------- panel
 
@@ -238,7 +335,7 @@ const PartModelerApp: React.FC = () => {
     const form = newFeatureForm(spec, snapshot.features, position);
     const firstSlot = spec.references.find((r) => !r.optional && r.kind !== 'vertex');
     const p: PanelState = { mode: 'add', type, featureId: null, position, form, activeSlot: firstSlot?.name ?? null };
-    if (run((d) => d.beginTransaction(`Добавить: ${label(FEATURE_LABELS, type)}`), p)) setPanel(p);
+    void run((d) => d.beginTransaction(`Добавить: ${label(FEATURE_LABELS, type)}`), p).then((ok) => ok && setPanel(p));
   };
 
   const openEdit = (feature: FeatureView) => {
@@ -252,52 +349,52 @@ const PartModelerApp: React.FC = () => {
       form: existingFeatureForm(spec, feature),
       activeSlot: null,
     };
-    if (run((d) => d.beginTransaction(`Изменить: ${feature.label}`), p)) setPanel(p);
+    void run((d) => d.beginTransaction(`Изменить: ${feature.label}`), p).then((ok) => ok && setPanel(p));
   };
 
   /** Applies the form to the document (inside the panel's transaction) and rebuilds. */
-  const applyPanel = (p: PanelState): PanelState | null => {
+  const applyPanel = async (p: PanelState): Promise<PanelState | null> => {
     const doc = docRef.current;
     if (!doc || !kernel) return null;
     let next: PanelState | null = null;
-    run((d) => {
+    await run(async (d) => {
       let sketch;
-      if (p.form.template) sketch = kernel.sketchTemplate(templateProfiles(p.form.template));
+      if (p.form.template) sketch = await kernel.root.sketchTemplate(templateProfiles(p.form.template));
       if (p.form.dimensions && p.featureId) {
-        const current = d.feature(p.featureId).sketch;
+        const current = (await d.feature(p.featureId)).sketch;
         if (current) sketch = applySketchDimensions(current, p.form.dimensions);
       }
       let id = p.featureId;
-      if (id === null) id = d.addFeature(toFeatureSpec(p.form, sketch), p.position);
-      else d.editFeature(id, toFeatureEdits(p.form, sketch));
-      d.rebuild();
+      if (id === null) id = await d.addFeature(toFeatureSpec(p.form, sketch), p.position);
+      else await d.editFeature(id, toFeatureEdits(p.form, sketch));
+      await d.rebuild();
       next = { ...p, featureId: id, activeSlot: null };
     }, () => next ?? { ...p, activeSlot: null });
     return next;
   };
 
-  const preview = () => {
+  const preview = async () => {
     const p = panelRef.current;
     if (!p) return;
-    const next = applyPanel(p);
-    if (next) setPanel(next);
+    const next = await applyPanel(p);
+    if (next && panelRef.current) setPanel(next);
   };
 
-  const confirm = () => {
+  const confirm = async () => {
     const p = panelRef.current;
     if (!p) return;
-    const next = applyPanel(p);
-    if (!next) return;
-    if (run((d) => d.commitTransaction(), null)) setPanel(null);
+    const next = await applyPanel(p);
+    if (!next || !panelRef.current) return;
+    if (await run((d) => d.commitTransaction(), null)) setPanel(null);
   };
 
   const cancel = () => {
     if (!panelRef.current) return;
-    run((d) => {
-      d.abortTransaction();
-      d.rebuild();
-    }, null);
     setPanel(null);
+    void run(async (d) => {
+      await d.abortTransaction();
+      await d.rebuild();
+    }, null);
   };
 
   const changeForm = (form: FeatureForm) => {
@@ -310,7 +407,7 @@ const PartModelerApp: React.FC = () => {
     if (!p) return;
     const next = { ...p, activeSlot: slot };
     setPanel(next);
-    refresh(next);
+    void refresh(next);
   };
 
   // ------------------------------------------------------------- picking
@@ -321,7 +418,7 @@ const PartModelerApp: React.FC = () => {
     return specOf(p.type)?.references.find((r) => r.name === p.activeSlot) ?? null;
   };
 
-  const pickElement = (kind: 'face' | 'edge', index: number | null) => {
+  const pickElement = async (kind: 'face' | 'edge', index: number | null) => {
     const doc = docRef.current;
     if (!doc) return;
     const p = panelRef.current;
@@ -329,19 +426,21 @@ const PartModelerApp: React.FC = () => {
     try {
       if (p && slot) {
         if (index === null || slot.kind !== kind) return;
-        const ref = doc.makeReference(shownTarget(p), kind, index);
-        const picks = togglePick(p.form.references[slot.name] ?? [], { ref, index }, slot.multiple);
-        setPanel({ ...p, form: { ...p.form, references: { ...p.form.references, [slot.name]: picks } } });
+        const ref = await doc.makeReference(shownTarget(p), kind, index);
+        const current = panelRef.current;
+        if (!current || current.activeSlot !== slot.name) return;
+        const picks = togglePick(current.form.references[slot.name] ?? [], { ref, index }, slot.multiple);
+        setPanel({ ...current, form: { ...current.form, references: { ...current.form.references, [slot.name]: picks } } });
         return;
       }
-      setSelection(index === null ? null : { kind, index, name: doc.element('final', kind, index).name });
+      setSelection(index === null ? null : { kind, index, name: (await doc.element('final', kind, index)).name });
     } catch (e) {
-      setError(describeError(e));
+      if (!isCancelled(e)) setError(describeError(e));
     }
   };
 
-  const onPickFace = useCallback((pick: FacePick | null) => pickElement('face', pick ? pick.faceIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
-  const onPickEdge = useCallback((pick: EdgePick | null) => pickElement('edge', pick ? pick.edgeIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onPickFace = useCallback((pick: FacePick | null) => void pickElement('face', pick ? pick.faceIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onPickEdge = useCallback((pick: EdgePick | null) => void pickElement('edge', pick ? pick.edgeIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------------------- tree, undo, files
 
@@ -351,130 +450,134 @@ const PartModelerApp: React.FC = () => {
         openEdit(f);
         return;
       case 'editSketch':
-        editSketch(f);
+        void editSketch(f);
         return;
       case 'suppress':
       case 'unsuppress':
-        run((d) => {
-          d.setSuppressed(f.id, action === 'suppress');
-          d.rebuild();
+        void run(async (d) => {
+          await d.setSuppressed(f.id, action === 'suppress');
+          await d.rebuild();
         });
         return;
       case 'remove':
         if (selectedId === f.id) setSelectedId(null);
-        run((d) => {
-          d.removeFeature(f.id);
-          d.rebuild();
+        void run(async (d) => {
+          await d.removeFeature(f.id);
+          await d.rebuild();
         });
         return;
       case 'moveUp':
       case 'moveDown':
-        run((d) => {
-          d.moveFeature(f.id, f.index + (action === 'moveUp' ? -1 : 1));
-          d.rebuild();
+        void run(async (d) => {
+          await d.moveFeature(f.id, f.index + (action === 'moveUp' ? -1 : 1));
+          await d.rebuild();
         });
         return;
       case 'rollbackHere':
-        run((d) => {
-          d.setRollback(f.index + 1);
-          d.rebuild();
+        void run(async (d) => {
+          await d.setRollback(f.index + 1);
+          await d.rebuild();
         });
         return;
     }
   };
 
   const undo = useCallback(() => {
-    if (panelRef.current || sketchModeRef.current || !docRef.current?.state().canUndo) return;
-    run((d) => d.undo());
+    if (panelRef.current || sketchModeRef.current) return;
+    void run(async (d) => {
+      if ((await d.state()).canUndo) await d.undo();
+    });
   }, [run]);
 
   const redo = useCallback(() => {
-    if (panelRef.current || sketchModeRef.current || !docRef.current?.state().canRedo) return;
-    run((d) => d.redo());
+    if (panelRef.current || sketchModeRef.current) return;
+    void run(async (d) => {
+      if ((await d.state()).canRedo) await d.redo();
+    });
   }, [run]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      const key = e.key.toLowerCase();
-      if (key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-      } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
-        e.preventDefault();
-        redo();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo]);
-
-  const newDocument = () => {
+  const newDocument = async () => {
     if (!kernel || panelRef.current) return;
     setError(null);
-    replaceDocument(kernel.createDocument());
-    setFileName('деталь.bcpart.json');
+    try {
+      await replaceDocument(await kernel.root.createDocument(), null);
+      setFileName(NEW_FILE_NAME);
+    } catch (e) {
+      if (!isCancelled(e)) setError(describeError(e));
+    }
   };
 
   const openFile = async (file: File) => {
     if (!kernel || panelRef.current) return;
     setError(null);
     try {
-      const { document } = kernel.loadDocument(await file.text());
-      replaceDocument(document);
+      const text = await file.text();
+      const { document } = await kernel.root.loadDocument(text);
       setFileName(file.name);
+      fileNameRef.current = file.name;
+      await replaceDocument(document, text);
+      hostRef.current.onFile?.({ kind: 'part', name: file.name, text });
     } catch (e) {
-      setError(describeError(e));
+      if (!isCancelled(e)) setError(describeError(e));
     }
   };
 
-  const saveFile = () => {
+  const saveFile = async () => {
     const doc = docRef.current;
     if (!doc) return;
     try {
-      const blob = new Blob([doc.save()], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const text = await doc.save();
+      downloadText(fileName, text, 'application/json');
+      savedRef.current = text;
+      if (!(await doc.state()).inTransaction) snapshotRef.current = text;
+      const file: DocumentFile = { kind: 'part', name: fileName, text };
+      hostRef.current.onFile?.(file);
+      hostRef.current.onChange?.(file, false);
     } catch (e) {
-      setError(describeError(e));
+      if (!isCancelled(e)) setError(describeError(e));
+    }
+  };
+
+  const createDrawing = async () => {
+    const doc = docRef.current;
+    if (!doc || !hostRef.current.onCreateDrawing) return;
+    try {
+      // With the BRep cache the drawing kernel does not rebuild the part.
+      const text = await doc.save({ includeCache: true });
+      hostRef.current.onCreateDrawing({ kind: 'part', name: fileName, text });
+    } catch (e) {
+      if (!isCancelled(e)) setError(describeError(e));
     }
   };
 
   const selectNode = (id: string | null) => {
     setSelectedId(id);
-    refresh(panelRef.current, id);
+    void refresh(panelRef.current, id);
   };
 
   // ------------------------------------------------------------- sketch editor
 
   /** Opens the sketch editor on node `id` inside a transaction (docs/ui/SKETCH_EDITOR.md). */
-  const enterSketch = (id: string, isNew: boolean) => {
+  const enterSketch = async (id: string, isNew: boolean) => {
     const doc = docRef.current;
     if (!doc) return;
     let body: KernelMesh | null = null;
     try {
-      body = doc.tessellate(`before:${id}`, MESH_PARAMS);
+      body = await doc.tessellate(`before:${id}`, MESH_PARAMS);
     } catch (e) {
+      if (isCancelled(e)) return;
       setError(describeError(e));
     }
     setSketchMode({ featureId: id, isNew, body });
   };
 
-  const newSketch = () => {
+  const newSketch = async () => {
     const doc = docRef.current;
     if (!doc || panelRef.current || sketchMode) return;
     const position = snapshot.doc?.rollback ?? snapshot.features.length;
     let id: string | null = null;
-    run((d) => {
-      d.beginTransaction('Эскиз');
+    await run(async (d) => {
+      await d.beginTransaction('Эскиз');
       const spec: Parameters<PartDocumentHandle['addFeature']>[0] = {
         type: 'Sketch',
         options: { plane: sketchPlane },
@@ -482,45 +585,59 @@ const PartModelerApp: React.FC = () => {
       };
       if (sketchPlane === 'face') {
         if (selection?.kind !== 'face') throw new Error('выберите плоскую грань во вьюпорте');
-        spec.references = { face: [d.makeReference('final', 'face', selection.index)] };
+        spec.references = { face: [await d.makeReference('final', 'face', selection.index)] };
       }
       try {
-        id = d.addFeature(spec, position);
-        d.rebuild();
+        id = await d.addFeature(spec, position);
+        await d.rebuild();
       } catch (e) {
-        d.abortTransaction();
-        d.rebuild();
+        if (isCancelled(e)) throw e;
+        await d.abortTransaction();
+        await d.rebuild();
         throw e;
       }
     }, null);
-    if (id) enterSketch(id, true);
+    if (id) await enterSketch(id, true);
   };
 
-  const editSketch = (f: FeatureView) => {
+  const editSketch = async (f: FeatureView) => {
     if (panelRef.current || sketchMode) return;
-    if (run((d) => d.beginTransaction(`Изменить эскиз: ${f.label}`), null)) enterSketch(f.id, false);
+    if (await run((d) => d.beginTransaction(`Изменить эскиз: ${f.label}`), null)) await enterSketch(f.id, false);
   };
 
   const exitSketch = (data: SketchData) => {
     const mode = sketchMode;
     if (!mode) return;
-    run((d) => {
-      d.editFeature(mode.featureId, { sketch: data });
-      d.rebuild();
-      d.commitTransaction();
-    }, null);
     setSketchMode(null);
     setSelectedId(mode.featureId);
-    refresh(null, mode.featureId);
+    selectedRef.current = mode.featureId;
+    void run(async (d) => {
+      await d.editFeature(mode.featureId, { sketch: data });
+      await d.rebuild();
+      await d.commitTransaction();
+    }, null);
   };
 
   const cancelSketch = () => {
-    run((d) => {
-      d.abortTransaction();
-      d.rebuild();
-    }, null);
     setSketchMode(null);
+    void run(async (d) => {
+      await d.abortTransaction();
+      await d.rebuild();
+    }, null);
   };
+
+  useHotkeys(active && !sketchMode, {
+    undo,
+    redo,
+    save: () => void saveFile(),
+    open: () => openInputRef.current?.click(),
+    escape: () => cancel(),
+    delete: () => {
+      const f = snapshot.features.find((x) => x.id === selectedId);
+      if (f && !panelRef.current) treeAction(f, 'remove');
+    },
+    fit: () => setFrameKey((k) => k + 1),
+  });
 
   // ------------------------------------------------------------- test API
 
@@ -553,6 +670,7 @@ const PartModelerApp: React.FC = () => {
   useEffect(() => {
     window.bendcorePartModeler = {
       getState: () => stateRef.current!,
+      idle: () => waitIdle(() => [kernelRef.current]),
       worldToClient: (x, y, z) => {
         if (!viewRef.current) throw new Error('viewport is not mounted');
         return viewRef.current.worldToClient(x, y, z);
@@ -579,11 +697,12 @@ const PartModelerApp: React.FC = () => {
     <div className="kv-root pm-root">
       <header className="kv-toolbar pm-toolbar">
         <span className="kv-title">bendcore · деталь</span>
-        <button type="button" onClick={newDocument} disabled={status !== 'ready' || busyPanel} data-testid="doc-new">
+        <button type="button" onClick={() => void newDocument()} disabled={status !== 'ready' || busyPanel} data-testid="doc-new">
           Новая
         </button>
         <label className="kv-file">
           <input
+            ref={openInputRef}
             type="file"
             accept=".json,application/json"
             data-testid="doc-open"
@@ -596,9 +715,14 @@ const PartModelerApp: React.FC = () => {
           />
           Открыть…
         </label>
-        <button type="button" onClick={saveFile} disabled={status !== 'ready'} data-testid="doc-save">
+        <button type="button" onClick={() => void saveFile()} disabled={status !== 'ready'} data-testid="doc-save" title="Ctrl+S">
           Сохранить
         </button>
+        {onCreateDrawing && (
+          <button type="button" onClick={() => void createDrawing()} disabled={status !== 'ready' || busyPanel} data-testid="doc-create-drawing">
+            {t('action.createDrawing')}
+          </button>
+        )}
         <span className="pm-sep" />
         <button
           type="button"
@@ -631,7 +755,7 @@ const PartModelerApp: React.FC = () => {
           <option value="YZ">YZ</option>
           <option value="face">выбранная грань</option>
         </select>
-        <button type="button" data-testid="sketch-draw" disabled={status !== 'ready' || busyPanel} onClick={newSketch}>
+        <button type="button" data-testid="sketch-draw" disabled={status !== 'ready' || busyPanel} onClick={() => void newSketch()}>
           Нарисовать эскиз
         </button>
         <span className="pm-sep" />
@@ -646,6 +770,7 @@ const PartModelerApp: React.FC = () => {
             {label(FEATURE_LABELS, t)}
           </button>
         ))}
+        <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
         <span className="kv-status" data-testid="modeling-status">
           {status === 'loading' && 'Загрузка ядра…'}
           {status === 'ready' && 'Ядро готово'}
@@ -655,6 +780,14 @@ const PartModelerApp: React.FC = () => {
       {error && (
         <div className="kv-error" role="alert" data-testid="modeling-error">
           {error.code}: {error.message}
+        </div>
+      )}
+      {notice && (
+        <div className="app-notice" role="status" data-testid="modeling-notice">
+          {notice}
+          <button type="button" onClick={() => setNotice(null)} aria-label={t('notify.dismiss')}>
+            ×
+          </button>
         </div>
       )}
       <main className="pm-main">
@@ -667,9 +800,9 @@ const PartModelerApp: React.FC = () => {
             onSelect={selectNode}
             onAction={treeAction}
             onClearRollback={() =>
-              run((d) => {
-                d.setRollback(null);
-                d.rebuild();
+              void run(async (d) => {
+                await d.setRollback(null);
+                await d.rebuild();
               })
             }
           />
@@ -688,9 +821,9 @@ const PartModelerApp: React.FC = () => {
                         onBlur={(e) => {
                           const expr = e.target.value;
                           if (expr !== v.expression) {
-                            run((d) => {
-                              d.setVariable(v.name, expr);
-                              d.rebuild();
+                            void run(async (d) => {
+                              await d.setVariable(v.name, expr);
+                              await d.rebuild();
                             });
                           }
                         }}
@@ -703,9 +836,9 @@ const PartModelerApp: React.FC = () => {
                         aria-label={`удалить ${v.name}`}
                         disabled={busyPanel}
                         onClick={() =>
-                          run((d) => {
-                            d.removeVariable(v.name);
-                            d.rebuild();
+                          void run(async (d) => {
+                            await d.removeVariable(v.name);
+                            await d.rebuild();
                           })
                         }
                       >
@@ -738,15 +871,12 @@ const PartModelerApp: React.FC = () => {
                       type="button"
                       data-testid="var-add"
                       disabled={busyPanel || !newVar.name.trim() || !newVar.expression.trim()}
-                      onClick={() => {
-                        if (
-                          run((d) => {
-                            d.setVariable(newVar.name.trim(), newVar.expression.trim());
-                            d.rebuild();
-                          })
-                        ) {
-                          setNewVar({ name: '', expression: '' });
-                        }
+                      onClick={async () => {
+                        const ok = await run(async (d) => {
+                          await d.setVariable(newVar.name.trim(), newVar.expression.trim());
+                          await d.rebuild();
+                        });
+                        if (ok) setNewVar({ name: '', expression: '' });
                       }}
                     >
                       +
@@ -796,8 +926,8 @@ const PartModelerApp: React.FC = () => {
                 activeSlot={panel.activeSlot}
                 onChange={changeForm}
                 onActivateSlot={activateSlot}
-                onPreview={preview}
-                onOk={confirm}
+                onPreview={() => void preview()}
+                onOk={() => void confirm()}
                 onCancel={cancel}
               />
             ) : (
@@ -816,7 +946,7 @@ const PartModelerApp: React.FC = () => {
                     value={density}
                     data-testid="density"
                     onChange={(e) => setDensity(e.target.value)}
-                    onBlur={() => refresh()}
+                    onBlur={() => void refresh()}
                   />
                 </dd>
                 <dt>Масса, кг</dt>

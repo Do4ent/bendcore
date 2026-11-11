@@ -1,19 +1,18 @@
-// Loads bendcore_modeling_wasm in the browser (docs/ui/PART_MODELING_UI.md).
+// Starts bendcore_modeling_wasm in a Web Worker (docs/ui/PART_MODELING_UI.md, docs/ui/APP_SHELL.md).
 //
-// The Emscripten glue (bendcore_modeling.mjs) is imported at run time from the URL where the
-// build output is served, not bundled: it finds bendcore_modeling.wasm next to itself through
-// import.meta.url. The JS API (bendcore_modeling_api.mjs) is bundled from src/wasm.
+// The worker imports the Emscripten glue (bendcore_modeling.mjs) at run time from the URL where
+// the build output is served; the glue finds bendcore_modeling.wasm next to itself. The page
+// talks to the JS API (bendcore_modeling_api.mjs) through WasmClient: every call returns a Promise.
 
-import { loadModeling } from '../../wasm/bendcore_modeling_api.mjs';
-import type { ModelingKernel, ModelingModuleFactory } from '../../wasm/bendcore_modeling_api.mjs';
+import type { ModelingKernel } from '../../wasm/bendcore_modeling_api.mjs';
+import { startWasmWorker } from '../worker/startWorker';
+import type { WasmClient } from '../worker/wasmClient';
 
 /** Directory URL (with trailing slash) that serves bendcore_modeling.mjs and .wasm. */
 export function defaultModelingBaseUrl(): string {
   return new URL('modeling/', document.baseURI).href;
 }
 
-export async function loadModelingFrom(baseUrl: string): Promise<ModelingKernel> {
-  const glueUrl = new URL('bendcore_modeling.mjs', baseUrl).href;
-  const glue = (await import(/* webpackIgnore: true */ glueUrl)) as { default: ModelingModuleFactory };
-  return loadModeling(glue.default);
+export function loadModelingFrom(baseUrl: string): Promise<WasmClient<ModelingKernel>> {
+  return startWasmWorker<ModelingKernel>('modeling', baseUrl);
 }

@@ -7,6 +7,7 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const base = require('../../webpack.web.js');
+const { workerEntry, workerFileName, workerOptimization } = require('../wasm-worker.config.js');
 
 const root = path.resolve(__dirname, '../..');
 const wasmDir = path.resolve(
@@ -25,9 +26,10 @@ const rules = base.module.rules.map((rule) =>
 module.exports = {
   ...base,
   context: root,
-  entry: { drawingEditor: './src/ui/drawing/drawingEditorEntry.tsx' },
-  output: { ...base.output, path: path.join(root, 'dist/drawing') },
+  entry: { drawingEditor: './src/ui/drawing/drawingEditorEntry.tsx', 'wasm-worker': workerEntry },
+  output: { ...base.output, filename: workerFileName(base.output.filename), path: path.join(root, 'dist/drawing') },
   module: { ...base.module, rules },
+  optimization: workerOptimization(base.optimization),
   devServer: {
     ...base.devServer,
     port: Number(process.env.PORT || 3150),
@@ -36,7 +38,7 @@ module.exports = {
     static: [{ directory: wasmDir, publicPath: '/drawing-wasm' }],
   },
   plugins: [
-    new HtmlWebpackPlugin({ template: path.join(__dirname, 'index.html'), filename: 'index.html' }),
+    new HtmlWebpackPlugin({ template: path.join(__dirname, 'index.html'), filename: 'index.html', chunks: ['drawingEditor'] }),
     new MiniCssExtractPlugin({ filename: isProduction ? '[name].[contenthash].css' : '[name].css' }),
   ],
 };

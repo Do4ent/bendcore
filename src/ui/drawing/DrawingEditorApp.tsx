@@ -5,7 +5,10 @@
  * datums, technical requirements, update from the model with a report of changed and dangling
  * dimensions, the specification of an assembly, export to PDF/DXF/SVG and save/open.
  *
- * Every action is a call of the drawing kernel; the sheet on screen is the kernel's SVG of the
+ * Every action is a call of the drawing kernel, executed in the WASM worker (docs/ui/APP_SHELL.md):
+ * long ones (views with HLR, update from the model, PDF) show the progress indicator and can be
+ * cancelled, then the drawing is reloaded from the snapshot taken after the last completed
+ * change. The sheet on screen is the kernel's SVG of the
  * sheet and the pickable edges are the kernel's 2D view edges. window.bendcoreDrawingEditor
  * exposes the page state (read-only) for end-to-end tests.
  */
@@ -47,6 +50,13 @@ import {
   sheetToViewPoint,
   viewPointToModel,
 } from './sheetGeometry';
+import type { Remote, WasmClient } from '../worker/wasmClient';
+import { isCancelled } from '../worker/wasmClient';
+import { waitIdle } from '../worker/idle';
+import BusyIndicator from '../app/BusyIndicator';
+import { useHotkeys } from '../app/hotkeys';
+import { useI18n } from '../app/i18n';
+import type { DocumentFile, EditorHostProps } from '../app/editorHost';
 import './DrawingEditor.css';
 
 type Variable = { name: string; expression: string; value: number | null; error: string | null };
@@ -66,6 +76,8 @@ export interface DrawingEditorState {
 declare global {
   interface Window {
     bendcoreDrawingEditor?: DrawingEditorState;
+    /** Resolves when no kernel call is in flight and the page has rendered the last result. */
+    bendcoreDrawingEditorIdle?: () => Promise<void>;
   }
 }
 
@@ -92,12 +104,50 @@ function errorOf(e: unknown): { code: string; message: string } {
 
 const STANDARD_PROJECTED: StandardView[] = ['top', 'left', 'right', 'bottom', 'rear'];
 
-export default function DrawingEditorApp(): JSX.Element {
-  const [kernel, setKernel] = useState<DrawingKernel | null>(null);
+type Drawing = Remote<DrawingHandle>;
+type DrawingModule = Remote<DrawingKernel>;
+
+/** Kind of a model document from its JSON ("bendcore-assembly" or a part). */
+function modelKind(text: string): 'part' | 'assembly' {
+  try {
+    return JSON.parse(text).format === 'bendcore-assembly' ? 'assembly' : 'part';
+  } catch {
+    // The kernel reports the parse error.
+    return 'part';
+  }
+}
+
+/** A drawing made from the model `text` named `fileName`. */
+function fromModel(k: DrawingModule, text: string, fileName: string): Promise<Drawing> {
+  const base = fileName.replace(/(\.part|\.assembly|\.bcpart|\.bcasm)?\.json$/i, '');
+  return modelKind(text) === 'assembly'
+    ? k.createFromAssembly(text, { path: fileName })
+    : k.createFromPart(text, { path: fileName, properties: { name: base } });
+}
+
+export default function DrawingEditorApp({
+  active = true,
+  initial = null,
+  initialDirty = false,
+  onChange,
+  onFile,
+}: EditorHostProps = {}): JSX.Element {
+  const { t } = useI18n();
+  const [kernel, setKernel] = useState<WasmClient<DrawingKernel> | null>(null);
+  const kernelRef = useRef(kernel);
+  kernelRef.current = kernel;
+  /** Serialises drawing bodies: one runs at a time, in click order. */
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+  /** Drawing and model JSON after the last completed change (cancel restores them). */
+  const snapshotRef = useRef<{ text: string; model: string; name: string } | null>(null);
+  const savedRef = useRef<string | null>(null);
+  const hostRef = useRef({ onChange, onFile });
+  hostRef.current = { onChange, onFile };
+  const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<DrawingEditorState['status']>('loading');
   const [error, setError] = useState<DrawingEditorState['error']>(null);
   const [message, setMessage] = useState('Загрузка ядра чертежей…');
-  const drawingRef = useRef<DrawingHandle | null>(null);
+  const drawingRef = useRef<Drawing | null>(null);
   const [desc, setDesc] = useState<DrawingDescription | null>(null);
   const [picture, setPicture] = useState<SheetPicture | null>(null);
   const [sheetId, setSheetId] = useState<string | null>(null);
@@ -127,12 +177,18 @@ export default function DrawingEditorApp(): JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
+    let client: WasmClient<DrawingKernel> | null = null;
     loadDrawingFrom(defaultDrawingBaseUrl())
       .then((k) => {
-        if (cancelled) return;
+        client = k;
+        if (cancelled) {
+          k.dispose();
+          return;
+        }
         setKernel(k);
         setStatus('ready');
         setMessage('Откройте документ детали или сборки (JSON)');
+        if (initial) void openInitial(k.root, initial);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -142,61 +198,105 @@ export default function DrawingEditorApp(): JSX.Element {
       });
     return () => {
       cancelled = true;
+      drawingRef.current = null;
+      client?.dispose();
     };
+    // The module loads once per editor; `initial` is a mount-time choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const sheet: SheetInfo | null = desc?.sheets.find((s) => s.id === sheetId) ?? null;
 
   const refresh = useCallback(
-    (wantedSheet?: string | null) => {
+    async (wantedSheet?: string | null) => {
       const d = drawingRef.current;
       if (!d) return;
-      const description = d.describe();
-      setDesc(description);
+      const description = await d.describe();
       const id =
         wantedSheet && description.sheets.some((s) => s.id === wantedSheet) ? wantedSheet : description.sheets[0]?.id ?? null;
-      setSheetId(id);
-      setPicture(id ? d.sheetPicture(id) : null);
-      if (description.model.kind === 'part') setVariables(d.variables());
-      else setVariables([]);
-      setStaleness(d.checkModel());
+      const pic = id ? await d.sheetPicture(id) : null;
+      const vars = description.model.kind === 'part' ? await d.variables() : [];
+      const stale = await d.checkModel();
+      let specification: { table: SpecificationTable | null; reason: string | null };
       try {
-        setSpec({ table: d.specification(), reason: null });
+        specification = { table: await d.specification(), reason: null };
       } catch (e) {
-        setSpec({ table: null, reason: errorOf(e).message });
+        if (isCancelled(e)) throw e;
+        specification = { table: null, reason: errorOf(e).message };
       }
+      if (drawingRef.current !== d) return;
+      setDesc(description);
+      setSheetId(id);
+      setPicture(pic);
+      setVariables(vars);
+      setStaleness(stale);
+      setSpec(specification);
     },
     [],
   );
 
+  /** Snapshot of the drawing and its model after a completed change; reported as a draft. */
+  const takeSnapshot = useCallback(async (d: Drawing, name: string) => {
+    const [text, model] = await Promise.all([d.save(), d.saveModel()]);
+    if (drawingRef.current !== d) return;
+    snapshotRef.current = { text, model, name };
+    hostRef.current.onChange?.({ kind: 'drawing', name, text, model }, text !== savedRef.current);
+  }, []);
+  const modelNameRef = useRef('');
+
   // Runs a kernel action; any failure is shown in the status line and the page is refreshed.
+  const sheetIdRef = useRef(sheetId);
+  sheetIdRef.current = sheetId;
+
   const run = useCallback(
-    (label: string, action: (d: DrawingHandle) => unknown, keepPicks = false) => {
-      const d = drawingRef.current;
-      if (!d) return;
-      let next = sheetId;
-      try {
-        const result = action(d) as { warnings?: string[]; switchTo?: string } | undefined;
-        if (result && typeof result.switchTo === 'string') next = result.switchTo;
-        setError(null);
-        const warnings = result && Array.isArray(result.warnings) && result.warnings.length ? ` (${result.warnings.join('; ')})` : '';
-        setMessage(label + warnings);
-      } catch (e) {
-        setError(errorOf(e));
-        setMessage(`${label}: не выполнено`);
-      }
-      if (!keepPicks) setPickState(emptyPicks);
-      refresh(next);
+    (label: string, action: (d: Drawing) => unknown, keepPicks = false): Promise<boolean> => {
+      const task = queueRef.current.then(async () => {
+        const d = drawingRef.current;
+        if (!d) return false;
+        let next = sheetIdRef.current;
+        let ok = true;
+        try {
+          const result = (await action(d)) as { warnings?: string[]; switchTo?: string } | undefined;
+          if (result && typeof result.switchTo === 'string') next = result.switchTo;
+          setError(null);
+          const warnings = result && Array.isArray(result.warnings) && result.warnings.length ? ` (${result.warnings.join('; ')})` : '';
+          setMessage(label + warnings);
+        } catch (e) {
+          if (isCancelled(e) || drawingRef.current !== d) return false;
+          setError(errorOf(e));
+          setMessage(`${label}: не выполнено`);
+          ok = false;
+        }
+        if (!keepPicks) setPickState(emptyPicks);
+        try {
+          await refresh(next);
+          if (ok) await takeSnapshot(d, modelNameRef.current);
+        } catch (e) {
+          if (!isCancelled(e)) setError(errorOf(e));
+        }
+        return ok;
+      });
+      queueRef.current = task.catch(() => undefined);
+      return task;
     },
-    [refresh, sheetId],
+    [refresh, takeSnapshot],
   );
 
-  const openDrawing = (make: (k: DrawingKernel) => DrawingHandle, name: string) => {
-    if (!kernel) return;
+  /** Makes `make`'s drawing the current one; `saved` is the file text it was opened from. */
+  const openDrawing = async (
+    make: (k: DrawingModule) => Promise<Drawing>,
+    name: string,
+    saved: string | null = null,
+    k: DrawingModule | undefined = kernel?.root,
+  ): Promise<boolean> => {
+    if (!k) return false;
     try {
-      const d = make(kernel);
-      drawingRef.current?.dispose();
+      const d = await make(k);
+      const old = drawingRef.current;
+      if (old) void old.dispose().catch(() => undefined);
       drawingRef.current = d;
+      savedRef.current = saved;
+      modelNameRef.current = name;
       setModelName(name);
       setReport(null);
       setSelectedView(null);
@@ -204,10 +304,25 @@ export default function DrawingEditorApp(): JSX.Element {
       setTool('select');
       setError(null);
       setMessage(`Открыто: ${name}`);
-      refresh(null);
+      await run(`Открыто: ${name}`, () => undefined);
+      return true;
     } catch (e) {
+      if (isCancelled(e)) return false;
       setError(errorOf(e));
       setMessage(`Не удалось открыть ${name}`);
+      return false;
+    }
+  };
+
+  /** Document given by the shell: a model to draw, or a drawing with its model. */
+  const openInitial = async (k: DrawingModule, file: DocumentFile) => {
+    if (file.kind === 'drawing' && file.model !== undefined) {
+      const model = file.model;
+      await openDrawing(async (m) => (await m.load(file.text, model)).drawing, file.name, initialDirty ? null : file.text, k);
+      if (!initialDirty) hostRef.current.onFile?.(file);
+    } else {
+      // A new drawing of a part or an assembly document.
+      await openDrawing((m) => fromModel(m, file.text, file.name), file.name, null, k);
     }
   };
 
@@ -215,20 +330,7 @@ export default function DrawingEditorApp(): JSX.Element {
     if (!files || files.length === 0) return;
     const file = files[0];
     const text = await file.text();
-    let kind: 'part' | 'assembly' = 'part';
-    try {
-      kind = JSON.parse(text).format === 'bendcore-assembly' ? 'assembly' : 'part';
-    } catch {
-      // The kernel reports the parse error.
-    }
-    const base = file.name.replace(/(\.part|\.assembly)?\.json$/i, '');
-    openDrawing(
-      (k) =>
-        kind === 'assembly'
-          ? k.createFromAssembly(text, { path: file.name })
-          : k.createFromPart(text, { path: file.name, properties: { name: base } }),
-      file.name,
-    );
+    await openDrawing((k) => fromModel(k, text, file.name), file.name);
   };
 
   const onOpenDrawing = async (files: FileList | null) => {
@@ -251,40 +353,84 @@ export default function DrawingEditorApp(): JSX.Element {
       return;
     }
     const loaded: { report: UpdateReport | null } = { report: null };
-    openDrawing(
-      (k) => {
-        const r = k.load(drawingFile.t, modelFile.t);
+    const ok = await openDrawing(
+      async (k) => {
+        const r = await k.load(drawingFile.t, modelFile.t);
         loaded.report = r.report;
         return r.drawing;
       },
       drawingFile.name,
+      drawingFile.t,
     );
     if (loaded.report) setReport(loaded.report);
+    if (ok) hostRef.current.onFile?.({ kind: 'drawing', name: drawingFile.name, text: drawingFile.t, model: modelFile.t });
   };
 
-  const onSave = () => {
+  const onSave = async () => {
     const d = drawingRef.current;
     if (!d || !desc) return;
-    const designation = sheet?.titleShown?.designation ?? '';
-    download(d.save(), downloadName(designation, '', 'drawing.json'), 'application/json');
-    download(d.saveModel(), downloadName(designation, '', desc.model.kind === 'part' ? 'part.json' : 'assembly.json'), 'application/json');
-    setMessage('Сохранено: документ чертежа и модель');
+    try {
+      const designation = sheet?.titleShown?.designation ?? '';
+      const [text, model] = await Promise.all([d.save(), d.saveModel()]);
+      const name = downloadName(designation, '', 'drawing.json');
+      download(text, name, 'application/json');
+      download(model, downloadName(designation, '', desc.model.kind === 'part' ? 'part.json' : 'assembly.json'), 'application/json');
+      savedRef.current = text;
+      const file: DocumentFile = { kind: 'drawing', name, text, model };
+      hostRef.current.onFile?.(file);
+      hostRef.current.onChange?.(file, false);
+      setMessage('Сохранено: документ чертежа и модель');
+    } catch (e) {
+      if (!isCancelled(e)) setError(errorOf(e));
+    }
   };
 
-  const onExport = (format: 'pdf' | 'dxf' | 'svg') => {
+  /**
+   * Cancels the running kernel call (e.g. a long HLR): the worker is terminated, a new one is
+   * started and the drawing is loaded from the last snapshot with its model.
+   */
+  const cancelOperation = async () => {
+    const old = kernelRef.current;
+    if (!old) return;
+    old.cancel('прервано пользователем');
+    setKernel(null);
+    setStatus('loading');
+    queueRef.current = Promise.resolve();
+    const snap = snapshotRef.current;
+    const saved = savedRef.current;
+    drawingRef.current = null;
+    try {
+      const client = await loadDrawingFrom(defaultDrawingBaseUrl());
+      setKernel(client);
+      setStatus('ready');
+      if (snap) await openDrawing(async (m) => (await m.load(snap.text, snap.model)).drawing, snap.name, saved, client.root);
+      else {
+        setDesc(null);
+        setPicture(null);
+      }
+      setNotice(t('busy.cancelled'));
+    } catch (e) {
+      setStatus('failed');
+      setError({ code: 'Cancelled', message: t('busy.restoreFailed', { reason: errorOf(e).message }) });
+    }
+  };
+
+  const onExport = async (format: 'pdf' | 'dxf' | 'svg') => {
     const d = drawingRef.current;
     if (!d || !sheet) return;
     try {
+      await queueRef.current;
       const designation = sheet.titleShown?.designation ?? '';
       if (format === 'pdf') {
-        download(d.exportPdf(), downloadName(designation, '', 'pdf'), 'application/pdf');
+        download(await d.exportPdf(), downloadName(designation, '', 'pdf'), 'application/pdf');
       } else {
-        const bytes = d.exportSheet(sheet.id, format);
+        const bytes = await d.exportSheet(sheet.id, format);
         download(bytes, downloadName(designation, `_${sheet.id}`, format), format === 'dxf' ? 'application/dxf' : 'image/svg+xml');
       }
       setError(null);
       setMessage(`Экспорт ${format.toUpperCase()} выполнен`);
     } catch (e) {
+      if (isCancelled(e)) return;
       setError(errorOf(e));
       setMessage(`Экспорт ${format.toUpperCase()}: не выполнен`);
     }
@@ -363,25 +509,48 @@ export default function DrawingEditorApp(): JSX.Element {
   };
 
   const onUpdate = () => {
-    const d = drawingRef.current;
-    if (!d) return;
-    try {
-      const r = d.updateFromModel();
+    let r: UpdateReport | null = null;
+    void run('Обновление по модели', async (d) => {
+      r = await d.updateFromModel();
       setReport(r);
-      setError(null);
+    }).then((ok) => {
+      const rep = r as UpdateReport | null;
+      if (!ok || !rep) return;
       setMessage(
-        r.modelChanged
-          ? `Чертёж обновлён: ревизия ${r.revision}, изменено размеров ${r.stale.length}, висячих ${r.dangling.length}`
+        rep.modelChanged
+          ? `Чертёж обновлён: ревизия ${rep.revision}, изменено размеров ${rep.stale.length}, висячих ${rep.dangling.length}`
           : 'Модель не изменилась',
       );
-    } catch (e) {
-      setError(errorOf(e));
-      setMessage('Обновление по модели: не выполнено');
-    }
-    refresh(sheetId);
+    });
   };
 
+  useHotkeys(active, {
+    save: () => void onSave(),
+    open: () => openDrawingInput.current?.click(),
+    escape: () => {
+      setTool('select');
+      setPickState(emptyPicks);
+      setSelectedView(null);
+    },
+    delete: () => {
+      const id = selectedView;
+      const sid = sheetIdRef.current;
+      if (!id || !sid) return;
+      void run('Вид удалён', async (d) => {
+        await d.removeView(sid, id);
+        setSelectedView(null);
+      });
+    },
+  });
+  const openDrawingInput = useRef<HTMLInputElement | null>(null);
+
   // State for tests.
+  useEffect(() => {
+    window.bendcoreDrawingEditorIdle = () => waitIdle(() => [kernelRef.current]);
+    return () => {
+      delete window.bendcoreDrawingEditorIdle;
+    };
+  }, []);
   useEffect(() => {
     window.bendcoreDrawingEditor = {
       status,
@@ -410,13 +579,14 @@ export default function DrawingEditorApp(): JSX.Element {
         </label>
         <label className="dr-file">
           Открыть чертёж…
-          <input type="file" accept=".json,application/json" multiple data-testid="open-drawing" onChange={(e) => void onOpenDrawing(e.target.files)} disabled={!kernel} />
+          <input ref={openDrawingInput} type="file" accept=".json,application/json" multiple data-testid="open-drawing" onChange={(e) => void onOpenDrawing(e.target.files)} disabled={!kernel} />
         </label>
-        <button onClick={onSave} disabled={!drawing}>Сохранить</button>
+        <button onClick={() => void onSave()} disabled={!drawing} data-testid="drawing-save" title="Ctrl+S">Сохранить</button>
         <span className="dr-sep" />
-        <button onClick={() => onExport('pdf')} disabled={!drawing} data-testid="export-pdf">PDF</button>
-        <button onClick={() => onExport('dxf')} disabled={!drawing} data-testid="export-dxf">DXF</button>
-        <button onClick={() => onExport('svg')} disabled={!drawing} data-testid="export-svg">SVG</button>
+        <button onClick={() => void onExport('pdf')} disabled={!drawing} data-testid="export-pdf">PDF</button>
+        <button onClick={() => void onExport('dxf')} disabled={!drawing} data-testid="export-dxf">DXF</button>
+        <button onClick={() => void onExport('svg')} disabled={!drawing} data-testid="export-svg">SVG</button>
+        <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
         <span className="dr-sep" />
         {(
           [
@@ -448,7 +618,7 @@ export default function DrawingEditorApp(): JSX.Element {
                     {s.id} · {s.name}
                   </button>
                 ))}
-                <button onClick={() => run('Лист добавлен', (d) => ({ switchTo: d.addSheet({}) }))} title="Добавить лист А3" data-testid="add-sheet">+</button>
+                <button onClick={() => run('Лист добавлен', async (d) => ({ switchTo: await d.addSheet({}) }))} title="Добавить лист А3" data-testid="add-sheet">+</button>
               </div>
               <div className="dr-row">
                 <label>
@@ -564,8 +734,8 @@ export default function DrawingEditorApp(): JSX.Element {
                   )}
                   <button
                     onClick={() =>
-                      run('Вид удалён', (d) => {
-                        d.removeView(sheet.id, selected.id);
+                      run('Вид удалён', async (d) => {
+                        await d.removeView(sheet.id, selected.id);
                         setSelectedView(null);
                       })
                     }
@@ -776,8 +946,8 @@ export default function DrawingEditorApp(): JSX.Element {
                   key={JSON.stringify(desc.model.properties)}
                   properties={desc.model.properties}
                   onApply={(p) =>
-                    run('Свойства детали', (d) => {
-                      const r = d.setModelProperties(p);
+                    run('Свойства детали', async (d) => {
+                      const r = await d.setModelProperties(p);
                       setReport(r);
                     })
                   }
@@ -825,6 +995,14 @@ export default function DrawingEditorApp(): JSX.Element {
         </aside>
       </div>
 
+      {notice && (
+        <div className="app-notice" role="status" data-testid="drawing-notice">
+          {notice}
+          <button type="button" onClick={() => setNotice(null)} aria-label={t('notify.dismiss')}>
+            ×
+          </button>
+        </div>
+      )}
       <footer className={`dr-status${error ? ' dr-error' : ''}`} data-testid="status" role={error ? 'alert' : 'status'}>
         {message}
         {error ? ` — ${error.code}: ${error.message}` : ''}

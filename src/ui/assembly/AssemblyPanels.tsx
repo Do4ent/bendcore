@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import type { Remote } from '../worker/wasmClient';
 import type {
   Alignment,
   AssemblyKernel,
@@ -136,7 +137,8 @@ export const MatePanel: React.FC<MatePanelProps> = ({ slots, onClearSlot, onAdd 
 // ------------------------------------------------------------------ fasteners
 
 export interface FastenerPanelProps {
-  kernel: AssemblyKernel;
+  /** Assembly module in the WASM worker. */
+  kernel: Remote<AssemblyKernel>;
   hole: PickedElement | null;
   onClearHole: () => void;
   onInsert: (spec: {
@@ -149,7 +151,14 @@ export interface FastenerPanelProps {
 }
 
 export const FastenerPanel: React.FC<FastenerPanelProps> = ({ kernel, hole, onClearHole, onInsert }) => {
-  const catalog = useMemo<FastenerStandardInfo[]>(() => kernel.fastenerCatalog(), [kernel]);
+  const [catalog, setCatalog] = useState<FastenerStandardInfo[]>([]);
+  useEffect(() => {
+    let live = true;
+    kernel.fastenerCatalog().then((c) => live && setCatalog(c), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [kernel]);
   const [system, setSystem] = useState<'gost' | 'iso'>('gost');
   const inSystem = catalog.filter((c) => c.gost === (system === 'gost'));
   const screws = inSystem.filter((c) => c.kind === 'hex-bolt' || c.kind === 'socket-head-screw');
@@ -183,13 +192,25 @@ export const FastenerPanel: React.FC<FastenerPanelProps> = ({ kernel, hole, onCl
   const washers = withSize(['plain-washer', 'spring-washer']);
   const nuts = withSize(['hex-nut']);
   const screwSpec: FastenerSpec | null = screw ? { standard: screw.id, size, length: num(length) } : null;
-  let description: FastenerDescription | null = null;
-  let descriptionError = '';
-  try {
-    if (screwSpec && sizes.includes(size)) description = kernel.describeFastener(screwSpec);
-  } catch (e) {
-    descriptionError = (e as Error).message;
-  }
+  const [described, setDescribed] = useState<{ key: string; description: FastenerDescription | null; error: string }>({
+    key: '',
+    description: null,
+    error: '',
+  });
+  const specKey = screwSpec && sizes.includes(size) ? JSON.stringify(screwSpec) : '';
+  useEffect(() => {
+    if (!specKey) return undefined;
+    let live = true;
+    kernel.describeFastener(JSON.parse(specKey) as FastenerSpec).then(
+      (d) => live && setDescribed({ key: specKey, description: d, error: '' }),
+      (e: unknown) => live && setDescribed({ key: specKey, description: null, error: (e as Error).message }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [kernel, specKey]);
+  const description = specKey && described.key === specKey ? described.description : null;
+  const descriptionError = specKey && described.key === specKey ? described.error : '';
   const valid = (id: string, list: FastenerStandardInfo[]) => (id && list.some((c) => c.id === id) ? id : '');
   const hw = valid(headWasher, washers);
   const nw = valid(nutWasher, washers);

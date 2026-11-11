@@ -35,6 +35,8 @@ export interface AssemblyPick {
 
 export type PartHighlight = 'interference' | 'touching' | 'selected';
 
+export type DragStart = false | { planeNormal: V3 | null };
+
 export interface AssemblyViewportHandle {
   worldToClient(x: number, y: number, z: number): { x: number; y: number };
   /** Client point of a visible triangle of the face (first hit of a ray through it), or null. */
@@ -53,9 +55,10 @@ export interface AssemblyViewportProps {
   /**
    * Press on face `face` of the part at `path`: false refuses the drag; otherwise the drag plane
    * normal (the grabbed face's plane, so the point slides in it), or null for the plane facing
-   * the camera.
+   * the camera. The answer may come asynchronously (kernel call in the worker): the view stops
+   * orbiting at once, and a release before the answer ends the drag as soon as it arrives.
    */
-  onDragStart?: (path: number[], face: number, point: V3) => false | { planeNormal: V3 | null };
+  onDragStart?: (path: number[], face: number, point: V3) => DragStart | Promise<DragStart>;
   onDragMove?: (target: V3) => void;
   onDragEnd?: () => void;
   onReady?: (handle: AssemblyViewportHandle | null) => void;
@@ -333,17 +336,43 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       const fh = faceHit(rayAt(e.clientX, e.clientY));
       if (!fh) return;
       const p = fh.hit.point;
-      const accepted = cb.current.onDragStart?.(fh.inst.path, fh.face, [p.x, p.y, p.z]);
-      if (!accepted) return;
+      const answer = cb.current.onDragStart?.(fh.inst.path, fh.face, [p.x, p.y, p.z]);
+      if (!answer) return;
       controls.enabled = false;
-      const normal = new THREE.Vector3();
-      camera.getWorldDirection(normal);
-      // A face plane seen nearly edge-on would throw the target far away: camera plane then.
-      const n = accepted.planeNormal;
-      if (n && Math.abs(normal.x * n[0] + normal.y * n[1] + normal.z * n[2]) > 0.25) normal.set(n[0], n[1], n[2]);
-      drag = { point: p.clone(), normal, pending: null, frame: 0 };
-      window.addEventListener('pointermove', onDragPointerMove);
-      window.addEventListener('pointerup', onDragPointerUp);
+      const begin = (accepted: { planeNormal: V3 | null }) => {
+        const normal = new THREE.Vector3();
+        camera.getWorldDirection(normal);
+        // A face plane seen nearly edge-on would throw the target far away: camera plane then.
+        const n = accepted.planeNormal;
+        if (n && Math.abs(normal.x * n[0] + normal.y * n[1] + normal.z * n[2]) > 0.25) normal.set(n[0], n[1], n[2]);
+        drag = { point: p.clone(), normal, pending: null, frame: 0 };
+        window.addEventListener('pointermove', onDragPointerMove);
+        window.addEventListener('pointerup', onDragPointerUp);
+      };
+      if (!(answer instanceof Promise)) {
+        begin(answer);
+        return;
+      }
+      let released = false;
+      const onEarlyUp = () => {
+        released = true;
+      };
+      window.addEventListener('pointerup', onEarlyUp);
+      void answer.then(
+        (accepted) => {
+          window.removeEventListener('pointerup', onEarlyUp);
+          if (!accepted) {
+            controls.enabled = true;
+            return;
+          }
+          begin(accepted);
+          if (released) finishDrag();
+        },
+        () => {
+          window.removeEventListener('pointerup', onEarlyUp);
+          controls.enabled = true;
+        },
+      );
     };
     const onPointerUp = (e: PointerEvent) => {
       if (!down || e.button !== 0) return;

@@ -26,6 +26,8 @@
     "dev:drawing": "webpack serve --config web/drawing/webpack.config.js --mode development",
     "test:drawing-wasm": "node tests/wasm/drawing_document.test.mjs",
     "test:e2e:drawing": "playwright test -c web/drawing/playwright.config.ts",
+    "dev:app": "webpack serve --config web/app/webpack.config.js --mode development",
+    "test:e2e:app": "playwright test -c web/app/playwright.config.ts",
     "lint": "eslint src/ui --ext .ts,.tsx",
     "format": "prettier --write src/ui",
     "start": "electron .",
@@ -53,6 +55,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.22.0",
+    "@babel/plugin-transform-modules-commonjs": "^7.29.7",
     "@babel/preset-typescript": "^7.22.0",
     "@playwright/test": "^1.40.0",
     "@testing-library/jest-dom": "^6.1.0",

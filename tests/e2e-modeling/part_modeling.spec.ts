@@ -20,12 +20,18 @@ declare global {
   interface Window {
     bendcorePartModeler?: {
       getState(): ModelerState;
+      idle(): Promise<void>;
       worldToClient(x: number, y: number, z: number): { x: number; y: number };
     };
   }
 }
 
-const state = (page: Page) => page.evaluate(() => window.bendcorePartModeler!.getState());
+// Kernel calls run in a worker (docs/ui/APP_SHELL.md): wait for the last result before reading.
+const state = (page: Page) =>
+  page.evaluate(async () => {
+    await window.bendcorePartModeler!.idle();
+    return window.bendcorePartModeler!.getState();
+  });
 const filletLoss = (r: number, L: number) => (1 - Math.PI / 4) * r * r * L;
 
 async function expectVolume(page: Page, expected: number) {

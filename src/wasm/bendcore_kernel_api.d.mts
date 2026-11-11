@@ -7,7 +7,11 @@ export type KernelErrorCode =
   | 'ParseError'
   | 'IoError'
   | 'Unsupported'
-  | 'Disposed';
+  | 'Disposed'
+  // Raised by the main-thread worker client (src/ui/worker/wasmClient.ts), not by the module:
+  // the worker was terminated by cancel(), or failed.
+  | 'Cancelled'
+  | 'WorkerFailed';
 
 export type SurfaceType = 'Plane' | 'Cylinder' | 'Cone' | 'Sphere' | 'Torus' | 'BSpline' | 'Other';
 export type CurveType = 'Line' | 'Circle' | 'Ellipse' | 'BSpline' | 'Other' | 'Degenerated';
