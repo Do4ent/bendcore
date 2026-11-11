@@ -172,6 +172,26 @@ struct RoughnessItem {
     annotations::RoughnessSpec spec;
 };
 
+// Допуск формы или расположения ГОСТ 2.308 на линии вида — изображении ребра модели: рамка
+// снаружи вида, соединительная линия со стрелкой на линии поверхности в доле at её длины.
+struct ToleranceItem {
+    std::string id;
+    std::string view;
+    modeling::TopoReference edge;
+    double at = 0.5;
+    annotations::FeatureControlFrame frame;
+};
+
+// Обозначение базы ГОСТ 2.308 на линии вида: зачернённый треугольник на линии поверхности
+// (снаружи вида) в доле at её длины, рамка с буквой.
+struct DatumItem {
+    std::string id;
+    std::string view;
+    modeling::TopoReference edge;
+    double at = 0.5;
+    std::string letter;
+};
+
 struct SheetDef {
     std::string id;
     SheetFormat format;
@@ -180,6 +200,8 @@ struct SheetDef {
     std::vector<ViewDef> views;
     std::vector<DimensionItem> dimensions;
     std::vector<RoughnessItem> roughness;
+    std::vector<ToleranceItem> tolerances;
+    std::vector<DatumItem> datums;
     std::optional<annotations::RoughnessSpec> roughnessRemainder;  // знак в правом верхнем углу
     std::vector<std::string> technicalRequirements;
     bool partsList = false;  // перечень составных частей ISO 7573 над основной надписью (сборка)
@@ -219,6 +241,8 @@ struct ComputedSheet {
     std::vector<ComputedView> views;
     std::vector<annotations::DimensionResult> dimensions;  // по SheetDef::dimensions
     std::vector<std::optional<annotations::SymbolGeometry>> roughness;  // nullopt — висячий
+    std::vector<std::optional<annotations::SymbolGeometry>> tolerances;  // по SheetDef::tolerances
+    std::vector<std::optional<annotations::SymbolGeometry>> datums;      // по SheetDef::datums
     std::vector<annotations::Balloon> balloons;
     std::optional<annotations::Specification> specification;  // для перечня ISO 7573
 };

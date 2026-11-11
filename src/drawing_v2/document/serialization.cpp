@@ -224,6 +224,22 @@ TitleFields titleFrom(const json& j) {
     return t;
 }
 
+const std::vector<std::pair<annotations::GeometricCharacteristic, const char*>> kGeomChars = {
+    {annotations::GeometricCharacteristic::Straightness, "straightness"},
+    {annotations::GeometricCharacteristic::Flatness, "flatness"},
+    {annotations::GeometricCharacteristic::Roundness, "roundness"},
+    {annotations::GeometricCharacteristic::Cylindricity, "cylindricity"},
+    {annotations::GeometricCharacteristic::LineProfile, "lineProfile"},
+    {annotations::GeometricCharacteristic::SurfaceProfile, "surfaceProfile"},
+    {annotations::GeometricCharacteristic::Parallelism, "parallelism"},
+    {annotations::GeometricCharacteristic::Perpendicularity, "perpendicularity"},
+    {annotations::GeometricCharacteristic::Angularity, "angularity"},
+    {annotations::GeometricCharacteristic::Position, "position"},
+    {annotations::GeometricCharacteristic::Coaxiality, "coaxiality"},
+    {annotations::GeometricCharacteristic::Symmetry, "symmetry"},
+    {annotations::GeometricCharacteristic::CircularRunout, "circularRunout"},
+    {annotations::GeometricCharacteristic::TotalRunout, "totalRunout"}};
+
 json roughJson(const annotations::RoughnessSpec& r) {
     return {{"method", enumName(r.method, kRoughMethods)}, {"parameter", r.parameter}, {"value", r.value},
             {"process", r.process}, {"heightFactor", r.heightFactor}};
@@ -351,6 +367,17 @@ Result<std::string> DrawingDocument::toJson() const {
         for (const RoughnessItem& r : s.roughness)
             rs.push_back({{"id", r.id}, {"view", r.view}, {"edge", refJson(r.edge)}, {"at", r.at}, {"spec", roughJson(r.spec)}});
         js["roughness"] = std::move(rs);
+        json ts = json::array();
+        for (const ToleranceItem& t : s.tolerances)
+            ts.push_back({{"id", t.id}, {"view", t.view}, {"edge", refJson(t.edge)}, {"at", t.at},
+                          {"characteristic", enumName(t.frame.characteristic, kGeomChars)},
+                          {"tolerance", t.frame.tolerance}, {"diameterZone", t.frame.diameterZone},
+                          {"datums", t.frame.datums}});
+        js["tolerances"] = std::move(ts);
+        json dms = json::array();
+        for (const DatumItem& dm : s.datums)
+            dms.push_back({{"id", dm.id}, {"view", dm.view}, {"edge", refJson(dm.edge)}, {"at", dm.at}, {"letter", dm.letter}});
+        js["datums"] = std::move(dms);
         js["roughnessRemainder"] = s.roughnessRemainder ? roughJson(*s.roughnessRemainder) : json(nullptr);
         js["technicalRequirements"] = s.technicalRequirements;
         js["partsList"] = s.partsList;
@@ -481,6 +508,32 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                     r.at = num(jr, "at", 0.5);
                     r.spec = roughFrom(field(jr, "spec"));
                     s.roughness.push_back(std::move(r));
+                }
+            }
+            // Допуски формы и базы (необязательны: файлы версии 2 без них читаются).
+            if (js.contains("tolerances")) {
+                for (const json& jt : js.at("tolerances")) {
+                    ToleranceItem t;
+                    t.id = str(jt, "id");
+                    t.view = str(jt, "view");
+                    t.edge = refFrom(field(jt, "edge"));
+                    t.at = num(jt, "at", 0.5);
+                    t.frame.characteristic = enumValue(field(jt, "characteristic"), kGeomChars, "geometric characteristic");
+                    t.frame.tolerance = str(jt, "tolerance");
+                    t.frame.diameterZone = flag(jt, "diameterZone", false);
+                    if (jt.contains("datums")) t.frame.datums = jt.at("datums").get<std::vector<std::string>>();
+                    s.tolerances.push_back(std::move(t));
+                }
+            }
+            if (js.contains("datums")) {
+                for (const json& jdm : js.at("datums")) {
+                    DatumItem dm;
+                    dm.id = str(jdm, "id");
+                    dm.view = str(jdm, "view");
+                    dm.edge = refFrom(field(jdm, "edge"));
+                    dm.at = num(jdm, "at", 0.5);
+                    dm.letter = str(jdm, "letter");
+                    s.datums.push_back(std::move(dm));
                 }
             }
             if (js.contains("roughnessRemainder") && !js.at("roughnessRemainder").is_null())

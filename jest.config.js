@@ -11,6 +11,7 @@ module.exports = {
     '<rootDir>/tests/e2e-kernel/',
     '<rootDir>/tests/e2e-modeling/',
     '<rootDir>/tests/e2e-assembly/',
+    '<rootDir>/tests/e2e-drawing/',
     '<rootDir>/tests/integration/comprehensive\\.test\\.ts',
     '<rootDir>/tests/integration/sketch-solver\\.integration\\.test\\.ts',
     '<rootDir>/tests/integration/import-export\\.integration\\.test\\.ts',

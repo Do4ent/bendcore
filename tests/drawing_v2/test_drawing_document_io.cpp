@@ -223,3 +223,125 @@ TEST(DrawingDocumentIo, SpecificationDocumentRoundTrip) {
     EXPECT_EQ(SpecificationDocument::fromJson(R"({"format":"bendcore-specification","version":1,
       "model":{"kind":"part","path":"x"},"settings":{}})").error().code, ErrorCode::ParseError);
 }
+
+// Лист без видов (новый чертёж): рамка и основная надпись; допуски формы и расположения и базы
+// ГОСТ 2.308 на линиях вида кронштейна — положение снаружи контура, тексты, файл, висячие знаки.
+TEST(DrawingDocumentIo, EmptySheetTolerancesAndDatums) {
+    auto part = makeBracket();
+    auto snap = snapshotPart(*part, {"РД.10.001", "Кронштейн", "Сталь 20", 7850.0});
+    ASSERT_TRUE(snap.ok());
+    const ModelSnapshot& m = snap.value();
+    DrawingDocument d;
+    d.model().kind = ModelKind::Part;
+    d.model().path = "bracket_part.json";
+    SheetDef s;
+    s.id = "S1";
+    s.format = {GostFormat::A3, 1, Orientation::Landscape};
+    s.scale = views::ScaleRatio{1, 1};
+    d.sheets().push_back(s);
+    views::ViewCache cache(8, 1);
+    ASSERT_TRUE(d.update(m, cache).ok());
+    auto blank = d.render(dv2test::systemFont());
+    ASSERT_TRUE(blank.ok()) << blank.error().message;
+    std::size_t blankTexts = 0;
+    for (const Entity& e : blank.value()[0].entities()) blankTexts += std::holds_alternative<Text>(e.geometry);
+    EXPECT_GT(blankTexts, 0u);  // графы основной надписи
+    EXPECT_EQ(d.computedSheets()[0].title.scale, "1:1");
+    EXPECT_TRUE(d.computedSheets()[0].views.empty());
+
+    ViewDef f;
+    f.id = "F";
+    d.sheets()[0].views.push_back(f);
+    auto edge = [&](Vec3 a, Vec3 b) {
+        auto i = lineEdge(m, a, b);
+        EXPECT_TRUE(i.has_value());
+        return elementReference(m, ElementKind::Edge, i.value_or(0)).value();
+    };
+    // База А — нижняя линия (z = 0), параллельность 0,02 к А — верх вертикальной полки (z = B = 50),
+    // плоскостность 0,05 — левая линия (x = 0).
+    d.sheets()[0].datums.push_back({"BA", "F", edge({0, -15, 0}, {60, -15, 0}), 0.5, "А"});
+    ToleranceItem par{"TP", "F", edge({0, -15, 50}, {8, -15, 50}), 0.5, {}};
+    par.frame.characteristic = annotations::GeometricCharacteristic::Parallelism;
+    par.frame.tolerance = "0,02";
+    par.frame.datums = {"А"};
+    d.sheets()[0].tolerances.push_back(par);
+    ToleranceItem flat{"TF", "F", edge({0, -15, 0}, {0, -15, 50}), 0.5, {}};
+    flat.frame.characteristic = annotations::GeometricCharacteristic::Flatness;
+    flat.frame.tolerance = "0,05";
+    d.sheets()[0].tolerances.push_back(flat);
+    auto rep = d.update(m, cache);
+    ASSERT_TRUE(rep.ok()) << rep.error().message;
+    EXPECT_TRUE(rep.value().dangling.empty());
+    const ComputedSheet& cs = d.computedSheets()[0];
+    const views::SheetView& sv = cs.views[0].sheetView;
+    const double bottomY = sv.toSheet({0, 0}).y, topY = sv.toSheet({0, 50}).y, leftX = sv.toSheet({0, 0}).x;
+    ASSERT_EQ(cs.datums.size(), 1u);
+    ASSERT_TRUE(cs.datums[0].has_value());
+    // Треугольник базы: основание на нижней линии, вершина — ниже (снаружи детали) на h = 3,5.
+    ASSERT_FALSE(cs.datums[0]->fills.empty());
+    double minY = 1e300, maxY = -1e300;
+    for (const Point2& p : cs.datums[0]->fills[0].points) {
+        minY = std::min(minY, p.y);
+        maxY = std::max(maxY, p.y);
+    }
+    EXPECT_NEAR(maxY, bottomY, 1e-6);
+    EXPECT_NEAR(maxY - minY, 3.5, 1e-6);
+    bool letterA = false;
+    for (const auto& l : cs.datums[0]->labels) letterA = letterA || l.text == "А";
+    EXPECT_TRUE(letterA);
+    // Рамки допусков: параллельность — выше верхней линии, плоскостность — левее левой линии.
+    ASSERT_EQ(cs.tolerances.size(), 2u);
+    ASSERT_TRUE(cs.tolerances[0] && cs.tolerances[1]);
+    auto texts = [](const annotations::SymbolGeometry& g) {
+        std::string all;
+        for (const auto& l : g.labels) all += l.text + "|";
+        return all;
+    };
+    EXPECT_NE(texts(*cs.tolerances[0]).find("0,02"), std::string::npos);
+    EXPECT_NE(texts(*cs.tolerances[0]).find("А"), std::string::npos);
+    EXPECT_NE(texts(*cs.tolerances[1]).find("0,05"), std::string::npos);
+    for (const auto& l : cs.tolerances[0]->labels) EXPECT_GT(l.position.y, topY + 5.0);
+    for (const auto& l : cs.tolerances[1]->labels) EXPECT_LT(l.position.x, leftX - 5.0);
+    // Стрелка соединительной линии — на линии поверхности.
+    bool arrowOnTop = false;
+    for (const auto& fl : cs.tolerances[0]->fills)
+        for (const Point2& p : fl.points) arrowOnTop = arrowOnTop || std::abs(p.y - topY) < 1e-6;
+    EXPECT_TRUE(arrowOnTop);
+
+    auto sheets = d.render(dv2test::systemFont());
+    ASSERT_TRUE(sheets.ok()) << sheets.error().message;
+    const std::string dir = dv2test::outPath("io");
+    std::filesystem::create_directories(dir);
+    ASSERT_TRUE(saveToFile(dir + "/tolerances.dxf", writeDxf(sheets.value()[0]).value()).ok());
+    const DxfContent dxf = readDxf(dir + "/tolerances.dxf");
+    EXPECT_TRUE(hasText(dxf, "0,02"));
+    EXPECT_TRUE(hasText(dxf, "0,05"));
+
+    // Формат файла: сохранение → загрузка → тот же текст.
+    const std::string text = d.toJson().value();
+    auto loaded = DrawingDocument::fromJson(text);
+    ASSERT_TRUE(loaded.ok()) << loaded.error().message;
+    EXPECT_EQ(loaded.value().toJson().value(), text);
+    ASSERT_EQ(loaded.value().sheets()[0].tolerances.size(), 2u);
+    EXPECT_EQ(loaded.value().sheets()[0].tolerances[0].frame.datums, std::vector<std::string>{"А"});
+    EXPECT_EQ(loaded.value().sheets()[0].datums[0].letter, "А");
+
+    // Проверка определений: допуск расположения без базы, допуск формы с базой.
+    DrawingDocument bad = loaded.value();
+    bad.sheets()[0].tolerances[0].frame.datums.clear();
+    EXPECT_EQ(bad.update(m, cache).error().code, ErrorCode::InvalidInput);
+    bad = loaded.value();
+    bad.sheets()[0].tolerances[1].frame.datums = {"А"};
+    EXPECT_EQ(bad.update(m, cache).error().code, ErrorCode::InvalidInput);
+
+    // Ребро, которое не изображено прямой линией на виде (окружность отверстия на виде спереди
+    // не видна), — висячий знак, лист строится.
+    DrawingDocument hole = loaded.value();
+    hole.sheets()[0].datums[0].edge = elementReference(m, ElementKind::Edge, circleEdge(m, {40, 0, 8}, 4).value()).value();
+    auto rh = hole.update(m, cache);
+    ASSERT_TRUE(rh.ok()) << rh.error().message;
+    ASSERT_EQ(rh.value().dangling.size(), 1u);
+    EXPECT_EQ(rh.value().dangling[0].rfind("S1/BA: ", 0), 0u) << rh.value().dangling[0];
+    EXPECT_FALSE(hole.computedSheets()[0].datums[0].has_value());
+    EXPECT_TRUE(hole.render(dv2test::systemFont()).ok());
+}
