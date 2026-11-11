@@ -219,3 +219,105 @@ ctest --test-dir build-occt -R 'corpus|qa_' --output-on-failure
 # перегенерация закоммиченного корпуса
 build-occt/generate_corpus tests/corpus/generated
 ```
+
+## 6. Нагрузочные тесты
+
+`stress_part_300`, `stress_assembly_300`, `stress_step_generate` → `stress_step_large`,
+`stress_hlr_1000` (метка ctest `stress`, `cmake/qa_stress.cmake`): деталь из 300 операций,
+сборка из 300 компонентов, сгенерированный STEP ≥ 50 МБ, вид HLR детали из 996 граней через
+кэш. Эталоны, пороги, отчёт с метками времени и базовая линия — `docs/qa/PERFORMANCE.md`.
+
+## 7. Fuzz-проверка загрузчиков
+
+Файлы: `tests/regression/fuzz/` (`fuzz_targets.{hpp,cpp}` — цели, затравки, мутатор;
+`test_fuzz_loaders.cpp`; `fuzz_main.cpp` — фаззер libFuzzer; `fuzz_seeds.cpp`;
+`fuzz_replay.cpp`; `test_loader_regressions.cpp`; `known_defects.txt`), подключение —
+`cmake/qa_fuzz.cmake`.
+
+### Цели
+
+| Цель | Загрузчик | После приёма |
+|---|---|---|
+| `part_json` | `PartDocument::fromJson` (с перестроением) | `toJson` обязан пройти |
+| `assembly_json` | `AssemblyDocument::fromJson` (встроенный BRep деталей) | `toJson`, `solve`, `placedParts` — только явные ошибки |
+| `drawing_json` | `DrawingDocument::fromJson` | `toJson` |
+| `step` | `kernel::readStep` | `counts()` |
+| `dxf` | `dxf::parseDxf` | `scaleToMillimeters` |
+| `brep_binary`, `brep_text` | `kernel::readBrepBinary`, `readBrepText` | `counts()` |
+
+Затравки: закоммиченные `tests/wasm/fixtures/bracket.part.json`, `tests/assembly-fixtures/*.json`,
+файлы корпуса STEP, а также документы, построенные через API модулей (сборка с двумя деталями и
+сопряжением, чертёж с листом и видами, STEP/BRep бруска со скруглением и отверстием, DXF писателя
+`drawing_v2` и DXF R12 с LWPOLYLINE и выпуклостью). Мутации (`Mutator`, `std::mt19937_64`):
+обрезка, перестановка байтов и блока, случайные байты, замена числа на «интересное» (1e308,
+1e999, −0, 2⁶⁴, NaN/inf текстом, 1e-320 …), повтор блока до 200 раз и строки 5000 раз, удаление
+блока, вставка 1000/200 000 скобок; для JSON — замена значения случайного поля (null, тип,
+строка 100 000 символов, ±экстремальные целые, 1e308, вложенность 100/5000) и удаление поля.
+
+### Детерминированный мутационный тест — ctest `fuzz_loaders`
+
+300 мутаций на цель, зерно 20261111 (`BENDCORE_FUZZ_ITERATIONS`, `BENDCORE_FUZZ_SEED`). Каждый
+вход — в отдельном процессе (`fork`); исход: принят, явная ошибка, **exception** (исключение
+наружу), **crash** (сигнал, отчёт ASan/UBSan), **hang** (> `BENDCORE_FUZZ_TIMEOUT_S` = 60 с,
+процесс убивается), **memory** (пик > 4096 МиБ; адресное пространство ребёнка ограничено 8 ГиБ,
+под ASan — `hard_rss_limit_mb=4096`). Вход каждого дефекта сохраняется в
+`build-*/fuzz-artifacts/<вид>-<цель>-<номер>.bin` (артефакт CI) и воспроизводится
+`fuzz_replay <цель> <файл>`. Тест требует, чтобы затравки принимались и чтобы были и приёмы, и
+отказы (иначе мутации ничего не проверяют).
+
+Дефекты, которые нельзя исправить в коде bendcore, перечислены в `known_defects.txt` для своей
+конфигурации (`native` — gcc, `asan` — clang + ASan/UBSan). Совпадение требуется точное: новый
+дефект роняет тест, исчезнувший (исправленный) — тоже, чтобы список не устаревал. Загрузчик в
+самом процессе теста не запускается: потоки OCCT, запущенные в родителе, после `fork` оставили бы
+захваченные мьютексы (первый вариант теста давал из-за этого ложные зависания).
+
+### libFuzzer — конфигурация `build-fuzz`
+
+```bash
+CC=clang CXX=clang++ cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install -DBENDCORE_FUZZ=ON \
+  -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+  -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,fuzzer-no-link -fno-sanitize-recover=undefined -fno-omit-frame-pointer" \
+  -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+cmake --build build-fuzz --target test_fuzz_loaders test_loader_regressions fuzz_seeds fuzz_replay \
+  fuzz_part_json fuzz_assembly_json fuzz_drawing_json fuzz_step fuzz_dxf fuzz_brep_binary fuzz_brep_text
+ctest --test-dir build-fuzz -L fuzz --output-on-failure
+build-fuzz/fuzz_dxf build-fuzz/fuzz-corpus/dxf -max_total_time=60     # поиск
+```
+
+Нужен `libclang-rt-18-dev` (libFuzzer). OCCT не инструментирован (установка native): санитайзеры
+проверяют код bendcore и вызовы OCCT из него. `fuzz_seeds` пишет затравочный корпус в
+`build-fuzz/fuzz-corpus/<цель>/` (в git не хранится), `fuzz_corpus_<цель>` — прогон фаззера по
+нему (`-runs=0`). В CI (задача `fuzz`) — ещё 60 с поиска на цель; находки `part_json`,
+`drawing_json`, `dxf` роняют задачу, находки целей, читающих через OCCT (`step`, `brep_*`,
+`assembly_json`), — предупреждение и артефакт `fuzz-findings`.
+
+### Найдено и исправлено
+
+1. `AssemblyDocument::fromJson` выпускал наружу `nlohmann::json::out_of_range` (406, переполнение
+   числа при разборе: `1e999`): ловился только `parse_error`
+   (`src/assembly_v2/document/serialization.cpp`). Теперь — `ParseError`. Регрессия —
+   `fuzz_loader_regressions` (`test_loader_regressions.cpp`: тот же вход у загрузчиков сборки,
+   детали и чертежа).
+
+### Найдено, не исправлено (OCCT) — `known_defects.txt`
+
+Все падения native-конфигурации (229 из 2100 мутаций) — внутри читателей OCCT 8.0.1, собранного
+с `No_Exception` (`BUILD_RELEASE_DISABLE_EXCEPTIONS=ON` по умолчанию, `third_party/build_occt.sh`):
+проверки `Standard_OutOfRange_Raise_if` вырезаны.
+
+| Цель | Падений | Где |
+|---|---:|---|
+| `brep_binary` | 103 | `BinTools_ShapeSet::ReadSubs/ReadShape` → `BinTools_{Location,Shape,Curve,Curve2d,Surface}Set::…(int)`: индекс вне диапазона |
+| `brep_text` | 69 | `TopTools_ShapeSet::Read`: индекс подформы вне диапазона |
+| `step` | 47 | `StepToGeom::Make*` / `StepToTopoDS_TranslateVertex`: нулевые `StepGeom_Direction`, `_Vector`, `_CartesianPoint`, `_BSplineCurveWithKnots` после порчи ссылки на сущность; `BSplCLib::InsertKnots` — порча кучи; один вход требует > 8 ГиБ |
+| `assembly_json` | 10 | тот же `BinTools` на встроенном BRep детали |
+
+JSON-документы детали и чертежа и DXF — 0 дефектов (ни падений, ни зависаний, ни исключений).
+Предложение инженеру ядра (через руководителя проекта): собрать OCCT с
+`-DBUILD_RELEASE_DISABLE_EXCEPTIONS=OFF` (индексы проверяются и бросают `Standard_OutOfRange`,
+который `brep_io.cpp`/`step_io.cpp` уже переводят в `ParseError`) и проверить этим же тестом,
+сколько падений остаётся; нулевые дескрипторы STEP — сообщить в OCCT; до исправления — чтение
+недоверенных STEP/BRep в отдельном процессе (native) или Web Worker (браузер). После изменения
+OCCT `known_defects.txt` перегенерируется: прогон теста печатает строки
+`[fuzz] <конфигурация> <цель> #<номер>: <вид>`.
