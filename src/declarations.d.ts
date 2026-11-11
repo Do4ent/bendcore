@@ -45,6 +45,10 @@ declare module 'three' {
     constructor();
     identity(): this;
     multiply(m: Matrix4): this;
+    makeBasis(x: Vector3, y: Vector3, z: Vector3): this;
+    setPosition(v: Vector3): this;
+    copy(m: Matrix4): this;
+    invert(): this;
   }
 
   export class BufferGeometry {
@@ -139,6 +143,8 @@ declare module 'three' {
     up: Vector3;
     scale: Vector3;
     children: Object3D[];
+    matrix: Matrix4;
+    matrixAutoUpdate: boolean;
     userData: Record<string, any>;
     add(...objects: Object3D[]): this;
     remove(...objects: Object3D[]): this;
@@ -210,6 +216,17 @@ declare module 'three' {
     updateProjectionMatrix(): void;
     getWorldDirection(target: Vector3): Vector3;
     updateMatrixWorld(force?: boolean): void;
+  }
+
+  export class OrthographicCamera extends Camera {
+    constructor(left?: number, right?: number, top?: number, bottom?: number, near?: number, far?: number);
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    near: number;
+    far: number;
+    updateProjectionMatrix(): void;
   }
 
   export class Box3 {
