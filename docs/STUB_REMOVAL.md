@@ -80,7 +80,8 @@
 
 ## 5. Найдено, не удалено
 
-Пересчитано 2026-11-08 после раздела 6. Явные заглушки C++ вне задачи. Список получен
+Пересчитано 2026-11-08 после раздела 6; файлы, удалённые разделом 7, из списка ниже
+поимённо не вычеркнуты (перечень удалённого — в разделе 7). Явные заглушки C++ вне задачи. Список получен
 поиском по `Placeholder`, `In a real implementation`, `in real implementation`,
 `в реальной реализации`, `not implemented`, `would send/upload/use`, `In production, would`
 (без `src/ui`, `src/kernel`); строки — по текущему коду. Дополнительно
@@ -89,18 +90,8 @@
 `no-assertions` в удалённом `tests/test_dxf_reader_comprehensive.cpp`; в изменённых файлах
 нарушений нет). Подтверждено чтением кода:
 
-- `src/drawing/print_manager.cpp:28, 170, 351, 356`; `src/drawing/file_handler.cpp:135-136`;
-  `src/drawing/annotation_dimension.cpp:288, 347`.
-- `src/testing/test_suite.cpp:351, 373, 448, 497, 521` — тесты (`CrashRecoveryTest` и др.)
-  возвращают успех без проверок, `// In real implementation, would …`.
-- Решатель сборок `src/assembly/assembly_constraint_system.cpp` — только валидирует
-  (раздел 1 плана).
-- `third_party_stubs/glm/` — самодельная замена GLM (не библиотека GLM), используется
-  только несобираемыми `src/bendcore/{camera_manager,snap_system,viewport_manager}`;
-  `third_party_stubs/include/nlohmann/json.hpp` — 133-строчная замена nlohmann/json, не
-  подключается ни одной целью (настоящая библиотека — `third_party/nlohmann`). Каталог
-  `third_party_stubs` убран из путей включения `bendcore_core`.
-- `third_party/zlib_stub.hpp` — замена zlib для WASM (только `crc32`) — отдельная задача.
+- Сняты разделом 7: `src/drawing/*`, `src/testing/test_suite.cpp`, решатель
+  `src/assembly/assembly_constraint_system.cpp`, `third_party_stubs`, `third_party/zlib_stub.hpp`.
 
 Остальные совпадения (требуют разбора владельцами модулей; часть может оказаться
 текстом интерфейса, а не отсутствующей логикой):
@@ -183,3 +174,101 @@ TypeScript: `src/analytics.ts:294`, `src/features/enterprise/BOM.tsx:160`,
 Заявление «59 WASM-тестов проходят» (`BUILD_STATUS_2026-11-06.md`) с заглушкой получено
 быть не могло; оно соответствует `scripts/build_wasm.sh`, который передаёт настоящий Eigen.
 Точное число 59 на той версии не перепроверялось; на `f5583b3` таких тестов 60.
+
+## 7. Третья очередь (2026-11-11): устаревшие подсистемы и непроверенные цели
+
+Номера строк — по коммиту `f3e1b9a` (до изменений). Критерий удаления: модуль не
+используется новым кодом (`src/kernel`, `src/modeling`, `src/assembly_v2`, `src/drawing_v2`),
+CLI, сервером и WASM-мостом **и** является заглушкой либо содержит данные без источников.
+Потребители проверены по `#include` во всём `src`, `include`, `tests` и по спискам целей
+CMake; замыкание включений от `src/cli/main.cpp`, `src/server/*`, `src/wasm/bindings.cpp`,
+`src/occt/*`, `bendcore_import` ни одного удалённого файла не содержит.
+
+### 7.1 Подсистемы
+
+| Подсистема | Кто использовал | Доказательство фиктивности | Что сделано |
+|---|---|---|---|
+| `src/materials`, `include/bendcore/materials` | только `tests/materials/test_material_library.cpp`; `material_property_database` — только тест `GAP-052`, не входивший в сборку | `material_library.cpp:500-508` и далее: «рейтинги» обрабатываемости/свариваемости 0–100 и `carbon_footprint` без единой ссылки на источник | Удалено. Замена — `bendcore_kernel_analysis` (`include/bendcore/kernel/material.hpp`, значения с источниками) |
+| `CadDocument`, транзакции, история, команды: `src/cad_document.cpp`, `entity_tree`, `document_event_bus`, `command_manager`, `transaction`, `history_stack`, `src/document/*`, `src/commands/*`, `src/api/document_api.cpp`, `src/serialization/document_serializer.cpp`, `src/serializer.cpp`, `src/atomic_save.cpp`, `src/recovery.cpp`, `src/legacy_adapter.cpp`, `src/wasm_bindings.cpp` | только собственные тесты, `src/testing`, старая сборка | `src/serializer.cpp:21, 27` — `// JSON format - simplified placeholder`, пишется строка `{"version": 1, "revision": 0}`; два варианта одного класса (`src/cad_document.cpp` и `src/document/cad_document.cpp`, собирался один); большинство тестовых целей не компилировалось (`'bendcore::document' is not a namespace-name` и т. п.); `src/wasm_bindings.cpp` включает несуществующие заголовки `*.h` | Удалено. Документ детали — `src/modeling` |
+| `ParameterStore` (`src/parameter_store.cpp`, `src/parameters/`) | тесты (цель `test_parameter_store` не компилировалась) | `parameter_store.cpp:11-17` — `get()` для неизвестного имени молча возвращает `0.0` | Удалено. Переменные и выражения — `bendcore_modeling_document` |
+| Граф зависимостей и перестроение: `src/dependency_graph.cpp`, `src/dependencies/`, `src/rebuild_engine.cpp`, `src/rebuild/` | тесты; `test_rebuild_engine` был закомментирован в `CMakeLists.txt` («Missing source files») | перестраивались только числа параметров, геометрии нет (раздел 1 плана); копии заголовка графа в `dependency/` и `dependencies/` | Удалено. Перестроение — дерево операций `src/modeling` |
+| Старая сборка `src/assembly`, `include/bendcore/assembly`, `src/main.cpp` | собственные тесты, `hierarchy_adapter.hpp` (удалён) | `assembly_constraint_system.cpp:237-262` — «решатель» вызывает `validate()` и ставит `SATISFIED`, положения компонентов не меняет; `:310-311` — присваивание поля самому себе; часть заголовков без реализаций (`mate_solver.hpp`, `fixture_designer.hpp`) | Удалено. Замена — `src/assembly_v2` |
+| `src/features/assembly` (React) | `src/features/BendCoreFeaturesApp.tsx` (сам никем не импортируется) | `Assembly.tsx:36-42` — сопряжение всегда между `face-0` и `face-0`, `status: 'satisfied'` без расчёта | Удалено; вкладка убрана; тип `FEAResult` перенесён в `src/features/simulation/types.ts` |
+| Старые чертежи `src/drawing`, `include/bendcore/drawing` | только 8 собственных тестов | после раздела 1 `exportDrawing` возвращал ошибку для любого формата, поэтому публикация, печать (`print_manager.cpp:28, 170, 351, 356`) и `file_handler.cpp:135-136` работали с пустым результатом; `annotation_dimension.cpp:288, 347` — заглушки | Удалено целиком. Замена — `src/drawing_v2` (виды, аннотации, PDF/DXF/SVG). Чертёж трубы `src/drawing.cpp` оставлен |
+| `third_party_stubs/include/nlohmann/json.hpp` | никто | 133-строчная замена; все потребители уже включают `third_party/nlohmann/json.hpp` (MIT) | Удалено |
+| `third_party_stubs/glm` и потребители: `src/bendcore/{camera_manager,snap_system,viewport_manager}.*`, `src/ipc_commands.{cpp,hpp}` | ни одна цель CMake | `snap_system.cpp:192-201` — привязки к концам и центрам возвращают `{}`; `viewport_manager.cpp:56-63` — «вписать в вид» ставит фиксированную камеру; настоящей GLM в системе нет | Удалено вместе с потребителями (вьюпорт — three.js в `src/ui`) |
+| `third_party/zlib_stub.hpp` | только удалённый `document_serializer.cpp` | — | Удалено |
+
+Оставлено и почему: `include/bendcore/document/entity_id.hpp` + `src/entity_id.cpp`
+(UUID-идентификатор, используют `src/features/{loft,sweep,revolve}` и
+`src/editing/direct_editing_manager`); `src/instances.cpp` (экземпляры труб, `core_api`);
+трубный модуль, CFD/тепло, `bendcore_formula`, `sketch2d`, PlaneGCS, сервер, CLI — на них
+держатся `bendcore_cli`, `bendcore_server`, `bendcore_wasm`, `bendcore_import`.
+
+### 7.2 Цели `BENDCORE_UNVERIFIED_TARGETS`
+
+Каждая цель собрана (`ninja -k 0`), затем — с добавлением её исходников реализации
+(они не входили в `bendcore_core`) и GTest. Список и опция `BENDCORE_BUILD_UNVERIFIED` удалены.
+
+| Цель | Результат проверки | Решение |
+|---|---|---|
+| `test_ab_testing` | собирается с `src/ab_testing.cpp`, проходит; распределение по вариантам — хеш, без заглушек | Возвращена в сборку |
+| `test_comments` | написана на GTest (не хватало библиотеки при линковке), 12 тестов проходят | Возвращена (под `GTest_FOUND`) |
+| `test_layers` | не хватало `using bendcore::Path/Bend/Straight`; после правки 9 тестов проходят | Возвращена |
+| `test_drawing_layers_manager` | собирается с `src/drawing_layers.cpp`, 16 тестов проходят | Возвращена |
+| `test_growthbook_client`, `test_analytics_event`, `test_event_batch_sender`, `e2e_analytics` | собираются с реализациями; три проходят, `test_event_batch_sender` падает | Заглушки: `growthbook_client.cpp:135-140`, `event_batch_sender.cpp:63-69`, `analytics_event.cpp:49-52` — «simulate a successful fetch/send», сеть не используется. Тесты и исходники удалены |
+| `test_gap083/085/086/087` (+ `tests/security/*`) | собираются и проходят | Заглушки: `src/security/compliance_standards.cpp:20-48` — `implementGDPRCompliance`, `verifyAccessControl`, `deletePersonalData` и др. возвращают `true`. `src/security`, `include/bendcore/security` удалены (`src/security.cpp` с тестом `security` оставлен) |
+| `test_cad_core_041…044` | 041, 044 проходят, 042 падает, 043 не компилируется | Заглушки: `src/deployment/CloudDeployment.cpp:162, 296, 306, 380-393`, `Installers.cpp:134, 143, 235` — «would go here», `return true`. `src/deployment` удалён |
+| `test_cad_core_037…040` | 037, 038, 040 не компилируются; 039 проходит | Данные без источников: `BOMGenerator.cpp:399-409` (цены и поставщики «MetalSupplies Inc.»), `:152` (50 $/ч), `GCodeGenerator.cpp:90-105`, `ManufacturingWorkflow.cpp:309, 407`. `src/manufacturing/{BOMGenerator,FEAIntegration,GCodeGenerator,ManufacturingPlanner,ManufacturingWorkflow}.*`, `src/fea/FEAEngine.hpp` удалены (`manufacturing/bom.cpp` с тестами оставлен) |
+| `test_manufacturing_constraints` | собирается с GTest, падает | `manufacturing_constraints.cpp:920, 934, 954` — «Simplified formula» с подобранными коэффициентами; потребителей нет. Удалено |
+| `test_multi_physics_coupling` | собирается, 41 проверка проходит | `multi_physics_coupling.cpp:304` — `residual_ = 0.0;  // Simplified residual` (сходимость фиктивна), `:88, 101, 243`; потребителей нет. Удалено |
+| `test_m5_optimization`, `phase_f_test_suite` | первая проходит, вторая не компилируется | `performance_monitor.cpp:207-212` — бенчмарк возвращает `executionTimeMs = 10`, `cacheHitRate = 0.85`; `src/testing/test_suite.cpp:351-521` — тесты без проверок. `src/testing`, `include/bendcore/testing` удалены |
+| `test_geometry_kernel`, `test_curve_operations`, `test_surface_operations`, `test_surfaces_m5` | первые две падают на `assert`, остальные не компилируются | `curve_operations.cpp:122, 275, 456, 525`, `surface_operations.cpp:84-199`, `nurbs_surface.cpp:443` — «Simplified/placeholder»; геометрия — OCCT (`src/kernel`). Исходники, заголовки, `src/surfaces` удалены |
+| `test_topology_optimization_m8` | 44 ошибки компиляции в заголовках модуля; исходники были закомментированы в CMake | `src/topology_optimization`, заголовки и тест удалены |
+| `test_search` | `src/search.cpp` не компилируется (`SearchCondition` не объявлен, обращение к закрытому методу) | Удалено с заголовком и тестом |
+| `test_drawing_undo_redo` | 4 проверки из 12 падают: менеджер хранит только индекс, первое действие отменить нельзя; потребителей нет | Удалено |
+| `test_gap025/026/027_*_comprehensive`, `test_cloud_collaboration` | не компилируются: написаны под API, которого нет (`ConstraintHandler()`, `CloudStorageManager`, …) | Удалены только тесты; модули FEA, generative, parametric AI проверяются `fea_m6`, `generative_m6`, `parametric_ai_m6` |
+| 18 целей документа/команд/параметров/графа/интеграции (`test_cad_document`, `test_entity_id`, `test_hierarchy_extended`, `test_command_executor`, `test_history_stack`, `test_transaction_manager`, `test_document_event_bus`, `test_parameter_store`, `test_dependency_graph`, `test_phase_c_integration`, `test_phase_d_integration`, `test_integration_e2e`, `test_multi_phase_integration`, `test_stress`, `test_stress_tests`, `test_e2e_workflows`, `test_cross_platform_validation`, `test_regression_suite`) | не компилируются | Удалены вместе с подсистемой (7.1) |
+
+Удалены также проходившие тесты удалённых подсистем: `m1_integration`, `transaction`,
+`undo_redo_manager`, `document_serializer`, `document_api`, `rebuild_cascade`,
+`part_reference`, `assembly_constraints`, `assembly_creation`, `assembly_validation`,
+`material_library`, `view_management`, `drawing_extraction`, `drawing_workbench_m4`,
+`annotation_dimension`, `drawing_export_m4`, `publishing_manager_m4`, `print_manager_m4`,
+`file_handler_m4`.
+
+### 7.3 Jest
+
+| Тест | Причина падения | Решение |
+|---|---|---|
+| `src/ui/__tests__/ImportDialog.integration.test.tsx` (7 из 10 падали) | устаревший тест: свойство `isOpen`, подписи и `role="dialog"`, которых у компонента нет; «проходившие» случаи — `if (x) expect(...)` | Удалён. Компонент реален и покрыт `tests/ImportDialog.test.tsx`; туда добавлен случай отклонения не-CAD файла |
+| `tests/web-app.spec.ts` | спецификация Playwright (`@playwright/test`), попадала в Jest по маске `*.spec.ts` | Исключена из Jest. В `playwright.config.ts` (`testDir: tests/e2e`) не входит — открытая задача для QA |
+| `tests/qa/fixtures/**` | фикстуры самотеста `check_no_stubs.sh`, не тесты | Исключены из Jest |
+| `tests/electron-smoke.test.ts` (4 из 5 падали) | нет `dist/` (нужен `npm run build`) и бинарника Electron; первый случай проходил даже при «Electron failed to install» | Код реален. Вынесен в `npm run test:electron-smoke` (сборка + запуск); отсутствие Electron теперь ошибка. В этой среде не запускался: нет дисплея и бинарника |
+
+### 7.4 Проверка
+
+| Конфигурация | До (`f3e1b9a`) | После |
+|---|---|---|
+| `build`, Release, без OCCT | ctest 74/74 | ctest 59/59 (−19 удалённых, +4 возвращённых) |
+| `build-occt`, Release, OCCT | ctest 133/134 (`performance` упал при параллельной сборке, отдельно проходит) | ctest 120/120, включая тесты документа чертежа из слияния `ccr-d188a25e-rml7z8` |
+| WASM, `cmake --preset wasm` | сборка OK, ctest 59/59 | сборка OK, ctest 47/47 |
+| Jest (полный) | наборов 54/58, тестов 1234/1245 | наборов 53/53, тестов 1230/1230 |
+| `check_no_stubs.sh`, `--diff ccr-d188a25e-rml7z8` | 0 | 0 |
+| `check_no_stubs.sh --paths src include tests` (весь старый код) | 1140 | 891 |
+
+### 7.5 Найдено, не удалено
+
+- `src/optimization/performance_monitor.cpp:207-212` — `BenchmarkFramework` с зашитыми
+  результатами (модуль в `bendcore_core`, тест удалён).
+- `src/cloud/cloud_storage_manager.cpp:30` — «выгрузка» записывает длину пути как размер
+  файла; сетевых операций в `src/cloud` нет.
+- `src/features/{loft,sweep,revolve,feature_system}.cpp`, `src/feature_system.cpp`,
+  `src/editing/direct_editing_manager.cpp`, React-панели
+  `src/features/{modeling,advanced,simulation,enterprise}` (`FEAResult.isStub`) — старые
+  операции без ядра; заменены `src/modeling`, но имеют проходящие тесты и в задачу не входили.
+- `src/manufacturing/cnc_*`, `src/geometry/{mesh_cache,parallel_geometry}.cpp`,
+  `src/bendcore/command_search.cpp` и другие файлы вне целей CMake.
+- `tests/acceptance/*` (свой `CMakeLists.txt`, не подключён) включает заголовки, которых
+  никогда не было (`bendcore/assembly_manager.hpp`, `bendcore/undo_redo_manager.hpp`).
+- `src/drawing_layers.cpp`, `src/ab_testing.cpp` — рабочие, но без потребителей кроме тестов.
