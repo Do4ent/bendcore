@@ -19,7 +19,6 @@ module.exports = {
     '<rootDir>/tests/integration/tube-generation\\.integration\\.test\\.ts',
     '<rootDir>/tests/SketchEditor\\.e2e\\.tsx',
     '<rootDir>/tests/comments\\.e2e\\.tsx',
-    '<rootDir>/tests/growthbook\\.e2e\\.tsx',
     '<rootDir>/tests/search\\.e2e\\.tsx',
     '<rootDir>/tests/templates\\.e2e\\.tsx',
     '<rootDir>/tests/performance/',
