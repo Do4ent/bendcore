@@ -293,11 +293,15 @@ const AppShell: React.FC = () => {
   const partLibrary = useMemo<PartSource[]>(() => {
     const out: PartSource[] = [];
     const seen = new Set<string>();
+    // Every open part tab is offered, also when two tabs have the same file name (new parts).
+    let n = 0;
     for (const tab of tabs) {
-      if (tab.kind === 'part' && tab.snapshot && !seen.has(tab.snapshot.name)) {
-        seen.add(tab.snapshot.name);
-        out.push({ definition: -1, name: tab.snapshot.name, text: tab.snapshot.text });
-      }
+      if (tab.kind !== 'part' || !tab.snapshot) continue;
+      n += 1;
+      const name = seen.has(tab.snapshot.name) ? tab.snapshot.name.replace(/(\.bcpart)?\.json$/i, ` (${n})$&`) : tab.snapshot.name;
+      seen.add(tab.snapshot.name);
+      seen.add(name);
+      out.push({ definition: -1, name, text: tab.snapshot.text });
     }
     for (const r of recent) {
       if (r.file.kind === 'part' && !seen.has(r.file.name)) {

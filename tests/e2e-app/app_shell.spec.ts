@@ -174,7 +174,7 @@ test('part with a fillet, its drawing in PDF, an assembly of two parts', async (
 
   // Assembly → open component part: a part tab with that part document.
   const partTabs = await page.getByTestId('doc-tab-part').count();
-  await A.getByTestId('assembly-tree').locator('[data-testid^="component-"]').first().click();
+  await A.getByTestId('assembly-tree').locator('[data-testid^="component-"] .as-name').first().click();
   await A.getByTestId('open-component-part').click();
   await expect(page.getByTestId('doc-tab-part')).toHaveCount(partTabs + 1);
   const opened = activePanel(page);
