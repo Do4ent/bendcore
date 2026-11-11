@@ -41,10 +41,6 @@ jobs:
     - name: Run unit tests
       run: npm run test -- --coverage --passWithNoTests
 
-    - name: Run integration tests
-      run: npm run test:integration -- --passWithNoTests
-      continue-on-error: true
-
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
@@ -54,44 +50,14 @@ jobs:
   # ============================================
   # STAGE 2: E2E TESTING
   # ============================================
+  # Сквозные тесты — настоящие наборы Playwright test:e2e:{kernel,modeling,assembly,drawing,app} на
+  # WASM-модулях, собранных из этого же коммита (wasm.yml, задачи wasm-modules и wasm-e2e).
+  # Корневой набор Playwright и скрипт test:e2e удалены вместе со старым интерфейсом; прежний
+  # шаг поднимал docker-compose и запускал несуществующий набор (docs/qa/QA.md, раздел 4).
   e2e-test:
-    name: E2E Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    name: E2E Tests (WASM-модули, Playwright)
     needs: test
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20.x
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Start services
-      run: |
-        docker-compose up -d
-        sleep 10
-
-    - name: Run E2E tests
-      run: npm run test:e2e
-      env:
-        BASE_URL: http://localhost:3000
-
-    - name: Upload E2E results
-      if: always()
-      uses: actions/upload-artifact@v3
-      with:
-        name: e2e-results
-        path: test-results/
-
-    - name: Cleanup
-      if: always()
-      run: docker-compose down
+    uses: ./.github/workflows/wasm.yml
 
   # ============================================
   # STAGE 3: SECURITY SCAN

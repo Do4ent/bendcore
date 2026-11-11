@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Вызов из production-deploy.yml: сквозные тесты интерфейса — условие развёртывания.
+  workflow_call:
 
 jobs:
   wasm:
@@ -78,23 +80,27 @@ jobs:
           path: build-wasm/web/
           if-no-files-found: error
 
-  # Ядро CAD для браузера (docs/ui/KERNEL_VIEWPORT.md): OCCT 8.0.1 для WASM
-  # (third_party/build_occt_wasm.sh, docs/kernel/OCCT_BUILD.md, раздел 3), модуль
-  # bendcore_kernel_wasm (cmake/wasm_kernel.cmake) и его проверка по корпусу в node.
-  # Native-сборка с OCCT — job occt-native в qa.yml.
-  kernel-wasm:
-    name: Ядро WASM (OCCT 8.0.1, bendcore_kernel_wasm, корпус)
+  # Все WASM-модули (docs/ui/*.md): OCCT 8.0.1 для WASM (third_party/build_occt_wasm.sh,
+  # docs/kernel/OCCT_BUILD.md, раздел 3) из кэша, одна сборка bendcore с emsdk и четыре цели —
+  # bendcore_kernel_wasm, bendcore_modeling_wasm, bendcore_assembly_wasm, bendcore_drawing_wasm
+  # (общие библиотеки ядра компилируются один раз), node-тесты всех модулей (ctest -R '^wasm_'),
+  # размеры в сводку. Native-сборка с OCCT — job occt-native в qa.yml.
+  wasm-modules:
+    name: WASM-модули (OCCT 8.0.1; ядро, деталь, сборка, чертёж; node-тесты)
     runs-on: ubuntu-24.04
-    # Сборка OCCT для WASM без кэша — около 25 минут на 4 ядрах (OCCT_BUILD.md, раздел 4).
-    timeout-minutes: 120
+    # Сборка OCCT для WASM без кэша — около 25 минут на 4 ядрах (OCCT_BUILD.md, раздел 4),
+    # четыре модуля — ещё около 30 минут.
+    timeout-minutes: 150
     env:
       OCCT_VERSION: 8.0.1
       EMSDK_VERSION: 6.0.12
     steps:
       - uses: actions/checkout@v4
 
-      - name: Зависимости (Ninja)
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      # fonts-dejavu-core: DejaVuSans.ttf и текст лицензии, которые cmake/wasm_drawing.cmake кладёт
+      # рядом с модулем чертежа (без шрифта чертёж не создаётся). Eigen — для PlaneGCS эскиза.
+      - name: Зависимости (Ninja, Eigen, шрифт DejaVu)
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev fonts-dejavu-core
 
       - name: Node.js
         uses: actions/setup-node@v4
@@ -105,7 +111,7 @@ jobs:
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: ${{ env.EMSDK_VERSION }}
-          actions-cache-folder: emsdk-cache-kernel
+          actions-cache-folder: emsdk-cache-modules
 
       # Ключ: версии OCCT и emsdk, список тулкитов и скрипт сборки. Кэшируются установка и
       # результаты пробной программы (sizes.txt, вывод под node), объектные файлы — нет.
@@ -120,7 +126,7 @@ jobs:
 
       # Тот же источник, что в build_occt.sh. Успех скрипта — код 0: внутри он собирает пробную
       # программу tests/kernel/wasm/occt_size_probe.cpp и проверяет её вывод OK под node.
-      - name: Сборка OCCT для WASM
+      - name: Сборка OCCT для WASM (при промахе кэша)
         if: steps.occt-wasm-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
@@ -132,30 +138,49 @@ jobs:
 
       - name: Конфигурация bendcore (Emscripten, BENDCORE_WITH_OCCT=ON)
         run: |
-          emcmake cmake -S . -B build-wasm-kernel -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install-wasm"
+          emcmake cmake -S . -B build-wasm-modules -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install-wasm" \
+            -DBENDCORE_EIGEN_DIR=/usr/include/eigen3
 
-      - name: Сборка bendcore_kernel_wasm
+      - name: Сборка четырёх модулей
         shell: bash
         run: |
           set -o pipefail
-          cmake --build build-wasm-kernel --target bendcore_kernel_wasm --parallel 2>&1 | tee build-wasm-kernel.log
+          cmake --build build-wasm-modules --parallel \
+            --target bendcore_kernel_wasm bendcore_modeling_wasm bendcore_assembly_wasm bendcore_drawing_wasm \
+            2>&1 | tee build-wasm-modules.log
 
-      - name: Тест wasm_kernel_corpus (node)
-        run: ctest --test-dir build-wasm-kernel -R '^wasm_kernel_corpus$' --no-tests=error --output-on-failure
+      - name: Шрифт модуля чертежа на месте
+        run: test -s build-wasm-modules/wasm_drawing/DejaVuSans.ttf && test -s build-wasm-modules/wasm_drawing/DejaVuSans-LICENSE.txt
 
-      - name: Размеры модуля
+      # wasm_kernel_corpus, wasm_modeling_document, wasm_sketch_editor, wasm_assembly_document,
+      # wasm_drawing_document; --no-tests=error — тест, пропавший из сборки, роняет шаг.
+      - name: Node-тесты модулей (ctest -R wasm)
+        run: ctest --test-dir build-wasm-modules -R '^wasm_' --no-tests=error --output-on-failure --timeout 900
+
+      - name: Число node-тестов
+        shell: bash
+        run: |
+          n=$(ctest --test-dir build-wasm-modules -N -R '^wasm_' | grep -c 'Test *#')
+          echo "node-тестов WASM: $n"
+          [ "$n" -ge 5 ]
+
+      - name: Размеры модулей
         shell: bash
         run: |
           set -euo pipefail
-          d=build-wasm-kernel/wasm_kernel
+          b=build-wasm-modules
           {
-            echo "### Размеры bendcore_kernel_wasm (emsdk $EMSDK_VERSION, OCCT $OCCT_VERSION)"
+            echo "### Размеры WASM-модулей (emsdk $EMSDK_VERSION, OCCT $OCCT_VERSION, -Oz)"
             echo
-            echo "| Файл | байт | gzip -9, байт |"
-            echo "|---|---:|---:|"
-            for f in bendcore_kernel.wasm bendcore_kernel.mjs bendcore_kernel_api.mjs; do
-              printf '| `%s` | %d | %d |\n' "$f" "$(stat -c %s "$d/$f")" "$(gzip -9 -c "$d/$f" | wc -c)"
+            echo "| Модуль | Файл | байт | gzip -9, байт |"
+            echo "|---|---|---:|---:|"
+            for m in kernel modeling assembly drawing; do
+              for ext in wasm mjs; do
+                f="$b/wasm_$m/bendcore_$m.$ext"
+                printf '| `%s` | `%s` | %d | %d |\n' "bendcore_${m}_wasm" "$(basename "$f")" \
+                  "$(stat -c %s "$f")" "$(gzip -9 -c "$f" | wc -c)"
+              done
             done
             probe=third_party/occt-build-wasm/probe/sizes.txt
             if [ -f "$probe" ]; then
@@ -166,36 +191,66 @@ jobs:
               cat "$probe"
               echo '```'
             fi
-          } | tee "$d/sizes.md" >> "$GITHUB_STEP_SUMMARY"
+          } | tee "$b/sizes.md" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Модуль ядра и размеры
+      - name: Модули и размеры
         uses: actions/upload-artifact@v4
         with:
-          name: bendcore-kernel-wasm
+          name: bendcore-wasm-modules
           path: |
-            build-wasm-kernel/wasm_kernel/
-            third_party/occt-build-wasm/probe/sizes.txt
+            build-wasm-modules/wasm_kernel/
+            build-wasm-modules/wasm_modeling/
+            build-wasm-modules/wasm_assembly/
+            build-wasm-modules/wasm_drawing/
+            build-wasm-modules/sizes.md
           if-no-files-found: error
 
       - name: Журналы (только при падении)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-wasm-logs
+          name: wasm-modules-logs
           path: |
             occt-wasm-build.log
-            build-wasm-kernel.log
+            build-wasm-modules.log
             third_party/occt-build-wasm/logs/
             third_party/occt-build-wasm/probe/
-            build-wasm-kernel/Testing/Temporary/
+            build-wasm-modules/Testing/Temporary/
           if-no-files-found: ignore
 
-  # Сквозной тест вьюпорта ядра (tests/e2e-kernel, Playwright + Chromium) на модуле из kernel-wasm.
-  kernel-viewer-e2e:
-    name: Вьюпорт ядра (Playwright, Chromium)
-    needs: kernel-wasm
+  # Сквозные тесты Playwright + Chromium на модулях из wasm-modules: по набору на модуль и набор
+  # оболочки приложения (test:e2e:app, все четыре модуля). Каталоги модулей передаются через
+  # BENDCORE_<МОДУЛЬ>_WASM_DIR (web/<страница>/webpack.config.js, web/app/webpack.config.js).
+  wasm-e2e:
+    name: Playwright ${{ matrix.suite }}
+    needs: wasm-modules
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: kernel
+            module: wasm_kernel
+            dir_env: BENDCORE_KERNEL_WASM_DIR
+            results: kernel-viewer
+          - suite: modeling
+            module: wasm_modeling
+            dir_env: BENDCORE_MODELING_WASM_DIR
+            results: part-modeler
+          - suite: assembly
+            module: wasm_assembly
+            dir_env: BENDCORE_ASSEMBLY_WASM_DIR
+            results: assembly
+          - suite: drawing
+            module: wasm_drawing
+            dir_env: BENDCORE_DRAWING_WASM_DIR
+            results: drawing
+          # Оболочка приложения (docs/ui/APP_SHELL.md) загружает все четыре модуля.
+          - suite: app
+            module: all
+            dir_env: all
+            results: app
     steps:
       - uses: actions/checkout@v4
 
@@ -205,29 +260,42 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Модуль ядра из kernel-wasm
+      - name: Модули из wasm-modules
         uses: actions/download-artifact@v4
         with:
-          name: bendcore-kernel-wasm
-          path: kernel-artifact
+          name: bendcore-wasm-modules
+          path: wasm-artifact
 
-      # postinstall-скрипты (electron и т. п.) тесту не нужны (docs/ui/KERNEL_VIEWPORT.md).
+      # postinstall-скрипты (electron и т. п.) тестам не нужны (docs/ui/KERNEL_VIEWPORT.md).
       - name: npm ci
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Сквозной тест вьюпорта
+      - name: npm run test:e2e:${{ matrix.suite }}
+        shell: bash
         env:
           CI: 'true'
-          BENDCORE_KERNEL_WASM_DIR: ${{ github.workspace }}/kernel-artifact/build-wasm-kernel/wasm_kernel
-        run: npm run test:e2e:kernel -- --trace off
+        run: |
+          a="$GITHUB_WORKSPACE/wasm-artifact"
+          if [ "${{ matrix.module }}" = all ]; then
+            for m in kernel modeling assembly drawing; do
+              test -s "$a/wasm_$m/bendcore_$m.wasm"
+              export "BENDCORE_${m^^}_WASM_DIR=$a/wasm_$m"
+            done
+          else
+            test -s "$a/${{ matrix.module }}/bendcore_${{ matrix.suite }}.wasm"
+            export ${{ matrix.dir_env }}="$a/${{ matrix.module }}"
+          fi
+          npm run test:e2e:${{ matrix.suite }} -- --trace off
 
+      # Снимки экрана упавших шагов (screenshot: 'only-on-failure' в web/*/playwright.config.ts),
+      # error-context.md Playwright и снимки, которые делают сами тесты.
       - name: Снимки и контекст ошибок (только при падении)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-viewer-e2e-results
-          path: test-results/kernel-viewer/
+          name: e2e-${{ matrix.suite }}-results
+          path: test-results/${{ matrix.results }}/
           if-no-files-found: warn

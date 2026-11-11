@@ -7,7 +7,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cmath>
+#include <cstdint>
 #include <fstream>
+#include <limits>
 #include <sstream>
 
 namespace bendcore::drawing_v2::document {
@@ -93,6 +96,27 @@ double num(const json& j, const char* name, double def) {
     if (!j.at(name).is_number()) fail(std::string("'") + name + "' must be a number");
     return j.at(name).get<double>();
 }
+// Целое значение в [lo, hi]. Вещественное принимается, только если оно целое и в диапазоне:
+// приведение double вне диапазона к int (1e308 → int) — неопределённое поведение.
+long long integerOf(const json& v, const char* name, long long lo, long long hi) {
+    if (v.is_number_unsigned()) {
+        const auto x = v.get<std::uint64_t>();
+        if (x <= static_cast<std::uint64_t>(hi)) {
+            if (static_cast<long long>(x) >= lo) return static_cast<long long>(x);
+        }
+    } else if (v.is_number_integer()) {
+        const auto x = v.get<std::int64_t>();
+        if (x >= lo && x <= hi) return x;
+    } else if (v.is_number_float()) {
+        const double x = v.get<double>();
+        if (std::isfinite(x) && x == std::floor(x) && x >= double(lo) && x <= double(hi)) return static_cast<long long>(x);
+    }
+    fail(std::string("'") + name + "' must be an integer in [" + std::to_string(lo) + ", " + std::to_string(hi) + "]");
+}
+int integer(const json& j, const char* name, int def) {
+    if (!j.contains(name) || j.at(name).is_null()) return def;
+    return int(integerOf(j.at(name), name, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
+}
 bool flag(const json& j, const char* name, bool def) {
     if (!j.contains(name) || j.at(name).is_null()) return def;
     if (!j.at(name).is_boolean()) fail(std::string("'") + name + "' must be a boolean");
@@ -122,9 +146,9 @@ json scaleJson(const std::optional<ScaleRatio>& s) {
 std::optional<ScaleRatio> scaleFrom(const json& j) {
     if (j.is_null()) return std::nullopt;
     if (!j.is_array() || j.size() != 2) fail("a scale must be [num, den]");
-    ScaleRatio s{j[0].get<int>(), j[1].get<int>()};
+    ScaleRatio s{int(integerOf(j[0], "scale", 1, 1000000)), int(integerOf(j[1], "scale", 1, 1000000))};
     for (const ScaleRatio& g : gostScales())
-        if (g.num * s.den == s.num * g.den) return g;
+        if ((long long)g.num * s.den == (long long)s.num * g.den) return g;
     fail("scale " + std::to_string(s.num) + ":" + std::to_string(s.den) + " is not in the GOST 2.302 series");
 }
 
@@ -265,7 +289,9 @@ ModelLink linkFrom(const json& j) {
     m.kind = enumValue(field(j, "kind"), kModelKinds, "model kind");
     m.path = str(j, "path");
     m.resultHash = str(j, "resultHash");
-    m.revision = std::uint32_t(num(j, "revision", 0));
+    m.revision = j.contains("revision") && !j.at("revision").is_null()
+                     ? std::uint32_t(integerOf(j.at("revision"), "revision", 0, std::numeric_limits<std::uint32_t>::max()))
+                     : 0u;
     if (j.contains("properties") && !j.at("properties").is_null()) {
         const json& p = j.at("properties");
         m.properties.designation = str(p, "designation");
@@ -394,7 +420,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
         if (str(j, "format") != "bendcore-drawing") return Error{ErrorCode::ParseError, "drawing: not a bendcore-drawing file"};
         const json& ver = field(j, "version");
         if (!ver.is_number_integer()) fail("'version' must be an integer");
-        const int version = ver.get<int>();
+        const int version = int(integerOf(ver, "version", std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
         if (version > kFormatVersion)
             return Error{ErrorCode::Unsupported, "drawing: file version " + std::to_string(version) + " is newer than " +
                                                      std::to_string(kFormatVersion)};
@@ -426,7 +452,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
             } else {
                 const json& f = field(js, "format");
                 s.format.base = enumValue(field(f, "base"), kFormats, "sheet format");
-                s.format.multiplier = int(num(f, "multiplier", 1));
+                s.format.multiplier = integer(f, "multiplier", 1);
                 s.format.orientation = enumValue(field(f, "orientation"), kOrient, "orientation");
             }
             if (js.contains("scale")) s.scale = scaleFrom(js.at("scale"));
@@ -489,7 +515,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                         def.toleranceDisplay = enumValue(jd.at("toleranceDisplay"), kTolDisp, "tolerance display");
                     def.prefix = str(jd, "prefix");
                     def.suffix = str(jd, "suffix");
-                    def.decimals = int(num(jd, "decimals", 2));
+                    def.decimals = integer(jd, "decimals", 2);
                     if (jd.contains("lastValue") && !jd.at("lastValue").is_null()) di.lastValue = jd.at("lastValue").get<double>();
                     s.dimensions.push_back(std::move(di));
                 }
@@ -598,7 +624,7 @@ Result<SpecificationDocument> SpecificationDocument::fromJson(std::string_view t
     try {
         if (str(j, "format") != "bendcore-specification")
             return Error{ErrorCode::ParseError, "specification: not a bendcore-specification file"};
-        const int version = field(j, "version").get<int>();
+        const int version = int(integerOf(field(j, "version"), "version", std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
         if (version > kFormatVersion)
             return Error{ErrorCode::Unsupported, "specification: file version " + std::to_string(version) + " is newer"};
         SpecificationDocument d;
@@ -622,7 +648,7 @@ Result<SpecificationDocument> SpecificationDocument::fromJson(std::string_view t
         }
         d.settings_.addAssemblyDrawing = flag(s, "addAssemblyDrawing", true);
         d.settings_.assemblyDrawingFormat = str(s, "assemblyDrawingFormat", "А3");
-        d.settings_.reservePositions = int(num(s, "reservePositions", 0));
+        d.settings_.reservePositions = integer(s, "reservePositions", 0);
         return d;
     } catch (const ParseFailure& e) {
         return Error{ErrorCode::ParseError, "specification: " + e.message};
