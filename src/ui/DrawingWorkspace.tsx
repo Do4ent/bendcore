@@ -560,16 +560,9 @@ export const DrawingWorkspace: React.FC<DrawingWorkspaceProps> = ({
 
         {associativeDrawing && (
           <DrawingVersionPanel
-            tubeId={tube.id ?? 'unknown'}
             currentRevision={associativeDrawing.versions[0]?.revision ?? 1}
             versions={associativeDrawing.versions}
             status={associativityStatus}
-            onRestore={async (revision) => {
-              console.log('Откат к версии', revision);
-            }}
-            onCompare={async (rev1, rev2) => {
-              console.log('Сравнение версий', rev1, 'и', rev2);
-            }}
           />
         )}
       </div>

@@ -272,3 +272,82 @@ CMake; замыкание включений от `src/cli/main.cpp`, `src/serve
 - `tests/acceptance/*` (свой `CMakeLists.txt`, не подключён) включает заголовки, которых
   никогда не было (`bendcore/assembly_manager.hpp`, `bendcore/undo_redo_manager.hpp`).
 - `src/drawing_layers.cpp`, `src/ab_testing.cpp` — рабочие, но без потребителей кроме тестов.
+
+## 8. Четвёртая очередь (2026-11-11): устаревший интерфейс `src/ui` и точки входа
+
+Номера строк — по коммиту `a1bb972` (до изменений). Критерий: файл не достижим по импортам ни
+от одной точки входа — окно Electron (`src/ui/index.tsx`, `webpack.config.js`), страницы
+`web/{kernel-viewer,part-modeler,assembly,drawing}` (`src/ui/{kernel,modeling,assembly,drawing}`),
+стенд `tests/ui_preview`, главный процесс `src/main.ts` — **или** выдаёт фиктивный результат.
+Граф построен разбором `import`/`require`/`import()` во всех `*.ts(x)`, `*.js`, `*.mjs`, `*.html`
+репозитория (кроме `node_modules`, `third_party`, `build*`). Каталоги `src/ui/{kernel,modeling,
+assembly,drawing,app}`, `web/app`, `src/wasm` не затрагивались.
+
+### 8.1 Удалено
+
+| Что | Кто использовал | Доказательство |
+|---|---|---|
+| `src/ui/M22*`–`M25*` (40 компонентов и 2 CSS: файловые диалоги, настройки, инструменты эскиза, сборки, гибка, BOM, стоимость, NC-код, FEA, отчёты, траектория), `BendCoreLanding`, M22-диалоги `CloudSettings`, `PluginSettings`, `FileExplorer`, `SettingsDialog`, `IconThemeManager`, `RecentFilesManager`, `SaveDialog`, `ThemeSelector`, `UnitPreferences`, `PerformanceSettings`, `KeyboardShortcutEditor`, `FilePickerDialog`; тесты `tests/ui/*` | `index.tsx:28-31` — `lazy(() => import('./M2…'))`, ни разу не отрисованы; `BendCoreLanding` только реэкспортировался (`index.tsx:34`) | Только локальное состояние форм, ни вычислений, ни вызовов ядра: `M24BendAnalysis.tsx:10` — `results` никогда не присваивается; `M25CostCalculator.tsx` — сумма двух введённых чисел; `M25FEAResultsViewer`, `M25ToolpathPreview`, `M24ExplodedView` — `viewport-placeholder`; `PluginSettings.tsx:27-31`, `FileExplorer.tsx:34-35` — зашитые списки («Mock file system»); `M22Integration.tsx:70-75` — действие диалога только закрывает его |
+| `PerformanceMonitoring.ts`, `MemoryManagement.ts`, `ComponentOptimization.tsx`, `DatabaseOptimization.ts`, `SerializationOptimization.ts`, `WebGLOptimization.ts`, `ConstraintSolverCache.ts`; `tests/performance-benchmark.test.ts` | первые три — `index.tsx` (печать времени запуска в консоль), остальные — только тест | `DatabaseOptimization.ts:308` — `ConnectionPool` раздаёт объекты `{id, available}` без базы данных; `SerializationOptimization.ts:29` — «сжатие» дописывает длину; `ComponentOptimization.tsx:107` — «This is a placeholder for the concept»; `MemoryManagement.ts:289` — «Placeholder» |
+| `AnalyticsDashboard`, `KPICards`, `FunnelChart`, `ExperimentCard`, `EventTimeline`, `hooks/useAnalytics.ts`, `styles/`; `src/analytics.ts`, `src/growthbook.ts`, `src/experiment.ts`; каталог `ui/` (18 файлов); `tests/growthbook.e2e.tsx` | собственный тест; `ui/` не входил ни в одну сборку и ни в корни Jest | `useAnalytics.ts:74-144` — запросы к `/api/analytics/*`, которых не отдаёт ни один запущенный сервер (`backend/src/api/routes/analytics.ts` не подключён в `backend/src/index.ts` и возвращает зашитые эксперименты, `sampleSize: 5234`); `src/analytics.ts:294` — «In a real implementation, this would send to the GrowthBook API», пакет помечается `sent`; `ui/src/hooks/useIpc.ts:88` — канал `bendcore-api`, которого нет в `src/main.ts` |
+| Калькуляторы смещения: `OffsetCalculatorTab`, `OffsetTypeSelector`, `OffsetResultsDisplay`, `OffsetVisualization`, `ParallelOffsetCalculator`, `Combined3DOffsetCalculator` (+ тесты), вкладка «Offset Calculator» `TubeDialog` | `TubeDialog.tsx:1437` | `OffsetCalculatorTab.tsx:121-131` — «Mock calculation for 3D»: `total_length = R·2 + offset·1,5`, `confidence: 82.5`; `ParallelOffsetCalculator.tsx:156` — `fetch('/api/bendcore/parallel-offset/calculate')` (маршрут ниже) |
+| `src/api/*` (Express-маршруты), `tsconfig.api.json`, `tests/test_parallel_offset_api.ts` | ни один сервер их не подключает (поиск по репозиторию: только этот тест) | `routes/parallel-offset.ts:268, 293` — «Здесь была бы интеграция с C++ модулем», `(…)·(1 + k·0,1)`; `import_routes.ts:41-43` — `mockFormulas`; `formula_routes.ts:43` — «In production, this would call the compiled C++ module»; `template_marketplace_routes.ts:266, 377, 411` — зашитые рейтинги и подборки; `formula_api.cpp` вне целей CMake |
+| `playwright.config.ts` (корневой), `tests/e2e/`, скрипты `test:e2e`, `test:e2e:{ui,headed,debug,report,parallel-offset,combined-3d,integration}` | — | наборы только для удалённых страниц смещения; `production.spec.ts` ищет кнопки «New Project», которых нет в интерфейсе; `webServer` — `npm run dev --workspace=@bendcore/backend` (рабочих пространств npm нет). Рабочие наборы — свои конфигурации `web/*/playwright.config.ts` |
+| `src/ui/AdapterWeb.tsx` (вход `webpack.web.js`), `public/`, `index.html` в корне, `tests/web-app.spec.ts` (Playwright для этой страницы на порту 3000), скрипты `dev:web`, `dev:web:prod`, `build:web` | `webpack.web.js` | `AdapterWeb.tsx:27-104` — `createMockElectron`: любая команда «успешна», импорт возвращает трубу 100/R50·90°/100, масса `2.5` кг «Steel 1020» (`:88`), «Small gap detected»; `public/index.html:470, 704` — реклама «Real FEA Solver», «In production, would redirect to sign-up flow». `webpack.web.js` оставлен как общая основа страниц `web/*` без собственной точки входа |
+| `src/index.tsx`, `src/App.tsx`, `src/screens/`, `src/ui/AppDemo.tsx`, `src/ui/components/*` (кроме `PropertiesPanel`) с тестами | ни одна сборка (`src/index.tsx` — не entry ни одного webpack) | `DrawingGenerationScreen.tsx:56-64` — «экспорт» с прогрессом `Math.random()·30` и сообщением «Exported» без экспорта; `WorkspaceScreen.tsx:37, 115`, `BendCreationScreen.tsx:33` — зашитые деревья и гибки; тесты `components/__tests__/*.spec.ts` — `// TODO: Implement test` + `expect(true).toBe(true)`, `Integration.test.ts`, `ThreeJsRenderer.test.tsx` проверяют собственные литералы |
+| Прочие компоненты `src/ui` без потребителей: `DrawingEditor` (старые чертежи), `PathSketch3D` с `PathValidator`, `DimensionRenderer`, `PathSketch3D.types` (старый 3D-эскиз пути), `EnterpriseProfileManager`, `MaterialsPanel`, `FormulaEditor`, `TemplateLibraryMarketplace`, `TemplateLibraryView`, `TemplateEditor`, `TemplateCreator`, `PatternTemplates`, `ProfileDialog`, `ProfilesManager`, `SettingsStore`, `IconThemeSettings`, `IconThemeSystem`, `ToolbarCustomizationDialog`, `SearchPanel`, `ManualDimensionEditor`, `MenuBar`, `ImportProgress`, `ImportResults`, `hooks/useImport.ts`; их тесты, `tests/{templates,search,comments}.e2e.tsx` | только собственные тесты | Вдобавок к неиспользованию: `EnterpriseProfileManager.tsx:404` — «Load mock data»; `MaterialsPanel.tsx:72` — «In a real app, this would call the IPC handler»; `PathSketch3D.tsx:334` — «For now, simulate with simple validation»; `FormulaEditor`, `TemplateCreator`, `TemplateLibraryMarketplace`, `useImport` обращаются к маршрутам `/api/…`, которых нет. Замены: `src/ui/drawing`, `src/ui/modeling/sketch`. `comments.e2e.tsx` не импортировал ничего из `src` |
+| Jest-наборы без кода проекта: `tests/AnalysisModule.test.ts`, `IPCIntegration.test.ts`, `cad-workflow.test.ts`, `ui-integration.test.tsx` | — | проверяют свои же объекты: `mockAnalysisModule`, `mockIPCBridge`, `MockApplication`, литерал `['step','stp']` |
+| `src/features/**/*.ts(x)` (React-панели), `src/modules/`, `src/routing/` | никто (`BendCoreFeaturesApp` не импортировался) | `FEASimulator.tsx:46, 52` — `maxValue: Math.random()·500 + 100`; `BOM.tsx:22`, `PipeRouting.tsx:50` — `mockItems`, `mockFittings` с выдуманными ценами; `DWGDXFHandler.ts:105, 143` — случайный цвет DXF, «would use dwg library»; `AdvancedRoutingEngine.cpp` не входил ни в одну цель CMake. C++-файлы `src/features/*.cpp` (в `bendcore_core`) оставлены |
+| `src/optimization/performance_monitor.cpp`, `include/bendcore/optimization/performance_monitor.hpp` | никто (заголовок не включается; тест удалён в 7.2) | `performance_monitor.cpp:207-216` — `executionTimeMs = 10`, `memoryPeakBytes = 1000000`, `cacheHitRate = 0.85`, `passedThresholds = true` при любом числе элементов; `:232` — `count / 100  // Simplified`; `recordMetric` отбрасывает значение. Строка убрана из `bendcore_core` в `CMakeLists.txt` |
+
+### 8.2 Исправлено в окне трубного приложения
+
+| Место | Было | Стало |
+|---|---|---|
+| `src/main.ts:58-73` `handleCommand` | `new-document`, `new-sketch`, `new-tube` — `{ document: 'new_doc_001' }`, `{ tube: 'tube_001' }` без создания объекта | В ядро идут только команды «раздел.действие» (`src/core_api.cpp`); иное — `{status: 'error', message: 'Команда не поддерживается ядром: …'}` |
+| `RibbonBar.tsx`, сохранение и создание трубы | ответ проверялся как `res.success === false`, поэтому `{status: 'error'}` считался успехом и диалог закрывался | проверяется `status !== 'ok'` |
+| `RibbonBar.tsx:542-640`, панели «Gaps» и «Mass» | образцы «Gap Violations (3 found)» (`:546`), «0.54 kg» (`:612`), «7.85 g/cm³»; `setGapViolations`/`setMassResult` нигде не вызывались | панели и кнопки удалены |
+| `RibbonBar.tsx:727-745`, «Tech Specs» | ограничения (`tubeMaxOD: 100`, `tubeMaxLength: 5000`), которые нигде не проверяются | удалено |
+| `RibbonBar.tsx:139-173`, импорт STEP/DWFx | файл отправлялся несуществующей команде, затем `alert('… imported successfully!')` (`:161` — `// TODO: Handle imported geometry`) | ветка удалена: STEP открывает настоящий `ImportDialog` (`index.tsx`, сервис `bendcore_server`); кнопка DWFx удалена (команды в ядре нет) |
+| `DrawingWorkspace.tsx:567-572`, `DrawingVersionPanel` | «Откат» и «Сравнить» — только `console.log`; `CoreClient.getDrawingVersions/compareVersions/restoreVersion` вызывали `drawing.get_versions/compare_versions/restore`, которых нет в `core_api.cpp` | кнопки и методы удалены; панель показывает список версий ассоциативного чертежа и состояние |
+
+### 8.3 Оставлено и почему
+
+| Что | Почему |
+|---|---|
+| `src/ui/index.tsx`, `RibbonBar`, `RibbonButton`, `RibbonTab`, `ColorScheme`, `ContextMenu`, `StatusBar`, `PropertiesPanel`, `PropertyGroups`, `components/PropertiesPanel`, `KeyboardShortcuts`, `WorkspaceState`, `FeatureTree`, `SearchBar`, `TubeDialog`, `NewTubeDialog`, `TemplateSuggestionsTab`, `TemplateMatcherView`, `hooks/useTemplates` | оболочка окна Electron трубного модуля (вход `webpack.config.js`, `npm run build` в CI); несёт настоящие панели ниже; покрыта Jest |
+| `CheckPanel`, `BendDataDialog`, `InstancesPanel`, `DrawingWorkspace`, `LayersPanel`, `CommentsPanel`, `CommentBubble`, `DrawingVersionPanel`, `SketchEditor` (2D-эскиз на листе трубы; результат уходит в `drawing.add_sketch`), `SketchControls`, `core/*` | вызывают существующие команды ядра (`check.run`, `bend.lra`, `bend.xyz`, `instances.*`, `drawing.part`, `drawing.make_associative`, `drawing.release_check`, `drawing.add_sketch`, `drawing.sketch_bbox`, слои, комментарии) через `bendcore_cli` (Electron) или `dispatch` модуля `bendcore_wasm` (`src/wasm/bindings.cpp`); `tests/node/ui_core.test.ts` проверяет клиент на настоящем `bendcore_cli`, стенд `tests/ui_preview` — панели |
+| `ImportDialog`, `tubeService`, `Viewport3D` с `OrbitCamera`, `MouseGestures`, `SnapConstraints`, `SKeyMenu` | импорт STEP и распознавание труб через `bendcore_server` (`/v1/analyze`), отображение сеток сервиса в three.js; тесты `tests/ImportDialog.test.tsx`, `OrbitCamera`, `MouseGestures`, `SnapConstraints` |
+| `webpack.web.js` | общая основа `web/*/webpack.config.js` |
+| `tests/SketchEditor.e2e.tsx` | проверяет оставленные `SketchEditor`/`DrawingWorkspace` (вне Jest, как и раньше); удалён только случай, проверявший собственный мок `restoreVersion` |
+
+### 8.4 Проверка
+
+| Конфигурация | До (`a1bb972`) | После |
+|---|---|---|
+| `npm run typecheck` | OK | OK (без `tsconfig.api.json`) |
+| Jest (полный) | наборов 56/56, тестов 1269/1269 | наборов 18/18, тестов 335/335 (−38 наборов удалённого кода и самопроверяющих) |
+| `npm run build` (tsc + webpack окна Electron) | — | OK |
+| `build`, Release, без OCCT | ctest 59/59 (7.4) | ctest 59/59 |
+| `build-occt`, Release, OCCT | ctest 120/120 (7.4) | ctest 120/120 (удалённый `performance_monitor` тестов не имел) |
+| Playwright `test:e2e:{kernel,modeling,assembly,drawing}` | — | WASM-модули (`build-wasm`, emsdk, OCCT WASM, `BENDCORE_EIGEN_DIR=/usr/include/eigen3`) собраны; kernel 4/4, modeling 4/4, assembly 2/2, drawing 1/1 |
+| `check_no_stubs.sh`, `--diff ccr-d188a25e-rml7z8` | 0 | 0 |
+| `check_no_stubs.sh --paths src include tests` | 891 | 675 |
+
+### 8.5 Найдено, не удалено
+
+- Кнопки ленты окна Electron без команды ядра (`new-tube`, `edit-tube`, `open`, `save`, эскиз,
+  опорная геометрия, `measure`, `generate-report` и др.), `SearchBar` (`search-commands`),
+  `FeatureTree` (`get-feature-tree`, `rename-feature`) теперь получают явную ошибку главного
+  процесса; канал `bendcore:set-property` (`index.tsx`) не обрабатывается. Оболочку заменит
+  приложение `src/ui/app`.
+- `useTemplates` и `NewTubeDialog` читают `/data/templates.json`, `./data/bending_profiles.json`,
+  которые `npm run build` не кладёт в `dist/web`.
+- `backend/` (Express): маршрут `analytics.ts` с зашитыми экспериментами; собирается в CI.
+- `docs/API_REFERENCE.md` (раздел «Optimization APIs») описывает несуществующий
+  `bendcore/optimization/performance_monitor.h`.
+- Зависимость `@growthbook/growthbook` в `package.json` больше не используется (lock-файл не
+  менялся).
+- `.github/workflows/production-deploy.yml` вызывает `npm run test:e2e` (удалён вместе с
+  корневым `playwright.config.ts`) и `test:integration`, `test:smoke`, `test:performance`
+  (не существовали и раньше) — для инженера качества.
