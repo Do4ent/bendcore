@@ -6,7 +6,6 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/dist/',
-    '<rootDir>/tests/e2e/',
     // Playwright specs of the kernel viewer and the part modeler (run by their own configs).
     '<rootDir>/tests/e2e-kernel/',
     '<rootDir>/tests/e2e-modeling/',
