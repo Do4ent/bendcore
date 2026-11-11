@@ -2,7 +2,7 @@
  * Interface strings of the application shell in Russian and English (docs/ui/APP_SHELL.md).
  *
  * `ru` is the reference dictionary; `en` must have exactly its keys (checked by the type and by
- * src/ui/app/__tests__/i18n.test.ts). Placeholders are written {name} and filled by translate().
+ * src/ui/app/__tests__/appLogic.test.ts). Parameters are written {name} and filled by translate().
  */
 
 import { createContext, useContext } from 'react';
@@ -154,8 +154,8 @@ export const en: Record<MessageKey, string> = {
 
 export const DICTIONARIES: Record<Lang, Record<MessageKey, string>> = { ru, en };
 
-/** Placeholders {name} of a message. */
-export function placeholders(message: string): string[] {
+/** Parameters {name} of a message. */
+export function messageParams(message: string): string[] {
   return [...message.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 }
 

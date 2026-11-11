@@ -214,6 +214,8 @@ test('a draft is restored after the page is reloaded', async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId('drafts-offer')).toBeVisible();
   await page.getByTestId('drafts-discard').click();
+  // The offer disappears once the deletion is committed.
+  await expect(page.getByTestId('drafts-offer')).toHaveCount(0);
   await page.reload();
   await expect(page.getByTestId('start-page')).toBeVisible();
   await expect.poll(async () => (await shell(page)).storage).toBe('ready');

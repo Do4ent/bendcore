@@ -1,7 +1,7 @@
 // Dictionaries, keyboard shortcuts, recent-file list and file detection of the application shell
 // (docs/ui/APP_SHELL.md), and the LatestRunner of pointer-move solves.
 
-import { DICTIONARIES, LANGS, en, placeholders, ru, translate } from '../i18n';
+import { DICTIONARIES, LANGS, en, messageParams, ru, translate } from '../i18n';
 import type { MessageKey } from '../i18n';
 import { hotkeyAction } from '../hotkeys';
 import { detectKind, mergeRecent, overflowRecent, recentId } from '../storage';
@@ -13,9 +13,9 @@ describe('dictionaries', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(ru).sort());
   });
 
-  test('every message keeps the placeholders of the Russian one', () => {
+  test('every message keeps the parameters of the Russian one', () => {
     for (const key of Object.keys(ru) as MessageKey[]) {
-      for (const lang of LANGS) expect([key, placeholders(DICTIONARIES[lang][key])]).toEqual([key, placeholders(ru[key])]);
+      for (const lang of LANGS) expect([key, messageParams(DICTIONARIES[lang][key])]).toEqual([key, messageParams(ru[key])]);
     }
   });
 
@@ -28,7 +28,7 @@ describe('dictionaries', () => {
     }
   });
 
-  test('translate fills placeholders and keeps unknown ones', () => {
+  test('translate fills parameters and keeps unknown ones', () => {
     expect(translate('ru', 'busy.working', { operation: 'перестроение', seconds: '2.5' })).toBe('Выполняется: перестроение · 2.5 с');
     expect(translate('en', 'busy.working', { operation: 'rebuild', seconds: 3 })).toBe('Running: rebuild · 3 s');
     expect(translate('en', 'notify.opened')).toBe('Opened {name}');

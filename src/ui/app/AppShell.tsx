@@ -271,13 +271,15 @@ const AppShell: React.FC = () => {
     setOffered([]);
   };
 
+  /** Deletes the offered drafts; the offer disappears once IndexedDB has committed it. */
   const discardDrafts = () => {
     const s = storeRef.current;
-    for (const d of offered) {
-      storedDrafts.current.delete(d.id);
-      s?.removeDraft(d.id).catch(() => undefined);
-    }
-    setOffered([]);
+    const list = offered;
+    for (const d of list) storedDrafts.current.delete(d.id);
+    Promise.all(list.map((d) => s?.removeDraft(d.id))).then(
+      () => setOffered([]),
+      (e: unknown) => notify('error', t('status.draftUnavailable', { reason: e instanceof Error ? e.message : String(e) })),
+    );
   };
 
   useHotkeys(active === 'start', { open: () => openInput.current?.click() });
