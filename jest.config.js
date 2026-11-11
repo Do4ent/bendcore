@@ -24,8 +24,6 @@ module.exports = {
     '<rootDir>/tests/smoke/',
     // Фикстуры самотеста scripts/check_no_stubs.sh — данные проверки, а не тесты.
     '<rootDir>/tests/qa/fixtures/',
-    // Спецификация Playwright (import '@playwright/test'), в Jest не исполняется.
-    '<rootDir>/tests/web-app\\.spec\\.ts',
     // Проверка собранного Electron-приложения: нужны dist/ (npm run build) и бинарник
     // Electron; запуск — npm run test:electron-smoke.
     ...(process.env.BENDCORE_ELECTRON_SMOKE ? [] : ['<rootDir>/tests/electron-smoke\\.test\\.ts']),
