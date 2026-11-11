@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { FEAResult } from '../assembly/types';
+import { FEAResult } from './types';
 
 interface FEASimulatorProps {
   onAnalyze: (result: FEAResult) => void;

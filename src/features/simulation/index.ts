@@ -3,3 +3,4 @@
  */
 
 export { FEASimulator } from './FEASimulator';
+export type { FEAResult } from './types';

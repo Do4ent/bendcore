@@ -3,7 +3,7 @@
  *
  * ЭТАП 1: Базовое моделирование (Pad, Pocket, Fillet, Chamfer, Mirror, Pattern)
  * ЭТАП 2: Продвинутое моделирование (Loft, Sweep, Surface)
- * ЭТАП 3: Сборка и симуляция (Assembly, FEA Simulator Mock)
+ * ЭТАП 3: Симуляция (FEA Simulator Mock); сборка — src/assembly_v2
  * ЭТАП 4: Enterprise функции (Pipe Routing, BOM)
  */
 
@@ -13,8 +13,7 @@ export * from './modeling';
 // ЭТАП 2: Продвинутое моделирование
 export * from './advanced';
 
-// ЭТАП 3: Сборка и симуляция
-export * from './assembly';
+// ЭТАП 3: Симуляция
 export * from './simulation';
 
 // ЭТАП 4: Enterprise функции

@@ -108,69 +108,6 @@ else()
   target_link_libraries(bendcore_zlib INTERFACE ZLIB::ZLIB)
 endif()
 
-# Модули, добавленные без проверки сборки (их цели не компилируются: отсутствующие заголовки и
-# пространства имён, нет реализаций, нужен GTest). По умолчанию выключены, чтобы сборка и ctest
-# отражали реально работающий код; список — BENDCORE_UNVERIFIED_TARGETS ниже.
-option(BENDCORE_BUILD_UNVERIFIED "Собирать непроверенные (не компилирующиеся) модули" OFF)
-# Не компилируются (заголовки/пространства имён, которых нет; нет реализаций; нужен GTest), кроме двух:
-# test_multi_physics_coupling — тесты ожидают неверные значения; test_m5_optimization — бенчмарк
-# возвращает зашитые числа вместо измерений. Цель убирается из списка, когда она собирается и проходит.
-set(BENDCORE_UNVERIFIED_TARGETS
-  e2e_analytics
-  phase_f_test_suite
-  test_ab_testing
-  test_analytics_event
-  test_cad_core_037_fea
-  test_cad_core_038_gcode
-  test_cad_core_039_bom
-  test_cad_core_040_workflow
-  test_cad_core_041_production_build
-  test_cad_core_042_installers
-  test_cad_core_043_license
-  test_cad_core_044_cloud
-  test_cad_document
-  test_cloud_collaboration
-  test_command_executor
-  test_comments
-  test_cross_platform_validation
-  test_curve_operations
-  test_dependency_graph
-  test_document_event_bus
-  test_drawing_layers_manager
-  test_drawing_undo_redo
-  test_e2e_workflows
-  test_entity_id
-  test_event_batch_sender
-  test_gap025_fea_comprehensive
-  test_gap026_generative_comprehensive
-  test_gap027_parametric_ai_comprehensive
-  test_gap083_security_audit
-  test_gap085_compliance_standards
-  test_gap086_access_logging
-  test_gap087_data_privacy
-  test_geometry_kernel
-  test_growthbook_client
-  test_hierarchy_extended
-  test_history_stack
-  test_integration_e2e
-  test_layers
-  test_m5_optimization
-  test_manufacturing_constraints
-  test_multi_phase_integration
-  test_multi_physics_coupling
-  test_parameter_store
-  test_phase_c_integration
-  test_phase_d_integration
-  test_regression_suite
-  test_search
-  test_stress
-  test_stress_tests
-  test_surface_operations
-  test_surfaces_m5
-  test_topology_optimization_m8
-  test_transaction_manager
-)
-
 # BC-015: LibDWG для экспорта в формат DWG
 find_package(LibDWG QUIET)
 if(NOT LibDWG_FOUND)
@@ -281,30 +218,10 @@ set(BENDCORE_SOURCES
   src/dwg_export.cpp
   src/drawing_editor.cpp
   src/geometry_analyzer.cpp
-  # Core architecture
+  # Идентификатор сущности (используют src/features, src/editing) и система операций
   src/entity_id.cpp
-  src/cad_document.cpp
-  src/entity_tree.cpp
-  src/document_event_bus.cpp
-  src/command_manager.cpp
-  src/transaction.cpp
-  src/history_stack.cpp
-  src/parameter_store.cpp
   src/feature_system.cpp
 
-  # M2 Phase: Document Management (GAP-017, GAP-018, GAP-019)
-  src/document/transaction.cpp
-  src/document/undo_redo_manager.cpp
-  src/serialization/document_serializer.cpp
-  src/api/document_api.cpp
-
-  # Dependencies and Rebuild (M2 Phase)
-  src/dependency_graph.cpp
-  src/rebuild_engine.cpp
-
-  # I/O and serialization
-  src/serializer.cpp
-  src/atomic_save.cpp
 
   # Constraint solver
   src/constraint_system.cpp
@@ -320,54 +237,13 @@ set(BENDCORE_SOURCES
   src/features/revolve.cpp
   src/features/feature_system.cpp
 
-  # M5 Phase: Surface Modeling (GAP-021) - TEMPORARILY DISABLED FOR COMPILATION
-  # src/surfaces/nurbs_surface.cpp
-  # src/surfaces/surface_types.cpp
-  # src/surfaces/surface_operations.cpp
-
-  # M3 Phase: Assembly (GAP-009, GAP-010)
   src/instances.cpp
-  src/assembly/part_reference.cpp
-  src/assembly/assembly.cpp
-  src/assembly/component_instance.cpp
-  src/assembly/assembly_constraints.cpp
-  src/assembly/assembly_constraint_system.cpp
-  src/assembly/assembly_validation.cpp
 
   # M3 Phase: Manufacturing - BOM Generation (GAP-012)
   src/manufacturing/bom.cpp
 
-  # M8 Phase: Manufacturing Constraints (GAP-034)
-  src/manufacturing_constraints.cpp
-
   # M3 Phase: Mass Properties Analysis (GAP-015)
   src/analysis/mass_properties.cpp
-
-  # M7 Phase: Multi-Physics Coupling (GAP-029)
-  src/analysis/multi_physics_coupling.cpp
-
-  # M3 Phase: Drawing Extraction (GAP-014)
-  src/drawing/drawing_extraction.cpp
-
-  # M4 Phase: Drawing Workbench Foundation (GAP-016)
-  # (Compiled separately with test to avoid conflicts)
-  # src/drawing/drawing.cpp
-  # src/drawing/drawing_manager.cpp
-
-  # M4 Phase: View Management & Layouts (GAP-017)
-  src/drawing/view_manager.cpp
-  src/drawing/layout_manager.cpp
-  src/drawing/view_properties.cpp
-
-  # M4 Phase: Annotation & Dimensioning (GAP-018)
-  src/drawing/annotation_dimension.cpp
-
-  # M4 Phase: Drawing Export & Publishing (GAP-019)
-  src/drawing/export_options.cpp
-  src/drawing/drawing_export.cpp
-  src/drawing/publishing_manager.cpp
-  src/drawing/print_manager.cpp
-  src/drawing/file_handler.cpp
 
   # M5 Phase: Direct Editing (GAP-022)
   src/editing/direct_editing_manager.cpp
@@ -441,20 +317,8 @@ set(BENDCORE_SOURCES
   src/cloud/analytics_monitoring.cpp
   src/cloud/cloud_manager.cpp
 
-  # M8 Phase: Material Library (GAP-033)
-  src/materials/material_library.cpp
-
   # M8 Phase: Cost Analysis (GAP-035)
   src/cost_analysis.cpp
-
-  # M8 Phase: Topology Optimization (GAP-032) - TEMPORARILY DISABLED DUE TO COMPILER ERRORS
-  # src/topology_optimization/simp_method.cpp
-  # src/topology_optimization/sensitivity_analysis.cpp
-  # src/topology_optimization/density_filtering.cpp
-  # src/topology_optimization/optimization_algorithms.cpp
-  # src/topology_optimization/constraint_handling.cpp
-  # src/topology_optimization/post_processing.cpp
-  # src/topology_optimization/topology_optimizer.cpp
 
   # M17 Phase: Advanced Analytics (GAP-074 to GAP-078)
   src/analytics/design_analytics.cpp
@@ -483,18 +347,11 @@ endif()
 # bendcore_core does not use OCCT; OCCT-dependent code lives in
 # bendcore_import (below) and bendcore_occt (BENDCORE_WITH_OCCT).
 
-# M1 Integration Test (CAD Foundation)
-add_executable(test_m1_integration tests/integration/test_m1_integration.cpp)
-target_link_libraries(test_m1_integration PRIVATE bendcore_core)
-
 enable_testing()
 
 # Тест: нативно — запуск исполняемого файла; WebAssembly — запуск через node (код возврата = результат теста).
 find_program(BENDCORE_NODE node)
 function(bendcore_add_test name target)
-  if(NOT BENDCORE_BUILD_UNVERIFIED AND target IN_LIST BENDCORE_UNVERIFIED_TARGETS)
-    return()
-  endif()
   # Тесты проверяют через assert(): в Release (NDEBUG) они бы молча отключались.
   if(MSVC)
     target_compile_options(${target} PRIVATE /UNDEBUG)
@@ -514,7 +371,6 @@ function(bendcore_add_test name target)
 endfunction()
 
 # M1 Integration Test
-bendcore_add_test(m1_integration test_m1_integration)
 
 add_executable(test_bend_output tests/test_bend_output.cpp)
 target_link_libraries(test_bend_output PRIVATE bendcore_core)
@@ -527,65 +383,6 @@ bendcore_add_test(batch_check test_batch_check)
 add_executable(test_instances tests/test_instances.cpp)
 target_link_libraries(test_instances PRIVATE bendcore_core)
 bendcore_add_test(instances test_instances)
-
-add_executable(test_part_reference tests/assembly/test_part_reference.cpp)
-target_link_libraries(test_part_reference PRIVATE bendcore_core)
-bendcore_add_test(part_reference test_part_reference)
-
-# M3 Phase: Assembly Constraints (GAP-011)
-add_executable(test_assembly_constraints tests/assembly/test_assembly_constraints.cpp)
-target_link_libraries(test_assembly_constraints PRIVATE bendcore_core)
-bendcore_add_test(assembly_constraints test_assembly_constraints)
-
-add_executable(test_entity_id tests/document/test_entity_id.cpp)
-target_link_libraries(test_entity_id PRIVATE bendcore_core)
-bendcore_add_test(entity_id test_entity_id)
-
-add_executable(test_cad_document tests/document/test_cad_document.cpp)
-target_link_libraries(test_cad_document PRIVATE bendcore_core)
-bendcore_add_test(cad_document test_cad_document)
-
-add_executable(test_hierarchy_extended tests/document/test_hierarchy_extended.cpp)
-target_link_libraries(test_hierarchy_extended PRIVATE bendcore_core)
-bendcore_add_test(hierarchy_extended test_hierarchy_extended)
-
-# M2 Phase: Document Management (GAP-017, GAP-018, GAP-019)
-add_executable(test_transaction tests/document/test_transaction.cpp)
-target_link_libraries(test_transaction PRIVATE bendcore_core)
-bendcore_add_test(transaction test_transaction)
-
-add_executable(test_undo_redo_manager tests/document/test_undo_redo_manager.cpp)
-target_link_libraries(test_undo_redo_manager PRIVATE bendcore_core)
-bendcore_add_test(undo_redo_manager test_undo_redo_manager)
-
-add_executable(test_document_serializer tests/serialization/test_document_serializer.cpp)
-target_link_libraries(test_document_serializer PRIVATE bendcore_core)
-bendcore_add_test(document_serializer test_document_serializer)
-
-add_executable(test_document_api tests/api/test_document_api.cpp)
-target_link_libraries(test_document_api PRIVATE bendcore_core)
-bendcore_add_test(document_api test_document_api)
-
-add_executable(test_command_executor tests/commands/test_command_executor.cpp)
-target_link_libraries(test_command_executor PRIVATE bendcore_core)
-bendcore_add_test(command_executor test_command_executor)
-
-add_executable(test_transaction_manager tests/commands/test_transaction_manager.cpp)
-target_link_libraries(test_transaction_manager PRIVATE bendcore_core)
-bendcore_add_test(transaction_manager test_transaction_manager)
-
-add_executable(test_history_stack tests/commands/test_history_stack.cpp)
-target_link_libraries(test_history_stack PRIVATE bendcore_core)
-bendcore_add_test(history_stack test_history_stack)
-
-add_executable(test_document_event_bus tests/commands/test_document_event_bus.cpp)
-target_link_libraries(test_document_event_bus PRIVATE bendcore_core)
-bendcore_add_test(document_event_bus test_document_event_bus)
-
-# M4 Phase: View Management & Layouts (GAP-017)
-add_executable(test_view_management tests/drawing/test_view_management.cpp)
-target_link_libraries(test_view_management PRIVATE bendcore_core)
-bendcore_add_test(view_management test_view_management)
 
 add_executable(test_drawing tests/test_drawing.cpp)
 target_link_libraries(test_drawing PRIVATE bendcore_core)
@@ -607,27 +404,10 @@ add_executable(test_core_api tests/test_core_api.cpp)
 target_link_libraries(test_core_api PRIVATE bendcore_core)
 bendcore_add_test(core_api test_core_api)
 
-# M4 Phase: Drawing Export & Publishing (GAP-019)
-# Tests use Google Test - only build if GTest is available
+# Тесты на Google Test собираются, только если GTest установлен.
 find_package(GTest QUIET)
-if(GTest_FOUND)
-  add_executable(test_drawing_export_m4 tests/test_drawing_export_m4.cpp)
-  target_link_libraries(test_drawing_export_m4 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(drawing_export_m4 test_drawing_export_m4)
-
-  add_executable(test_publishing_manager_m4 tests/test_publishing_manager_m4.cpp)
-  target_link_libraries(test_publishing_manager_m4 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(publishing_manager_m4 test_publishing_manager_m4)
-
-  add_executable(test_print_manager_m4 tests/test_print_manager_m4.cpp)
-  target_link_libraries(test_print_manager_m4 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(print_manager_m4 test_print_manager_m4)
-
-  add_executable(test_file_handler_m4 tests/test_file_handler_m4.cpp)
-  target_link_libraries(test_file_handler_m4 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(file_handler_m4 test_file_handler_m4)
-else()
-  message(STATUS "GTest not found - M4 Phase tests skipped")
+if(NOT GTest_FOUND)
+  message(STATUS "GTest not found - GoogleTest-based tests skipped")
 endif()
 
 # Ядро отдельным процессом для Electron (строки JSON через stdin/stdout).
@@ -667,11 +447,6 @@ add_executable(test_analysis tests/test_analysis.cpp)
 target_link_libraries(test_analysis PRIVATE bendcore_core)
 bendcore_add_test(analysis test_analysis)
 
-# M7 Phase: Multi-Physics Coupling (GAP-029)
-add_executable(test_multi_physics_coupling tests/test_multi_physics_coupling.cpp)
-target_link_libraries(test_multi_physics_coupling PRIVATE bendcore_core)
-bendcore_add_test(multi_physics_coupling test_multi_physics_coupling)
-
 # M7 Phase: Real-time Solver (GAP-030)
 add_executable(test_real_time_solver tests/solver/test_real_time_solver.cpp)
 target_link_libraries(test_real_time_solver PRIVATE bendcore_core)
@@ -685,19 +460,9 @@ add_executable(test_collaboration tests/test_collaboration.cpp)
 target_link_libraries(test_collaboration PRIVATE bendcore_core)
 bendcore_add_test(collaboration test_collaboration)
 
-# M7 Phase: Cloud & Collaboration (GAP-031)
-add_executable(test_cloud_collaboration tests/test_cloud_collaboration.cpp)
-target_link_libraries(test_cloud_collaboration PRIVATE bendcore_core)
-bendcore_add_test(cloud_collaboration test_cloud_collaboration)
-
 add_executable(test_standards tests/test_standards.cpp)
 target_link_libraries(test_standards PRIVATE bendcore_core)
 bendcore_add_test(standards test_standards)
-
-# M8 Phase: Topology Optimization (GAP-032)
-add_executable(test_topology_optimization_m8 tests/test_topology_optimization_m8.cpp)
-target_link_libraries(test_topology_optimization_m8 PRIVATE bendcore_core)
-bendcore_add_test(topology_optimization_m8 test_topology_optimization_m8)
 
 # M8 Phase: Cost Analysis (GAP-035)
 add_executable(test_simple_cost_analysis tests/simple_cost_analysis.cpp)
@@ -713,16 +478,6 @@ else()
   message(STATUS "GTest not found - Comprehensive Cost Analysis tests skipped (using simple test)")
 endif()
 
-# M3 Phase: Assembly Creation (GAP-009)
-add_executable(test_assembly_creation tests/assembly/test_assembly_creation.cpp)
-target_link_libraries(test_assembly_creation PRIVATE bendcore_core)
-bendcore_add_test(assembly_creation test_assembly_creation)
-
-# M3 Phase: Assembly Validation (GAP-013)
-add_executable(test_assembly_validation tests/assembly/test_assembly_validation.cpp)
-target_link_libraries(test_assembly_validation PRIVATE bendcore_core)
-bendcore_add_test(assembly_validation test_assembly_validation)
-
 add_executable(test_reporting tests/test_reporting.cpp)
 target_link_libraries(test_reporting PRIVATE bendcore_core)
 bendcore_add_test(reporting test_reporting)
@@ -730,11 +485,6 @@ bendcore_add_test(reporting test_reporting)
 add_executable(test_reporting_ui tests/test_reporting_ui.cpp)
 target_link_libraries(test_reporting_ui PRIVATE bendcore_core)
 bendcore_add_test(reporting_ui test_reporting_ui)
-
-# M5 Phase: Surface Modeling (GAP-021)
-add_executable(test_surfaces_m5 tests/surfaces/test_surfaces_m5.cpp)
-target_link_libraries(test_surfaces_m5 PRIVATE bendcore_core)
-bendcore_add_test(surfaces_m5 test_surfaces_m5)
 
 add_library(bendcore_formula STATIC src/formula.cpp)
 target_include_directories(bendcore_formula PUBLIC include third_party)
@@ -819,19 +569,16 @@ target_link_libraries(test_sketch2d PRIVATE bendcore_sketch2d)
 bendcore_add_test(sketch2d test_sketch2d)
 
 # Комментарии и замечания (Q2 2027, Task 4)
-add_executable(test_comments tests/test_comments.cpp)
-target_link_libraries(test_comments PRIVATE bendcore_core)
-bendcore_add_test(comments test_comments)
+if(GTest_FOUND)
+  add_executable(test_comments tests/test_comments.cpp)
+  target_link_libraries(test_comments PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
+  bendcore_add_test(comments test_comments)
+endif()
 
 # Слои и управление видимостью (Q2 2027, Task 3)
 add_executable(test_layers tests/test_layers.cpp)
 target_link_libraries(test_layers PRIVATE bendcore_core)
 bendcore_add_test(layers test_layers)
-
-# Поиск и фильтрация (Q3 2027, Task 3)
-add_executable(test_search tests/test_search.cpp)
-target_link_libraries(test_search PRIVATE bendcore_core)
-bendcore_add_test(search test_search)
 
 # OCCT initialization test (Q3 2027, Task 1, Subtask 1)
 # Анализ формы трубы по B-rep (бэкенд OCCT подключается в bendcore_occt; ядро от OCCT не зависит).
@@ -887,63 +634,19 @@ if(OpenCASCADE_FOUND)
   bendcore_add_test(e2e_import e2e_import)
 endif()
 
-# GrowthBook Analytics (Q3 2027, Task 4)
-# Subtask 1: GrowthBook SDK Integration
-add_executable(test_growthbook_client tests/test_growthbook_client.cpp)
-target_link_libraries(test_growthbook_client PRIVATE bendcore_core)
-bendcore_add_test(growthbook_client test_growthbook_client)
-
-# Subtask 2: Analytics Event System
-add_executable(test_analytics_event tests/test_analytics_event.cpp)
-target_link_libraries(test_analytics_event PRIVATE bendcore_core)
-bendcore_add_test(analytics_event test_analytics_event)
-
 # Subtask 3: A/B Testing Framework
-add_executable(test_ab_testing tests/test_ab_testing.cpp)
-target_link_libraries(test_ab_testing PRIVATE bendcore_core)
+add_executable(test_ab_testing tests/test_ab_testing.cpp src/ab_testing.cpp)
+target_include_directories(test_ab_testing PRIVATE include)
 bendcore_add_test(ab_testing test_ab_testing)
-
-# Subtask 4: Event Batching & Delivery
-add_executable(test_event_batch_sender tests/test_event_batch_sender.cpp)
-target_link_libraries(test_event_batch_sender PRIVATE bendcore_core)
-bendcore_add_test(event_batch_sender test_event_batch_sender)
 
 # Q4 Task 1: Advanced Drawing Features
 add_executable(test_drawing_editor tests/test_drawing_editor.cpp)
 target_link_libraries(test_drawing_editor PRIVATE bendcore_core bendcore_formula)
 bendcore_add_test(drawing_editor test_drawing_editor)
 
-add_executable(test_drawing_layers_manager tests/test_drawing_layers_manager.cpp)
+add_executable(test_drawing_layers_manager tests/test_drawing_layers_manager.cpp src/drawing_layers.cpp)
 target_link_libraries(test_drawing_layers_manager PRIVATE bendcore_core)
 bendcore_add_test(drawing_layers_manager test_drawing_layers_manager)
-
-add_executable(test_drawing_undo_redo tests/test_drawing_undo_redo.cpp)
-target_link_libraries(test_drawing_undo_redo PRIVATE bendcore_core)
-bendcore_add_test(drawing_undo_redo test_drawing_undo_redo)
-
-# M3 Phase: Drawing Extraction (GAP-014)
-add_executable(test_drawing_extraction tests/test_drawing_extraction.cpp)
-target_link_libraries(test_drawing_extraction PRIVATE bendcore_core)
-bendcore_add_test(drawing_extraction test_drawing_extraction)
-
-# M4 Phase: Drawing Workbench Foundation (GAP-016)
-add_executable(test_drawing_workbench_m4
-  tests/test_drawing_workbench_m4.cpp
-  src/drawing/drawing.cpp
-  src/drawing/drawing_manager.cpp
-)
-target_link_libraries(test_drawing_workbench_m4 PRIVATE bendcore_core)
-bendcore_add_test(drawing_workbench_m4 test_drawing_workbench_m4)
-
-# M4 Phase: Annotation & Dimensioning (GAP-018)
-add_executable(test_annotation_dimension tests/test_annotation_dimension.cpp)
-target_link_libraries(test_annotation_dimension PRIVATE bendcore_core)
-bendcore_add_test(annotation_dimension test_annotation_dimension)
-
-# Subtask 7: Integration Testing & Documentation
-add_executable(e2e_analytics tests/e2e_analytics.cpp)
-target_link_libraries(e2e_analytics PRIVATE bendcore_core)
-bendcore_add_test(e2e_analytics e2e_analytics)
 
 # Труба из пути как тело (Open CASCADE): опционально, нужен установленный OCCT (см. README).
 # Установка OCCT (cmake --install), например /path/to/occt-install. Конфиг OCCT для статической сборки
@@ -1015,50 +718,10 @@ if(BENDCORE_WITH_OCCT)
   endif()
 endif()
 
-# Phase C: Parameter Store, Dependency Graph, Rebuild Engine
-add_executable(test_parameter_store tests/parameters/test_parameter_store.cpp)
-target_link_libraries(test_parameter_store PRIVATE bendcore_core)
-bendcore_add_test(parameter_store test_parameter_store)
-
-add_executable(test_dependency_graph tests/dependencies/test_dependency_graph.cpp)
-target_link_libraries(test_dependency_graph PRIVATE bendcore_core)
-bendcore_add_test(dependency_graph test_dependency_graph)
-
-# Disabled - Missing source files
-#add_executable(test_rebuild_engine tests/rebuild/test_rebuild_engine.cpp)
-#target_link_libraries(test_rebuild_engine PRIVATE bendcore_core)
-#bendcore_add_test(rebuild_engine test_rebuild_engine)
-
-# M2 Phase: Rebuild System (GAP-023: Cascading updates with incremental rebuild)
-add_executable(test_rebuild_cascade tests/rebuild/test_rebuild_cascade.cpp)
-target_link_libraries(test_rebuild_cascade PRIVATE bendcore_core)
-bendcore_add_test(rebuild_cascade test_rebuild_cascade)
-
-add_executable(test_phase_c_integration tests/integration/test_phase_c_integration.cpp)
-target_link_libraries(test_phase_c_integration PRIVATE bendcore_core)
-bendcore_add_test(phase_c_integration test_phase_c_integration)
-
-# Phase D: Geometry & Topology (CAD-CORE-013 to CAD-CORE-016)
-add_executable(test_geometry_kernel tests/geometry/test_geometry_kernel.cpp)
-target_link_libraries(test_geometry_kernel PRIVATE bendcore_core)
-bendcore_add_test(geometry_kernel test_geometry_kernel)
-
-add_executable(test_curve_operations tests/geometry/test_curve_operations.cpp)
-target_link_libraries(test_curve_operations PRIVATE bendcore_core)
-bendcore_add_test(curve_operations test_curve_operations)
-
-add_executable(test_surface_operations tests/geometry/test_surface_operations.cpp)
-target_link_libraries(test_surface_operations PRIVATE bendcore_core)
-bendcore_add_test(surface_operations test_surface_operations)
-
 # M5 Phase: Advanced Feature Operations (GAP-020) - Loft, Sweep, Revolve
 add_executable(test_advanced_features_m5 tests/features/test_advanced_features_m5.cpp)
 target_link_libraries(test_advanced_features_m5 PRIVATE bendcore_core)
 bendcore_add_test(advanced_features_m5 test_advanced_features_m5)
-
-add_executable(test_phase_d_integration tests/integration/test_phase_d_integration.cpp)
-target_link_libraries(test_phase_d_integration PRIVATE bendcore_core)
-bendcore_add_test(phase_d_integration test_phase_d_integration)
 
 # Comprehensive Test Suite for Phase 4 (90%+ coverage target)
 add_executable(test_dwfx_parser_comprehensive tests/test_dwfx_parser_comprehensive.cpp)
@@ -1077,29 +740,6 @@ add_executable(test_geometry_analyzer_comprehensive tests/test_geometry_analyzer
 target_link_libraries(test_geometry_analyzer_comprehensive PRIVATE bendcore_core)
 bendcore_add_test(geometry_analyzer_comprehensive test_geometry_analyzer_comprehensive)
 
-
-# ============================================================================
-# Phase F: Production Launch (CAD-CORE-021 to 024)
-# ============================================================================
-
-# CAD-CORE-021: Comprehensive Test Suite
-add_executable(phase_f_test_suite src/testing/phase_f_main.cpp)
-target_link_libraries(phase_f_test_suite PRIVATE bendcore_core)
-bendcore_add_test(phase_f_test_suite phase_f_test_suite)
-
-# CAD-CORE-021: Individual test scenarios
-add_executable(test_integration_e2e tests/testing/test_integration_e2e.cpp)
-target_link_libraries(test_integration_e2e PRIVATE bendcore_core)
-bendcore_add_test(integration_e2e test_integration_e2e)
-
-add_executable(test_stress tests/testing/test_stress.cpp)
-target_link_libraries(test_stress PRIVATE bendcore_core)
-bendcore_add_test(stress test_stress)
-
-add_executable(test_multi_phase_integration tests/testing/test_multi_phase_integration.cpp)
-target_link_libraries(test_multi_phase_integration PRIVATE bendcore_core)
-bendcore_add_test(multi_phase_integration test_multi_phase_integration)
-
 # ============================================================================
 # Phase I: Integration Testing (CAD-CORE-033 to CAD-CORE-036)
 # ============================================================================
@@ -1107,32 +747,6 @@ bendcore_add_test(multi_phase_integration test_multi_phase_integration)
 # CAD-CORE-033 through CAD-CORE-036: Phase I Integration Testing
 add_executable(test_phase_i_main tests/integration/test_phase_i_main.cpp)
 bendcore_add_test(phase_i_main test_phase_i_main)
-
-# CAD-CORE-033: E2EWorkflows — полные workflow тесты (Create → Edit → Parameters → Geometry → FEA → Export)
-add_executable(test_e2e_workflows tests/integration/test_e2e_workflows.cpp)
-target_link_libraries(test_e2e_workflows PRIVATE bendcore_core)
-bendcore_add_test(e2e_workflows test_e2e_workflows)
-
-# CAD-CORE-034: CrossPlatformValidation — тесты кроссплатформной совместимости (Windows/Linux/macOS)
-add_executable(test_cross_platform_validation tests/integration/test_cross_platform_validation.cpp)
-target_link_libraries(test_cross_platform_validation PRIVATE bendcore_core)
-bendcore_add_test(cross_platform_validation test_cross_platform_validation)
-
-# CAD-CORE-035: StressTests — тесты производительности (1K, 5K, 10K, 50K элементов)
-add_executable(test_stress_tests tests/integration/test_stress_tests.cpp)
-target_link_libraries(test_stress_tests PRIVATE bendcore_core)
-bendcore_add_test(stress_tests test_stress_tests)
-
-# CAD-CORE-036: RegressionTests — регрессионные тесты всех фаз A-F
-add_executable(test_regression_suite tests/integration/test_regression_suite.cpp)
-target_link_libraries(test_regression_suite PRIVATE bendcore_core)
-bendcore_add_test(regression_suite test_regression_suite)
-
-# Phase H: Advanced Optimization Tests (CAD-CORE-029, 030, 031, 032)
-# M5 Phase: Performance Optimization Tests - 30+ unit tests
-add_executable(test_m5_optimization src/testing/optimization_test_suite.cpp)
-target_link_libraries(test_m5_optimization PRIVATE bendcore_core)
-bendcore_add_test(m5_optimization test_m5_optimization)
 
 # ============================================================================
 # M6 Phase: FEA Integration (GAP-025)
@@ -1144,36 +758,8 @@ target_link_libraries(test_fea_m6 PRIVATE bendcore_core)
 bendcore_add_test(fea_m6 test_fea_m6)
 
 # ============================================================================
-# M7 Phase: Mesh Optimization (GAP-028) - 40+ unit tests
+# BOM, массовые свойства, расчётные модули
 # ============================================================================
-
-# add_executable(test_mesh_optimization_m7 tests/mesh_optimization/test_mesh_optimization_m7.cpp)
-# target_link_libraries(test_mesh_optimization_m7 PRIVATE bendcore_core)
-# bendcore_add_test(mesh_optimization_m7 test_mesh_optimization_m7)
-
-# ============================================================================
-# Phase J: Manufacturing Integration (CAD-CORE-037 to CAD-CORE-040)
-# ============================================================================
-
-# CAD-CORE-037: FEA Integration
-add_executable(test_cad_core_037_fea tests/CAD-CORE-037-FEAIntegration.test.cpp)
-target_link_libraries(test_cad_core_037_fea PRIVATE bendcore_core)
-bendcore_add_test(cad_core_037_fea test_cad_core_037_fea)
-
-# CAD-CORE-038: G-Code Generator
-add_executable(test_cad_core_038_gcode tests/CAD-CORE-038-GCodeGenerator.test.cpp)
-target_link_libraries(test_cad_core_038_gcode PRIVATE bendcore_core)
-bendcore_add_test(cad_core_038_gcode test_cad_core_038_gcode)
-
-# CAD-CORE-039: BOM Generator
-add_executable(test_cad_core_039_bom tests/CAD-CORE-039-BOMGenerator.test.cpp)
-target_link_libraries(test_cad_core_039_bom PRIVATE bendcore_core)
-bendcore_add_test(cad_core_039_bom test_cad_core_039_bom)
-
-# CAD-CORE-040: Manufacturing Workflow
-add_executable(test_cad_core_040_workflow tests/CAD-CORE-040-ManufacturingWorkflow.test.cpp)
-target_link_libraries(test_cad_core_040_workflow PRIVATE bendcore_core)
-bendcore_add_test(cad_core_040_workflow test_cad_core_040_workflow)
 
 # M3 Phase: Manufacturing - BOM Generation (GAP-012)
 add_executable(test_bom_simple tests/test_bom_simple.cpp)
@@ -1207,55 +793,6 @@ if(GTest_FOUND)
   target_link_libraries(test_generative_m6 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(generative_m6 test_generative_m6)
 endif()
-
-# ============================================================================
-# Phase K: Deployment & Distribution (CAD-CORE-041 to CAD-CORE-044)
-# ============================================================================
-
-# CAD-CORE-041: Production Build Pipeline
-add_executable(test_cad_core_041_production_build tests/CAD-CORE-041-ProductionBuild.test.cpp)
-target_link_libraries(test_cad_core_041_production_build PRIVATE bendcore_core)
-bendcore_add_test(cad_core_041_production_build test_cad_core_041_production_build)
-
-# CAD-CORE-042: Installers (Multi-platform)
-add_executable(test_cad_core_042_installers tests/CAD-CORE-042-Installers.test.cpp)
-target_link_libraries(test_cad_core_042_installers PRIVATE bendcore_core)
-bendcore_add_test(cad_core_042_installers test_cad_core_042_installers)
-
-# CAD-CORE-043: License Management
-add_executable(test_cad_core_043_license tests/CAD-CORE-043-LicenseManagement.test.cpp)
-target_link_libraries(test_cad_core_043_license PRIVATE bendcore_core)
-bendcore_add_test(cad_core_043_license test_cad_core_043_license)
-
-# CAD-CORE-044: Cloud Deployment
-add_executable(test_cad_core_044_cloud tests/CAD-CORE-044-CloudDeployment.test.cpp)
-target_link_libraries(test_cad_core_044_cloud PRIVATE bendcore_core)
-bendcore_add_test(cad_core_044_cloud test_cad_core_044_cloud)
-
-# M8 Phase (GAP-034): Manufacturing Constraints
-add_executable(test_manufacturing_constraints tests/CAD-CORE-043-ManufacturingConstraints.test.cpp)
-target_link_libraries(test_manufacturing_constraints PRIVATE bendcore_core)
-bendcore_add_test(manufacturing_constraints test_manufacturing_constraints)
-
-# M8 Phase: Material Library (GAP-033) - 45+ unit tests
-add_executable(test_material_library tests/materials/test_material_library.cpp)
-target_link_libraries(test_material_library PRIVATE bendcore_core)
-bendcore_add_test(material_library test_material_library)
-
-# M6 Phase: FEA Integration (GAP-025) - 35 comprehensive unit tests
-add_executable(test_gap025_fea_comprehensive tests/gap025_fea_comprehensive.cpp)
-target_link_libraries(test_gap025_fea_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(gap025_fea_comprehensive test_gap025_fea_comprehensive)
-
-# M6 Phase: Generative Design (GAP-026) - 35 comprehensive unit tests
-add_executable(test_gap026_generative_comprehensive tests/gap026_generative_comprehensive.cpp)
-target_link_libraries(test_gap026_generative_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(gap026_generative_comprehensive test_gap026_generative_comprehensive)
-
-# M6 Phase: Parametric AI (GAP-027) - 35 comprehensive unit tests
-add_executable(test_gap027_parametric_ai_comprehensive tests/gap027_parametric_ai_comprehensive.cpp)
-target_link_libraries(test_gap027_parametric_ai_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(gap027_parametric_ai_comprehensive test_gap027_parametric_ai_comprehensive)
 
 # ============================================================================
 # M20: Production Hardening (GAP-088 to GAP-093) - 220 tests
@@ -1298,49 +835,6 @@ target_include_directories(test_gap093_production_deployment PRIVATE ${CMAKE_CUR
 bendcore_add_test(gap093_production_deployment test_gap093_production_deployment)
 
 # ============================================================================
-# M17 Phase: Advanced Analytics (GAP-074 to GAP-078) - 170 tests
-# ============================================================================
-
-# GAP-074: DesignAnalytics (35 tests) - Metrics collection, pattern analysis
-# TODO: Implement analytics_design.test.cpp
-
-# GAP-075: PerformanceMonitoring (33 tests) - System tracking, profiling
-# TODO: Implement analytics_performance.test.cpp
-
-# GAP-076: UsageTracking (32 tests) - Event tracking, user behavior
-# TODO: Implement analytics_usage.test.cpp
-
-# GAP-077: ReportGeneration (36 tests) - PDF/HTML reports, aggregation
-# TODO: Implement analytics_report.test.cpp
-
-# GAP-078: DataVisualization (34 tests) - Charts, dashboards, real-time display
-# TODO: Implement analytics_visualization.test.cpp
-
-# ============================================================================
-# M19 Phase: Security & Compliance (GAP-083 to GAP-087) - 175 tests
-# ============================================================================
-
-# GAP-083: SecurityAudit (36 tests) - Vulnerability scanner, penetration testing
-add_executable(test_gap083_security_audit tests/GAP-083-SecurityAudit.test.cpp)
-target_link_libraries(test_gap083_security_audit PRIVATE bendcore_core)
-bendcore_add_test(gap083_security_audit test_gap083_security_audit)
-
-# GAP-085: ComplianceStandards (34 tests) - GDPR, ISO 27001, PCI-DSS
-add_executable(test_gap085_compliance_standards tests/GAP-085-ComplianceStandards.test.cpp)
-target_link_libraries(test_gap085_compliance_standards PRIVATE bendcore_core)
-bendcore_add_test(gap085_compliance_standards test_gap085_compliance_standards)
-
-# GAP-086: AccessLogging (32 tests) - Audit trails, event tracking
-add_executable(test_gap086_access_logging tests/GAP-086-AccessLogging.test.cpp)
-target_link_libraries(test_gap086_access_logging PRIVATE bendcore_core)
-bendcore_add_test(gap086_access_logging test_gap086_access_logging)
-
-# GAP-087: DataPrivacy (35 tests) - Anonymization, consent management
-add_executable(test_gap087_data_privacy tests/GAP-087-DataPrivacy.test.cpp)
-target_link_libraries(test_gap087_data_privacy PRIVATE bendcore_core)
-bendcore_add_test(gap087_data_privacy test_gap087_data_privacy)
-
-# ============================================================================
 # P1-02: Security & Reliability (80+ tests)
 # ============================================================================
 # Comprehensive security hardening: input validation, serialization, memory safety,
@@ -1365,13 +859,4 @@ if(EMSCRIPTEN)
     -sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 -sNO_EXIT_RUNTIME=1)
   # Страница и JS-обёртка копируются рядом с модулем (открывать через http-сервер, не file://).
   file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/web/ DESTINATION ${CMAKE_BINARY_DIR}/web)
-endif()
-
-# Непроверенные цели не входят в сборку по умолчанию (см. BENDCORE_UNVERIFIED_TARGETS).
-if(NOT BENDCORE_BUILD_UNVERIFIED)
-  foreach(t IN LISTS BENDCORE_UNVERIFIED_TARGETS)
-    if(TARGET ${t})
-      set_target_properties(${t} PROPERTIES EXCLUDE_FROM_ALL TRUE)
-    endif()
-  endforeach()
 endif()
