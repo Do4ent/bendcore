@@ -29,6 +29,7 @@
     "test:e2e:kernel": "playwright test -c web/kernel-viewer/playwright.config.ts",
     "dev:part-modeler": "webpack serve --config web/part-modeler/webpack.config.js --mode development",
     "test:modeling-wasm": "node tests/wasm/modeling_document.test.mjs",
+    "test:sketch-editor-wasm": "node tests/wasm/sketch_editor.test.mjs",
     "test:e2e:modeling": "playwright test -c web/part-modeler/playwright.config.ts",
     "lint": "eslint src/ui --ext .ts,.tsx",
     "format": "prettier --write src/ui",

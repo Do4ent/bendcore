@@ -163,6 +163,25 @@ export class PartDocumentHandle {
   properties(target = 'final', density = null) {
     return this.#call('docProperties', target, density);
   }
+
+  /**
+   * Solves sketch data in the context of sketch node `featureId` (variables, placement, projected
+   * edges) without changing the document (docs/ui/SKETCH_EDITOR.md): solved points and curves,
+   * intersections, dof, definition, conflicting/redundant constraints, profile regions and the
+   * data moved to the solution. options.drag = { point, x, y } pulls a free point.
+   */
+  solveSketch(featureId, sketch, options = {}) {
+    return this.#call('docSketchSolve', featureId, sketch, options);
+  }
+
+  /**
+   * Applies a sketch editing tool (trim, extend, offset, mirror, linear-pattern,
+   * circular-pattern, fillet, chamfer) to sketch data; returns { sketch, created, modified,
+   * removed, points, constraints }. The document is not changed.
+   */
+  editSketch(featureId, sketch, tool) {
+    return this.#call('docSketchEdit', featureId, sketch, tool);
+  }
 }
 
 export class ModelingKernel {

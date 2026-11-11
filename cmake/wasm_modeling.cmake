@@ -20,8 +20,11 @@ set(BENDCORE_WASM_MODELING_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
 set(BENDCORE_WASM_MODELING_OUT "${CMAKE_BINARY_DIR}/wasm_modeling")
 set(BENDCORE_WASM_MODELING_OPT "Oz" CACHE STRING "Optimisation level of bendcore_modeling_wasm (O2, O3, Os, Oz)")
 
-add_executable(bendcore_modeling_wasm ${BENDCORE_WASM_MODELING_ROOT}/src/wasm/modeling_bindings.cpp)
-target_link_libraries(bendcore_modeling_wasm PRIVATE bendcore_modeling_document)
+# sketch_editor_bindings.cpp: solve and editing tools of the sketch editor (docs/ui/SKETCH_EDITOR.md).
+add_executable(bendcore_modeling_wasm
+  ${BENDCORE_WASM_MODELING_ROOT}/src/wasm/modeling_bindings.cpp
+  ${BENDCORE_WASM_MODELING_ROOT}/src/wasm/sketch_editor_bindings.cpp)
+target_link_libraries(bendcore_modeling_wasm PRIVATE bendcore_modeling_document bendcore_modeling_sketch bendcore_formula)
 target_compile_options(bendcore_modeling_wasm PRIVATE -${BENDCORE_WASM_MODELING_OPT})
 set_target_properties(bendcore_modeling_wasm PROPERTIES
   OUTPUT_NAME bendcore_modeling
@@ -50,4 +53,9 @@ if(BENDCORE_NODE)
     COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_MODELING_ROOT}/tests/wasm/modeling_document.test.mjs"
             --module "${BENDCORE_WASM_MODELING_OUT}")
   set_tests_properties(wasm_modeling_document PROPERTIES TIMEOUT 600)
+  # Sketch editor API (docs/ui/SKETCH_EDITOR.md): definition, reference dimensions, solve, tools.
+  add_test(NAME wasm_sketch_editor
+    COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_MODELING_ROOT}/tests/wasm/sketch_editor.test.mjs"
+            --module "${BENDCORE_WASM_MODELING_OUT}")
+  set_tests_properties(wasm_sketch_editor PROPERTIES TIMEOUT 300)
 endif()

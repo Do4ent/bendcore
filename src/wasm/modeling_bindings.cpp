@@ -22,6 +22,8 @@
 #include <bendcore/modeling/part_features.hpp>
 #include <bendcore/modeling/part_sketch.hpp>
 
+#include "modeling_bindings_internal.hpp"
+
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
@@ -43,12 +45,7 @@ using emscripten::val;
 namespace k = bendcore::kernel;
 namespace m = bendcore::modeling;
 
-namespace {
-
-// Malformed argument from JS (wrong type, missing field); reported as InvalidInput.
-struct InputError : std::runtime_error {
-    using std::runtime_error::runtime_error;
-};
+namespace bendcore::wasm_modeling {
 
 std::map<std::uint32_t, std::unique_ptr<m::PartDocument>>& documents() {
     static std::map<std::uint32_t, std::unique_ptr<m::PartDocument>> docs;
@@ -81,31 +78,6 @@ val failure(const std::string& code, const std::string& message) {
 }
 
 val failure(const k::Error& error) { return failure(k::toString(error.code), error.message); }
-
-// Runs body() and converts exceptions: InputError -> InvalidInput, OCCT and std -> OperationFailed.
-template <typename Body>
-val guarded(Body&& body) {
-    try {
-        return body();
-    } catch (const InputError& e) {
-        return failure("InvalidInput", e.what());
-    } catch (const Standard_Failure& e) {
-        return failure("OperationFailed", std::string("OCCT: ") + e.what());
-    } catch (const std::exception& e) {
-        return failure("OperationFailed", e.what());
-    }
-}
-
-template <typename Body>
-val withDocument(std::uint32_t handle, Body&& body) {
-    auto it = documents().find(handle);
-    if (it == documents().end()) {
-        return failure("InvalidInput", "unknown document handle " + std::to_string(handle) +
-                                           " (never created or already disposed)");
-    }
-    m::PartDocument& doc = *it->second;
-    return guarded([&] { return body(doc); });
-}
 
 // ------------------------------------------------------------------ JS value helpers
 
@@ -189,13 +161,18 @@ val stringArray(const std::vector<std::string>& items) {
     return out;
 }
 
-template <typename T>
-val typedArray(const char* constructor, const std::vector<T>& data) {
-    // The view aliases wasm memory; constructing a new typed array from it copies the data.
-    return val::global(constructor).new_(emscripten::typed_memory_view(data.size(), data.data()));
-}
-
 // ------------------------------------------------------------------ sketch data <-> JS
+
+val placementJs(const m::SketchPlacement& p) {
+    auto dir = [](const gp_Dir& d) { return point({d.X(), d.Y(), d.Z()}); };
+    val o = val::object();
+    const gp_Pnt c = p.origin();
+    o.set("origin", point({c.X(), c.Y(), c.Z()}));
+    o.set("xDirection", dir(p.xDirection()));
+    o.set("yDirection", dir(p.yDirection()));
+    o.set("normal", dir(p.normal()));
+    return o;
+}
 
 val toJs(const m::SketchData& d) {
     val points = val::array();
@@ -490,6 +467,7 @@ val featureView(const m::FeatureInfo& f, std::size_t index) {
         s.set("pointDefined", pointDefined);
         s.set("entityDefined", entityDefined);
         s.set("constraintValues", values);
+        s.set("placement", placementJs(f.sketchResult->placement));
         o.set("sketchResult", s);
     }
     if (f.datum) {
@@ -1038,7 +1016,9 @@ val docProperties(std::uint32_t handle, val target, val density) {
     });
 }
 
-}  // namespace
+}  // namespace bendcore::wasm_modeling
+
+using namespace bendcore::wasm_modeling;
 
 EMSCRIPTEN_BINDINGS(bendcore_modeling) {
     emscripten::function("modelingInfo", &modelingInfo);

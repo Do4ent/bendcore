@@ -179,7 +179,7 @@ describe('feature form', () => {
 
 describe('tree actions', () => {
   it('offers moves within the tree, rollback after the node, suppress toggle', () => {
-    expect(treeActions(tree[0], 4, null)).toEqual(['edit', 'suppress', 'remove', 'moveDown', 'rollbackHere']);
+    expect(treeActions(tree[0], 4, null)).toEqual(['edit', ...(tree[0].type === 'Sketch' ? ['editSketch'] : []), 'suppress', 'remove', 'moveDown', 'rollbackHere']);
     expect(treeActions(tree[3], 4, null)).toEqual(['edit', 'suppress', 'remove', 'moveUp']);
     expect(treeActions(tree[1], 4, 2)).toEqual(['edit', 'suppress', 'remove', 'moveUp', 'moveDown']);
     // Rolled-back nodes cannot be edited; a suppressed node offers "unsuppress".

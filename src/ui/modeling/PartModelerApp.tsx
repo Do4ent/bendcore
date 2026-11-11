@@ -18,12 +18,14 @@ import type {
   ModelingKernel,
   PartDocumentHandle,
   PartProperties,
+  SketchData,
   VariableView,
 } from '../../wasm/bendcore_modeling_api.mjs';
 import KernelViewport from '../kernel/KernelViewport';
 import type { EdgePick, FacePick, KernelViewportHandle, PickMode } from '../kernel/KernelViewport';
 import FeaturePanel from './FeaturePanel';
 import FeatureTree from './FeatureTree';
+import SketchEditor from './sketch/SketchEditor';
 import {
   FeatureForm,
   existingFeatureForm,
@@ -76,6 +78,8 @@ export interface PartModelerState {
   selection: SelectionInfo | null;
   /** Shape shown in the viewport (target string of the document API). */
   shownTarget: string;
+  /** Sketch being edited in the sketch editor. */
+  sketchMode: { featureId: string; isNew: boolean } | null;
 }
 
 export interface PartModelerTestApi {
@@ -122,12 +126,16 @@ const PartModelerApp: React.FC = () => {
   const [frameKey, setFrameKey] = useState(0);
   const [fileName, setFileName] = useState('деталь.bcpart.json');
   const [newVar, setNewVar] = useState({ name: '', expression: '' });
+  const [sketchMode, setSketchMode] = useState<{ featureId: string; isNew: boolean; body: KernelMesh | null } | null>(null);
+  const [sketchPlane, setSketchPlane] = useState('XY');
 
   const docRef = useRef<PartDocumentHandle | null>(null);
   const panelRef = useRef<PanelState | null>(null);
   const viewRef = useRef<KernelViewportHandle | null>(null);
   const densityRef = useRef(density);
   densityRef.current = density;
+  const sketchModeRef = useRef(sketchMode);
+  sketchModeRef.current = sketchMode;
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
 
@@ -342,6 +350,9 @@ const PartModelerApp: React.FC = () => {
       case 'edit':
         openEdit(f);
         return;
+      case 'editSketch':
+        editSketch(f);
+        return;
       case 'suppress':
       case 'unsuppress':
         run((d) => {
@@ -373,12 +384,12 @@ const PartModelerApp: React.FC = () => {
   };
 
   const undo = useCallback(() => {
-    if (panelRef.current || !docRef.current?.state().canUndo) return;
+    if (panelRef.current || sketchModeRef.current || !docRef.current?.state().canUndo) return;
     run((d) => d.undo());
   }, [run]);
 
   const redo = useCallback(() => {
-    if (panelRef.current || !docRef.current?.state().canRedo) return;
+    if (panelRef.current || sketchModeRef.current || !docRef.current?.state().canRedo) return;
     run((d) => d.redo());
   }, [run]);
 
@@ -442,6 +453,75 @@ const PartModelerApp: React.FC = () => {
     refresh(panelRef.current, id);
   };
 
+  // ------------------------------------------------------------- sketch editor
+
+  /** Opens the sketch editor on node `id` inside a transaction (docs/ui/SKETCH_EDITOR.md). */
+  const enterSketch = (id: string, isNew: boolean) => {
+    const doc = docRef.current;
+    if (!doc) return;
+    let body: KernelMesh | null = null;
+    try {
+      body = doc.tessellate(`before:${id}`, MESH_PARAMS);
+    } catch (e) {
+      setError(describeError(e));
+    }
+    setSketchMode({ featureId: id, isNew, body });
+  };
+
+  const newSketch = () => {
+    const doc = docRef.current;
+    if (!doc || panelRef.current || sketchMode) return;
+    const position = snapshot.doc?.rollback ?? snapshot.features.length;
+    let id: string | null = null;
+    run((d) => {
+      d.beginTransaction('Эскиз');
+      const spec: Parameters<PartDocumentHandle['addFeature']>[0] = {
+        type: 'Sketch',
+        options: { plane: sketchPlane },
+        sketch: { points: [], geometry: [], constraints: [], regions: [] },
+      };
+      if (sketchPlane === 'face') {
+        if (selection?.kind !== 'face') throw new Error('выберите плоскую грань во вьюпорте');
+        spec.references = { face: [d.makeReference('final', 'face', selection.index)] };
+      }
+      try {
+        id = d.addFeature(spec, position);
+        d.rebuild();
+      } catch (e) {
+        d.abortTransaction();
+        d.rebuild();
+        throw e;
+      }
+    }, null);
+    if (id) enterSketch(id, true);
+  };
+
+  const editSketch = (f: FeatureView) => {
+    if (panelRef.current || sketchMode) return;
+    if (run((d) => d.beginTransaction(`Изменить эскиз: ${f.label}`), null)) enterSketch(f.id, false);
+  };
+
+  const exitSketch = (data: SketchData) => {
+    const mode = sketchMode;
+    if (!mode) return;
+    run((d) => {
+      d.editFeature(mode.featureId, { sketch: data });
+      d.rebuild();
+      d.commitTransaction();
+    }, null);
+    setSketchMode(null);
+    setSelectedId(mode.featureId);
+    refresh(null, mode.featureId);
+  };
+
+  const cancelSketch = () => {
+    run((d) => {
+      d.abortTransaction();
+      d.rebuild();
+    }, null);
+    setSketchMode(null);
+  };
+
   // ------------------------------------------------------------- test API
 
   const stateRef = useRef<PartModelerState | null>(null);
@@ -468,6 +548,7 @@ const PartModelerApp: React.FC = () => {
     },
     selection,
     shownTarget: shownTarget(panel),
+    sketchMode: sketchMode && { featureId: sketchMode.featureId, isNew: sketchMode.isNew },
   };
   useEffect(() => {
     window.bendcorePartModeler = {
@@ -490,7 +571,7 @@ const PartModelerApp: React.FC = () => {
   const pickedIndices = slotPicks.map((p) => p.index).filter((i): i is number => i !== null);
   const props = snapshot.properties;
   const docState = snapshot.doc;
-  const busyPanel = panel !== null;
+  const busyPanel = panel !== null || sketchMode !== null;
   const panelSpec = panel ? specOf(panel.type) : undefined;
   const panelView = panel?.featureId ? snapshot.features.find((f) => f.id === panel.featureId) ?? null : null;
 
@@ -536,6 +617,22 @@ const PartModelerApp: React.FC = () => {
           title={docState?.redoHistory.at(-1)?.name ? `Повторить: ${docState.redoHistory.at(-1)!.name} (Ctrl+Y)` : 'Ctrl+Y'}
         >
           Повторить
+        </button>
+        <span className="pm-sep" />
+        <select
+          value={sketchPlane}
+          data-testid="sketch-plane"
+          title="Плоскость нового эскиза"
+          disabled={status !== 'ready' || busyPanel}
+          onChange={(e) => setSketchPlane(e.target.value)}
+        >
+          <option value="XY">XY</option>
+          <option value="XZ">XZ</option>
+          <option value="YZ">YZ</option>
+          <option value="face">выбранная грань</option>
+        </select>
+        <button type="button" data-testid="sketch-draw" disabled={status !== 'ready' || busyPanel} onClick={newSketch}>
+          Нарисовать эскиз
         </button>
         <span className="pm-sep" />
         {TOOLBAR_TYPES.filter((t) => specOf(t)).map((t) => (
@@ -660,81 +757,93 @@ const PartModelerApp: React.FC = () => {
             </table>
           </section>
         </aside>
-        <KernelViewport
-          mesh={mesh}
-          selectedFace={pickMode === 'face' && !slot && selection?.kind === 'face' ? selection.index : null}
-          selectedFaces={slot && slot.kind === 'face' ? pickedIndices : []}
-          selectedEdges={
-            slot && slot.kind === 'edge' ? pickedIndices : selection?.kind === 'edge' ? [selection.index] : []
-          }
-          pickMode={pickMode}
-          onPick={onPickFace}
-          onPickEdge={onPickEdge}
-          overlay={overlay}
-          autoFrame="first"
-          frameKey={frameKey}
-          onReady={(h) => {
-            viewRef.current = h;
-          }}
-        />
-        <aside className="pm-right kv-panel">
-          {panel && panelSpec ? (
-            <FeaturePanel
-              mode={panel.mode}
-              spec={panelSpec}
-              form={panel.form}
-              view={panelView}
-              features={snapshot.features}
-              position={panel.position}
-              activeSlot={panel.activeSlot}
-              onChange={changeForm}
-              onActivateSlot={activateSlot}
-              onPreview={preview}
-              onOk={confirm}
-              onCancel={cancel}
-            />
-          ) : (
-            <p className="pm-hint">Выберите операцию на панели инструментов или узел дерева.</p>
-          )}
-          <section>
-            <h2>Свойства</h2>
-            <dl data-testid="properties">
-              <dt>Объём, мм³</dt>
-              <dd data-testid="prop-volume" data-value={props?.volume ?? ''}>
-                {props?.volume === null || props?.volume === undefined ? 'нет тела' : fmt(props.volume)}
-              </dd>
-              <dt>Плотность, кг/м³</dt>
-              <dd>
-                <input
-                  value={density}
-                  data-testid="density"
-                  onChange={(e) => setDensity(e.target.value)}
-                  onBlur={() => refresh()}
-                />
-              </dd>
-              <dt>Масса, кг</dt>
-              <dd data-testid="prop-mass" data-value={props?.mass ?? ''}>
-                {fmt(props?.mass, 4)}
-              </dd>
-              <dt>Площадь, мм²</dt>
-              <dd>{fmt(props?.area)}</dd>
-              <dt>Центр масс</dt>
-              <dd>{props?.centerOfMass ? fmtVec(props.centerOfMass) : '—'}</dd>
-              <dt>Габарит</dt>
-              <dd>{props?.boundingBox ? `${fmtVec(props.boundingBox.min)} – ${fmtVec(props.boundingBox.max)}` : '—'}</dd>
-              <dt>Грани / рёбра</dt>
-              <dd>{props ? `${props.counts.faces} / ${props.counts.edges}` : '—'}</dd>
-              {selection && (
-                <>
-                  <dt>{selection.kind === 'face' ? 'Грань' : 'Ребро'}</dt>
-                  <dd data-testid="selection-name">
-                    <code>{selection.name}</code>
-                  </dd>
-                </>
-              )}
-            </dl>
-          </section>
-        </aside>
+        {sketchMode && docRef.current ? (
+          <SketchEditor
+            doc={docRef.current}
+            featureId={sketchMode.featureId}
+            body={sketchMode.body}
+            onExit={exitSketch}
+            onCancel={cancelSketch}
+          />
+        ) : (
+          <>
+          <KernelViewport
+            mesh={mesh}
+            selectedFace={pickMode === 'face' && !slot && selection?.kind === 'face' ? selection.index : null}
+            selectedFaces={slot && slot.kind === 'face' ? pickedIndices : []}
+            selectedEdges={
+              slot && slot.kind === 'edge' ? pickedIndices : selection?.kind === 'edge' ? [selection.index] : []
+            }
+            pickMode={pickMode}
+            onPick={onPickFace}
+            onPickEdge={onPickEdge}
+            overlay={overlay}
+            autoFrame="first"
+            frameKey={frameKey}
+            onReady={(h) => {
+              viewRef.current = h;
+            }}
+          />
+          <aside className="pm-right kv-panel">
+            {panel && panelSpec ? (
+              <FeaturePanel
+                mode={panel.mode}
+                spec={panelSpec}
+                form={panel.form}
+                view={panelView}
+                features={snapshot.features}
+                position={panel.position}
+                activeSlot={panel.activeSlot}
+                onChange={changeForm}
+                onActivateSlot={activateSlot}
+                onPreview={preview}
+                onOk={confirm}
+                onCancel={cancel}
+              />
+            ) : (
+              <p className="pm-hint">Выберите операцию на панели инструментов или узел дерева.</p>
+            )}
+            <section>
+              <h2>Свойства</h2>
+              <dl data-testid="properties">
+                <dt>Объём, мм³</dt>
+                <dd data-testid="prop-volume" data-value={props?.volume ?? ''}>
+                  {props?.volume === null || props?.volume === undefined ? 'нет тела' : fmt(props.volume)}
+                </dd>
+                <dt>Плотность, кг/м³</dt>
+                <dd>
+                  <input
+                    value={density}
+                    data-testid="density"
+                    onChange={(e) => setDensity(e.target.value)}
+                    onBlur={() => refresh()}
+                  />
+                </dd>
+                <dt>Масса, кг</dt>
+                <dd data-testid="prop-mass" data-value={props?.mass ?? ''}>
+                  {fmt(props?.mass, 4)}
+                </dd>
+                <dt>Площадь, мм²</dt>
+                <dd>{fmt(props?.area)}</dd>
+                <dt>Центр масс</dt>
+                <dd>{props?.centerOfMass ? fmtVec(props.centerOfMass) : '—'}</dd>
+                <dt>Габарит</dt>
+                <dd>{props?.boundingBox ? `${fmtVec(props.boundingBox.min)} – ${fmtVec(props.boundingBox.max)}` : '—'}</dd>
+                <dt>Грани / рёбра</dt>
+                <dd>{props ? `${props.counts.faces} / ${props.counts.edges}` : '—'}</dd>
+                {selection && (
+                  <>
+                    <dt>{selection.kind === 'face' ? 'Грань' : 'Ребро'}</dt>
+                    <dd data-testid="selection-name">
+                      <code>{selection.name}</code>
+                    </dd>
+                  </>
+                )}
+              </dl>
+            </section>
+          </aside>
+          </>
+        )}
       </main>
     </div>
   );

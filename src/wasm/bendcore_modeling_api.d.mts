@@ -137,6 +137,104 @@ export interface SketchResultInfo {
   entityDefined: boolean[];
   /** per constraint: dimension value (driven ones: measured) */
   constraintValues: number[];
+  /** sketch frame in model space */
+  placement: SketchPlacementInfo;
+}
+
+export interface SketchPlacementInfo {
+  origin: Vec3;
+  xDirection: Vec3;
+  yDirection: Vec3;
+  normal: Vec3;
+}
+
+/** Curve of a sketch entity at the solution (docs/ui/SKETCH_EDITOR.md). */
+export interface SketchSolvedCurve {
+  /** entity id (1-based) */
+  entity: number;
+  type: SketchGeometryDef['type'];
+  construction: boolean;
+  projection: number;
+  defined: boolean;
+  /** x0, y0, x1, y1, ... in sketch coordinates, sampled from the OCCT curve */
+  polyline: Float64Array;
+  /** middle of an open curve (parameter midpoint), null for closed ones */
+  midpoint: [number, number] | null;
+  center?: [number, number];
+  radius?: number;
+}
+
+export interface SketchProfileIssue {
+  kind: string;
+  entities: number[];
+  location: [number, number];
+  detail: string;
+}
+
+export interface SketchSolvedRegion {
+  index: number;
+  /** entities of the outer loop, in traversal order */
+  entities: number[];
+  holes: number[][];
+  area: number;
+  depth: number;
+  material: boolean;
+  selected: boolean;
+  /** entity id that selects exactly this region in SketchData.regions, or null */
+  selector: number | null;
+  /** triangulated face in sketch coordinates (x, y, 0) */
+  positions: Float32Array;
+  indices: Uint32Array;
+}
+
+export interface SketchSolution {
+  converged: boolean;
+  status: string;
+  dof: number;
+  /** 'fully-defined' | 'under-defined' | 'over-defined' */
+  definition: string;
+  /** constraint numbers (1-based, sketch data order) */
+  conflicting: number[];
+  redundant: number[];
+  partiallyRedundant: number[];
+  placement: SketchPlacementInfo;
+  points: { x: number; y: number; fixed: boolean; defined: boolean }[];
+  /** per constraint: dimension value (reference ones measured), other constraints their value */
+  constraintValues: number[];
+  /** per constraint: residual at the solution (0 for reference dimensions) */
+  residuals: number[];
+  curves: SketchSolvedCurve[];
+  intersections: { x: number; y: number; a: number; b: number }[];
+  /** null when the sketch did not solve exactly (conflict, no convergence) or with options.lite */
+  profile: {
+    hasProfile: boolean;
+    issues: SketchProfileIssue[];
+    regions: SketchSolvedRegion[];
+    error: string | null;
+  } | null;
+  /** the input data with free points and initial radii at the solution */
+  sketch: SketchData;
+}
+
+export type SketchTool =
+  | { name: 'trim' | 'extend'; entity: number; pick: [number, number] }
+  | { name: 'offset'; chain: number[]; distance: number; constrain?: boolean }
+  | { name: 'mirror'; entities: number[]; axis: number; constrain?: boolean }
+  | { name: 'linear-pattern'; entities: number[]; step: [number, number]; count: number; constrain?: boolean }
+  | { name: 'circular-pattern'; entities: number[]; center: number; count: number; angle: number; constrain?: boolean }
+  | { name: 'fillet'; a: number; b: number; radius: number }
+  | { name: 'chamfer'; a: number; b: number; d1: number; d2: number };
+
+export interface SketchEditOutcome {
+  sketch: SketchData;
+  /** entity ids in the new data */
+  created: number[];
+  modified: number[];
+  /** entity ids of the input data */
+  removed: number[];
+  /** new point indices and constraint numbers in the new data */
+  points: number[];
+  constraints: number[];
 }
 
 export interface FeatureView {
@@ -247,6 +345,8 @@ export class PartDocumentHandle {
   element(target: ShapeTarget, kind: ElementKind, index: number): ElementRecord;
   tessellate(target?: ShapeTarget, params?: TessellationParams): KernelMesh;
   properties(target?: ShapeTarget, density?: number | null): PartProperties;
+  solveSketch(featureId: string, sketch: SketchData, options?: { drag?: { point: number; x: number; y: number }; lite?: boolean }): SketchSolution;
+  editSketch(featureId: string, sketch: SketchData, tool: SketchTool): SketchEditOutcome;
 }
 
 export interface ModelingInfo {
