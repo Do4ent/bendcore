@@ -53,4 +53,9 @@ if(BENDCORE_NODE)
     COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_MODELING_ROOT}/tests/wasm/modeling_document.test.mjs"
             --module "${BENDCORE_WASM_MODELING_OUT}")
   set_tests_properties(wasm_modeling_document PROPERTIES TIMEOUT 600)
+  # Sketch editor API (docs/ui/SKETCH_EDITOR.md): definition, reference dimensions, solve, tools.
+  add_test(NAME wasm_sketch_editor
+    COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_MODELING_ROOT}/tests/wasm/sketch_editor.test.mjs"
+            --module "${BENDCORE_WASM_MODELING_OUT}")
+  set_tests_properties(wasm_sketch_editor PROPERTIES TIMEOUT 300)
 endif()

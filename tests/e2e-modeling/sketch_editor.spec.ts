@@ -72,7 +72,7 @@ async function expectVolume(page: Page, expected: number) {
     .toBeLessThan(1e-7);
 }
 
-test('rounded rectangle with a hole: dimensions to full definition, conflict, extrusion, size change', async ({ page }) => {
+test('rounded rectangle with a hole: dimensions to full definition, conflict, regions, extrusion, size change', async ({ page }) => {
   const W = 60;
   const H = 40;
   const r = 5;
@@ -178,6 +178,20 @@ test('rounded rectangle with a hole: dimensions to full definition, conflict, ex
   expect(s.constraints[extra - 1].measured).toBeCloseTo(W, 9);
   await expect(page.getByTestId(`sketch-dim-${extra}`)).toHaveText(`(${W})`);
 
+  // Regions of the profile: the disc is added by a click inside it, the plate removed, and back.
+  const selectedAreas = async () =>
+    (await editor(page)).regions!.filter((g) => g.selected).map((g) => Math.round(g.area)).sort((a, b) => a - b);
+  const disc = Math.round((Math.PI * d * d) / 4);
+  const plateArea = Math.round(volume(W) / D);
+  await page.getByTestId('tool-regions').click();
+  await click(page, W / 2, H / 2);
+  expect(await selectedAreas()).toEqual([disc, plateArea]);
+  await click(page, 8, H / 2);
+  expect(await selectedAreas()).toEqual([disc]);
+  await click(page, 8, H / 2);
+  await click(page, W / 2, H / 2);
+  expect(await selectedAreas()).toEqual([plateArea]);
+
   // Leave the sketch, extrude it.
   await page.getByTestId('sketch-exit').click();
   await expect(page.getByTestId('sketch-panel')).toHaveCount(0);
@@ -210,7 +224,7 @@ test('rounded rectangle with a hole: dimensions to full definition, conflict, ex
   expect((await modeler(page)).error).toBeNull();
 });
 
-test('drawing tools, constraints panel, dragging, editing tools, regions, cancel', async ({ page }) => {
+test('drawing tools, constraints panel, dragging, trim, undo, cancel', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('modeling-status')).toHaveText('Ядро готово');
   await page.getByTestId('sketch-draw').click();
