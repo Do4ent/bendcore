@@ -1,0 +1,276 @@
+/* Application shell (docs/ui/APP_SHELL.md) and the shared pieces the editors use:
+   progress indicator, notices. One palette for every page. */
+:root {
+  --app-bg: #f4f6f8;
+  --app-panel: #ffffff;
+  --app-fg: #1d2733;
+  --app-muted: #5b6878;
+  --app-border: #d5dbe3;
+  --app-accent: #1f6feb;
+  --app-error: #b42318;
+  --app-error-bg: #fef3f2;
+  --app-info-bg: #eff8ff;
+}
+
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--app-fg);
+  background: var(--app-bg);
+}
+
+.app-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 6px 0;
+  background: #e6eaef;
+  border-bottom: 1px solid var(--app-border);
+}
+.app-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--app-border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: #f1f3f6;
+  color: var(--app-fg);
+  cursor: pointer;
+  font: inherit;
+  max-width: 280px;
+}
+.app-tab-active {
+  background: var(--app-panel);
+  font-weight: 600;
+}
+.app-tab-kind {
+  color: var(--app-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.app-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-tab-dirty {
+  color: var(--app-accent);
+}
+.app-tab-close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--app-muted);
+  font-size: 14px;
+  padding: 0 2px;
+}
+.app-tabs-fill,
+.app-status-fill {
+  flex: 1;
+}
+.app-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 4px;
+  color: var(--app-muted);
+}
+
+.app-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.app-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Editors fill the tab instead of the window. */
+.app-panel > .kv-root,
+.app-panel > .dr-root {
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-start {
+  flex: 1;
+  overflow: auto;
+  padding: 24px 32px;
+}
+.app-start h1 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+.app-start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.app-card {
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.app-card h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.app-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+.app-drafts {
+  border-color: var(--app-accent);
+  background: var(--app-info-bg);
+  margin-bottom: 16px;
+}
+.app-primary {
+  background: var(--app-accent);
+  color: #fff;
+  border: 1px solid var(--app-accent);
+  border-radius: 4px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.app-link {
+  border: none;
+  background: none;
+  color: var(--app-accent);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+}
+.app-file {
+  position: relative;
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.app-file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.app-hint {
+  color: var(--app-muted);
+}
+
+.app-menu {
+  position: fixed;
+  z-index: 50;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.15);
+}
+.app-menu button {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 5px 14px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.app-menu button:hover {
+  background: var(--app-info-bg);
+}
+
+.app-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 10px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-panel);
+  min-height: 24px;
+}
+.app-notifications {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.app-note {
+  padding: 1px 6px;
+  border-radius: 4px;
+  max-width: 520px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-note button {
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.app-note-error {
+  background: var(--app-error-bg);
+  color: var(--app-error);
+}
+.app-note-info {
+  background: var(--app-info-bg);
+}
+
+/* Shared by the editors (BusyIndicator, notices). */
+.app-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--app-info-bg);
+  color: var(--app-fg);
+}
+.app-busy-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--app-border);
+  border-top-color: var(--app-accent);
+  border-radius: 50%;
+  animation: app-spin 0.8s linear infinite;
+}
+@keyframes app-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.app-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 12px;
+  background: var(--app-info-bg);
+  border-bottom: 1px solid var(--app-border);
+}
+.app-notice button {
+  border: none;
+  background: none;
+  cursor: pointer;
+}

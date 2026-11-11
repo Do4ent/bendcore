@@ -24,8 +24,10 @@ interface Entity {
   radius?: number;
 }
 
+// Kernel calls run in a worker (docs/ui/APP_SHELL.md): wait for the last result before reading.
 async function pageState(page: Page) {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
+    await window.bendcoreAssembly!.idle();
     const s = window.bendcoreAssembly!.getState();
     return {
       status: s.status,
@@ -44,11 +46,10 @@ async function pageState(page: Page) {
 async function faceIndex(page: Page, occ: number, pred: string): Promise<number[]> {
   // pred is evaluated in the page against each face entity (e).
   return page.evaluate(
-    ([o, p]) => {
+    async ([o, p]) => {
       // eslint-disable-next-line no-new-func
       const f = new Function('e', `return ${p};`) as (e: Entity) => boolean;
-      return window
-        .bendcoreAssembly!.faces([o as number])
+      return (await window.bendcoreAssembly!.faces([o as number]))
         .filter((x) => x.entity && f(x.entity as Entity))
         .map((x) => x.index);
     },
@@ -145,7 +146,11 @@ test('insert, mate by clicks, drag about the axis, fasteners and BOM', async ({ 
     const c = await worldToClient(page, at(((Math.PI / 2) * k) / 12));
     await page.mouse.move(c.x, c.y, { steps: 2 });
   }
-  const during = await page.evaluate(() => window.bendcoreAssembly!.getState().dragSolve);
+  // Drag steps are solved in the worker: wait for the last one while the button is still down.
+  const during = await page.evaluate(async () => {
+    await window.bendcoreAssembly!.idle();
+    return window.bendcoreAssembly!.getState().dragSolve;
+  });
   expect(during?.success).toBe(true);
   await page.mouse.up();
   await expect.poll(async () => (await pageState(page)).mates.length).toBe(2);

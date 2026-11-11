@@ -6,6 +6,7 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const base = require('../../webpack.web.js');
+const { workerEntry, workerFileName, workerOptimization } = require('../wasm-worker.config.js');
 
 const root = path.resolve(__dirname, '../..');
 const wasmDir = path.resolve(process.env.BENDCORE_KERNEL_WASM_DIR || path.join(root, 'build-wasm-kernel/wasm_kernel'));
@@ -22,9 +23,10 @@ const rules = base.module.rules.map((rule) =>
 module.exports = {
   ...base,
   context: root,
-  entry: { kernelViewer: './src/ui/kernel/kernelViewerEntry.tsx' },
-  output: { ...base.output, path: path.join(root, 'dist/kernel-viewer') },
+  entry: { kernelViewer: './src/ui/kernel/kernelViewerEntry.tsx', 'wasm-worker': workerEntry },
+  output: { ...base.output, filename: workerFileName(base.output.filename), path: path.join(root, 'dist/kernel-viewer') },
   module: { ...base.module, rules },
+  optimization: workerOptimization(base.optimization),
   devServer: {
     ...base.devServer,
     port: Number(process.env.PORT || 3100),
@@ -33,7 +35,7 @@ module.exports = {
     static: [{ directory: wasmDir, publicPath: '/kernel' }],
   },
   plugins: [
-    new HtmlWebpackPlugin({ template: path.join(__dirname, 'index.html'), filename: 'index.html' }),
+    new HtmlWebpackPlugin({ template: path.join(__dirname, 'index.html'), filename: 'index.html', chunks: ['kernelViewer'] }),
     new MiniCssExtractPlugin({ filename: isProduction ? '[name].[contenthash].css' : '[name].css' }),
   ],
 };

@@ -17,6 +17,8 @@ import type {
   SketchSolvedCurve,
   SketchTool,
 } from '../../../wasm/bendcore_modeling_api.mjs';
+import type { Remote } from '../../worker/wasmClient';
+import { LatestRunner } from '../../worker/latestRunner';
 import SketchCanvas from './SketchCanvas';
 import type { SketchCanvasHandle, SketchPointerEvent } from './SketchCanvas';
 import { dimensionGraphic, formatValue, offsetFor, twoPointDimension } from './dimensionLayout';
@@ -110,7 +112,8 @@ declare global {
 }
 
 export interface SketchEditorProps {
-  doc: PartDocumentHandle;
+  /** Part document in the WASM worker: solves and edits are asynchronous. */
+  doc: Remote<PartDocumentHandle>;
   featureId: string;
   /** Body the sketch is drawn on (shown behind the sketch). */
   body: KernelMesh | null;
@@ -141,7 +144,13 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
   const [solution, setSolution] = useState<SketchSolution | null>(null);
   const [history, setHistory] = useState<SketchData[]>([]);
   const [tool, setToolState] = useState<EditorTool>('select');
-  const [picks, setPicks] = useState<Snap[]>([]);
+  const [picks, setPicksState] = useState<Snap[]>([]);
+  // Picks are read by handlers that run after pending commits (enqueue): the ref is current.
+  const picksRef = useRef<Snap[]>([]);
+  const setPicks = (next: Snap[]) => {
+    picksRef.current = next;
+    setPicksState(next);
+  };
   const [hover, setHover] = useState<Snap | null>(null);
   const [preview, setPreview] = useState<SketchSolvedCurve[]>([]);
   const [selection, setSelection] = useState<SketchRef[]>([]);
@@ -149,7 +158,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
   const [dimPicks, setDimPicks] = useState<SketchRef[]>([]);
   const [pending, setPending] = useState<PendingDimension | null>(null);
   // Text offsets of the dimensions, kept for the page session per document and sketch.
-  const offsetKey = `${doc.handle}:${featureId}`;
+  const offsetKey = `${doc.remoteId}:${featureId}`;
   const [offsets, setOffsetsState] = useState<Record<number, { x: number; y: number }>>(() => TEXT_OFFSETS.get(offsetKey) ?? {});
   const setOffsets = (next: Record<number, { x: number; y: number }> | ((o: Record<number, { x: number; y: number }>) => Record<number, { x: number; y: number }>)) =>
     setOffsetsState((o) => {
@@ -179,12 +188,34 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
   const solutionRef = useRef(solution);
   solutionRef.current = solution;
   const dragRef = useRef<{ point: number; active: boolean; last: SketchSolution | null } | null>(null);
+  /** Pointer-move solves (drag, preview): the newest position wins (LatestRunner). */
+  const moveRunner = useRef(new LatestRunner()).current;
+  /** Serialises commits so that each one solves the data the previous one produced. */
+  const commitQueue = useRef<Promise<unknown>>(Promise.resolve());
 
   /** Solves `next` and makes it the current data (free points move to the solution). */
   const commit = useCallback(
-    (next: SketchData, record = true): SketchSolution | null => {
+    (next: SketchData, record = true): Promise<SketchSolution | null> => {
+      const task = commitQueue.current.then(() => solveAndCommit(next, record));
+      commitQueue.current = task.catch(() => null);
+      return task;
+    },
+    // solveAndCommit reads refs only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [doc, featureId],
+  );
+
+  /** Runs `job` after every pending commit; jobs read dataRef and commit with solveAndCommit. */
+  const enqueue = <T,>(job: () => Promise<T>): Promise<T> => {
+    const task = commitQueue.current.then(job);
+    commitQueue.current = task.catch(() => null);
+    return task;
+  };
+
+  const solveAndCommit = async (next: SketchData, record: boolean): Promise<SketchSolution | null> => {
+    {
       try {
-        const sol = doc.solveSketch(featureId, next);
+        const sol = await doc.solveSketch(featureId, next);
         // The updater runs at the next render, after dataRef moves on: capture the data now.
         const previous = dataRef.current;
         if (record) setHistory((h) => [...h, previous]);
@@ -198,23 +229,26 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
         setMessage(errorText(e));
         return null;
       }
-    },
-    [doc, featureId],
-  );
+    }
+  };
 
   // Enter: the sketch data of the node.
   useEffect(() => {
-    let initial: SketchData;
-    try {
-      initial = doc.feature(featureId).sketch ?? emptySketch();
-    } catch (e) {
-      setMessage(errorText(e));
-      return;
-    }
-    dataRef.current = initial;
-    setData(initial);
-    setHistory([]);
-    commit(initial, false);
+    let cancelled = false;
+    doc.feature(featureId).then(
+      (f) => {
+        if (cancelled) return;
+        const initial = f.sketch ?? emptySketch();
+        dataRef.current = initial;
+        setData(initial);
+        setHistory([]);
+        void commit(initial, false);
+      },
+      (e: unknown) => !cancelled && setMessage(errorText(e)),
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [doc, featureId, commit]);
 
   const setTool = (t: EditorTool) => {
@@ -237,13 +271,14 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     setSelection([]);
     setSelectedConstraints([]);
     setOffsets({});
-    commit(prev, false);
+    void commit(prev, false);
   };
 
   const deleteSelection = () => {
     if (selection.length === 0 && selectedConstraints.length === 0) return;
     const { data: next, constraintMap } = removeItems(data, selection, selectedConstraints);
-    if (commit(next)) {
+    void commit(next).then((sol) => {
+      if (!sol) return;
       const moved: Record<number, { x: number; y: number }> = {};
       for (const [k, o] of Object.entries(offsets)) {
         const nk = constraintMap[Number(k)];
@@ -252,23 +287,24 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
       setOffsets(moved);
       setSelection([]);
       setSelectedConstraints([]);
-    }
+    });
   };
 
   /** Runs a kernel editing tool on the current data. */
-  const runTool = (spec: SketchTool): boolean => {
-    try {
-      const out = doc.editSketch(featureId, dataRef.current, spec);
-      // Constraint numbers may change (removed constraints): text offsets are dropped.
-      setOffsets({});
-      setSelection([]);
-      setSelectedConstraints([]);
-      return commit(out.sketch) !== null;
-    } catch (e) {
-      setMessage(errorText(e));
-      return false;
-    }
-  };
+  const runTool = (spec: SketchTool): Promise<boolean> =>
+    enqueue(async () => {
+      try {
+        const out = await doc.editSketch(featureId, dataRef.current, spec);
+        // Constraint numbers may change (removed constraints): text offsets are dropped.
+        setOffsets({});
+        setSelection([]);
+        setSelectedConstraints([]);
+        return (await solveAndCommit(out.sketch, true)) !== null;
+      } catch (e) {
+        setMessage(errorText(e));
+        return false;
+      }
+    });
 
   const numberParam = (key: keyof typeof params, what: string): number | null => {
     const v = Number(params[key]);
@@ -280,11 +316,14 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
   };
 
   /** Adds a dimension as a reference one, lets the kernel measure it and asks for the value. */
-  const startDimension = (p: ConstraintProposal, at: { x: number; y: number } | null) => {
+  const startDimension = (p: ConstraintProposal, at: { x: number; y: number } | null) =>
+    enqueue(() => startDimensionNow(p, at));
+
+  const startDimensionNow = async (p: ConstraintProposal, at: { x: number; y: number } | null) => {
     const next = cloneSketch(dataRef.current);
     const k = addConstraint(next, p.type, p.a, p.b, p.c, '0', true);
     try {
-      const sol = doc.solveSketch(featureId, next, { lite: true });
+      const sol = await doc.solveSketch(featureId, next, { lite: true });
       setPending({ data: next, k, text: formatValue(sol.constraintValues[k - 1]), existing: false, at });
       setMessage(null);
     } catch (e) {
@@ -292,7 +331,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     }
   };
 
-  const confirmDimension = () => {
+  const confirmDimension = async () => {
     if (!pending) return;
     const next = cloneSketch(pending.data);
     const c = next.constraints[pending.k - 1];
@@ -305,7 +344,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
       c.value = pending.text.trim();
       delete c.driven;
     }
-    const sol = commit(next);
+    const sol = await commit(next);
     if (!sol) return;
     if (pending.at && !pending.existing) {
       const g = dimensionGraphic(sol.sketch, sol, pending.k, 24 * unitsPerPixel);
@@ -317,10 +356,10 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
 
   const applyConstraint = (p: ConstraintProposal) => {
     if (DIMENSION_TYPES.has(p.type)) {
-      startDimension(p, null);
+      void startDimension(p, null);
       return;
     }
-    const next = cloneSketch(data);
+    const next = cloneSketch(dataRef.current);
     let value = '0';
     if (p.type === 'rotation' && solution) {
       // Angle from (a - c) to (b - c), the current rotation of a onto b.
@@ -329,24 +368,24 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
       value = formatValue(deg);
     }
     addConstraint(next, p.type, p.a, p.b, p.c, value);
-    if (commit(next)) setSelection([]);
+    void commit(next).then((sol) => sol && setSelection([]));
   };
 
   const toggleDriven = (k: number) => {
-    const next = cloneSketch(data);
+    const next = cloneSketch(dataRef.current);
     const c = next.constraints[k - 1];
     if (c.driven) {
       delete c.driven;
       // A reference dimension becomes driving at its measured value.
-      c.value = formatValue(solution?.constraintValues[k - 1] ?? Number(c.value));
+      c.value = formatValue(solutionRef.current?.constraintValues[k - 1] ?? Number(c.value));
     } else {
       c.driven = true;
     }
-    commit(next);
+    void commit(next);
   };
 
   const toggleRegion = (x: number, y: number) => {
-    const regions = solution?.profile?.regions ?? [];
+    const regions = solutionRef.current?.profile?.regions ?? [];
     // Innermost region whose kernel triangulation contains the point.
     let hit: (typeof regions)[number] | null = null;
     for (const r of regions) {
@@ -371,7 +410,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
       setMessage('в профиле должна остаться хотя бы одна область');
       return;
     }
-    commit({ ...cloneSketch(data), regions: chosen.map((r) => r.selector as number) });
+    void commit({ ...cloneSketch(dataRef.current), regions: chosen.map((r) => r.selector as number) });
   };
 
   // ------------------------------------------------------------------ pointer
@@ -389,7 +428,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
   const snapAt = (e: SketchPointerEvent): Snap =>
     findSnap(e, dataRef.current, solutionRef.current, {
       tolerance: PICK_PIXELS * e.unitsPerPixel,
-      reference: picks.length > 0 ? picks[picks.length - 1] : null,
+      reference: picksRef.current.length > 0 ? picksRef.current[picksRef.current.length - 1] : null,
       grid: gridSnap ? 1 : 0,
     });
 
@@ -397,16 +436,21 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
 
   const finishShape = (all: Snap[]) => {
     if (!isDrawTool(tool)) return;
-    try {
-      const shape = drawShape(dataRef.current, tool, all, positions(), { construction });
-      if (commit(shape.data)) setPicks(shape.next ? [shape.next] : []);
-      else setPicks([]);
-    } catch (e) {
-      if (!(e instanceof DrawError)) throw e;
-      setMessage(e.message);
-      setPicks([]);
-    }
+    const drawTool = tool;
+    moveRunner.clear();
     setPreview([]);
+    void enqueue(async () => {
+      try {
+        const shape = drawShape(dataRef.current, drawTool, all, positions(), { construction });
+        const sol = await solveAndCommit(shape.data, true);
+        setPicks(sol && shape.next ? [shape.next] : []);
+      } catch (e) {
+        if (!(e instanceof DrawError)) throw e;
+        setMessage(e.message);
+        setPicks([]);
+      }
+      setPreview([]);
+    });
   };
 
   const onDown = (e: SketchPointerEvent) => {
@@ -423,15 +467,18 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     const drag = dragRef.current;
     if (drag) {
       // Drag: the kernel pulls the point and re-solves; the data is committed on release.
-      try {
-        const sol = doc.solveSketch(featureId, dataRef.current, { drag: { point: drag.point, x: e.x, y: e.y }, lite: true });
-        drag.active = true;
-        drag.last = sol;
-        solutionRef.current = { ...sol, profile: solutionRef.current?.profile ?? null, intersections: [] };
-        setSolution(solutionRef.current);
-      } catch (err) {
-        setMessage(errorText(err));
-      }
+      drag.active = true;
+      const data = dataRef.current;
+      moveRunner.schedule(async () => {
+        try {
+          const sol = await doc.solveSketch(featureId, data, { drag: { point: drag.point, x: e.x, y: e.y }, lite: true });
+          drag.last = sol;
+          solutionRef.current = { ...sol, profile: solutionRef.current?.profile ?? null, intersections: [] };
+          setSolution(solutionRef.current);
+        } catch (err) {
+          setMessage(errorText(err));
+        }
+      });
       return;
     }
     if (!isDrawTool(tool)) {
@@ -440,33 +487,48 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     }
     const snap = snapAt(e);
     setHover(snap);
-    const all = [...picks, snap];
-    const enough = tool === 'spline' ? all.length >= 2 : all.length === PICK_COUNT[tool] && picks.length > 0;
+    const all = [...picksRef.current, snap];
+    const enough = tool === 'spline' ? all.length >= 2 : all.length === PICK_COUNT[tool] && picksRef.current.length > 0;
     if (!enough) {
       if (preview.length > 0) setPreview([]);
       return;
     }
+    let shape: ReturnType<typeof drawShape>;
     try {
-      const shape = drawShape(dataRef.current, tool, all, positions(), { construction });
-      const sol = doc.solveSketch(featureId, shape.data, { lite: true });
-      setPreview(shape.created.map((id) => sol.curves[id - 1]).filter(Boolean));
+      shape = drawShape(dataRef.current, tool, all, positions(), { construction });
     } catch {
       // A degenerate tentative shape (cursor on a pick) has no preview.
       setPreview([]);
+      return;
     }
+    moveRunner.schedule(async () => {
+      try {
+        const sol = await doc.solveSketch(featureId, shape.data, { lite: true });
+        setPreview(shape.created.map((id) => sol.curves[id - 1]).filter(Boolean));
+      } catch {
+        setPreview([]);
+      }
+    });
   };
 
+  // A release is handled after pending commits: it picks on the data they produce.
+  const upHandler = useRef<(e: SketchPointerEvent, moved: boolean) => void>(() => undefined);
   const onUp = (e: SketchPointerEvent, moved: boolean) => {
+    const handler = upHandler;
+    void commitQueue.current.then(() => handler.current(e, moved));
+  };
+  upHandler.current = (e: SketchPointerEvent, moved: boolean) => {
     const drag = dragRef.current;
     dragRef.current = null;
-    if (drag?.active && drag.last) {
-      commit(drag.last.sketch);
+    if (drag?.active) {
+      // The last move is solved before the data is committed.
+      void moveRunner.settled().then(() => drag.last && commit(drag.last.sketch));
       return;
     }
     if (pending) return;
     if (isDrawTool(tool)) {
       if (moved) return;
-      const all = [...picks, snapAt(e)];
+      const all = [...picksRef.current, snapAt(e)];
       if (all.length >= PICK_COUNT[tool]) finishShape(all);
       else setPicks(all);
       return;
@@ -509,12 +571,12 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
           setDimPicks([]);
           return;
         }
-        startDimension(choice, { x: e.x, y: e.y });
+        void startDimension(choice, { x: e.x, y: e.y });
         return;
       }
       case 'trim':
       case 'extend':
-        if (hit?.kind === 'entity') runTool({ name: tool, entity: hit.id, pick: [e.x, e.y] });
+        if (hit?.kind === 'entity') void runTool({ name: tool, entity: hit.id, pick: [e.x, e.y] });
         return;
       case 'fillet':
       case 'chamfer': {
@@ -526,11 +588,11 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
         }
         if (tool === 'fillet') {
           const r = numberParam('filletRadius', 'радиус скругления');
-          if (r !== null) runTool({ name: 'fillet', a: lines[0], b: lines[1], radius: r });
+          if (r !== null) void runTool({ name: 'fillet', a: lines[0], b: lines[1], radius: r });
         } else {
           const d1 = numberParam('chamfer1', 'катет фаски');
           const d2 = numberParam('chamfer2', 'катет фаски');
-          if (d1 !== null && d2 !== null) runTool({ name: 'chamfer', a: lines[0], b: lines[1], d1, d2 });
+          if (d1 !== null && d2 !== null) void runTool({ name: 'chamfer', a: lines[0], b: lines[1], d1, d2 });
         }
         return;
       }
@@ -541,7 +603,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
   };
 
   const finishChain = () => {
-    if (tool === 'spline' && picks.length >= 2) finishShape(picks);
+    if (tool === 'spline' && picksRef.current.length >= 2) finishShape(picksRef.current);
     else {
       setPicks([]);
       setPreview([]);
@@ -554,7 +616,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
     if (e.key === 'Escape') {
       if (pending) setPending(null);
-      else if (picks.length > 0 || dimPicks.length > 0) {
+      else if (picksRef.current.length > 0 || dimPicks.length > 0) {
         setPicks([]);
         setPreview([]);
         setDimPicks([]);
@@ -570,7 +632,13 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     }
   };
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => keyHandler.current(e);
+    // Keys act after pending commits (Esc ends the chain the last click extended).
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+      if (!typing && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') e.preventDefault();
+      void commitQueue.current.then(() => keyHandler.current(e));
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -734,7 +802,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
             style={inputAt ? { position: 'fixed', left: inputAt.x - 50, top: inputAt.y - 14 } : undefined}
             onSubmit={(e) => {
               e.preventDefault();
-              confirmDimension();
+              void confirmDimension();
             }}
           >
             <input
@@ -770,7 +838,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
           </div>
         )}
         <div className="pm-panel-buttons">
-          <button type="button" className="pm-primary" data-testid="sketch-exit" onClick={() => onExit(dataRef.current)}>
+          <button type="button" className="pm-primary" data-testid="sketch-exit" onClick={() => void commitQueue.current.then(() => onExit(dataRef.current))}>
             Выйти из эскиза
           </button>
           <button type="button" data-testid="sketch-cancel" onClick={onCancel}>
@@ -825,7 +893,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
               </button>
             ))}
             {selEntities.length > 0 && (
-              <button type="button" data-testid="sketch-toggle-construction" onClick={() => commit(toggleConstruction(data, selEntities))}>
+              <button type="button" data-testid="sketch-toggle-construction" onClick={() => void commit(toggleConstruction(data, selEntities))}>
                 Вспомогательная ⇄ основная
               </button>
             )}
@@ -840,7 +908,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
                   data-testid="sketch-offset"
                   onClick={() => {
                     const d = numberParam('offset', 'смещение');
-                    if (d !== null) runTool({ name: 'offset', chain: selEntities, distance: d });
+                    if (d !== null) void runTool({ name: 'offset', chain: selEntities, distance: d });
                   }}
                 >
                   Эквидистанта
@@ -851,7 +919,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
                   disabled={lastLine === undefined || selEntities.length < 2}
                   title="Ось — отрезок, выбранный последним"
                   onClick={() =>
-                    lastLine !== undefined && runTool({ name: 'mirror', entities: selEntities.filter((id) => id !== lastLine), axis: lastLine })
+                    lastLine !== undefined && void runTool({ name: 'mirror', entities: selEntities.filter((id) => id !== lastLine), axis: lastLine })
                   }
                 >
                   Зеркало (ось — последний отрезок)
@@ -864,7 +932,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
                   data-testid="sketch-linear-pattern"
                   onClick={() => {
                     const [dx, dy, n] = [numberParam('stepX', 'шаг X'), numberParam('stepY', 'шаг Y'), numberParam('count', 'количество')];
-                    if (dx !== null && dy !== null && n !== null) runTool({ name: 'linear-pattern', entities: selEntities, step: [dx, dy], count: n });
+                    if (dx !== null && dy !== null && n !== null) void runTool({ name: 'linear-pattern', entities: selEntities, step: [dx, dy], count: n });
                   }}
                 >
                   Линейный массив
@@ -877,7 +945,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
                   title="Центр — выбранная точка"
                   onClick={() => {
                     const [n, a] = [numberParam('count', 'количество'), numberParam('angle', 'шаг угла')];
-                    if (n !== null && a !== null) runTool({ name: 'circular-pattern', entities: selEntities, center: selPoints[0], count: n, angle: a });
+                    if (n !== null && a !== null) void runTool({ name: 'circular-pattern', entities: selEntities, center: selPoints[0], count: n, angle: a });
                   }}
                 >
                   Круговой массив (центр — точка)
@@ -964,7 +1032,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
                         if (!v || v === c.value) return;
                         const next = cloneSketch(data);
                         next.constraints[i].value = v;
-                        commit(next);
+                        void commit(next);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
@@ -977,12 +1045,13 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
                     data-testid={`constraint-remove-${k}`}
                     onClick={() => {
                       const { data: next, constraintMap } = removeItems(data, [], [k]);
-                      if (commit(next)) {
+                      void commit(next).then((sol) => {
+                        if (!sol) return;
                         const moved: Record<number, { x: number; y: number }> = {};
                         for (const [key, o] of Object.entries(offsets)) if (constraintMap[Number(key)] > 0) moved[constraintMap[Number(key)]] = o;
                         setOffsets(moved);
                         setSelectedConstraints([]);
-                      }
+                      });
                     }}
                   >
                     ×
