@@ -59,7 +59,7 @@ TEST(StressHlr, ThousandFaceTopViewThroughCache) {
     ViewCache cache(16, 2);
     const ViewRequest req{model, top, {}, false};  // точный HLRBRep_Algo
     ViewResultPtr first;
-    timed("hlr_1000_faces", "top_view_exact_cold", 300, [&] { first = cache.get(req); },
+    timed("hlr_1000_faces", "top_view_exact_cold", 30, [&] { first = cache.get(req); },
           "\"faces\":" + std::to_string(6 + kHoles));
     ASSERT_TRUE(first && first->ok()) << (first ? first->error().message : "null");
     const ProjectedView& v = first->value();
@@ -78,7 +78,7 @@ TEST(StressHlr, ThousandFaceTopViewThroughCache) {
     // Изменённая модель (толщина 25) — другой ключ кэша: пересчёт, тот же вид сверху.
     const bendcore::kernel::Shape thicker(plate(25));
     ViewResultPtr changed;
-    timed("hlr_1000_faces", "top_view_after_model_change", 300,
+    timed("hlr_1000_faces", "top_view_after_model_change", 30,
           [&] { changed = cache.get({thicker, top, {}, false}); });
     ASSERT_TRUE(changed && changed->ok());
     EXPECT_EQ(visibleCircles(changed->value(), kR), std::size_t(kHoles));
@@ -87,7 +87,7 @@ TEST(StressHlr, ThousandFaceTopViewThroughCache) {
 
     // Изометрия с автоматическим выбором алгоритма (PolyAlgo для крупных моделей).
     ViewResultPtr iso;
-    timed("hlr_1000_faces", "isometric_auto_method", 300,
+    timed("hlr_1000_faces", "isometric_auto_method", 60,
           [&] { iso = cache.get({model, axonometricFrame(defaultFrontFrame(), Axonometry::Isometric), {}, true}); });
     ASSERT_TRUE(iso && iso->ok()) << (iso ? iso->error().message : "null");
     EXPECT_FALSE(iso->value().edges.empty());

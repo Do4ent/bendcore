@@ -81,7 +81,7 @@ TEST(StressAssembly, ThreeHundredComponentsSolveInterferenceBom) {
     ASSERT_EQ(doc.mates().size(), 598u);
 
     DocumentSolveReport solved;
-    timed("assembly_300", "solve_598_mates", 60, [&] {
+    timed("assembly_300", "solve_598_mates", 15, [&] {
         auto r = doc.solve();
         ASSERT_TRUE(r.ok()) << r.error().message;
         solved = r.value();
@@ -99,7 +99,7 @@ TEST(StressAssembly, ThreeHundredComponentsSolveInterferenceBom) {
     }
 
     InterferenceReport inter;
-    timed("assembly_300", "interference_bbox_prefilter", 300, [&] {
+    timed("assembly_300", "interference_bbox_prefilter", 240, [&] {
         auto r = checkInterference(doc);
         ASSERT_TRUE(r.ok()) << r.error().message;
         inter = std::move(r.value());

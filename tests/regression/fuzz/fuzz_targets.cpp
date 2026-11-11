@@ -44,17 +44,22 @@ namespace dv = bendcore::drawing_v2;
 // исключение наружу — дефект, тест его сообщает.
 [[noreturn]] void invariant(const std::string& what) { throw std::logic_error("fuzz invariant: " + what); }
 
-Outcome runPartJson(std::string_view in) {
+Outcome reject(const std::string& message, std::string* why) {
+    if (why) *why = message;
+    return Outcome::Rejected;
+}
+
+Outcome runPartJson(std::string_view in, std::string* why) {
     auto doc = modeling::PartDocument::fromJson(in, modeling::partRegistry());
-    if (!doc) return Outcome::Rejected;
+    if (!doc) return reject(doc.error().message, why);
     auto text = doc.value().toJson();
     if (!text) invariant("accepted part document cannot be saved: " + text.error().message);
     return Outcome::Accepted;
 }
 
-Outcome runAssemblyJson(std::string_view in) {
+Outcome runAssemblyJson(std::string_view in, std::string* why) {
     auto loaded = asmv2::AssemblyDocument::fromJson(in, asmv2::LoadOptions{});
-    if (!loaded) return Outcome::Rejected;
+    if (!loaded) return reject(loaded.error().message, why);
     asmv2::AssemblyDocument& doc = loaded.value().document;
     auto text = doc.toJson();
     if (!text) invariant("accepted assembly document cannot be saved: " + text.error().message);
@@ -64,38 +69,38 @@ Outcome runAssemblyJson(std::string_view in) {
     return Outcome::Accepted;
 }
 
-Outcome runDrawingJson(std::string_view in) {
+Outcome runDrawingJson(std::string_view in, std::string* why) {
     auto doc = ddoc::DrawingDocument::fromJson(in);
-    if (!doc) return Outcome::Rejected;
+    if (!doc) return reject(doc.error().message, why);
     auto text = doc.value().toJson();
     if (!text) invariant("accepted drawing document cannot be saved: " + text.error().message);
     return Outcome::Accepted;
 }
 
-Outcome runStep(std::string_view in) {
+Outcome runStep(std::string_view in, std::string* why) {
     auto s = kernel::readStep(in);
-    if (!s) return Outcome::Rejected;
+    if (!s) return reject(s.error().message, why);
     (void)s.value().counts();
     return Outcome::Accepted;
 }
 
-Outcome runDxf(std::string_view in) {
+Outcome runDxf(std::string_view in, std::string* why) {
     auto d = dxf::parseDxf(in);
-    if (!d) return Outcome::Rejected;
+    if (!d) return reject(d.error().message, why);
     (void)dxf::scaleToMillimeters(d.value());
     return Outcome::Accepted;
 }
 
-Outcome runBrepBinary(std::string_view in) {
+Outcome runBrepBinary(std::string_view in, std::string* why) {
     auto s = kernel::readBrepBinary(reinterpret_cast<const std::uint8_t*>(in.data()), in.size());
-    if (!s) return Outcome::Rejected;
+    if (!s) return reject(s.error().message, why);
     (void)s.value().counts();
     return Outcome::Accepted;
 }
 
-Outcome runBrepText(std::string_view in) {
+Outcome runBrepText(std::string_view in, std::string* why) {
     auto s = kernel::readBrepText(in);
-    if (!s) return Outcome::Rejected;
+    if (!s) return reject(s.error().message, why);
     (void)s.value().counts();
     return Outcome::Accepted;
 }
@@ -141,10 +146,10 @@ std::vector<std::string> assemblySeeds() {
     (void)doc.addMate(asmv2::MateSpec::coincident({{a}, asmv2::ElementRef::face(5), asmv2::EntityUse::Auto},
                                                   {{b}, asmv2::ElementRef::face(2), asmv2::EntityUse::Auto}));
     std::vector<std::string> out;
-    out.push_back(must(doc.toJson(), "assembly toJson"));  // с встроенным BRep
-    asmv2::SaveOptions noGeom;
-    noGeom.embedGeometry = false;
-    out.push_back(must(doc.toJson(noGeom), "assembly toJson"));
+    out.push_back(must(doc.toJson(), "assembly toJson"));  // с встроенным BRep (без него деталь без source не загрузить)
+    asmv2::SaveOptions compact;
+    compact.indent = -1;
+    out.push_back(must(doc.toJson(compact), "assembly toJson"));
     return out;
 }
 

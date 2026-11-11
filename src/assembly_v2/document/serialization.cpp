@@ -646,7 +646,7 @@ public:
         json j;
         try {
             j = json::parse(textIn);
-        } catch (const json::parse_error& e) {
+        } catch (const json::exception& e) {  // parse_error и out_of_range (переполнение числа: 1e999)
             return Error{ErrorCode::ParseError, std::string("assembly document is not JSON: ") + e.what()};
         }
         try {

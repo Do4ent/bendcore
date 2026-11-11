@@ -27,6 +27,10 @@ target_link_libraries(bendcore_qa_fuzz_targets PUBLIC ${_qa_fuzz_libs})
 
 set(_qa_fuzz_artifacts "${CMAKE_CURRENT_BINARY_DIR}/fuzz-artifacts")
 
+# Повтор сохранённых входов: fuzz_replay <цель> <файл>...
+add_executable(fuzz_replay tests/regression/fuzz/fuzz_replay.cpp)
+target_link_libraries(fuzz_replay PRIVATE bendcore_qa_fuzz_targets)
+
 find_package(GTest QUIET)
 if(GTest_FOUND)
   add_executable(test_fuzz_loaders tests/regression/fuzz/test_fuzz_loaders.cpp)

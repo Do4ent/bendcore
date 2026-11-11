@@ -23,6 +23,6 @@ const bendcore::qa::fuzz::Target& target() {
 }  // namespace
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
-    target().run(std::string_view(reinterpret_cast<const char*>(data), size));
+    target().run(std::string_view(reinterpret_cast<const char*>(data), size), nullptr);
     return 0;
 }

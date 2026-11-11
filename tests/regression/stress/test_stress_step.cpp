@@ -52,7 +52,7 @@ TEST(StressStep, LargeFileImportTessellationMemory) {
     const double rssBefore = rssMiB();
 
     bendcore::kernel::Shape shape;
-    timed("step_large", "import_readStep", 600, [&] {
+    timed("step_large", "import_readStep", 120, [&] {
         auto r = bendcore::kernel::readStep(text);
         ASSERT_TRUE(r.ok()) << r.error().message;
         shape = std::move(r.value());
@@ -81,7 +81,7 @@ TEST(StressStep, LargeFileImportTessellationMemory) {
     tp.linearDeflection = 0.1;
     tp.angularDeflection = 0.5;
     tp.inParallel = true;
-    timed("step_large", "tessellate", 600, [&] {
+    timed("step_large", "tessellate", 60, [&] {
         auto m = bendcore::kernel::tessellate(shape, tp);
         ASSERT_TRUE(m.ok()) << m.error().message;
         mesh = std::move(m.value());
@@ -101,8 +101,9 @@ TEST(StressStep, LargeFileImportTessellationMemory) {
     std::snprintf(extra, sizeof(extra), "\"file_mib\":%.1f,\"rss_growth_mib\":%.0f,\"triangles\":%zu", mib, grown,
                   triangles);
     bendcore::qa::stress::report("step_large", "memory", 0.0, 0.0, extra);
-    // Порог памяти: 40 байт файла на байт... — с запасом: пик не больше 60× размера файла и 8 ГиБ.
-    EXPECT_LT(peak, std::min(60.0 * mib, 8192.0)) << "peak RSS " << peak << " MiB for a " << mib << " MiB file";
+    // Порог памяти с запасом ~2,5× к базовой линии (пик ≈ 10× размера файла): не больше
+    // 25× размера файла и не больше 8 ГиБ.
+    EXPECT_LT(peak, std::min(25.0 * mib, 8192.0)) << "peak RSS " << peak << " MiB for a " << mib << " MiB file";
 }
 
 int main(int argc, char** argv) {

@@ -22,7 +22,8 @@ enum class Outcome { Accepted, Rejected };
 struct Target {
     const char* name;
     bool json;  // вход — JSON: мутатор добавляет замену значений полей и вложенность
-    Outcome (*run)(std::string_view input);
+    // why — сообщение явной ошибки при отказе (может быть nullptr).
+    Outcome (*run)(std::string_view input, std::string* why);
 };
 
 // Все цели: part_json, assembly_json, drawing_json, step, dxf, brep_binary, brep_text.

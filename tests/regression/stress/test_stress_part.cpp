@@ -118,14 +118,14 @@ TEST(StressPart, ThreeHundredFeaturesRebuildAfterFirstSketchEdit) {
     ASSERT_EQ(doc.size(), 300u);
 
     RebuildReport rep;
-    timed("part_300", "initial_rebuild", 120, [&] { rep = doc.rebuild(); });
+    timed("part_300", "initial_rebuild", 180, [&] { rep = doc.rebuild(); });
     EXPECT_TRUE(rep.failed.empty()) << rep.failed.size() << " failed, first " << rep.failed.front();
     EXPECT_EQ(rep.recomputed.size(), 300u);
     expectPlate(doc, 130);
 
     // Изменение первого эскиза: прямоугольник длиннее на 10 мм — перестраивается всё дерево.
     ASSERT_TRUE(doc.setVariable("L", "140").ok());
-    timed("part_300", "rebuild_after_sketch_edit", 120, [&] { rep = doc.rebuild(); });
+    timed("part_300", "rebuild_after_sketch_edit", 180, [&] { rep = doc.rebuild(); });
     EXPECT_TRUE(rep.failed.empty());
     EXPECT_EQ(rep.recomputed.size(), 300u) << "every feature depends on the first sketch";
     expectPlate(doc, 140);
@@ -151,5 +151,6 @@ TEST(StressPart, ThreeHundredFeaturesRebuildAfterFirstSketchEdit) {
         expectPlate(loaded.value(), 140);
     }, "\"json_mib\":" + num(double(json.size()) / (1024.0 * 1024.0)));
     EXPECT_TRUE(loadRep.failed.empty());
-    EXPECT_EQ(loadRep.fromCache.size(), 300u);
+    // Кэш BRep хранится у операций с телом (выдавливание и 149 вырезов); эскизы пересчитываются.
+    EXPECT_EQ(loadRep.fromCache.size(), std::size_t(1 + kHoles));
 }

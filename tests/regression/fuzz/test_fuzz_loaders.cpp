@@ -1,31 +1,57 @@
 // Детерминированный мутационный тест загрузчиков (docs/qa/QA.md, раздел 7).
 //
 // Для каждой цели: затравки (fuzz_targets.cpp) → BENDCORE_FUZZ_ITERATIONS мутаций с
-// фиксированным зерном (BENDCORE_FUZZ_SEED, по умолчанию 20261111). Каждый вход:
-//  * загрузчик возвращает результат (принят или явная ошибка) — исключение наружу — дефект;
-//  * не дольше BENDCORE_FUZZ_TIMEOUT_S секунд (по умолчанию 30): сторож пишет вход в
-//    <BENDCORE_FUZZ_ARTIFACTS>/hang-<цель>-<n>.bin и аварийно завершает процесс;
-//  * под ASan/UBSan (конфигурация build-fuzz) — без ошибок санитайзеров.
-// Затравки должны приниматься — иначе тест проверял бы только ветку ошибок.
+// фиксированным зерном (BENDCORE_FUZZ_SEED, по умолчанию 20261111). Каждый вход выполняется в
+// отдельном дочернем процессе (fork), поэтому падение не обрывает тест, а фиксируется:
+//  * accepted / rejected (явная ошибка Result) — норма;
+//  * exception — исключение вышло из загрузчика;
+//  * crash — сигнал или ненормальный код (в том числе отчёт ASan/UBSan в конфигурации build-fuzz);
+//  * hang — дольше BENDCORE_FUZZ_TIMEOUT_S секунд (по умолчанию 60), процесс убивается;
+//  * memory — пиковая память дочернего процесса больше BENDCORE_FUZZ_RSS_LIMIT_MB (4096).
+// Вход каждого дефекта сохраняется в BENDCORE_FUZZ_ARTIFACTS (<вид>-<цель>-<номер>.bin) и
+// воспроизводится fuzz_replay <цель> <файл>.
+//
+// Дефекты, которые нельзя исправить в коде bendcore (в сторонней библиотеке), перечислены в
+// known_defects.txt для своей конфигурации (native — gcc без санитайзеров, asan — build-fuzz).
+// Тест требует точного совпадения: новый дефект — падение теста, исчезнувший (исправленный)
+// дефект — тоже падение, чтобы список не устаревал. Затравки должны приниматься.
 
 #include "fuzz_targets.hpp"
 
 #include <gtest/gtest.h>
 
-#include <atomic>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <chrono>
-#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <mutex>
+#include <set>
+#include <sstream>
 #include <string>
 #include <thread>
+#include <tuple>
 
 using namespace bendcore::qa::fuzz;
 
 namespace {
+
+#if defined(__SANITIZE_ADDRESS__)
+constexpr const char* kConfig = "asan";
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+constexpr const char* kConfig = "asan";
+#else
+constexpr const char* kConfig = "native";
+#endif
+#else
+constexpr const char* kConfig = "native";
+#endif
+
+constexpr int kAccepted = 10, kRejected = 11, kException = 12;
 
 long envLong(const char* name, long fallback) {
     const char* v = std::getenv(name);
@@ -41,56 +67,93 @@ void saveInput(const std::string& name, const std::string& data) {
     std::filesystem::create_directories(artifactsDir());
     const std::string path = artifactsDir() + "/" + name;
     std::ofstream(path, std::ios::binary).write(data.data(), std::streamsize(data.size()));
-    std::fprintf(stderr, "fuzz: input saved to %s (%zu bytes)\n", path.c_str(), data.size());
 }
 
-// Сторож зависаний: поток проверяет время текущего входа и при превышении сохраняет вход
-// и завершает процесс (std::abort) — зависание нельзя прервать изнутри загрузчика.
-class Watchdog {
-public:
-    explicit Watchdog(std::chrono::seconds limit) : limit_(limit), thread_([this] { loop(); }) {}
-    ~Watchdog() {
-        {
-            std::lock_guard<std::mutex> lock(m_);
-            stop_ = true;
-        }
-        cv_.notify_all();
-        thread_.join();
-    }
-    void begin(const std::string& label, const std::string* input) {
-        std::lock_guard<std::mutex> lock(m_);
-        label_ = label;
-        input_ = input;
-        start_ = std::chrono::steady_clock::now();
-        busy_ = true;
-    }
-    void end() {
-        std::lock_guard<std::mutex> lock(m_);
-        busy_ = false;
-    }
-
-private:
-    void loop() {
-        std::unique_lock<std::mutex> lock(m_);
-        while (!stop_) {
-            cv_.wait_for(lock, std::chrono::milliseconds(200));
-            if (busy_ && std::chrono::steady_clock::now() - start_ > limit_) {
-                std::fprintf(stderr, "fuzz: HANG > %llds on %s\n", static_cast<long long>(limit_.count()),
-                             label_.c_str());
-                saveInput("hang-" + label_ + ".bin", *input_);
-                std::abort();
-            }
-        }
-    }
-    std::chrono::seconds limit_;
-    std::mutex m_;
-    std::condition_variable cv_;
-    bool stop_ = false, busy_ = false;
-    std::string label_;
-    const std::string* input_ = nullptr;
-    std::chrono::steady_clock::time_point start_;
-    std::thread thread_;
+struct RunResult {
+    std::string kind;  // accepted, rejected, exception, crash, hang
+    std::string detail;
+    double maxRssMiB = 0;
 };
+
+// Загрузчик в дочернем процессе; код выхода — исход, сообщение исключения — через канал.
+RunResult runIsolated(const Target& t, const std::string& input, long timeoutS) {
+    int fds[2];
+    if (pipe(fds) != 0) return {"crash", "pipe() failed", 0};
+    std::fflush(nullptr);
+    const pid_t pid = fork();
+    if (pid == 0) {
+        close(fds[0]);
+        int code = kRejected;
+        try {
+            code = t.run(input, nullptr) == Outcome::Accepted ? kAccepted : kRejected;
+        } catch (const std::exception& e) {
+            const std::string m = e.what();
+            (void)!write(fds[1], m.data(), m.size());
+            code = kException;
+        } catch (...) {
+            code = kException;
+        }
+        std::fflush(nullptr);
+        _exit(code);
+    }
+    close(fds[1]);
+    if (pid < 0) {
+        close(fds[0]);
+        return {"crash", "fork() failed", 0};
+    }
+    int status = 0;
+    rusage ru{};
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutS);
+    bool hung = false;
+    while (wait4(pid, &status, WNOHANG, &ru) == 0) {
+        if (std::chrono::steady_clock::now() > deadline) {
+            kill(pid, SIGKILL);
+            wait4(pid, &status, 0, &ru);
+            hung = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    std::string message;
+    char buf[512];
+    for (ssize_t n; (n = read(fds[0], buf, sizeof(buf))) > 0;) message.append(buf, std::size_t(n));
+    close(fds[0]);
+    RunResult r;
+    r.maxRssMiB = double(ru.ru_maxrss) / 1024.0;
+    if (hung) {
+        r.kind = "hang";
+    } else if (WIFEXITED(status) && WEXITSTATUS(status) == kAccepted) {
+        r.kind = "accepted";
+    } else if (WIFEXITED(status) && WEXITSTATUS(status) == kRejected) {
+        r.kind = "rejected";
+    } else if (WIFEXITED(status) && WEXITSTATUS(status) == kException) {
+        r.kind = "exception";
+        r.detail = message;
+    } else {
+        r.kind = "crash";
+        r.detail = WIFSIGNALED(status) ? "signal " + std::to_string(WTERMSIG(status))
+                                       : "exit code " + std::to_string(WEXITSTATUS(status));
+    }
+    return r;
+}
+
+using Defect = std::tuple<std::string, long, std::string>;  // цель, номер мутации, вид
+
+// known_defects.txt: «<конфигурация> <цель> <номер> <вид>  # причина».
+std::set<Defect> knownDefects(const std::string& target) {
+    std::set<Defect> out;
+    std::ifstream f(std::string(BENDCORE_SOURCE_DIR) + "/tests/regression/fuzz/known_defects.txt");
+    std::string line;
+    while (std::getline(f, line)) {
+        line = line.substr(0, line.find('#'));
+        std::istringstream ss(line);
+        std::string config, name, kind;
+        long n = -1;
+        if (!(ss >> config >> name >> n >> kind)) continue;
+        if (config == kConfig && name == target) out.emplace(name, n, kind);
+    }
+    return out;
+}
 
 class FuzzLoaders : public ::testing::TestWithParam<const char*> {};
 
@@ -99,40 +162,66 @@ TEST_P(FuzzLoaders, MutatedInputsGiveExplicitErrorsOnly) {
     ASSERT_NE(target, nullptr);
     const long iterations = envLong("BENDCORE_FUZZ_ITERATIONS", 300);
     const std::uint64_t seed = std::uint64_t(envLong("BENDCORE_FUZZ_SEED", 20261111));
-    Watchdog dog(std::chrono::seconds(envLong("BENDCORE_FUZZ_TIMEOUT_S", 30)));
+    const long timeoutS = envLong("BENDCORE_FUZZ_TIMEOUT_S", 60);
+    const double rssLimit = double(envLong("BENDCORE_FUZZ_RSS_LIMIT_MB", 4096));
 
     const std::vector<std::string> base = seeds(target->name, BENDCORE_SOURCE_DIR);
+    // Загрузчик никогда не выполняется в самом тесте: потоки OCCT (OSD_ThreadPool и др.),
+    // запущенные в родителе, после fork остались бы с захваченными мьютексами в дочернем.
     for (std::size_t i = 0; i < base.size(); ++i) {
-        dog.begin(std::string(target->name) + "-seed" + std::to_string(i), &base[i]);
-        const Outcome o = target->run(base[i]);
-        dog.end();
-        EXPECT_EQ(o, Outcome::Accepted) << target->name << ": seed " << i << " must load";
+        const RunResult r = runIsolated(*target, base[i], timeoutS);
+        EXPECT_EQ(r.kind, "accepted") << target->name << ": seed " << i << " must load " << r.detail;
     }
 
     // Зерно зависит от цели: наборы мутаций у целей разные, но воспроизводимые.
     Mutator mut(seed ^ std::hash<std::string>{}(target->name));
     long accepted = 0, rejected = 0;
+    double maxRss = 0;
+    long maxRssAt = -1;
+    std::set<Defect> found;
     const auto t0 = std::chrono::steady_clock::now();
     for (long n = 0; n < iterations; ++n) {
         const std::string& origin = base[mut.below(base.size())];
         const std::string input = mut.mutate(origin, target->json);
-        const std::string label = std::string(target->name) + "-" + std::to_string(n);
-        dog.begin(label, &input);
-        try {
-            (target->run(input) == Outcome::Accepted ? accepted : rejected)++;
-        } catch (const std::exception& e) {
-            saveInput("exception-" + label + ".bin", input);
-            ADD_FAILURE() << label << ": exception escaped the loader: " << e.what();
-        } catch (...) {
-            saveInput("exception-" + label + ".bin", input);
-            ADD_FAILURE() << label << ": non-standard exception escaped the loader";
+        RunResult r = runIsolated(*target, input, timeoutS);
+        if (r.maxRssMiB > maxRss) {
+            maxRss = r.maxRssMiB;
+            maxRssAt = n;
         }
-        dog.end();
+        if (r.kind == "accepted" || r.kind == "rejected") {
+            (r.kind == "accepted" ? accepted : rejected)++;
+            if (r.maxRssMiB <= rssLimit) continue;
+            r.kind = "memory";
+            r.detail = std::to_string(long(r.maxRssMiB)) + " MiB";
+        }
+        found.emplace(target->name, n, r.kind);
+        saveInput(r.kind + "-" + target->name + "-" + std::to_string(n) + ".bin", input);
+        std::printf("[fuzz] %s %s #%ld: %s %s (%zu bytes, saved to %s)\n", kConfig, target->name, n, r.kind.c_str(),
+                    r.detail.c_str(), input.size(), artifactsDir().c_str());
     }
     const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-    std::printf("[fuzz] %-13s seed=%llu iterations=%ld accepted=%ld rejected=%ld time=%.2fs peakRSS=%.0fMiB\n",
-                target->name, static_cast<unsigned long long>(seed), iterations, accepted, rejected, s,
-                double(peakRssBytes()) / (1024.0 * 1024.0));
+    std::printf("[fuzz] %s %-13s seed=%llu iterations=%ld accepted=%ld rejected=%ld defects=%zu time=%.2fs "
+                "max child RSS %.0f MiB (#%ld)\n",
+                kConfig, target->name, static_cast<unsigned long long>(seed), iterations, accepted, rejected,
+                found.size(), s, maxRss, maxRssAt);
+
+    // Сравнение со списком известных дефектов — только при номинальных параметрах прогона.
+    if (seed == 20261111 && iterations == 300) {
+        const std::set<Defect> known = knownDefects(target->name);
+        for (const Defect& d : found) {
+            EXPECT_TRUE(known.count(d)) << "new defect: " << kConfig << " " << std::get<0>(d) << " " << std::get<1>(d)
+                                        << " " << std::get<2>(d);
+        }
+        for (const Defect& d : known) {
+            EXPECT_TRUE(found.count(d)) << "listed defect no longer reproduces (fixed? remove it from "
+                                           "known_defects.txt): "
+                                        << kConfig << " " << std::get<0>(d) << " " << std::get<1>(d) << " "
+                                        << std::get<2>(d);
+        }
+    } else {
+        EXPECT_TRUE(found.empty()) << found.size() << " defects with seed " << seed << ", " << iterations
+                                   << " iterations";
+    }
     // Мутации должны давать оба исхода: только отказы значат, что мутатор рушит каждый вход
     // ещё до разбора полей, только приёмы — что загрузчик ничего не проверяет.
     if (iterations >= 100) {

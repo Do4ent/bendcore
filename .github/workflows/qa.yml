@@ -60,8 +60,10 @@ jobs:
 
       # Eigen — системный libeigen3-dev; без настоящего Eigen конфигурация падает
       # (см. docs/WASM_BUILD_GUIDE.md).
-      - name: Зависимости (Ninja, GTest, Eigen, Python3)
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libgtest-dev libeigen3-dev libexpat1-dev zlib1g-dev python3
+      # zlib и expat — для 3MF (bendcore_kernel_analysis): без них тест 3MF молча пропускается;
+      # fonts-dejavu-core — системный шрифт нативных тестов чертежа (findSystemFont).
+      - name: Зависимости (Ninja, GTest, Eigen, zlib, expat, DejaVu, Python3)
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libgtest-dev libeigen3-dev libexpat1-dev zlib1g-dev fonts-dejavu-core python3
 
       # Ключ зависит от версии OCCT, списка тулкитов и скрипта сборки: при изменении любого из
       # них OCCT пересобирается. Прежний ключ (occt-build-…-v3, 48 тулкитов) больше не совпадает.
@@ -101,14 +103,48 @@ jobs:
           set -o pipefail
           cmake --build build-occt --parallel 2>&1 | tee build-occt.log
 
-      # Все тесты build-occt, кроме "performance": его пороги времени не выдерживают параллельной
-      # нагрузки ctest (docs/kernel/OCCT_BUILD.md, раздел 2), поэтому он идёт следующим шагом один.
-      - name: Тесты build-occt (параллельно, без performance)
-        run: ctest --test-dir build-occt --output-on-failure --timeout 600 --parallel 4 --no-tests=error -E '^performance$'
+      # Все тесты build-occt, кроме замеров времени: performance и offset_performance (их пороги не
+      # выдерживают параллельной нагрузки ctest, docs/kernel/OCCT_BUILD.md, раздел 2) и нагрузочных
+      # stress_* (docs/qa/PERFORMANCE.md) — они идут следующим шагом последовательно.
+      - name: Тесты build-occt (параллельно, без замеров времени)
+        run: |
+          ctest --test-dir build-occt --output-on-failure --timeout 1800 --parallel 4 --no-tests=error \
+            -E '^(performance|offset_performance|stress_.*)$'
 
-      - name: Тест performance (последовательно)
+      # Выполняется и после падения предыдущего шага. Крупный STEP (≥ 50 МБ) строит
+      # stress_step_generate (fixture ctest) в build-occt/stress-large; в git его нет.
+      - name: Замеры времени и нагрузка (последовательно)
         if: success() || failure()
-        run: ctest --test-dir build-occt --output-on-failure --timeout 600 --no-tests=error -R '^performance$'
+        env:
+          # Запас по времени для машины CI относительно базовой линии docs/qa/PERFORMANCE.md.
+          BENDCORE_STRESS_TIME_SCALE: '1.5'
+        run: |
+          ctest --test-dir build-occt --output-on-failure --timeout 1800 --no-tests=error \
+            -R '^(performance|offset_performance|stress_.*)$'
+
+      - name: Отчёт нагрузочных тестов в сводку
+        if: success() || failure()
+        shell: bash
+        run: |
+          f=build-occt/stress-report.jsonl
+          [ -f "$f" ] || exit 0
+          {
+            echo "### Нагрузочные тесты (docs/qa/PERFORMANCE.md)"
+            echo
+            echo "| Время (UTC) | Тест | Шаг | с | порог, с | пик RSS, МиБ |"
+            echo "|---|---|---|---:|---:|---:|"
+            python3 -c 'import json,sys
+          for l in open(sys.argv[1]):
+              r=json.loads(l); print("| %s | %s | %s | %.3f | %.1f | %.0f |" % (r["time"], r["test"], r["step"], r["seconds"], r["limit_seconds"], r["peak_rss_mib"]))' "$f"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Отчёт нагрузочных тестов (артефакт)
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-report
+          path: build-occt/stress-report.jsonl
+          if-no-files-found: warn
 
       - name: Ошибки в аннотации (только при падении)
         if: failure()
@@ -130,6 +166,7 @@ jobs:
             build-occt.log
             third_party/occt-build/logs/
             build-occt/Testing/Temporary/
+            build-occt/fuzz-artifacts/
           if-no-files-found: ignore
 
       - name: Свежесгенерированный корпус (при любом результате)
@@ -170,3 +207,89 @@ jobs:
         run: |
           docker logs bendcore-server 2>&1 | tail -n 50 || true
           docker rm -f bendcore-server >/dev/null 2>&1 || true
+
+  # Fuzz-проверка загрузчиков (docs/qa/QA.md, раздел 7) в отдельной конфигурации clang +
+  # ASan/UBSan: детерминированный мутационный тест (fuzz_loaders, список known_defects.txt для
+  # конфигурации asan), прогон фаззеров libFuzzer по затравочному корпусу и короткий поиск.
+  # OCCT берётся из кэша occt-native (тот же ключ; job ждёт его сохранения) и не
+  # инструментирован: санитайзеры проверяют код bendcore и границы вызовов OCCT.
+  fuzz:
+    name: Fuzz загрузчиков (clang, ASan/UBSan, libFuzzer)
+    needs: occt-native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      OCCT_VERSION: 8.0.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Зависимости (clang 18, libFuzzer, Ninja, GTest, Eigen, zlib, expat, DejaVu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 libclang-rt-18-dev ninja-build libgtest-dev libeigen3-dev \
+            libexpat1-dev zlib1g-dev fonts-dejavu-core
+
+      - name: Кэш установки OCCT (из occt-native)
+        uses: actions/cache/restore@v4
+        with:
+          path: third_party/occt-install
+          key: occt-native-V${{ env.OCCT_VERSION }}-ubuntu-24.04-${{ hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt.sh') }}
+          fail-on-cache-miss: true
+
+      - name: Конфигурация build-fuzz (BENDCORE_FUZZ=ON, ASan/UBSan)
+        run: |
+          CC=clang-18 CXX=clang++-18 cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install" \
+            -DBENDCORE_FUZZ=ON \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,fuzzer-no-link -fno-sanitize-recover=undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Сборка фаззеров и теста
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build-fuzz --parallel --target test_fuzz_loaders fuzz_seeds fuzz_replay \
+            fuzz_part_json fuzz_assembly_json fuzz_drawing_json fuzz_step fuzz_dxf fuzz_brep_binary fuzz_brep_text \
+            2>&1 | tee build-fuzz.log
+
+      - name: Мутационный тест и корпус фаззеров (ctest -L fuzz)
+        run: ctest --test-dir build-fuzz -L fuzz --output-on-failure --no-tests=error --parallel 2
+
+      # Поиск по 60 с на цель. Цели, у которых чтение идёт через читатели OCCT (STEP, BRep и BRep,
+      # встроенный в документ сборки), падают в самом OCCT (known_defects.txt) — их находки
+      # сохраняются в артефакт, но шаг не роняют; для остальных любая находка — ошибка.
+      - name: libFuzzer, 60 с на цель
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          set -u
+          mkdir -p fuzz-findings
+          rc=0
+          for t in part_json drawing_json dxf assembly_json step brep_binary brep_text; do
+            mkdir -p "fuzz-work/$t"
+            set +e
+            build-fuzz/fuzz_$t "fuzz-work/$t" "build-fuzz/fuzz-corpus/$t" -max_total_time=60 -timeout=30 \
+              -rss_limit_mb=4096 -artifact_prefix="fuzz-findings/$t-" -print_final_stats=1 > "fuzz-findings/$t.log" 2>&1
+            r=$?
+            set -e
+            echo "fuzz_$t: exit $r ($(grep -c '^#' "fuzz-findings/$t.log") status lines)"
+            case "$t" in
+              part_json|drawing_json|dxf) [ "$r" -eq 0 ] || { echo "::error title=fuzz_$t::libFuzzer finding, see artifact fuzz-findings"; rc=1; } ;;
+              *) [ "$r" -eq 0 ] || echo "::warning title=fuzz_$t::finding inside OCCT readers (known_defects.txt)" ;;
+            esac
+          done
+          exit $rc
+
+      - name: Находки фаззеров и журналы (при любом результате)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-findings
+          path: |
+            fuzz-findings/
+            build-fuzz/fuzz-artifacts/
+            build-fuzz/Testing/Temporary/
+            build-fuzz.log
+          if-no-files-found: ignore
