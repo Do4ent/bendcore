@@ -43,11 +43,13 @@ if(GTest_FOUND)
   add_test(NAME fuzz_loaders COMMAND test_fuzz_loaders)
   # Утечки памяти OCCT (статические кэши) — не предмет проверки; ASan проверяет доступ к памяти.
   set_tests_properties(fuzz_loaders PROPERTIES TIMEOUT 1800 LABELS fuzz
-    ENVIRONMENT "BENDCORE_FUZZ_ARTIFACTS=${_qa_fuzz_artifacts};ASAN_OPTIONS=detect_leaks=0:hard_rss_limit_mb=4096;UBSAN_OPTIONS=print_stacktrace=1")
+    ENVIRONMENT "BENDCORE_FUZZ_ARTIFACTS=${_qa_fuzz_artifacts};ASAN_OPTIONS=detect_leaks=0:hard_rss_limit_mb=4096:malloc_limit_mb=4096;UBSAN_OPTIONS=print_stacktrace=1")
 
   # Регрессия исправленных дефектов, найденных fuzz-проверкой.
   add_executable(test_loader_regressions tests/regression/fuzz/test_loader_regressions.cpp)
-  target_link_libraries(test_loader_regressions PRIVATE ${_qa_fuzz_libs} GTest::gtest GTest::gtest_main)
+  target_compile_definitions(test_loader_regressions PRIVATE BENDCORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  target_include_directories(test_loader_regressions PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+  target_link_libraries(test_loader_regressions PRIVATE bendcore_qa_fuzz_targets GTest::gtest GTest::gtest_main)
   add_test(NAME fuzz_loader_regressions COMMAND test_loader_regressions)
   set_tests_properties(fuzz_loader_regressions PROPERTIES LABELS fuzz ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
 endif()

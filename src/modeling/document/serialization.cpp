@@ -8,7 +8,9 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <stdexcept>
 
 namespace bendcore::modeling {
@@ -16,6 +18,38 @@ namespace bendcore::modeling {
 using nlohmann::json;
 
 namespace {
+
+// Целые поля файла: только целое число JSON в диапазоне T. Вещественное значение вне диапазона
+// (1e308) при get<int>() — неопределённое преобразование double → int; здесь — ошибка разбора.
+template <typename T>
+T checkedInteger(const json& v, const char* what) {
+    if (v.is_number_unsigned()) {
+        const auto x = v.get<std::uint64_t>();
+        if (x <= static_cast<std::uint64_t>(std::numeric_limits<T>::max())) return static_cast<T>(x);
+    } else if (v.is_number_integer()) {
+        const auto x = v.get<std::int64_t>();
+        if (x >= static_cast<std::int64_t>(std::numeric_limits<T>::min()) &&
+            (x < 0 || static_cast<std::uint64_t>(x) <= static_cast<std::uint64_t>(std::numeric_limits<T>::max())))
+            return static_cast<T>(x);
+    }
+    throw std::invalid_argument(std::string(what) + ": expected an integer in range, got " + v.dump().substr(0, 40));
+}
+
+template <typename T>
+T integerValue(const json& object, const char* key, T fallback) {
+    const auto it = object.find(key);
+    return it == object.end() ? fallback : checkedInteger<T>(*it, key);
+}
+
+template <typename T>
+std::vector<T> integerArray(const json& object, const char* key) {
+    std::vector<T> out;
+    const auto it = object.find(key);
+    if (it == object.end()) return out;
+    if (!it->is_array()) throw std::invalid_argument(std::string(key) + ": expected an array");
+    for (const json& v : *it) out.push_back(checkedInteger<T>(v, key));
+    return out;
+}
 
 constexpr const char* kFormatName = "bendcore-part";
 
@@ -316,18 +350,18 @@ SketchData sketchFromJson(const json& j) {
         auto type = sketchGeometryTypeFromString(g.at("type").get<std::string>());
         if (!type) throw std::invalid_argument("unknown sketch geometry '" + g.at("type").get<std::string>() + "'");
         d.type = *type;
-        d.start = g.value("start", -1);
-        d.end = g.value("end", -1);
-        d.center = g.value("center", -1);
+        d.start = integerValue<int>(g, "start", -1);
+        d.end = integerValue<int>(g, "end", -1);
+        d.center = integerValue<int>(g, "center", -1);
         d.radius = g.value("radius", std::string("1"));
         d.counterClockwise = g.value("counterClockwise", true);
         d.construction = g.value("construction", false);
-        d.projection = g.value("projection", -1);
-        d.focus = g.value("focus", -1);
-        d.poles = g.value("poles", std::vector<int>());
-        d.degree = g.value("degree", 3);
+        d.projection = integerValue<int>(g, "projection", -1);
+        d.focus = integerValue<int>(g, "focus", -1);
+        d.poles = integerArray<int>(g, "poles");
+        d.degree = integerValue<int>(g, "degree", 3);
         d.knots = g.value("knots", std::vector<double>());
-        d.multiplicities = g.value("multiplicities", std::vector<int>());
+        d.multiplicities = integerArray<int>(g, "multiplicities");
         d.weights = g.value("weights", std::vector<double>());
         d.periodic = g.value("periodic", false);
         s.geometry.push_back(std::move(d));
@@ -337,14 +371,14 @@ SketchData sketchFromJson(const json& j) {
         auto type = sketchConstraintTypeFromString(c.at("type").get<std::string>());
         if (!type) throw std::invalid_argument("unknown sketch constraint '" + c.at("type").get<std::string>() + "'");
         d.type = *type;
-        d.a = c.value("a", -1);
-        d.b = c.value("b", -1);
-        d.c = c.value("c", -1);
+        d.a = integerValue<int>(c, "a", -1);
+        d.b = integerValue<int>(c, "b", -1);
+        d.c = integerValue<int>(c, "c", -1);
         d.value = c.value("value", std::string("0"));
         d.driven = c.value("driven", false);
         s.constraints.push_back(std::move(d));
     }
-    s.regions = j.value("regions", std::vector<SketchEntityId>());
+    s.regions = integerArray<SketchEntityId>(j, "regions");
     return s;
 }
 
@@ -469,7 +503,7 @@ json migrateV2(json doc) {
     }
     // The rollback marker counted the old features: each PrismCut became two nodes.
     if (doc.contains("rollback") && !doc.at("rollback").is_null()) {
-        const std::size_t rb = doc.at("rollback").get<std::size_t>();
+        const std::size_t rb = checkedInteger<std::size_t>(doc.at("rollback"), "rollback");
         std::size_t extra = 0, k = 0;
         for (const auto& f : doc.at("features")) {
             if (k++ >= rb) break;
@@ -557,7 +591,7 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
         if (!doc.is_object() || doc.value("format", std::string()) != kFormatName) {
             return R::failure(ErrorCode::ParseError, std::string("not a ") + kFormatName + " document");
         }
-        const int version = doc.at("version").get<int>();
+        const int version = checkedInteger<int>(doc.at("version"), "version");
         if (version > kFormatVersion) {
             return R::failure(ErrorCode::Unsupported, "format version " + std::to_string(version) +
                                                           " is newer than the supported " +
@@ -565,7 +599,7 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
         }
         if (version < 1) return R::failure(ErrorCode::ParseError, "invalid format version " + std::to_string(version));
         if (version == 1) doc = migrateV1(doc, *registry);
-        if (doc.at("version").get<int>() == 2) doc = migrateV2(std::move(doc));
+        if (checkedInteger<int>(doc.at("version"), "version") == 2) doc = migrateV2(std::move(doc));
 
         PartDocument part(registry);
         for (const auto& v : doc.at("variables")) {
@@ -596,7 +630,7 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
         }
         const json& rb = doc.value("rollback", json());
         if (!rb.is_null()) {
-            auto st = part.setRollback(rb.get<std::size_t>());
+            auto st = part.setRollback(checkedInteger<std::size_t>(rb, "rollback"));
             if (!st) return R::failure(ErrorCode::ParseError, st.error().message);
         }
         if (doc.contains("cache")) {

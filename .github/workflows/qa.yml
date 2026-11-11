@@ -262,7 +262,7 @@ jobs:
       - name: libFuzzer, 60 с на цель
         shell: bash
         env:
-          ASAN_OPTIONS: detect_leaks=0
+          ASAN_OPTIONS: detect_leaks=0:malloc_limit_mb=4096
         run: |
           set -u
           mkdir -p fuzz-findings
