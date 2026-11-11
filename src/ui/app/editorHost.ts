@@ -16,6 +16,19 @@ export interface DocumentFile {
   text: string;
   /** Drawing only: the model JSON the drawing is made from (DrawingHandle.saveModel). */
   model?: string;
+  /**
+   * Assembly only: part JSON of the definitions inserted from bendcore parts. The assembly file
+   * keeps BRep only; this list (kept in drafts, not in the file) lets "open component part" find
+   * the part document of a component.
+   */
+  parts?: PartSource[];
+}
+
+export interface PartSource {
+  /** Definition id in the assembly; -1 for a library entry not inserted yet. */
+  definition: number;
+  name: string;
+  text: string;
 }
 
 export interface EditorHostProps {
