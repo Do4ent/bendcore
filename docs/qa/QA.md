@@ -179,7 +179,7 @@ int legacy_bridge(int /*code*/) {  // qa-allow(literal-return): ABI shim, value 
 
 * YAML всех `.github/workflows/*.yml` разобран `python3 -c "import yaml"` (после каждого изменения).
 * `occt-native`: `build-occt` с `/home/user/bendcore/third_party/occt-install`; полный
-  `ctest -E 'wasm|performance'` — см. итог в отчёте приёмки; `ctest -L stress` последовательно — 5/5
+  `ctest -E 'wasm|performance' --parallel 2` — 123/123; `ctest -L stress` последовательно — 5/5
   (таблица — `docs/qa/PERFORMANCE.md`); `fuzz_loaders` и `fuzz_loader_regressions` — проходят.
 * `fuzz`: clang 18.1.3 + `libclang-rt-18-dev`, ровно та же конфигурация `build-fuzz` и список
   целей, `ctest -L fuzz` — 10/10 (мутационный тест 175 с под ASan); libFuzzer 60 с:
@@ -194,12 +194,12 @@ int legacy_bridge(int /*code*/) {  // qa-allow(literal-return): ABI shim, value 
   | `bendcore_kernel_wasm` | 12 625 582 | 3 793 177 | 168 676 |
   | `bendcore_modeling_wasm` | 19 873 786 | 5 736 884 | 203 201 |
   | `bendcore_assembly_wasm` | 29 238 501 | 7 927 427 | 235 445 |
-  | `bendcore_drawing_wasm` | 21 656 992 | — | 206 823 |
+  | `bendcore_drawing_wasm` | 21 656 992 | 6 276 570 | 206 823 |
 
 * `wasm-e2e`: `npm ci --ignore-scripts`, затем для каждого набора `npm run test:e2e:<набор> -- --trace off`
-  с `CI=true` и `BENDCORE_*_WASM_DIR` на каталоги сборки: kernel 4/4, modeling 4/4, assembly 2/2,
-  drawing 1/1 (до слияния оболочки приложения). Браузер — локальный Chromium 1243 через
-  `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. Набор `app` и повторный прогон после слияния — см. отчёт приёмки.
+  с `CI=true` и `BENDCORE_*_WASM_DIR` на каталоги сборки, после слияния оболочки приложения и
+  пересборки модулей: kernel 4/4, modeling 4/4, assembly 2/2, drawing 1/1, app 3/3 (60 с). Браузер —
+  локальный Chromium 1243 через `PLAYWRIGHT_CHROMIUM_EXECUTABLE`.
 * `no-stubs`: самотест, полная проверка (расширенный список каталогов) и `--diff ccr-d188a25e-rml7z8` —
   0 нарушений.
 
