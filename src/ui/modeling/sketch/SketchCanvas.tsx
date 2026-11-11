@@ -15,7 +15,7 @@ import type { SketchPlacementInfo, SketchSolution, SketchSolvedCurve } from '../
 import { packEdgePolylines } from '../../kernel/edgeBuffers';
 import type { DimensionGraphic } from './dimensionLayout';
 import type { DefinitionState } from './sketchModel';
-import { gridStep, SNAP_LABELS } from './snap';
+import { gridStep, nearestPoint, SNAP_LABELS } from './snap';
 import type { Snap } from './snap';
 
 export interface SketchPointerEvent {
@@ -67,6 +67,8 @@ interface View {
 }
 
 const CLICK_TOLERANCE = 4;
+/** A dimension text does not take clicks within this distance (px) of a sketch point. */
+const POINT_PRIORITY_PIXELS = 6;
 
 interface BodyLayer {
   renderer: THREE.WebGLRenderer;
@@ -168,6 +170,17 @@ const SketchCanvas = React.forwardRef<SketchCanvasHandle, SketchCanvasProps>((pr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The first solution frames the view when it has geometry (entering an existing sketch);
+  // later solutions never move the view.
+  const framedData = useRef(false);
+  useEffect(() => {
+    if (framedData.current || !props.solution) return;
+    framedData.current = true;
+    if (bounds(props.solution)) fit();
+    // fit reads the latest props through propsRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.solution]);
+
   // Body layer: renderer and scene once.
   useEffect(() => {
     const host = glRef.current;
@@ -236,6 +249,9 @@ const SketchCanvas = React.forwardRef<SketchCanvasHandle, SketchCanvasProps>((pr
 
   const drag = useRef<{ x: number; y: number; button: number; moved: boolean; view: View } | null>(null);
   const labelDrag = useRef<{ k: number; x: number; y: number; moved: boolean } | null>(null);
+  // Dimension text clicked last: with pointer capture on the SVG the double click is delivered
+  // to the SVG, not to the text.
+  const lastLabel = useRef<number | null>(null);
 
   const eventOf = (e: { clientX: number; clientY: number; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }): SketchPointerEvent => {
     const rect = rootRef.current!.getBoundingClientRect();
@@ -274,9 +290,11 @@ const SketchCanvas = React.forwardRef<SketchCanvasHandle, SketchCanvasProps>((pr
     labelDrag.current = null;
     if (!d || d.button !== 0) return;
     if (l) {
+      lastLabel.current = l.moved ? null : l.k;
       if (!l.moved) props.onDimensionClick(l.k);
       return;
     }
+    lastLabel.current = null;
     props.onUp(eventOf(e), d.moved);
   };
   const onWheel = (e: React.WheelEvent) => {
@@ -354,7 +372,10 @@ const SketchCanvas = React.forwardRef<SketchCanvasHandle, SketchCanvasProps>((pr
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onWheel={onWheel}
-        onDoubleClick={(e) => props.onDoubleClick(eventOf(e))}
+        onDoubleClick={(e) => {
+          if (lastLabel.current !== null) props.onDimensionEdit(lastLabel.current);
+          else props.onDoubleClick(eventOf(e));
+        }}
       >
         {gridLines}
         <line x1={0} y1={origin.y} x2={size.w} y2={origin.y} className="sk-axis-x" />
@@ -407,11 +428,10 @@ const SketchCanvas = React.forwardRef<SketchCanvasHandle, SketchCanvasProps>((pr
                 data-testid={`sketch-dim-${g.constraint}`}
                 data-state={props.constraintClass(g.constraint)}
                 onPointerDown={(e) => {
-                  if (e.button === 0) labelDrag.current = { k: g.constraint, x: e.clientX, y: e.clientY, moved: false };
-                }}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  props.onDimensionEdit(g.constraint);
+                  // A sketch point under the text keeps priority (corners under radius texts).
+                  const p = eventOf(e);
+                  const onPoint = solution && nearestPoint(solution, p.x, p.y, POINT_PRIORITY_PIXELS * p.unitsPerPixel);
+                  if (e.button === 0 && !onPoint) labelDrag.current = { k: g.constraint, x: e.clientX, y: e.clientY, moved: false };
                 }}
               >
                 {g.label}

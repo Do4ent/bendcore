@@ -21,6 +21,7 @@ import {
   emptySketch,
   entityRef,
   highlights,
+  num,
   pointRef,
   removeItems,
   toggleConstruction,
@@ -274,6 +275,12 @@ describe('selection, deletion, diagnostics', () => {
     expect(two.constraintMap).toEqual([0, 0, 0, 1, 2, 0, 0]);
     // Deleting one constraint.
     expect(removeItems(data, [], [5]).data.constraints).toHaveLength(5);
+  });
+
+  it('coordinates are written without exponent notation (the expression parser has none)', () => {
+    expect(num(-6.6e-21)).toBe('0');
+    expect(num(2.5e-7)).toBe('0.00000025');
+    expect(num(12.5)).toBe('12.5');
   });
 
   it('construction toggle, corners', () => {

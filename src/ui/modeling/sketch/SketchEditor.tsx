@@ -71,6 +71,12 @@ const EDIT_TOOL_HINTS: Record<string, string> = {
   regions: 'Щёлкните внутри области, чтобы включить или исключить её из профиля.',
 };
 
+/**
+ * Dimension text offsets by "<document handle>:<sketch id>": the part file has no place for
+ * them, so they live as long as the page.
+ */
+const TEXT_OFFSETS = new Map<string, Record<number, { x: number; y: number }>>();
+
 /** Pixel radius of snapping and picking. */
 const PICK_PIXELS = 8;
 
@@ -142,7 +148,15 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
   const [selectedConstraints, setSelectedConstraints] = useState<number[]>([]);
   const [dimPicks, setDimPicks] = useState<SketchRef[]>([]);
   const [pending, setPending] = useState<PendingDimension | null>(null);
-  const [offsets, setOffsets] = useState<Record<number, { x: number; y: number }>>({});
+  // Text offsets of the dimensions, kept for the page session per document and sketch.
+  const offsetKey = `${doc.handle}:${featureId}`;
+  const [offsets, setOffsetsState] = useState<Record<number, { x: number; y: number }>>(() => TEXT_OFFSETS.get(offsetKey) ?? {});
+  const setOffsets = (next: Record<number, { x: number; y: number }> | ((o: Record<number, { x: number; y: number }>) => Record<number, { x: number; y: number }>)) =>
+    setOffsetsState((o) => {
+      const value = typeof next === 'function' ? next(o) : next;
+      TEXT_OFFSETS.set(offsetKey, value);
+      return value;
+    });
   const [message, setMessage] = useState<string | null>(null);
   const [construction, setConstruction] = useState(false);
   const [gridSnap, setGridSnap] = useState(false);
@@ -171,7 +185,9 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     (next: SketchData, record = true): SketchSolution | null => {
       try {
         const sol = doc.solveSketch(featureId, next);
-        if (record) setHistory((h) => [...h, dataRef.current]);
+        // The updater runs at the next render, after dataRef moves on: capture the data now.
+        const previous = dataRef.current;
+        if (record) setHistory((h) => [...h, previous]);
         dataRef.current = sol.sketch;
         solutionRef.current = sol;
         setData(sol.sketch);
@@ -198,7 +214,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     dataRef.current = initial;
     setData(initial);
     setHistory([]);
-    if (commit(initial, false)) requestAnimationFrame(() => canvasRef.current?.fit());
+    commit(initial, false);
   }, [doc, featureId, commit]);
 
   const setTool = (t: EditorTool) => {
@@ -485,6 +501,9 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
           const type = twoPointDimension(a, b, e, PICK_PIXELS * e.unitsPerPixel);
           choice = options.find((p) => p.type === type) ?? choice;
         }
+        // A circle is dimensioned by its diameter, an arc by its radius (as in SolidWorks / КОМПАС).
+        const only = dimPicks.length === 1 && dimPicks[0].kind === 'entity' ? dataRef.current.geometry[dimPicks[0].id - 1] : null;
+        if (only?.type === 'circle') choice = options.find((p) => p.type === 'diameter') ?? choice;
         if (!choice) {
           setMessage('для выбранных элементов нет размера');
           setDimPicks([]);
@@ -759,6 +778,9 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
           </button>
           <button type="button" data-testid="sketch-undo" disabled={history.length === 0} onClick={undoStep}>
             Шаг назад
+          </button>
+          <button type="button" data-testid="sketch-fit" onClick={() => canvasRef.current?.fit()}>
+            Вписать
           </button>
         </div>
 

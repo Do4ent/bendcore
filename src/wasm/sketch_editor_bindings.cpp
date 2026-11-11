@@ -40,6 +40,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <optional>
 #include <set>
 #include <variant>
@@ -52,7 +53,20 @@ namespace s2 = bendcore::sketch2d;
 
 constexpr double kPi = 3.14159265358979323846;
 
-std::string num(double v) { return val::global("String")(val(v)).as<std::string>(); }
+// Decimal spelling of a value written back into sketch expressions. The expression parser has no
+// exponent notation, so tiny values (solver noise around 0) become 0 and the rest is written in
+// plain positional form.
+std::string num(double v) {
+    if (std::abs(v) < 1e-9) return "0";
+    std::string text = val::global("String")(val(v)).as<std::string>();
+    if (text.find('e') == std::string::npos) return text;
+    char buf[64];
+    std::snprintf(buf, sizeof buf, "%.12f", v);
+    text = buf;
+    while (!text.empty() && text.back() == '0') text.pop_back();
+    if (!text.empty() && text.back() == '.') text.pop_back();
+    return text;
+}
 
 // ------------------------------------------------------------------ evaluation in the document
 

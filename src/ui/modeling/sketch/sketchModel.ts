@@ -82,8 +82,15 @@ export function cloneSketch(data: SketchData): SketchData {
   };
 }
 
-/** Shortest decimal spelling of a coordinate (the data stores expressions). */
-export const num = (v: number): string => String(Math.abs(v) < 1e-12 ? 0 : v);
+/**
+ * Decimal spelling of a coordinate (the data stores expressions; the expression parser has no
+ * exponent notation): values below 1e-9 become 0, the rest is written positionally.
+ */
+export function num(v: number): string {
+  if (Math.abs(v) < 1e-9) return '0';
+  const text = String(v);
+  return text.includes('e') ? v.toFixed(12).replace(/0+$/, '').replace(/\.$/, '') : text;
+}
 
 /** Appends a point; returns its index. */
 export function addPoint(data: SketchData, x: number, y: number, fixed = false): number {

@@ -134,7 +134,8 @@ export function dimensionGraphic(
       const anchor = cv.midpoint ? { x: cv.midpoint[0], y: cv.midpoint[1] } : { x: from.x + r * Math.SQRT1_2, y: from.y + r * Math.SQRT1_2 };
       const dir = { x: anchor.x - from.x, y: anchor.y - from.y };
       const l = Math.hypot(dir.x, dir.y) || 1;
-      const text = { x: anchor.x + (dir.x / l) * gap + offset.x, y: anchor.y + (dir.y / l) * gap + offset.y };
+      // Twice the gap: clear of the corner of a fillet (the virtual sharp lies at r·(√2 − 1) beyond).
+      const text = { x: anchor.x + (dir.x / l) * 2 * gap + offset.x, y: anchor.y + (dir.y / l) * 2 * gap + offset.y };
       return done([[from.x, from.y, text.x, text.y]], text);
     }
     case 'angle': {
