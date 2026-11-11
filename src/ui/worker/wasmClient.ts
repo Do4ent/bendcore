@@ -59,6 +59,13 @@ interface Waiting extends PendingCall {
 }
 
 export class WasmClient<Root> {
+  /** Clients whose worker is running (the shell's idle() waits for all of them). */
+  private static readonly running = new Set<WasmClient<unknown>>();
+
+  static live(): WasmClient<unknown>[] {
+    return [...WasmClient.running];
+  }
+
   private readonly pending = new Map<number, Waiting>();
   private readonly listeners = new Set<ActivityListener>();
   private nextId = 1;
@@ -71,6 +78,7 @@ export class WasmClient<Root> {
     readonly info: unknown,
   ) {
     this.root = this.proxy(0, module) as Remote<Root>;
+    WasmClient.running.add(this as WasmClient<unknown>);
     worker.onmessage = (e) => this.receive(e.data);
     worker.onerror = (e) => this.close(new KernelError('WorkerFailed', e.message ?? 'worker error'));
   }
@@ -173,6 +181,7 @@ export class WasmClient<Root> {
   private close(error: KernelError) {
     if (this.closed) return;
     this.closed = error;
+    WasmClient.running.delete(this as WasmClient<unknown>);
     this.worker.terminate();
     const list = [...this.pending.values()];
     this.pending.clear();
