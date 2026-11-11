@@ -6,19 +6,17 @@
 import React, { useState } from 'react';
 import { ModelingPanel } from './modeling';
 import { AdvancedPanel } from './advanced';
-import { AssemblyPanel } from './assembly';
 import { EnterprisePanel } from './enterprise';
 import { FEASimulator } from './simulation';
 import {
   ModelingFeature,
   AdvancedFeature,
-  BendCoreAssembly,
   PipeRoute,
   BillOfMaterials,
   FEAResult,
 } from './index';
 
-type TabType = 'modeling' | 'advanced' | 'assembly' | 'enterprise';
+type TabType = 'modeling' | 'advanced' | 'enterprise';
 
 interface BendCoreFeaturesAppProps {
   onSave?: (state: AppState) => void;
@@ -27,7 +25,6 @@ interface BendCoreFeaturesAppProps {
 interface AppState {
   modelingFeatures: ModelingFeature[];
   advancedFeatures: AdvancedFeature[];
-  assemblies: BendCoreAssembly[];
   routes: PipeRoute[];
   boms: BillOfMaterials[];
   results: FEAResult[];
@@ -38,7 +35,6 @@ export const BendCoreFeaturesApp: React.FC<BendCoreFeaturesAppProps> = ({ onSave
   const [state, setState] = useState<AppState>({
     modelingFeatures: [],
     advancedFeatures: [],
-    assemblies: [],
     routes: [],
     boms: [],
     results: [],
@@ -57,15 +53,6 @@ export const BendCoreFeaturesApp: React.FC<BendCoreFeaturesAppProps> = ({ onSave
     const newState = {
       ...state,
       advancedFeatures: [...state.advancedFeatures, feature],
-    };
-    setState(newState);
-    onSave?.(newState);
-  };
-
-  const handleCreateAssembly = (assembly: BendCoreAssembly) => {
-    const newState = {
-      ...state,
-      assemblies: [...state.assemblies, assembly],
     };
     setState(newState);
     onSave?.(newState);
@@ -101,7 +88,6 @@ export const BendCoreFeaturesApp: React.FC<BendCoreFeaturesAppProps> = ({ onSave
   const stats = {
     modeling: state.modelingFeatures.length,
     advanced: state.advancedFeatures.length,
-    assemblies: state.assemblies.length,
     routes: state.routes.length,
     boms: state.boms.length,
     analyses: state.results.length,
@@ -137,15 +123,6 @@ export const BendCoreFeaturesApp: React.FC<BendCoreFeaturesAppProps> = ({ onSave
           </button>
 
           <button
-            className={`tab-button ${activeTab === 'assembly' ? 'active' : ''}`}
-            onClick={() => setActiveTab('assembly')}
-          >
-            <span className="tab-icon">⚙️</span>
-            <span className="tab-label">ЭТАП 3: Сборка</span>
-            <span className="tab-badge">{stats.assemblies}</span>
-          </button>
-
-          <button
             className={`tab-button ${activeTab === 'enterprise' ? 'active' : ''}`}
             onClick={() => setActiveTab('enterprise')}
           >
@@ -173,13 +150,6 @@ export const BendCoreFeaturesApp: React.FC<BendCoreFeaturesAppProps> = ({ onSave
           />
         )}
 
-        {activeTab === 'assembly' && (
-          <AssemblyPanel
-            onAssemblyCreated={handleCreateAssembly}
-            assemblies={state.assemblies}
-          />
-        )}
-
         {activeTab === 'enterprise' && (
           <EnterprisePanel
             onRouteGenerated={handleGenerateRoute}
@@ -197,10 +167,6 @@ export const BendCoreFeaturesApp: React.FC<BendCoreFeaturesAppProps> = ({ onSave
             <span className="stat-value">
               {stats.modeling + stats.advanced}
             </span>
-          </div>
-          <div className="stat">
-            <span className="stat-label">Сборок:</span>
-            <span className="stat-value">{stats.assemblies}</span>
           </div>
           <div className="stat">
             <span className="stat-label">Маршрутов:</span>
