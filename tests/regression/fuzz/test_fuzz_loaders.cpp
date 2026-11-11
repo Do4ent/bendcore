@@ -2,7 +2,7 @@
 //
 // Для каждой цели: затравки (fuzz_targets.cpp) → BENDCORE_FUZZ_ITERATIONS мутаций с
 // фиксированным зерном (BENDCORE_FUZZ_SEED, по умолчанию 20261111). Каждый вход выполняется в
-// отдельном дочернем процессе (fork), поэтому падение не обрывает тест, а фиксируется:
+// отдельном процессе (fork + exec), поэтому падение не обрывает тест, а фиксируется:
 //  * accepted / rejected (явная ошибка Result) — норма;
 //  * exception — исключение вышло из загрузчика;
 //  * crash — сигнал или ненормальный код (в том числе отчёт ASan/UBSan в конфигурации build-fuzz);
@@ -76,11 +76,13 @@ struct RunResult {
     double maxRssMiB = 0;
 };
 
-// Загрузчик в дочернем процессе; код выхода — исход, сообщение исключения — через канал.
+// Загрузчик в отдельном процессе (fork + exec себя же); код выхода — исход, сообщение исключения — через канал.
 // В дочернем процессе адресное пространство ограничено (native: RLIMIT_AS = 2 × лимит памяти):
 // вход, требующий десятков гигабайт, получает отказ выделения памяти, а не останавливает машину.
 // Под ASan RLIMIT_AS неприменим (теневая память) — там действует ASAN_OPTIONS=hard_rss_limit_mb.
 RunResult runIsolated(const Target& t, const std::string& input, long timeoutS, double rssLimitMiB) {
+    const std::string inputFile = artifactsDir() + "/current-" + t.name + ".bin";
+    saveInput("current-" + std::string(t.name) + ".bin", input);
     int fds[2];
     if (pipe(fds) != 0) return {"crash", "pipe() failed", 0};
     std::fflush(nullptr);
@@ -92,18 +94,12 @@ RunResult runIsolated(const Target& t, const std::string& input, long timeoutS, 
             rlimit lim{cap, cap};
             setrlimit(RLIMIT_AS, &lim);
         }
-        int code = kRejected;
-        try {
-            code = t.run(input, nullptr) == Outcome::Accepted ? kAccepted : kRejected;
-        } catch (const std::exception& e) {
-            const std::string m = e.what();
-            (void)!write(fds[1], m.data(), m.size());
-            code = kException;
-        } catch (...) {
-            code = kException;
-        }
-        std::fflush(nullptr);
-        _exit(code);
+        // Новый образ процесса (exec): в нём заново стартуют фоновые потоки ASan (hard_rss_limit_mb)
+        // и нет состояния родителя. Вход передаётся файлом, сообщение исключения — каналом (fd).
+        const std::string fd = std::to_string(fds[1]);
+        execl("/proc/self/exe", "test_fuzz_loaders", "--fuzz-child", t.name, inputFile.c_str(), fd.c_str(),
+              static_cast<char*>(nullptr));
+        _exit(127);
     }
     close(fds[1]);
     if (pid < 0) {
@@ -162,6 +158,27 @@ std::set<Defect> knownDefects(const std::string& target) {
         if (config == kConfig && name == target) out.emplace(name, n, kind);
     }
     return out;
+}
+
+// Дочерний процесс: test_fuzz_loaders --fuzz-child <цель> <файл> <fd канала>.
+int fuzzChild(const char* name, const char* file, int fd) {
+    const Target* t = findTarget(name);
+    std::ifstream f(file, std::ios::binary);
+    if (!t || !f) return 2;
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    int code = kRejected;
+    try {
+        code = t->run(ss.str(), nullptr) == Outcome::Accepted ? kAccepted : kRejected;
+    } catch (const std::exception& e) {
+        const std::string m = e.what();
+        (void)!write(fd, m.data(), m.size());
+        code = kException;
+    } catch (...) {
+        code = kException;
+    }
+    std::fflush(nullptr);
+    _exit(code);
 }
 
 class FuzzLoaders : public ::testing::TestWithParam<const char*> {};
@@ -245,3 +262,9 @@ INSTANTIATE_TEST_SUITE_P(Targets, FuzzLoaders,
                          [](const ::testing::TestParamInfo<const char*>& p) { return std::string(p.param); });
 
 }  // namespace
+
+int main(int argc, char** argv) {
+    if (argc == 5 && std::string(argv[1]) == "--fuzz-child") return fuzzChild(argv[2], argv[3], std::atoi(argv[4]));
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

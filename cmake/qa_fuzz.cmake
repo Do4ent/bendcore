@@ -39,7 +39,7 @@ find_package(GTest QUIET)
 if(GTest_FOUND)
   add_executable(test_fuzz_loaders tests/regression/fuzz/test_fuzz_loaders.cpp)
   target_compile_definitions(test_fuzz_loaders PRIVATE BENDCORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-  target_link_libraries(test_fuzz_loaders PRIVATE bendcore_qa_fuzz_targets GTest::gtest GTest::gtest_main)
+  target_link_libraries(test_fuzz_loaders PRIVATE bendcore_qa_fuzz_targets GTest::gtest)
   add_test(NAME fuzz_loaders COMMAND test_fuzz_loaders)
   # Утечки памяти OCCT (статические кэши) — не предмет проверки; ASan проверяет доступ к памяти.
   set_tests_properties(fuzz_loaders PROPERTIES TIMEOUT 1800 LABELS fuzz

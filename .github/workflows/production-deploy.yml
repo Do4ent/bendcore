@@ -50,7 +50,7 @@ jobs:
   # ============================================
   # STAGE 2: E2E TESTING
   # ============================================
-  # Сквозные тесты — настоящие наборы Playwright test:e2e:{kernel,modeling,assembly,drawing} на
+  # Сквозные тесты — настоящие наборы Playwright test:e2e:{kernel,modeling,assembly,drawing,app} на
   # WASM-модулях, собранных из этого же коммита (wasm.yml, задачи wasm-modules и wasm-e2e).
   # Корневой набор Playwright и скрипт test:e2e удалены вместе со старым интерфейсом; прежний
   # шаг поднимал docker-compose и запускал несуществующий набор (docs/qa/QA.md, раздел 4).

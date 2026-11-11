@@ -218,8 +218,9 @@ jobs:
             build-wasm-modules/Testing/Temporary/
           if-no-files-found: ignore
 
-  # Сквозные тесты Playwright + Chromium на модулях из wasm-modules: по набору на модуль.
-  # Каталог модуля передаётся через BENDCORE_<МОДУЛЬ>_WASM_DIR (web/<страница>/webpack.config.js).
+  # Сквозные тесты Playwright + Chromium на модулях из wasm-modules: по набору на модуль и набор
+  # оболочки приложения (test:e2e:app, все четыре модуля). Каталоги модулей передаются через
+  # BENDCORE_<МОДУЛЬ>_WASM_DIR (web/<страница>/webpack.config.js, web/app/webpack.config.js).
   wasm-e2e:
     name: Playwright ${{ matrix.suite }}
     needs: wasm-modules
@@ -245,6 +246,11 @@ jobs:
             module: wasm_drawing
             dir_env: BENDCORE_DRAWING_WASM_DIR
             results: drawing
+          # Оболочка приложения (docs/ui/APP_SHELL.md) загружает все четыре модуля.
+          - suite: app
+            module: all
+            dir_env: all
+            results: app
     steps:
       - uses: actions/checkout@v4
 
@@ -272,9 +278,16 @@ jobs:
         env:
           CI: 'true'
         run: |
-          dir="$GITHUB_WORKSPACE/wasm-artifact/${{ matrix.module }}"
-          test -s "$dir/bendcore_${{ matrix.suite }}.wasm"
-          export ${{ matrix.dir_env }}="$dir"
+          a="$GITHUB_WORKSPACE/wasm-artifact"
+          if [ "${{ matrix.module }}" = all ]; then
+            for m in kernel modeling assembly drawing; do
+              test -s "$a/wasm_$m/bendcore_$m.wasm"
+              export "BENDCORE_${m^^}_WASM_DIR=$a/wasm_$m"
+            done
+          else
+            test -s "$a/${{ matrix.module }}/bendcore_${{ matrix.suite }}.wasm"
+            export ${{ matrix.dir_env }}="$a/${{ matrix.module }}"
+          fi
           npm run test:e2e:${{ matrix.suite }} -- --trace off
 
       # Снимки экрана упавших шагов (screenshot: 'only-on-failure' в web/*/playwright.config.ts),
