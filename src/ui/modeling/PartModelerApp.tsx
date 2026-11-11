@@ -542,7 +542,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     const doc = docRef.current;
     if (!doc || !hostRef.current.onCreateDrawing) return;
     try {
-      const text = await doc.save();
+      // With the BRep cache the drawing kernel does not rebuild the part.
+      const text = await doc.save({ includeCache: true });
       hostRef.current.onCreateDrawing({ kind: 'part', name: fileName, text });
     } catch (e) {
       if (!isCancelled(e)) setError(describeError(e));
