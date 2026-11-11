@@ -175,23 +175,33 @@ int legacy_bridge(int /*code*/) {  // qa-allow(literal-return): ABI shim, value 
 `test:performance` в недостижимой `post-deploy-tests` тоже отсутствуют; задача оставлена как
 есть до появления реального окружения развёртывания (решение руководителя проекта).
 
-### Проверено локально (2026-11-07, 4 ядра)
+### Проверено локально (2026-11-11, 4 ядра, 15 ГиБ)
 
-* YAML всех `.github/workflows/*.yml` разобран `python3 -c "import yaml"`.
-* `occt-native`: конфигурация и полная сборка `build-occt` (429 шагов) с
-  `/home/user/bendcore/third_party/occt-install` (это прежняя установка из 48 тулкитов;
-  установка из 29 — `occt-install-min` — проверена инженером ядра, `OCCT_BUILD.md`, раздел 2);
-  ровно те же команды ctest: 109 тестов параллельно без `performance` — все проходят,
-  затем `performance` отдельно — проходит.
-* `kernel-wasm`: `build_occt_wasm.sh` с `SKIP_OCCT_BUILD=1` на готовой `occt-install-wasm`
-  (29 тулкитов) — пробная программа собрана в -O2/-Oz, обе печатают `OK`, код 0;
-  `emcmake cmake` + сборка `bendcore_kernel_wasm` + `wasm_kernel_corpus` — проходит
-  (3 с); шаг размеров: `bendcore_kernel.wasm` 12 625 582 байт, gzip -9 3 793 177;
-  `bendcore_kernel.mjs` 168 676 / 29 265.
-* `kernel-viewer-e2e`: `npm ci --ignore-scripts` в чистой рабочей копии, затем
-  `npm run test:e2e:kernel -- --trace off` с `CI=true` — 4 из 4 (11 с). Браузер — локальный
-  Chromium 1243 через `PLAYWRIGHT_CHROMIUM_EXECUTABLE`.
-* `no-stubs`: самотест, полная проверка и `--diff ccr-d188a25e-rml7z8` — 0 нарушений.
+* YAML всех `.github/workflows/*.yml` разобран `python3 -c "import yaml"` (после каждого изменения).
+* `occt-native`: `build-occt` с `/home/user/bendcore/third_party/occt-install`; полный
+  `ctest -E 'wasm|performance'` — см. итог в отчёте приёмки; `ctest -L stress` последовательно — 5/5
+  (таблица — `docs/qa/PERFORMANCE.md`); `fuzz_loaders` и `fuzz_loader_regressions` — проходят.
+* `fuzz`: clang 18.1.3 + `libclang-rt-18-dev`, ровно та же конфигурация `build-fuzz` и список
+  целей, `ctest -L fuzz` — 10/10 (мутационный тест 175 с под ASan); libFuzzer 60 с:
+  `fuzz_dxf` 703 645 запусков, `fuzz_drawing_json` 693 543, `fuzz_part_json` 78 678 — без находок.
+  Полная сборка дерева в `build-fuzz` не нужна и не проверялась (задача собирает только цели fuzz).
+* `wasm-modules`: `emcmake cmake` (как в задаче) на готовой `occt-install-wasm`, четыре цели в одном
+  каталоге — собраны; `DejaVuSans.ttf` и лицензия на месте; `ctest -R '^wasm_' --no-tests=error` —
+  5/5 (31 с), счётчик тестов — 5; шаг размеров выполнен локально (скрипт шага из YAML):
+
+  | Модуль | `.wasm`, байт | gzip -9 | `.mjs`, байт |
+  |---|---:|---:|---:|
+  | `bendcore_kernel_wasm` | 12 625 582 | 3 793 177 | 168 676 |
+  | `bendcore_modeling_wasm` | 19 873 786 | 5 736 884 | 203 201 |
+  | `bendcore_assembly_wasm` | 29 238 501 | 7 927 427 | 235 445 |
+  | `bendcore_drawing_wasm` | 21 656 992 | — | 206 823 |
+
+* `wasm-e2e`: `npm ci --ignore-scripts`, затем для каждого набора `npm run test:e2e:<набор> -- --trace off`
+  с `CI=true` и `BENDCORE_*_WASM_DIR` на каталоги сборки: kernel 4/4, modeling 4/4, assembly 2/2,
+  drawing 1/1 (до слияния оболочки приложения). Браузер — локальный Chromium 1243 через
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. Набор `app` и повторный прогон после слияния — см. отчёт приёмки.
+* `no-stubs`: самотест, полная проверка (расширенный список каталогов) и `--diff ccr-d188a25e-rml7z8` —
+  0 нарушений.
 
 ### Только в CI (локально не воспроизводится)
 
@@ -202,6 +212,8 @@ int legacy_bridge(int /*code*/) {  // qa-allow(literal-return): ABI shim, value 
 * `npx playwright install --with-deps chromium` (браузер версии из `package-lock.json`,
   Playwright 1.64.1) и передача модуля между задачами через `upload/download-artifact`.
 * Сборка образа сервиса и запросы к контейнеру (Docker здесь не проверялся).
+* Вызов `wasm.yml` из `production-deploy.yml` (`workflow_call`) и публикация образов.
+* `actions/cache/restore` с `fail-on-cache-miss` в задаче `fuzz` (кэш сохраняет `occt-native`).
 
 ## 5. Как запускать локально
 
@@ -218,6 +230,11 @@ ctest --test-dir build-occt -R 'corpus|qa_' --output-on-failure
 
 # перегенерация закоммиченного корпуса
 build-occt/generate_corpus tests/corpus/generated
+
+# нагрузка и fuzz (разделы 6, 7)
+ctest --test-dir build-occt -L stress --output-on-failure
+ctest --test-dir build-occt -L fuzz --output-on-failure
+build-occt/fuzz_replay step build-occt/fuzz-artifacts/crash-step-82.bin
 ```
 
 ## 6. Нагрузочные тесты
