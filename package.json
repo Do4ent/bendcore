@@ -10,20 +10,9 @@
   },
   "scripts": {
     "dev": "electron . --debug",
-    "dev:web": "webpack serve --config webpack.web.js --mode development",
-    "dev:web:prod": "webpack serve --config webpack.web.js --mode production",
     "build": "tsc && webpack && node scripts/generate-index.js",
-    "build:web": "tsc && webpack --config webpack.web.js --mode production",
     "test": "jest",
     "test:electron-smoke": "npm run build && BENDCORE_ELECTRON_SMOKE=1 jest tests/electron-smoke.test.ts",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed",
-    "test:e2e:debug": "playwright test --debug",
-    "test:e2e:report": "playwright show-report",
-    "test:e2e:parallel-offset": "playwright test parallel-offset.spec.ts",
-    "test:e2e:combined-3d": "playwright test combined-3d-offset.spec.ts",
-    "test:e2e:integration": "playwright test offset-integration.spec.ts",
     "dev:kernel-viewer": "webpack serve --config web/kernel-viewer/webpack.config.js --mode development",
     "test:kernel-wasm": "node tests/wasm/kernel_corpus.test.mjs",
     "test:e2e:kernel": "playwright test -c web/kernel-viewer/playwright.config.ts",
@@ -42,8 +31,7 @@
     "start": "electron .",
     "dist": "electron-builder",
     "verify": "node scripts/verify-build.js",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.api.json",
-    "typecheck:api": "tsc --noEmit -p tsconfig.api.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
   "keywords": [
     "CAD",
