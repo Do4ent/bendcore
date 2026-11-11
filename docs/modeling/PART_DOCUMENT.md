@@ -122,10 +122,9 @@ doc.undo();                          // W = 40, прежние результа�
 ошибкой «cyclic dependency A -> B -> A», неизвестное имя — «unknown variable 'Q'».
 Единицы: длины — мм, **углы параметров операций и ограничений эскиза — градусы**.
 
-Почему не `src/parameters` / `src/rebuild`: `ParameterStore` (`src/parameters/parameter_store.cpp`)
-хранит строку `formula`, но не вычисляет её, а `get()` для отсутствующего имени молча
-возвращает `0.0`; тест `test_parameter_store` в списке `BENDCORE_UNVERIFIED_TARGETS`, тест
-`test_rebuild_engine` закомментирован, `src/rebuild/*.cpp` не входят в сборку. Граф
+Прежние `src/parameters` (`ParameterStore`) и `src/rebuild` не использовались: `ParameterStore`
+хранил формулу, но не вычислял её и для отсутствующего имени молча возвращал `0.0`; оба
+модуля удалены (`docs/STUB_REMOVAL.md`, раздел 7). Граф
 зависимостей детали — цепочка хэшей тела плюс хэши связанных узлов.
 
 ## Эскиз (`Sketch`)

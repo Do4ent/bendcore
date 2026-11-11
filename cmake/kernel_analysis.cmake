@@ -11,7 +11,17 @@ set(BENDCORE_KERNEL_ANALYSIS_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
 
 # zlib (deflate and CRC-32 of 3MF packages): the system library, ZLIB::ZLIB.
 if(NOT TARGET ZLIB::ZLIB)
-  find_package(ZLIB REQUIRED)
+  if(EMSCRIPTEN)
+    # No system zlib when cross-compiling; the module has no WASM consumer yet, so it is
+    # left out of WASM builds until zlib is provided for them (docs/kernel/ANALYSIS.md).
+    find_package(ZLIB QUIET)
+    if(NOT ZLIB_FOUND)
+      message(STATUS "zlib not found for Emscripten - bendcore_kernel_analysis skipped")
+      return()
+    endif()
+  else()
+    find_package(ZLIB REQUIRED)
+  endif()
 endif()
 
 add_library(bendcore_kernel_analysis STATIC
