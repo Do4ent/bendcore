@@ -7,7 +7,8 @@
 //  * exception — исключение вышло из загрузчика;
 //  * crash — сигнал или ненормальный код (в том числе отчёт ASan/UBSan в конфигурации build-fuzz);
 //  * hang — дольше BENDCORE_FUZZ_TIMEOUT_S секунд (по умолчанию 60), процесс убивается;
-//  * memory — пиковая память дочернего процесса больше BENDCORE_FUZZ_RSS_LIMIT_MB (4096).
+//  * memory — пиковая память дочернего процесса больше BENDCORE_FUZZ_RSS_LIMIT_MB (4096); адресное
+//    пространство дочернего процесса ограничено вдвое большим значением (см. runIsolated).
 // Вход каждого дефекта сохраняется в BENDCORE_FUZZ_ARTIFACTS (<вид>-<цель>-<номер>.bin) и
 // воспроизводится fuzz_replay <цель> <файл>.
 //
@@ -76,13 +77,21 @@ struct RunResult {
 };
 
 // Загрузчик в дочернем процессе; код выхода — исход, сообщение исключения — через канал.
-RunResult runIsolated(const Target& t, const std::string& input, long timeoutS) {
+// В дочернем процессе адресное пространство ограничено (native: RLIMIT_AS = 2 × лимит памяти):
+// вход, требующий десятков гигабайт, получает отказ выделения памяти, а не останавливает машину.
+// Под ASan RLIMIT_AS неприменим (теневая память) — там действует ASAN_OPTIONS=hard_rss_limit_mb.
+RunResult runIsolated(const Target& t, const std::string& input, long timeoutS, double rssLimitMiB) {
     int fds[2];
     if (pipe(fds) != 0) return {"crash", "pipe() failed", 0};
     std::fflush(nullptr);
     const pid_t pid = fork();
     if (pid == 0) {
         close(fds[0]);
+        if (std::string(kConfig) == "native") {
+            const rlim_t cap = rlim_t(2.0 * rssLimitMiB * 1024 * 1024);
+            rlimit lim{cap, cap};
+            setrlimit(RLIMIT_AS, &lim);
+        }
         int code = kRejected;
         try {
             code = t.run(input, nullptr) == Outcome::Accepted ? kAccepted : kRejected;
@@ -169,7 +178,7 @@ TEST_P(FuzzLoaders, MutatedInputsGiveExplicitErrorsOnly) {
     // Загрузчик никогда не выполняется в самом тесте: потоки OCCT (OSD_ThreadPool и др.),
     // запущенные в родителе, после fork остались бы с захваченными мьютексами в дочернем.
     for (std::size_t i = 0; i < base.size(); ++i) {
-        const RunResult r = runIsolated(*target, base[i], timeoutS);
+        const RunResult r = runIsolated(*target, base[i], timeoutS, rssLimit);
         EXPECT_EQ(r.kind, "accepted") << target->name << ": seed " << i << " must load " << r.detail;
     }
 
@@ -183,7 +192,7 @@ TEST_P(FuzzLoaders, MutatedInputsGiveExplicitErrorsOnly) {
     for (long n = 0; n < iterations; ++n) {
         const std::string& origin = base[mut.below(base.size())];
         const std::string input = mut.mutate(origin, target->json);
-        RunResult r = runIsolated(*target, input, timeoutS);
+        RunResult r = runIsolated(*target, input, timeoutS, rssLimit);
         if (r.maxRssMiB > maxRss) {
             maxRss = r.maxRssMiB;
             maxRssAt = n;

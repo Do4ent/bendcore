@@ -59,12 +59,14 @@ fi
 
 # Каталоги нового кода (docs/ROADMAP_GENERAL_CAD.md, фаза 0); отсутствующие пропускаются.
 # src/wasm — привязки ядра (kernel_bindings.cpp) и JS API; src/ui/kernel и web/kernel-viewer —
-# вьюпорт ядра (docs/ui/KERNEL_VIEWPORT.md); tests/wasm, tests/e2e-kernel — их тесты.
+# вьюпорт ядра (docs/ui/KERNEL_VIEWPORT.md); tests/wasm, tests/e2e-* — тесты модулей и страниц;
+# web/part-modeler, web/assembly, web/drawing — страницы модулей; tests/regression — нагрузка и fuzz.
 default_dirs=(
   src/kernel src/modeling src/assembly_v2 src/drawing_v2 src/wasm src/ui/kernel
   include/bendcore/kernel include/bendcore/modeling include/bendcore/assembly_v2 include/bendcore/drawing_v2
   tests/kernel tests/modeling tests/assembly_v2 tests/drawing_v2 tests/corpus tests/wasm tests/e2e-kernel
-  web/kernel-viewer
+  tests/regression tests/e2e-modeling tests/e2e-assembly tests/e2e-drawing tests/assembly-fixtures
+  web/kernel-viewer web/part-modeler web/assembly web/drawing
 )
 [[ ${#paths[@]} -gt 0 ]] || paths=("${default_dirs[@]}")
 
