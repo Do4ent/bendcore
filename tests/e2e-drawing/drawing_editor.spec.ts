@@ -24,7 +24,13 @@ interface EditorState {
   report: { stale: string[]; dangling: string[] } | null;
 }
 
-const state = (page: Page) => page.evaluate(() => (window as unknown as { bendcoreDrawingEditor: EditorState }).bendcoreDrawingEditor);
+// Kernel calls run in a worker (docs/ui/APP_SHELL.md): wait for the last result before reading.
+const state = (page: Page) =>
+  page.evaluate(async () => {
+    const w = window as unknown as { bendcoreDrawingEditor: EditorState; bendcoreDrawingEditorIdle: () => Promise<void> };
+    await w.bendcoreDrawingEditorIdle();
+    return w.bendcoreDrawingEditor;
+  });
 
 async function expectNoError(page: Page) {
   const s = await state(page);
