@@ -33,12 +33,22 @@ declare global {
         properties: { volume: number | null } | null;
         sketchMode: { featureId: string } | null;
       };
+      idle(): Promise<void>;
     };
   }
 }
 
-const editor = (page: Page) => page.evaluate(() => window.bendcoreSketchEditor!.getState());
-const modeler = (page: Page) => page.evaluate(() => window.bendcorePartModeler!.getState());
+// Kernel calls run in a worker (docs/ui/APP_SHELL.md): wait for the last result before reading.
+const editor = (page: Page) =>
+  page.evaluate(async () => {
+    await window.bendcorePartModeler!.idle();
+    return window.bendcoreSketchEditor!.getState();
+  });
+const modeler = (page: Page) =>
+  page.evaluate(async () => {
+    await window.bendcorePartModeler!.idle();
+    return window.bendcorePartModeler!.getState();
+  });
 
 async function at(page: Page, x: number, y: number) {
   return page.evaluate(([a, b]) => window.bendcoreSketchEditor!.sketchToClient(a, b), [x, y]);
