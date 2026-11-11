@@ -6,7 +6,6 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/dist/',
-    '<rootDir>/tests/e2e/',
     // Playwright specs of the kernel viewer and the part modeler (run by their own configs).
     '<rootDir>/tests/e2e-kernel/',
     '<rootDir>/tests/e2e-modeling/',
@@ -19,10 +18,6 @@ module.exports = {
     '<rootDir>/tests/integration/profile-database\\.integration\\.test\\.ts',
     '<rootDir>/tests/integration/tube-generation\\.integration\\.test\\.ts',
     '<rootDir>/tests/SketchEditor\\.e2e\\.tsx',
-    '<rootDir>/tests/comments\\.e2e\\.tsx',
-    '<rootDir>/tests/growthbook\\.e2e\\.tsx',
-    '<rootDir>/tests/search\\.e2e\\.tsx',
-    '<rootDir>/tests/templates\\.e2e\\.tsx',
     '<rootDir>/tests/performance/',
     '<rootDir>/tests/regression/',
     '<rootDir>/tests/node/',
@@ -30,8 +25,6 @@ module.exports = {
     '<rootDir>/tests/smoke/',
     // Фикстуры самотеста scripts/check_no_stubs.sh — данные проверки, а не тесты.
     '<rootDir>/tests/qa/fixtures/',
-    // Спецификация Playwright (import '@playwright/test'), в Jest не исполняется.
-    '<rootDir>/tests/web-app\\.spec\\.ts',
     // Проверка собранного Electron-приложения: нужны dist/ (npm run build) и бинарник
     // Electron; запуск — npm run test:electron-smoke.
     ...(process.env.BENDCORE_ELECTRON_SMOKE ? [] : ['<rootDir>/tests/electron-smoke\\.test\\.ts']),

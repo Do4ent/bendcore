@@ -253,7 +253,6 @@ set(BENDCORE_SOURCES
   src/optimization/computation_cache.cpp
   src/optimization/parallel_executor.cpp
   src/optimization/memory_management.cpp
-  src/optimization/performance_monitor.cpp
   src/optimization/optimization_profiles.cpp
   src/optimization/memory_optimizer.cpp
   src/optimization/performance_tuning.cpp
