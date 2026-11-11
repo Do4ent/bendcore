@@ -9,6 +9,10 @@
 #     -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
 #     -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,fuzzer-no-link -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
 
+if(EMSCRIPTEN)
+  return()  # загрузчики проверяются в native-сборке; WASM-модули — node-тестами и Playwright
+endif()
+
 option(BENDCORE_FUZZ "Фаззеры libFuzzer загрузчиков файлов (clang, -fsanitize=fuzzer)" OFF)
 
 set(_qa_fuzz_libs bendcore_modeling_document bendcore_assembly_document bendcore_drawing_document

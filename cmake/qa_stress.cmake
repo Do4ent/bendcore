@@ -9,6 +9,9 @@
 # BENDCORE_STRESS_STEP_MB — минимальный размер сгенерированного STEP (план фазы 5: ≥ 100 МБ на
 # бета-сборке; по умолчанию 60 МБ — ≥ 50 МБ, укладывается в диск и время машины CI).
 
+if(EMSCRIPTEN)
+  return()
+endif()
 find_package(GTest QUIET)
 if(NOT GTest_FOUND)
   message(STATUS "qa: GoogleTest не найден — нагрузочные тесты не собираются")

@@ -16,7 +16,8 @@ scripts/check_no_stubs.sh --list-rules         # список правил
 * Полная проверка всегда сканирует `src/{kernel,modeling,assembly_v2,drawing_v2,wasm,ui/kernel}`
   (в `src/wasm` — `kernel_bindings.cpp` и JS API ядра),
   `include/bendcore/{kernel,modeling,assembly_v2,drawing_v2}`,
-  `tests/{kernel,modeling,assembly_v2,drawing_v2,corpus,wasm,e2e-kernel}`, `web/kernel-viewer`;
+  `tests/{kernel,modeling,assembly_v2,drawing_v2,corpus,wasm,e2e-kernel,e2e-modeling,e2e-assembly,e2e-drawing,assembly-fixtures,regression}`,
+  `web/{kernel-viewer,part-modeler,assembly,drawing}`;
   отсутствующие каталоги пропускаются.
 * `--diff <ref>` дополнительно проверяет **только добавленные строки** во всех файлах кода,
   изменённых относительно `merge-base(<ref>, HEAD)`, включая незакоммиченные изменения
@@ -144,23 +145,35 @@ int legacy_bridge(int /*code*/) {  // qa-allow(literal-return): ABI shim, value 
 (`STEPCAFControl_Reader`) напрямую. Когда читатель начнёт отдавать структуру сборки, эти
 проверки нужно перевести на его API.
 
-## 4. CI — `.github/workflows/qa.yml`, `wasm.yml`
+## 4. CI — `.github/workflows/qa.yml`, `wasm.yml`, `production-deploy.yml`
 
 | Workflow / задача | Когда | Что делает |
 |---|---|---|
 | `qa.yml` / `no-stubs` | push, PR | самотест; `check_no_stubs.sh --diff origin/<base_ref>` на PR, `--diff <before>` на push (на новой ветке — только полная проверка); нарушения выводятся аннотациями `::error file=…,line=…` и роняют задачу |
-| `qa.yml` / `occt-native` | push, PR | OCCT 8.0.1 скриптом `third_party/build_occt.sh` (29 тулкитов из `third_party/occt_toolkits.txt`) с `actions/cache` установки; ключ `occt-native-V<версия>-ubuntu-24.04-<hashFiles(occt_toolkits.txt, build_occt.sh)>` — старый кэш `occt-build-…-v3` (48 тулкитов) не совпадает; в сводке — число тулкитов в списке и установленных. Конфигурация `BENDCORE_WITH_OCCT=ON` (RelWithDebInfo), полная сборка, **весь** `ctest` по `build-occt` (`--parallel 4 -E '^performance$'`), затем `performance` отдельным последовательным шагом (выполняется и после падения предыдущего). Затем образ сервиса (`docker/Dockerfile`) и запросы к нему. Артефакты: свежий корпус (всегда), журналы OCCT/сборки/ctest (при падении) |
-| `wasm.yml` / `kernel-wasm` | push в main, PR | emsdk 6.0.12; кэш `third_party/occt-install-wasm` и `third_party/occt-build-wasm/probe` с ключом `occt-wasm-V8.0.1-emsdk-6.0.12-<hashFiles(occt_toolkits.txt, build_occt_wasm.sh)>`; при промахе — `git clone --depth 1 --branch V8.0.1` и `third_party/build_occt_wasm.sh` (успех — код 0, внутри пробная программа печатает `OK` под node). Затем `emcmake cmake … -DBENDCORE_WITH_OCCT=ON`, цель `bendcore_kernel_wasm` (`cmake/wasm_kernel.cmake`), `ctest -R '^wasm_kernel_corpus$' --no-tests=error`. Размеры `.wasm`/`.mjs` (байт и gzip -9) и `sizes.txt` пробной программы — в сводку job и в артефакт `bendcore-kernel-wasm` (вместе с модулем) |
-| `wasm.yml` / `kernel-viewer-e2e` | после `kernel-wasm` | модуль из артефакта; `npm ci --ignore-scripts` (postinstall electron тесту не нужен), `npx playwright install --with-deps chromium`, `npm run test:e2e:kernel -- --trace off` с `CI=true` и `BENDCORE_KERNEL_WASM_DIR`; при падении — артефакт `kernel-viewer-e2e-results` (`test-results/kernel-viewer/`: снимок `kernel_viewport.png` и `error-context.md` Playwright) |
+| `qa.yml` / `occt-native` | push, PR | apt: Ninja, GTest, Eigen, **zlib и expat** (3MF в `bendcore_kernel_analysis`, без них тест молча пропускается), **`fonts-dejavu-core`** (системный шрифт нативных тестов чертежа). OCCT 8.0.1 скриптом `third_party/build_occt.sh` с `actions/cache` установки (ключ `occt-native-V<версия>-ubuntu-24.04-<hashFiles(occt_toolkits.txt, build_occt.sh)>`). Полная сборка `build-occt` (RelWithDebInfo), `ctest --parallel 4 -E '^(performance\|offset_performance\|stress_.*)$'`, затем **отдельным последовательным шагом** (выполняется и после падения предыдущего) `-R '^(performance\|offset_performance\|stress_.*)$'` с `BENDCORE_STRESS_TIME_SCALE=1.5`; отчёт нагрузки (`stress-report.jsonl`) — таблицей в сводку и артефактом `stress-report`. Затем образ сервиса и запросы к нему. Артефакты: свежий корпус (всегда), журналы и входы дефектов fuzz (при падении) |
+| `qa.yml` / `fuzz` | после `occt-native` | clang 18 + `libclang-rt-18-dev`; OCCT из кэша `occt-native` (`fail-on-cache-miss`); конфигурация `build-fuzz` с `-DBENDCORE_FUZZ=ON`, ASan/UBSan (`-fno-sanitize-recover=undefined`); `ctest -L fuzz` (мутационный тест, регрессия, прогон фаззеров по затравочному корпусу); libFuzzer по 60 с на цель. Находки — артефакт `fuzz-findings` (раздел 7) |
+| `wasm.yml` / `wasm` | push в main, PR | прежняя сборка `scripts/build_wasm.sh` и проверка `web/index.html` (не менялась) |
+| `wasm.yml` / `wasm-modules` | push в main, PR, вызов из `production-deploy.yml` | apt: Ninja, Eigen, **`fonts-dejavu-core`** (`cmake/wasm_drawing.cmake` кладёт `DejaVuSans.ttf` и лицензию рядом с модулем чертежа; шаг проверяет, что оба файла есть). emsdk 6.0.12; кэш `third_party/occt-install-wasm` и `third_party/occt-build-wasm/probe` (ключ `occt-wasm-V8.0.1-emsdk-6.0.12-<hashFiles(occt_toolkits.txt, build_occt_wasm.sh)>`), при промахе — `git clone` OCCT и `build_occt_wasm.sh`. **Одна** сборка `build-wasm-modules` с четырьмя целями `bendcore_kernel_wasm`, `bendcore_modeling_wasm`, `bendcore_assembly_wasm`, `bendcore_drawing_wasm` (библиотеки ядра компилируются один раз, а не четыре); node-тесты `ctest -R '^wasm_' --no-tests=error` (и проверка, что их не меньше 5: `wasm_kernel_corpus`, `wasm_modeling_document`, `wasm_sketch_editor`, `wasm_assembly_document`, `wasm_drawing_document`); размеры `.wasm`/`.mjs` всех модулей (байт и gzip -9) и `sizes.txt` пробной программы — в сводку и `sizes.md`; артефакт `bendcore-wasm-modules` (четыре каталога модулей) |
+| `wasm.yml` / `wasm-e2e` (матрица `kernel`, `modeling`, `assembly`, `drawing`) | после `wasm-modules` | модули из артефакта; `npm ci --ignore-scripts`, `npx playwright install --with-deps chromium`, `npm run test:e2e:<набор> -- --trace off` с `CI=true` и каталогом модуля в `BENDCORE_{KERNEL,MODELING,ASSEMBLY,DRAWING}_WASM_DIR` (перед запуском проверяется, что `.wasm` на месте); `fail-fast: false`. При падении — артефакт `e2e-<набор>-results` = `test-results/{kernel-viewer,part-modeler,assembly,drawing}/`: снимки экрана упавших тестов (`screenshot: 'only-on-failure'` в конфигурациях модуля детали, сборки и чертежа), снимки самих тестов и `error-context.md` |
+| `production-deploy.yml` | только вручную | см. ниже |
 
-Job `occt` из `wasm.yml` удалён: его полный `ctest` и проверка образа сервиса теперь в
-`occt-native`, так что native OCCT в CI собирается одной задачей. Каталог Eigen в новых
-задачах не задаётся: его находит корневой `CMakeLists.txt` (`third_party/eigen-5.0.0`).
+Задачи `kernel-wasm` и `kernel-viewer-e2e` заменены `wasm-modules` и `wasm-e2e` (ядро — одна из
+четырёх целей и один из четырёх наборов). В `web/kernel-viewer/playwright.config.ts` (зона
+фронтенда) `screenshot: 'only-on-failure'` не задан — для вьюпорта ядра в артефакт попадают снимок
+самого теста и `error-context.md`. Порог роста размера `.wasm` не задан: размеры только публикуются.
 
-Порог роста размера `.wasm` не задан: размеры только публикуются. Снимки экрана на каждом
-упавшем шаге Playwright делает только при `screenshot: 'only-on-failure'` в
-`web/kernel-viewer/playwright.config.ts` (зона фронтенда); сейчас в артефакт попадают снимок
-документационного теста и `error-context.md` упавших тестов.
+**`production-deploy.yml`** (решение 2026-11-11). Запускается только вручную; при `workflow_dispatch`
+выполняются задачи `test` (lint, Jest), `e2e-test`, `security` и `build` (сборка и публикация образов
+в Docker Hub при наличии секретов). Задачи `deploy`, `post-deploy-tests`, `metrics` имеют условие
+`github.event_name == 'push'` и при ручном запуске не выполняются никогда; кластера и адреса
+`bendcore.app`, на которые они ссылаются, у проекта нет. Прежняя задача `e2e-test` поднимала
+`docker-compose` и вызывала `npm run test:e2e` — корневой набор Playwright удалён вместе со старым
+интерфейсом. Решение: `e2e-test` теперь вызывает `wasm.yml` как переиспользуемый workflow
+(`workflow_call`), то есть публикации образов предшествуют настоящие наборы
+`test:e2e:{kernel,modeling,assembly,drawing}` на модулях из того же коммита. Шаг
+`npm run test:integration` удалён: такого скрипта в `package.json` нет. Скрипты `test:smoke` и
+`test:performance` в недостижимой `post-deploy-tests` тоже отсутствуют; задача оставлена как
+есть до появления реального окружения развёртывания (решение руководителя проекта).
 
 ### Проверено локально (2026-11-07, 4 ядра)
 
