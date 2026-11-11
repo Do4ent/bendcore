@@ -1,0 +1,85 @@
+/* Assembly page (docs/ui/ASSEMBLY_UI.md); base layout from KernelViewer.css and PartModeler.css. */
+.as-root {
+  --as-interference: #e53935;
+  --as-touching: #b8860b;
+}
+
+.as-modes { display: inline-flex; gap: 8px; }
+.as-modes label { display: inline-flex; align-items: center; gap: 3px; }
+.as-ok { color: var(--pm-ok); }
+.as-bad { color: var(--pm-error); font-weight: 600; }
+.as-muted { color: var(--kv-muted); }
+.as-hint { color: var(--kv-muted); font-size: 12px; margin: 4px 0; }
+.as-warn { color: var(--pm-warning); margin: 4px 0; }
+
+.as-tree ul, .as-list { list-style: none; margin: 0 0 6px; padding: 0; }
+.as-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.as-row:hover { background: #eef2f7; }
+.as-row.as-selected { background: #e3ecf8; }
+.as-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-actions { display: inline-flex; gap: 2px; }
+.as-actions button { padding: 0 4px; font-size: 11px; }
+.as-suppressed .as-name { text-decoration: line-through; color: var(--kv-muted); }
+.as-dof {
+  font-size: 11px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: #e8eef6;
+  color: #2b4f7e;
+  white-space: nowrap;
+}
+.as-dof-fixed { background: #ececec; color: var(--kv-muted); }
+.as-dof-zero { background: #e5f3e6; color: var(--pm-ok); }
+.as-status { font-size: 11px; color: var(--kv-muted); white-space: nowrap; }
+.as-mate-redundant .as-status, .as-mate-unsolved .as-status { color: var(--pm-warning); }
+.as-mate-conflicting .as-status, .as-mate-broken .as-status { color: var(--pm-error); font-weight: 600; }
+.as-mate-suppressed .as-name { text-decoration: line-through; color: var(--kv-muted); }
+.as-interference .as-status { color: var(--as-interference); font-weight: 600; }
+.as-touching .as-status { color: var(--as-touching); }
+
+.as-right { width: 340px; }
+.as-right-wide { width: 560px; }
+.as-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+.as-tabs button { padding: 2px 6px; font-size: 12px; }
+.as-tabs .as-tab-active { background: #dfe9f6; border-color: #7fa3cf; }
+
+.as-panel { display: flex; flex-direction: column; gap: 6px; }
+.as-field { display: flex; flex-direction: column; gap: 2px; color: var(--kv-muted); }
+.as-field input[type='checkbox'] { align-self: flex-start; }
+.as-field:has(input[type='checkbox']) { flex-direction: row; align-items: center; gap: 6px; color: var(--kv-fg); }
+.as-types { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+.as-types label { display: flex; align-items: center; gap: 4px; }
+.as-disabled { color: #a6afba; }
+.as-primary { align-self: flex-start; padding: 4px 12px; font-weight: 600; }
+
+.as-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px dashed var(--kv-border);
+  border-radius: 4px;
+}
+.as-slot-filled { border-style: solid; border-color: var(--pm-accent); }
+.as-slot-title { font-weight: 700; width: 18px; }
+.as-slot-label { flex: 1; min-width: 0; word-break: break-word; }
+
+.as-bom { border-collapse: collapse; width: 100%; font-size: 12px; }
+.as-bom th, .as-bom td { border: 1px solid var(--kv-border); padding: 2px 4px; text-align: left; }
+.as-bom th { background: #f3f5f8; }
+.as-bom td:nth-child(5), .as-bom td:nth-child(6), .as-bom td:nth-child(7) { text-align: right; }
+.as-bom-assembly td { font-weight: 600; }
+.as-bom tfoot td { font-weight: 600; }
+
+/* Row actions appear on hover, focus or selection so that names stay readable. */
+.as-tree .as-row .as-actions { display: none; }
+.as-tree .as-row:hover .as-actions,
+.as-tree .as-row:focus-within .as-actions,
+.as-tree .as-row.as-selected .as-actions { display: inline-flex; }

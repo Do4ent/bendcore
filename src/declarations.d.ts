@@ -38,6 +38,7 @@ declare module 'three' {
     setFromMatrixColumn(matrix: Matrix4, index: number): this;
     applyQuaternion(q: Quaternion): this;
     angleTo(v: Vector3): number;
+    fromArray(array: ArrayLike<number>, offset?: number): this;
   }
 
   export class Matrix4 {
@@ -49,6 +50,7 @@ declare module 'three' {
     setPosition(v: Vector3): this;
     copy(m: Matrix4): this;
     invert(): this;
+    fromArray(array: ArrayLike<number>, offset?: number): this;
   }
 
   export class BufferGeometry {
@@ -56,6 +58,8 @@ declare module 'three' {
     attributes: Record<string, BufferAttribute>;
     boundingBox: Box3 | null;
     setAttribute(name: string, attribute: BufferAttribute): this;
+    getAttribute(name: string): BufferAttribute;
+    getIndex(): BufferAttribute | null;
     setIndex(index: number[] | BufferAttribute): this;
     index: BufferAttribute | null;
     groups: Array<{ start: number; count: number; materialIndex?: number }>;
@@ -85,6 +89,7 @@ declare module 'three' {
   }
 
   export class Material {
+    userData: Record<string, any>;
     dispose(): void;
   }
 
@@ -117,6 +122,7 @@ declare module 'three' {
   }
 
   export class MeshPhongMaterial extends Material {
+    color: Color;
     emissive: Color;
     shininess: number;
     constructor(params?: MaterialParameters & { emissive?: number | string; shininess?: number });
@@ -146,6 +152,11 @@ declare module 'three' {
     matrix: Matrix4;
     matrixAutoUpdate: boolean;
     userData: Record<string, any>;
+    matrix: Matrix4;
+    matrixWorld: Matrix4;
+    matrixAutoUpdate: boolean;
+    matrixWorldNeedsUpdate: boolean;
+    updateMatrixWorld(force?: boolean): void;
     add(...objects: Object3D[]): this;
     remove(...objects: Object3D[]): this;
     traverse(callback: (obj: Object3D) => void): void;
@@ -191,6 +202,8 @@ declare module 'three' {
 
   export class Color {
     constructor(color?: number | string);
+    constructor(r: number, g: number, b: number);
+    getHex(): number;
     r: number;
     g: number;
     b: number;
@@ -239,6 +252,7 @@ declare module 'three' {
     isEmpty(): boolean;
     union(box: Box3): this;
     expandByObject(object: Object3D): this;
+    getBoundingSphere(target: Sphere): Sphere;
   }
 
   export class WebGLRenderer {
@@ -347,6 +361,7 @@ declare module 'three/examples/jsm/controls/OrbitControls' {
     target: Vector3;
     enableDamping: boolean;
     screenSpacePanning: boolean;
+    enabled: boolean;
     update(): boolean;
     addEventListener(type: 'change' | 'start' | 'end', listener: () => void): void;
     removeEventListener(type: 'change' | 'start' | 'end', listener: () => void): void;
