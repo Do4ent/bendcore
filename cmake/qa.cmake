@@ -55,3 +55,7 @@ if(TARGET bendcore_import)
 else()
   message(STATUS "qa: цели bendcore_import нет — test_step_corpus не собирается")
 endif()
+
+# --- Нагрузочные тесты и fuzz-проверка загрузчиков (фаза 5, docs/qa/PERFORMANCE.md, QA.md) ---
+include(${CMAKE_CURRENT_LIST_DIR}/qa_stress.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/qa_fuzz.cmake)

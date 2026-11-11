@@ -3,6 +3,12 @@
 // Использование: generate_corpus <каталог>
 // Пишет <каталог>/<модель>.step и <каталог>/manifest.json.
 //
+//        generate_corpus --large <файл.step> <минимум МБ>
+// Крупный STEP для нагрузочного теста (tests/regression/stress/test_stress_step.cpp): сетка
+// чередующихся брусков 20×10×5 и цилиндров R5×12 (каждое тело — своя топология, без общих
+// представлений), число тел подбирается так, чтобы файл был не меньше заданного размера.
+// Рядом пишется <файл.step>.json с ожидаемыми величинами (по формулам). В git не хранится.
+//
 // Ожидаемые значения в манифесте (объём, площадь, габариты, число тел и граней, имена,
 // цвета) вычисляются здесь по формулам из размеров модели, а не измерением OCCT:
 // так регрессионный тест test_step_corpus сверяет импорт с независимым эталоном.
@@ -26,6 +32,7 @@
 #include <NCollection_IndexedMap.hxx>
 #include <Quantity_Color.hxx>
 #include <STEPCAFControl_Writer.hxx>
+#include <STEPControl_Writer.hxx>
 #include <Standard_Failure.hxx>
 #include <TCollection_ExtendedString.hxx>
 #include <TDataStd_Name.hxx>
@@ -49,9 +56,11 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -473,11 +482,94 @@ nlohmann::json to_json(const Model& m) {
   return j;
 }
 
+
+// ---- крупный STEP (--large)
+
+constexpr double kLargeBox[3] = {20.0, 10.0, 5.0};
+constexpr double kLargeCylR = 5.0, kLargeCylH = 12.0, kLargePitch = 30.0;
+constexpr int kLargeRow = 100;  // тел в ряду по X; рядов по Y — 100, затем следующий слой по Z
+
+// Тело i сетки: чётные — брусок, нечётные — цилиндр; угол/основание в узле сетки.
+TopoDS_Shape large_item(int i) {
+  const int ix = i % kLargeRow, iy = (i / kLargeRow) % kLargeRow, iz = i / (kLargeRow * kLargeRow);
+  const gp_Pnt p(ix * kLargePitch, iy * kLargePitch, iz * kLargePitch);
+  if (i % 2 == 0) return BRepPrimAPI_MakeBox(p, kLargeBox[0], kLargeBox[1], kLargeBox[2]).Shape();
+  return BRepPrimAPI_MakeCylinder(gp_Ax2(p, gp::DZ()), kLargeCylR, kLargeCylH).Shape();
+}
+
+std::uintmax_t write_large(const std::filesystem::path& file, int count) {
+  BRep_Builder bb;
+  TopoDS_Compound c;
+  bb.MakeCompound(c);
+  for (int i = 0; i < count; ++i) bb.Add(c, large_item(i));
+  STEPControl_Writer w;
+  if (w.Transfer(c, STEPControl_AsIs) != IFSelect_RetDone)
+    throw std::runtime_error("--large: STEPControl_Writer::Transfer не выполнен");
+  if (w.Write(file.string().c_str()) != IFSelect_RetDone)
+    throw std::runtime_error("--large: не записан " + file.string());
+  return std::filesystem::file_size(file);
+}
+
+int generate_large(const std::filesystem::path& file, double min_mb) {
+  if (!(min_mb > 0) || min_mb > 4096) throw std::runtime_error("--large: размер должен быть в (0, 4096] МБ");
+  if (file.has_parent_path()) std::filesystem::create_directories(file.parent_path());
+  // Размер одного тела в файле — по пробной записи 400 тел; затем запас 3%.
+  const int probe = 400;
+  const double per_item = double(write_large(file, probe)) / probe;
+  const double min_bytes = min_mb * 1024.0 * 1024.0;
+  const int count = int(std::ceil(min_bytes / per_item * 1.03));
+  const std::uintmax_t size = write_large(file, count);
+  if (double(size) < min_bytes)
+    throw std::runtime_error("--large: файл " + std::to_string(size) + " байт меньше заданного минимума");
+  const int boxes = (count + 1) / 2, cylinders = count / 2;
+  nlohmann::json j;
+  j["generator"] = "tests/corpus/generate_corpus.cpp --large";
+  j["file"] = file.filename().string();
+  j["bytes"] = size;
+  j["solids"] = count;
+  j["boxes"] = boxes;
+  j["cylinders"] = cylinders;
+  j["faces"] = 6 * boxes + 3 * cylinders;
+  j["volume"] = boxes * kLargeBox[0] * kLargeBox[1] * kLargeBox[2] + cylinders * kPi * kLargeCylR * kLargeCylR * kLargeCylH;
+  j["volume_rel_tol"] = 1e-6;
+  // Габариты: от минимума по узлам (0 или −R цилиндра) до максимума по последним узлам.
+  double lo[3] = {1e300, 1e300, 1e300}, hi[3] = {-1e300, -1e300, -1e300};
+  for (int i = 0; i < count; ++i) {
+    const int ix = i % kLargeRow, iy = (i / kLargeRow) % kLargeRow, iz = i / (kLargeRow * kLargeRow);
+    const double x = ix * kLargePitch, y = iy * kLargePitch, z = iz * kLargePitch;
+    const double a[3] = {i % 2 ? x - kLargeCylR : x, i % 2 ? y - kLargeCylR : y, z};
+    const double b[3] = {i % 2 ? x + kLargeCylR : x + kLargeBox[0], i % 2 ? y + kLargeCylR : y + kLargeBox[1],
+                         z + (i % 2 ? kLargeCylH : kLargeBox[2])};
+    for (int k = 0; k < 3; ++k) {
+      lo[k] = std::min(lo[k], a[k]);
+      hi[k] = std::max(hi[k], b[k]);
+    }
+  }
+  j["bbox_min"] = {lo[0], lo[1], lo[2]};
+  j["bbox_max"] = {hi[0], hi[1], hi[2]};
+  std::ofstream mf(file.string() + ".json");
+  mf << j.dump(2) << "\n";
+  if (!mf) throw std::runtime_error("--large: не записан " + file.string() + ".json");
+  std::cout << "записано: " << file.string() << " (" << size << " байт, тел: " << count << ")\n";
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
+  if (argc == 4 && std::string(argv[1]) == "--large") {
+    try {
+      return generate_large(argv[2], std::strtod(argv[3], nullptr));
+    } catch (const Standard_Failure& e) {
+      std::cerr << "generate_corpus: ошибка OCCT: " << e.what() << "\n";
+    } catch (const std::exception& e) {
+      std::cerr << "generate_corpus: " << e.what() << "\n";
+    }
+    return 1;
+  }
   if (argc != 2) {
-    std::cerr << "Использование: " << argv[0] << " <каталог для STEP-файлов и manifest.json>\n";
+    std::cerr << "Использование: " << argv[0] << " <каталог для STEP-файлов и manifest.json>\n"
+              << "               " << argv[0] << " --large <файл.step> <минимум МБ>\n";
     return 2;
   }
   const std::filesystem::path out = argv[1];
