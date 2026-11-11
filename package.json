@@ -15,6 +15,7 @@
     "build": "tsc && webpack && node scripts/generate-index.js",
     "build:web": "tsc && webpack --config webpack.web.js --mode production",
     "test": "jest",
+    "test:electron-smoke": "npm run build && BENDCORE_ELECTRON_SMOKE=1 jest tests/electron-smoke.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",

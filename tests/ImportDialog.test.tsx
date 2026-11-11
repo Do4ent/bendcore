@@ -113,6 +113,21 @@ describe("ImportDialog", () => {
     });
   });
 
+  describe("File rejection", () => {
+    it("should reject files that are not CAD files", () => {
+      const alertSpy = jest.spyOn(window, "alert").mockImplementation(() => undefined);
+      const { container } = render(<ImportDialog onImport={jest.fn()} />);
+
+      selectFile(container, "notes.txt");
+
+      expect(alertSpy).toHaveBeenCalledTimes(1);
+      expect(mockedAnalyzeStep).not.toHaveBeenCalled();
+      expect(container.querySelector(".file-drop-zone")).toBeInTheDocument();
+      expect(container.querySelector(".import-tube-reviewer")).not.toBeInTheDocument();
+      alertSpy.mockRestore();
+    });
+  });
+
   describe("Grouping rules", () => {
     it("should have 5 grouping rules", () => {
       const rules = Object.keys(GroupingRule).length;
