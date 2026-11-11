@@ -68,7 +68,9 @@ void passOn(int sig, siginfo_t* info, void* context) {
 }
 
 void onFault(int sig, siginfo_t* info, void* context) {
-    if (t_guardDepth <= 0 || Standard_ErrorHandler::FindHandler() == nullptr) {
+    // Depth > 0 means runConvertingFaults() is on this thread's stack, so its
+    // Standard_ErrorHandler (or a nested one of OCCT) is registered and Abort() has a target.
+    if (t_guardDepth <= 0) {
         passOn(sig, info, context);
         return;
     }
