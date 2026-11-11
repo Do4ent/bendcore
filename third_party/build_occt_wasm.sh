@@ -11,6 +11,9 @@
 #   OCCT_WASM_INSTALL  OCCT install prefix       (default: third_party/occt-install-wasm)
 #   EMSDK              emsdk root                (default: /root/emsdk); emsdk 6.0.12 is pinned in CI
 #   OCCT_JOBS          parallel compile jobs     (default: nproc)
+#   OCCT_RELEASE_CHECKS 1 = keep OCCT's argument/index checks (*_Raise_if macros) in the
+#                      Release build: BUILD_RELEASE_DISABLE_EXCEPTIONS=OFF, no -DNo_Exception;
+#                      0 = OCCT's own default (checks compiled out). Default: 1.
 #   SKIP_OCCT_BUILD=1  reuse an existing install and only build/run the probe
 # Details, measured sizes and known issues: docs/kernel/OCCT_BUILD.md.
 set -euo pipefail
@@ -22,10 +25,17 @@ OCCT_WASM_BUILD="${OCCT_WASM_BUILD:-$ROOT/occt-build-wasm}"
 OCCT_WASM_INSTALL="${OCCT_WASM_INSTALL:-$ROOT/occt-install-wasm}"
 EMSDK="${EMSDK:-/root/emsdk}"
 JOBS="${OCCT_JOBS:-$(nproc 2>/dev/null || echo 4)}"
+RELEASE_CHECKS="${OCCT_RELEASE_CHECKS:-1}"
 TOOLKITS_FILE="$ROOT/occt_toolkits.txt"
 LOG_DIR="$OCCT_WASM_BUILD/logs"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
+
+case "$RELEASE_CHECKS" in
+  1) DISABLE_EXCEPTIONS=OFF ;;
+  0) DISABLE_EXCEPTIONS=ON ;;
+  *) die "OCCT_RELEASE_CHECKS must be 0 or 1, got '$RELEASE_CHECKS'" ;;
+esac
 
 # --- Toolchain -------------------------------------------------------------------
 if ! command -v emcmake >/dev/null 2>&1; then
@@ -46,6 +56,7 @@ mapfile -t TOOLKITS < <(grep -E '^TK' "$TOOLKITS_FILE" | cut -d' ' -f1)
 [[ ${#TOOLKITS[@]} -gt 0 ]] || die "no toolkits in $TOOLKITS_FILE"
 TOOLKITS_CMAKE="$(IFS=';'; echo "${TOOLKITS[*]}")"
 echo "Toolkits (${#TOOLKITS[@]}): ${TOOLKITS[*]}"
+echo "Release checks: $RELEASE_CHECKS (BUILD_RELEASE_DISABLE_EXCEPTIONS=$DISABLE_EXCEPTIONS)"
 
 # Exceptions: OCCT reports errors by throwing Standard_Failure; the bendcore WASM
 # build uses Emscripten's JS-based exceptions (-fexceptions, root CMakeLists.txt),
@@ -64,6 +75,7 @@ if [[ "${SKIP_OCCT_BUILD:-0}" != "1" ]]; then
       -DCMAKE_INSTALL_PREFIX="$OCCT_WASM_INSTALL" \
       -DCMAKE_C_FLAGS="$EH_FLAGS" -DCMAKE_CXX_FLAGS="$EH_FLAGS" \
       -DBUILD_LIBRARY_TYPE=Static \
+      -DBUILD_RELEASE_DISABLE_EXCEPTIONS="$DISABLE_EXCEPTIONS" \
       -DBUILD_MODULE_FoundationClasses=OFF \
       -DBUILD_MODULE_ModelingData=OFF \
       -DBUILD_MODULE_ModelingAlgorithms=OFF \
@@ -82,6 +94,15 @@ if [[ "${SKIP_OCCT_BUILD:-0}" != "1" ]]; then
     die "OCCT configuration failed (full log: $LOG_DIR/configure.log)"
   fi
 
+  # The mode must have reached the compiler (BUILD_RELEASE_DISABLE_EXCEPTIONS is a cached option).
+  if grep -q -- '-DNo_Exception' "$OCCT_WASM_BUILD/build.ninja"; then have_no_exc=1; else have_no_exc=0; fi
+  if [[ "$RELEASE_CHECKS" == "1" && "$have_no_exc" == "1" ]]; then
+    die "OCCT_RELEASE_CHECKS=1 but -DNo_Exception is in $OCCT_WASM_BUILD/build.ninja (stale cache?)"
+  fi
+  if [[ "$RELEASE_CHECKS" == "0" && "$have_no_exc" == "0" ]]; then
+    die "OCCT_RELEASE_CHECKS=0 but -DNo_Exception is not in $OCCT_WASM_BUILD/build.ninja"
+  fi
+
   echo "[2/3] Building OCCT with $JOBS jobs (log: $LOG_DIR/build.log)"
   if ! cmake --build "$OCCT_WASM_BUILD" --parallel "$JOBS" >"$LOG_DIR/build.log" 2>&1; then
     grep -n -E "error:|FAILED" "$LOG_DIR/build.log" | head -n 40 >&2 || true
@@ -91,6 +112,7 @@ if [[ "${SKIP_OCCT_BUILD:-0}" != "1" ]]; then
     tail -n 40 "$LOG_DIR/install.log" >&2
     die "OCCT install failed (full log: $LOG_DIR/install.log)"
   fi
+  printf 'OCCT 8.0.1 wasm release_checks=%s\n' "$RELEASE_CHECKS" >"$OCCT_WASM_INSTALL/bendcore_occt_build.txt"
 fi
 
 LIB_DIR="$OCCT_WASM_INSTALL/lib"

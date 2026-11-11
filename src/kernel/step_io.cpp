@@ -1,8 +1,10 @@
 #include <bendcore/kernel/step_io.hpp>
 
 #include "occt_failure.hpp"
+#include "occt_fault_guard.hpp"
 
 #include <exception>
+#include <optional>
 #include <sstream>
 
 #include <DESTEP_Parameters.hxx>
@@ -41,22 +43,34 @@ Result<Shape> readStep(std::string_view data) {
         return R::failure(ErrorCode::ParseError, "STEP input is empty");
     }
     try {
-        std::istringstream in{std::string(data)};
-        STEPControl_Reader reader;
-        const IFSelect_ReturnStatus status = reader.ReadStream("memory.step", in);
-        if (status != IFSelect_RetDone) {
-            return R::failure(ErrorCode::ParseError,
-                              "STEP input could not be parsed (IFSelect status " + std::to_string(status) + ")");
+        // Parsing and transfer run under the fault guard: corrupted entity references can leave
+        // null handles that OCCT dereferences without a check (docs/kernel/OCCT_BUILD.md, раздел 6).
+        std::optional<R> failure;
+        TopoDS_Shape shape;
+        detail::runConvertingFaults([&] {
+            std::istringstream in{std::string(data)};
+            STEPControl_Reader reader;
+            const IFSelect_ReturnStatus status = reader.ReadStream("memory.step", in);
+            if (status != IFSelect_RetDone) {
+                failure = R::failure(ErrorCode::ParseError, "STEP input could not be parsed (IFSelect status " +
+                                                                std::to_string(status) + ")");
+                return;
+            }
+            reader.SetSystemLengthUnit(kSystemUnitMm);
+            if (reader.NbRootsForTransfer() <= 0) {
+                failure = R::failure(ErrorCode::ParseError, "STEP input has no transferable shape roots");
+                return;
+            }
+            const int transferred = reader.TransferRoots();
+            if (transferred <= 0 || reader.NbShapes() <= 0) {
+                failure = R::failure(ErrorCode::OperationFailed, "STEP roots produced no shape on transfer");
+                return;
+            }
+            shape = reader.OneShape();
+        });
+        if (failure) {
+            return std::move(*failure);
         }
-        reader.SetSystemLengthUnit(kSystemUnitMm);
-        if (reader.NbRootsForTransfer() <= 0) {
-            return R::failure(ErrorCode::ParseError, "STEP input has no transferable shape roots");
-        }
-        const int transferred = reader.TransferRoots();
-        if (transferred <= 0 || reader.NbShapes() <= 0) {
-            return R::failure(ErrorCode::OperationFailed, "STEP roots produced no shape on transfer");
-        }
-        TopoDS_Shape shape = reader.OneShape();
         if (shape.IsNull()) {
             return R::failure(ErrorCode::OperationFailed, "STEP transfer returned a null shape");
         }

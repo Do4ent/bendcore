@@ -1,6 +1,7 @@
 #include <bendcore/kernel/xcaf_io.hpp>
 
 #include "occt_failure.hpp"
+#include "occt_fault_guard.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -753,51 +754,55 @@ Result<AssemblyDocument> readStepAssembly(std::string_view data) {
         return R::failure(ErrorCode::ParseError, "STEP input is empty");
     }
     try {
-        TempXcafDocument xcaf;
-        std::istringstream in{std::string(data)};
-        STEPCAFControl_Reader reader;
-        reader.SetNameMode(true);
-        reader.SetColorMode(true);
-        reader.SetLayerMode(true);
-        const IFSelect_ReturnStatus status = reader.ReadStream("memory.step", in);
-        if (status != IFSelect_RetDone) {
-            return R::failure(ErrorCode::ParseError,
-                              "STEP input could not be parsed (IFSelect status " + std::to_string(status) + ")");
-        }
-        if (reader.NbRootsForTransfer() <= 0) {
-            return R::failure(ErrorCode::ParseError, "STEP input has no transferable shape roots");
-        }
-        if (!reader.Transfer(xcaf.doc())) {
-            return R::failure(ErrorCode::OperationFailed, "STEP roots could not be transferred to XCAF");
-        }
-
-        AssemblyDocument out;
-        NCollection_Sequence<TCollection_AsciiString> lengthNames;
-        NCollection_Sequence<TCollection_AsciiString> angleNames;
-        NCollection_Sequence<TCollection_AsciiString> solidAngleNames;
-        reader.ChangeReader().FileUnits(lengthNames, angleNames, solidAngleNames);
-        for (int i = 1; i <= lengthNames.Length(); ++i) {
-            out.fileLengthUnits.emplace_back(lengthNames.Value(i).ToCString());
-        }
-        if (out.fileLengthUnits.size() == 1) {
-            out.fileUnitMm = unitNameToMm(out.fileLengthUnits.front());
-        }
-
-        NCollection_Sequence<TDF_Label> free;
-        xcaf.shapes()->GetFreeShapes(free);
-        if (free.Length() == 0) {
-            return R::failure(ErrorCode::OperationFailed, "STEP transfer produced no shapes");
-        }
-        const StepAttributes attributes = collectStepAttributes(reader, xcaf.shapes());
-        XcafToDocument converter(xcaf, attributes, out);
-        for (int i = 1; i <= free.Length(); ++i) {
-            auto root = converter.convert(free.Value(i));
-            if (!root) {
-                return R(root.error());
+        // Under the fault guard: corrupted entity references can leave null handles that OCCT
+        // dereferences without a check (docs/kernel/OCCT_BUILD.md, раздел 6).
+        return detail::callConvertingFaults<R>([&]() -> R {
+            TempXcafDocument xcaf;
+            std::istringstream in{std::string(data)};
+            STEPCAFControl_Reader reader;
+            reader.SetNameMode(true);
+            reader.SetColorMode(true);
+            reader.SetLayerMode(true);
+            const IFSelect_ReturnStatus status = reader.ReadStream("memory.step", in);
+            if (status != IFSelect_RetDone) {
+                return R::failure(ErrorCode::ParseError,
+                                  "STEP input could not be parsed (IFSelect status " + std::to_string(status) + ")");
             }
-            out.roots.push_back(root.value());
-        }
-        return out;
+            if (reader.NbRootsForTransfer() <= 0) {
+                return R::failure(ErrorCode::ParseError, "STEP input has no transferable shape roots");
+            }
+            if (!reader.Transfer(xcaf.doc())) {
+                return R::failure(ErrorCode::OperationFailed, "STEP roots could not be transferred to XCAF");
+            }
+
+            AssemblyDocument out;
+            NCollection_Sequence<TCollection_AsciiString> lengthNames;
+            NCollection_Sequence<TCollection_AsciiString> angleNames;
+            NCollection_Sequence<TCollection_AsciiString> solidAngleNames;
+            reader.ChangeReader().FileUnits(lengthNames, angleNames, solidAngleNames);
+            for (int i = 1; i <= lengthNames.Length(); ++i) {
+                out.fileLengthUnits.emplace_back(lengthNames.Value(i).ToCString());
+            }
+            if (out.fileLengthUnits.size() == 1) {
+                out.fileUnitMm = unitNameToMm(out.fileLengthUnits.front());
+            }
+
+            NCollection_Sequence<TDF_Label> free;
+            xcaf.shapes()->GetFreeShapes(free);
+            if (free.Length() == 0) {
+                return R::failure(ErrorCode::OperationFailed, "STEP transfer produced no shapes");
+            }
+            const StepAttributes attributes = collectStepAttributes(reader, xcaf.shapes());
+            XcafToDocument converter(xcaf, attributes, out);
+            for (int i = 1; i <= free.Length(); ++i) {
+                auto root = converter.convert(free.Value(i));
+                if (!root) {
+                    return R(root.error());
+                }
+                out.roots.push_back(root.value());
+            }
+            return out;
+        });
     } catch (const Standard_Failure& failure) {
         return R::failure(ErrorCode::ParseError, "STEP input is malformed: " + failureText(failure));
     } catch (const std::exception& e) {

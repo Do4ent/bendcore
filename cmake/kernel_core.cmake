@@ -7,6 +7,7 @@ set(BENDCORE_KERNEL_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
 add_library(bendcore_kernel STATIC
   ${BENDCORE_KERNEL_ROOT}/src/kernel/shape.cpp
   ${BENDCORE_KERNEL_ROOT}/src/kernel/brep_io.cpp
+  ${BENDCORE_KERNEL_ROOT}/src/kernel/occt_fault_guard.cpp
   ${BENDCORE_KERNEL_ROOT}/src/kernel/step_io.cpp
   ${BENDCORE_KERNEL_ROOT}/src/kernel/tessellation.cpp)
 target_compile_features(bendcore_kernel PUBLIC cxx_std_20)

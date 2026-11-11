@@ -125,7 +125,49 @@ endif()
 
 # OCCT (Open Cascade Technology) для импорта STEP файлов (Q3 2027, Task 1)
 # Find OCCT on all platforms (Windows, Linux, macOS)
-set(BENDCORE_OCCT_DIR "" CACHE PATH "OCCT install directory (build with: third_party/build_occt.sh)")
+# Default install: the one with OCCT's Release checks (third_party/build_occt.sh and
+# build_occt_wasm.sh with OCCT_RELEASE_CHECKS=1, docs/kernel/OCCT_BUILD.md, раздел 6), when it
+# exists next to the sources.
+if(EMSCRIPTEN)
+  set(_bendcore_occt_default_dir "${CMAKE_CURRENT_SOURCE_DIR}/third_party/occt-install-wasm-checked")
+else()
+  set(_bendcore_occt_default_dir "${CMAKE_CURRENT_SOURCE_DIR}/third_party/occt-install-checked")
+endif()
+if(NOT EXISTS "${_bendcore_occt_default_dir}/include/opencascade/Standard_Version.hxx")
+  set(_bendcore_occt_default_dir "")
+endif()
+set(BENDCORE_OCCT_DIR "${_bendcore_occt_default_dir}" CACHE PATH
+  "OCCT install directory (build with: third_party/build_occt.sh)")
+option(BENDCORE_OCCT_REQUIRE_CHECKS
+  "Refuse an OCCT install built with -DNo_Exception (OCCT index/argument checks compiled out)" ON)
+
+# Whether an OCCT install was built with -DNo_Exception (BUILD_RELEASE_DISABLE_EXCEPTIONS=ON):
+# OCCT's installed CMake config records the Release flags. Without the checks a corrupted
+# BRep/STEP file reads out of bounds inside OCCT instead of raising Standard_OutOfRange.
+function(bendcore_check_occt_release_checks dir)
+  set(_flags_file "${dir}/lib/cmake/opencascade/OpenCASCADECompileDefinitionsAndFlags-release.cmake")
+  if(NOT EXISTS "${_flags_file}")
+    message(STATUS "OCCT Release checks: unknown (${_flags_file} not found)")
+    return()
+  endif()
+  file(STRINGS "${_flags_file}" _no_exc REGEX "No_Exception")
+  if(_no_exc)
+    set(_msg "OCCT at ${dir} is built with -DNo_Exception: its index and argument checks are "
+             "compiled out and corrupted BRep/STEP input crashes inside OCCT. Rebuild it with "
+             "third_party/build_occt.sh (or build_occt_wasm.sh), OCCT_RELEASE_CHECKS=1, into "
+             "third_party/occt-install-checked (occt-install-wasm-checked), or configure with "
+             "-DBENDCORE_OCCT_REQUIRE_CHECKS=OFF to accept it (docs/kernel/OCCT_BUILD.md, раздел 6).")
+    string(CONCAT _msg ${_msg})
+    if(BENDCORE_OCCT_REQUIRE_CHECKS)
+      message(FATAL_ERROR "${_msg}")
+    endif()
+    message(WARNING "${_msg}")
+    set(BENDCORE_OCCT_RELEASE_CHECKS OFF CACHE INTERNAL "OCCT built without No_Exception")
+  else()
+    message(STATUS "OCCT Release checks: on (no -DNo_Exception in ${_flags_file})")
+    set(BENDCORE_OCCT_RELEASE_CHECKS ON CACHE INTERNAL "OCCT built without No_Exception")
+  endif()
+endfunction()
 
 # Explicit OCCT toolkit set (docs/kernel/OCCT_BUILD.md). The list lives in
 # third_party/occt_toolkits.txt so that the native link line here and the WASM
@@ -164,6 +206,7 @@ if(BENDCORE_OCCT_DIR)
   set(OpenCASCADE_FOUND TRUE)
   set(OpenCASCADE_INCLUDE_DIRS "${BENDCORE_OCCT_DIR}/include/opencascade")
   bendcore_resolve_occt_toolkits("${BENDCORE_OCCT_DIR}" OpenCASCADE_LIBRARIES)
+  bendcore_check_occt_release_checks("${BENDCORE_OCCT_DIR}")
   message(STATUS "Using OCCT from: ${BENDCORE_OCCT_DIR}")
   message(STATUS "  Headers: ${OpenCASCADE_INCLUDE_DIRS}")
   message(STATUS "  Libraries: ${OpenCASCADE_LIBRARIES}")
