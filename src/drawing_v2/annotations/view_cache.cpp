@@ -169,8 +169,14 @@ AlgorithmChoice chooseHlrMethod(const kernel::Shape& shape, const ViewFrame& fra
 }
 
 ViewCache::ViewCache(std::size_t capacity, unsigned threads) : capacity_(capacity == 0 ? 1 : capacity) {
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+    // WebAssembly без потоков (bendcore_drawing_wasm): рабочих потоков нет, request() считает
+    // вид в вызывающем потоке; кэш и статистика работают так же.
+    (void)threads;
+#else
     if (threads == 0) threads = std::max(1u, std::thread::hardware_concurrency());
     for (unsigned i = 0; i < threads; ++i) workers_.emplace_back([this] { worker(); });
+#endif
 }
 
 ViewCache::~ViewCache() {
@@ -277,7 +283,7 @@ std::shared_future<ViewResultPtr> ViewCache::request(const ViewRequest& r) {
             it = prev;
         }
         const ViewFrame frame = r.frame;
-        queue_.emplace_back([promise, copy, frame, opts] {
+        auto task = [promise, copy, frame, opts] {
             try {
                 auto res = projectShape(kernel::Shape(copy), frame, opts);
                 promise->set_value(std::make_shared<const Result<ProjectedView>>(std::move(res)));
@@ -285,7 +291,13 @@ std::shared_future<ViewResultPtr> ViewCache::request(const ViewRequest& r) {
                 promise->set_value(std::make_shared<const Result<ProjectedView>>(
                     Error{ErrorCode::OperationFailed, std::string("view cache: ") + e.what()}));
             }
-        });
+        };
+        if (!workers_.empty()) {
+            queue_.emplace_back(std::move(task));
+        } else {
+            // Без рабочих потоков — расчёт сразу (под замком: других потоков нет).
+            task();
+        }
     }
     cv_.notify_one();
     return future;

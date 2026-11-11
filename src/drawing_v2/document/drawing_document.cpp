@@ -248,7 +248,9 @@ Status DrawingDocument::validate() const {
                 return invalid("drawing: " + where + ": a view in projection relation needs a parent in the group");
             seen[v.id] = &v;
         }
-        if (bases != 1) return invalid("drawing: sheet '" + s.id + "' must have exactly one base view");
+        // Лист без видов допустим (только рамка и основная надпись — новый чертёж до первого вида).
+        if (bases != 1 && !(bases == 0 && s.views.empty()))
+            return invalid("drawing: sheet '" + s.id + "' must have exactly one base view");
         std::set<std::string> annIds;
         for (const DimensionItem& d : s.dimensions) {
             if (d.id.empty() || !annIds.insert(d.id).second) return invalid("drawing: empty or duplicate annotation id '" + d.id + "'");
@@ -258,6 +260,19 @@ Status DrawingDocument::validate() const {
             if (r.id.empty() || !annIds.insert(r.id).second) return invalid("drawing: empty or duplicate annotation id '" + r.id + "'");
             if (!seen.count(r.view)) return invalid("drawing: roughness '" + r.id + "' refers to unknown view '" + r.view + "'");
             if (r.edge.kind != modeling::ElementKind::Edge) return invalid("drawing: roughness '" + r.id + "' must reference an edge");
+        }
+        for (const ToleranceItem& t : s.tolerances) {
+            if (t.id.empty() || !annIds.insert(t.id).second) return invalid("drawing: empty or duplicate annotation id '" + t.id + "'");
+            if (!seen.count(t.view)) return invalid("drawing: tolerance '" + t.id + "' refers to unknown view '" + t.view + "'");
+            if (t.edge.kind != modeling::ElementKind::Edge) return invalid("drawing: tolerance '" + t.id + "' must reference an edge");
+            if (t.frame.tolerance.empty()) return invalid("drawing: tolerance '" + t.id + "' has no value");
+            // Базы допуска проверяет featureControlFrame при обновлении (ISO 1101, табл. 2).
+        }
+        for (const DatumItem& d : s.datums) {
+            if (d.id.empty() || !annIds.insert(d.id).second) return invalid("drawing: empty or duplicate annotation id '" + d.id + "'");
+            if (!seen.count(d.view)) return invalid("drawing: datum '" + d.id + "' refers to unknown view '" + d.view + "'");
+            if (d.edge.kind != modeling::ElementKind::Edge) return invalid("drawing: datum '" + d.id + "' must reference an edge");
+            if (d.letter.empty()) return invalid("drawing: datum '" + d.id + "' has no letter");
         }
     }
     return okStatus();
@@ -459,7 +474,10 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         for (const ViewDef& v : sd.views)
             if (isGroupView(v)) group.push_back(&v);
         PlacedGroup pg;
-        {
+        if (group.empty()) {
+            // Лист без видов: масштаб графы 6 — заданный или 1:1.
+            pg.scale = sd.scale ? *sd.scale : ScaleRatio{1, 1};
+        } else {
             std::vector<ScaleRatio> candidates = sd.scale ? std::vector<ScaleRatio>{*sd.scale} : scalesUpTo(settings_.maxScale);
             bool placedOk = false;
             for (const ScaleRatio& s : candidates) {
@@ -639,6 +657,47 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             cs.dimensions[di] = std::move(res);
         }
 
+        // Самый длинный видимый прямолинейный участок изображения ребра edge на виде, концы
+        // упорядочены так, что левая сторона направления a→b — снаружи вида (от центра габарита).
+        struct EdgePlacement {
+            Point2 a, b, tip, outward;  // outward — единичная нормаль наружу
+            double angleDeg = 0.0;
+        };
+        auto placeOnEdge = [&](const ComputedView& cv, modeling::TopoReference& edge, double at,
+                               std::string& reason) -> std::optional<EdgePlacement> {
+            ModelRef ref;
+            ref.kind = annotations::RefKind::Edge;
+            ref.persistent = edge;
+            auto rb = annotations::rebindRef(ref, binding);
+            if (!rb.ok) {
+                reason = "reference is broken: " + rb.detail;
+                return std::nullopt;
+            }
+            std::optional<LinePick> best;
+            for (const ViewEdge& e : cv.sheetView.view.edges) {
+                if (e.visibility != Visibility::Visible || !e.edgeIndex || *e.edgeIndex != ref.index) continue;
+                if (auto p = straightPiece(e.curve); p && (!best || p->length > best->length)) best = p;
+            }
+            if (!best) {
+                reason = "edge is not shown as a straight visible line in view '" + cv.id + "'";
+                return std::nullopt;
+            }
+            edge = ref.persistent;
+            EdgePlacement pl;
+            pl.a = cv.sheetView.toSheet(best->a);
+            pl.b = cv.sheetView.toSheet(best->b);
+            const Box2 vb = cv.sheetView.sheetBounds();
+            const Point2 c{0.5 * (vb.minX + vb.maxX), 0.5 * (vb.minY + vb.maxY)};
+            const Point2 mid{0.5 * (pl.a.x + pl.b.x), 0.5 * (pl.a.y + pl.b.y)};
+            if (-(pl.b.y - pl.a.y) * (mid.x - c.x) + (pl.b.x - pl.a.x) * (mid.y - c.y) < 0) std::swap(pl.a, pl.b);
+            const double t = std::clamp(at, 0.0, 1.0);
+            pl.tip = {pl.a.x + t * (pl.b.x - pl.a.x), pl.a.y + t * (pl.b.y - pl.a.y)};
+            const double len = std::hypot(pl.b.x - pl.a.x, pl.b.y - pl.a.y);
+            pl.outward = {-(pl.b.y - pl.a.y) / len, (pl.b.x - pl.a.x) / len};
+            pl.angleDeg = std::atan2(pl.b.y - pl.a.y, pl.b.x - pl.a.x) * 180.0 / 3.14159265358979323846;
+            return pl;
+        };
+
         // 6. Знаки шероховатости на изображениях рёбер.
         for (RoughnessItem& ri : sd.roughness) {
             const ComputedView& cv = cs.views[indexOf.at(ri.view)];
@@ -696,6 +755,56 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 g.append(sign.value());
                 cs.roughness.emplace_back(std::move(g));
             }
+        }
+
+        // 6а. Допуски формы и расположения (ГОСТ 2.308): рамка снаружи вида на расстоянии 12 мм
+        // от линии, соединительная линия от ближней стороны рамки к линии со стрелкой.
+        for (ToleranceItem& ti : sd.tolerances) {
+            const ComputedView& cv = cs.views[indexOf.at(ti.view)];
+            std::string reason;
+            auto pl = placeOnEdge(cv, ti.edge, ti.at, reason);
+            if (!pl) {
+                report.dangling.push_back(sd.id + "/" + ti.id + ": " + reason);
+                cs.tolerances.emplace_back(std::nullopt);
+                continue;
+            }
+            auto fail = [&](const Error& e) { return Error{e.code, "sheet '" + sd.id + "', tolerance '" + ti.id + "': " + e.message}; };
+            // Пробная рамка в начале координат — для габарита.
+            auto probe = annotations::featureControlFrame({0, 0}, ti.frame, style);
+            if (!probe) return fail(probe.error());
+            const double fw = probe.value().box.width(), fh = probe.value().box.height();
+            const double out = 12.0;
+            const Point2 knee{pl->tip.x + out * pl->outward.x, pl->tip.y + out * pl->outward.y};
+            // Рамка — горизонтально; конец соединительной линии — середина ближней к линии стороны.
+            Point2 origin, attach;
+            if (std::abs(pl->outward.y) >= std::abs(pl->outward.x)) {
+                origin = {knee.x - 0.5 * fw, pl->outward.y > 0 ? knee.y : knee.y - fh};
+                attach = {knee.x, pl->outward.y > 0 ? origin.y : origin.y + fh};
+            } else {
+                origin = {pl->outward.x > 0 ? knee.x : knee.x - fw, knee.y - 0.5 * fh};
+                attach = {pl->outward.x > 0 ? origin.x : origin.x + fw, knee.y};
+            }
+            auto frame = annotations::featureControlFrame(origin, ti.frame, style);
+            if (!frame) return fail(frame.error());
+            auto lead = annotations::frameLeader({attach, pl->tip}, style);
+            if (!lead) return fail(lead.error());
+            annotations::SymbolGeometry g = std::move(frame).value().geometry;
+            g.append(lead.value());
+            cs.tolerances.emplace_back(std::move(g));
+        }
+        // 6б. Обозначения баз (ГОСТ 2.308): треугольник на линии снаружи вида.
+        for (DatumItem& di : sd.datums) {
+            const ComputedView& cv = cs.views[indexOf.at(di.view)];
+            std::string reason;
+            auto pl = placeOnEdge(cv, di.edge, di.at, reason);
+            if (!pl) {
+                report.dangling.push_back(sd.id + "/" + di.id + ": " + reason);
+                cs.datums.emplace_back(std::nullopt);
+                continue;
+            }
+            auto g = annotations::datumSymbol(pl->tip, pl->angleDeg, di.letter, 5.0, style);
+            if (!g) return Error{g.error().code, "sheet '" + sd.id + "', datum '" + di.id + "': " + g.error().message};
+            cs.datums.emplace_back(std::move(g).value());
         }
 
         // 7. Позиции по спецификации (ГОСТ 2.109): выноски на видимые линии составных частей.
@@ -844,9 +953,11 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
             if (auto st = annotations::renderDimension(d, cs.dimensions[di], style); !st)
                 return Error{st.error().code, "sheet '" + cs.id + "', dimension '" + sd.dimensions[di].id + "': " + st.error().message};
         }
-        for (const auto& g : cs.roughness) {
-            if (!g) continue;
-            if (auto st = annotations::renderSymbol(d, *g, style); !st) return st.error();
+        for (const auto* list : {&cs.roughness, &cs.tolerances, &cs.datums}) {
+            for (const auto& g : *list) {
+                if (!g) continue;
+                if (auto st = annotations::renderSymbol(d, *g, style); !st) return st.error();
+            }
         }
         if (sd.roughnessRemainder) {
             auto g = annotations::roughnessRemainder(lay.value().frame, *sd.roughnessRemainder, style);

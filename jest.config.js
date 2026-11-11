@@ -10,6 +10,7 @@ module.exports = {
     // Playwright specs of the kernel viewer and the part modeler (run by their own configs).
     '<rootDir>/tests/e2e-kernel/',
     '<rootDir>/tests/e2e-modeling/',
+    '<rootDir>/tests/e2e-drawing/',
     '<rootDir>/tests/integration/comprehensive\\.test\\.ts',
     '<rootDir>/tests/integration/sketch-solver\\.integration\\.test\\.ts',
     '<rootDir>/tests/integration/import-export\\.integration\\.test\\.ts',

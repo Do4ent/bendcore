@@ -54,3 +54,4 @@ endif()
 
 # Part document module (bendcore_modeling_wasm, docs/ui/PART_MODELING_UI.md).
 include(${CMAKE_CURRENT_LIST_DIR}/wasm_modeling.cmake OPTIONAL)
+include(${CMAKE_CURRENT_LIST_DIR}/wasm_drawing.cmake OPTIONAL)  # bendcore_drawing_wasm, docs/ui/DRAWING_UI.md
