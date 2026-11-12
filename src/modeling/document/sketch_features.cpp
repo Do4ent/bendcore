@@ -331,6 +331,7 @@ public:
     std::vector<OptionSpec> optionSpecs() const override { return {{"plane", {"XY", "XZ", "YZ", "face", "datum"}}}; }
     std::vector<LinkSlot> linkSlots() const override { return {{"plane", {"DatumPlane"}, true}}; }
     bool hasSketchData() const override { return true; }
+    bool readsInputBody() const override { return false; }
 
     Result<FeatureOutput> execute(const FeatureContext& ctx) const override {
         const SketchData* data = ctx.sketch();
@@ -783,6 +784,7 @@ private:
 class DatumPlaneFeature final : public Feature {
 public:
     std::string type() const override { return "DatumPlane"; }
+    bool readsInputBody() const override { return false; }
     std::vector<ParameterSpec> parameterSpecs() const override { return {{"offset", "0"}, {"angle", "0"}}; }
     std::vector<ReferenceSlot> referenceSlots() const override {
         return {{"face", ElementKind::Face, false, true},
@@ -829,6 +831,7 @@ public:
 class DatumAxisFeature final : public Feature {
 public:
     std::string type() const override { return "DatumAxis"; }
+    bool readsInputBody() const override { return false; }
     std::vector<ParameterSpec> parameterSpecs() const override { return {}; }
     std::vector<ReferenceSlot> referenceSlots() const override {
         return {{"face", ElementKind::Face, false, true}, {"edge", ElementKind::Edge, false, true}};

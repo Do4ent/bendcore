@@ -1,9 +1,10 @@
 #pragma once
 
 // Проверка пересечений деталей сборки (docs/assembly/ASSEMBLY_DOCUMENT.md, раздел 6):
-// предварительный отбор пар по габаритам (Bnd_Box, сортировка и проход по оси X), объём
-// пересечения через kernel::booleanOp(Common), касание — нулевой объём при расстоянии
-// BRepExtrema_DistShapeShape не больше contactTolerance.
+// предварительный отбор пар по габаритам (Bnd_Box, сортировка и проход по оси X), затем по
+// габаритам граней; крупные детали разрезаются сеткой на куски, и пара считается только по
+// кускам рядом с другой деталью. Объём пересечения — kernel::booleanOp(Common), касание —
+// нулевой объём при расстоянии BRepExtrema_DistShapeShape не больше contactTolerance.
 
 #include <bendcore/assembly_v2/assembly_document.hpp>
 #include <bendcore/kernel/boolean.hpp>

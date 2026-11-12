@@ -147,6 +147,10 @@ public:
     virtual std::vector<LinkSlot> linkSlots() const { return {}; }
     // true: the node carries SketchData (sketch features).
     virtual bool hasSketchData() const { return false; }
+    // false: execute() never reads context.input() and returns no shape (sketch, datum). A node
+    // of such a feature without references does not depend on the body before it: its input
+    // hash leaves the body chain out, so an edit upstream does not recompute it.
+    virtual bool readsInputBody() const { return true; }
     virtual Result<FeatureOutput> execute(const FeatureContext& context) const = 0;
 };
 

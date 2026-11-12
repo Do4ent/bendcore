@@ -99,7 +99,8 @@ TEST(StressAssembly, ThreeHundredComponentsSolveInterferenceBom) {
     }
 
     InterferenceReport inter;
-    timed("assembly_300", "interference_bbox_prefilter", 240, [&] {
+    // Порог: ~7 с после фазы 5 (сетка кусков плиты, отбор по габаритам граней), запас 3×.
+    timed("assembly_300", "interference_bbox_prefilter", 25, [&] {
         auto r = checkInterference(doc);
         ASSERT_TRUE(r.ok()) << r.error().message;
         inter = std::move(r.value());

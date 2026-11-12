@@ -4,6 +4,15 @@
 #include "assembly_document_helpers.hpp"
 
 #include <bendcore/assembly_v2/interference.hpp>
+#include <bendcore/kernel/boolean.hpp>
+
+#include <BRepExtrema_DistShapeShape.hxx>
+#include <TopExp_Explorer.hxx>
+
+#include <set>
+#include <string>
+#include <tuple>
+#include <vector>
 
 using namespace bendcore::assembly_v2;
 using namespace bendcore::assembly_v2::testing;
@@ -110,4 +119,93 @@ TEST(AssemblyDocumentInterference, PartsInsideSubassembly) {
     ASSERT_TRUE(r2.ok());
     EXPECT_TRUE(r2.value().pairs.empty());
     EXPECT_EQ(r2.value().totalPairs, 0u);
+}
+
+// Локальный алгоритм (сетка кусков крупной детали, отбор по габаритам граней) против прямого
+// расчёта по целым деталям — алгоритма до фазы 5: Common всей пары и BRepExtrema по целым формам.
+// Плита 100 × 80 × 10 с 30 отверстиями r = 3 (36 граней — крупная деталь, разрезается сеткой
+// 3 × 3; плоскость сетки y = 80/3 проходит через отверстия ряда y = 24). Штифты: точно по отверстию
+// (касание), с зазором r = 2,5 (габариты пересекаются, пары нет), с натягом r = 3,5 (пересечение
+// π·(3,5² − 3²)·10), куб внутри тела плиты (вложен, граней рядом нет), куб на верхней грани
+// (касание), куб над плитой с зазором 0,2 (не кандидат).
+TEST(AssemblyDocumentInterference, LocalAlgorithmMatchesWholeShapeReference) {
+    TopoDS_Shape plate = box(0, 0, 0, 100, 80, 10);
+    std::vector<std::pair<double, double>> holes;
+    for (int j = 0; j < 5; ++j)
+        for (int i = 0; i < 6; ++i) holes.emplace_back(10 + 16 * i, 8 + 16 * j);
+    for (const auto& [x, y] : holes) plate = cut(plate, cylinder(x, y, -1, 3, 12));
+    int plateFaces = 0;
+    for (TopExp_Explorer f(plate, TopAbs_FACE); f.More(); f.Next()) ++plateFaces;
+    ASSERT_GT(plateFaces, 32);
+
+    AssemblyDocument doc;
+    const DefinitionId plateDef = doc.addPart("Plate", {plate, nullptr}).value();
+    const DefinitionId fit = doc.addPart("Fit", {cylinder(0, 0, -5, 3, 20), nullptr}).value();
+    const DefinitionId loose = doc.addPart("Loose", {cylinder(0, 0, -5, 2.5, 20), nullptr}).value();
+    const DefinitionId tight = doc.addPart("Tight", {cylinder(0, 0, -5, 3.5, 20), nullptr}).value();
+    const DefinitionId cube = doc.addPart("Cube", {box(0, 0, 0, 2, 2, 2), nullptr}).value();
+    ASSERT_TRUE(doc.addOccurrence(plateDef, Transform::identity(), "Plate").ok());
+    // Отверстия 6–11 (ряд y = 24) пересекает плоскость сетки: штифт попадает в два куска.
+    const std::vector<std::tuple<DefinitionId, int, std::string>> pins = {
+        {fit, 8, "Fit8"}, {fit, 0, "Fit0"}, {fit, 29, "Fit29"}, {loose, 9, "Loose9"},
+        {loose, 3, "Loose3"}, {tight, 16, "Tight16"}, {tight, 7, "Tight7"}};
+    for (const auto& [def, h, name] : pins)
+        ASSERT_TRUE(doc.addOccurrence(def, Transform::fromTranslation(Vec3(holes[h].first, holes[h].second, 0)), name).ok());
+    ASSERT_TRUE(doc.addOccurrence(cube, Transform::fromTranslation(Vec3(16, 14, 4)), "Inside").ok());
+    ASSERT_TRUE(doc.addOccurrence(cube, Transform::fromTranslation(Vec3(48, 30, 10)), "OnTop").ok());
+    ASSERT_TRUE(doc.addOccurrence(cube, Transform::fromTranslation(Vec3(80, 60, 10.2)), "Above").ok());
+
+    auto r = checkInterference(doc);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const InterferenceReport& rep = r.value();
+
+    // Эталон: прямой расчёт по целым формам для всех пар.
+    InterferenceOptions o;
+    std::set<std::pair<std::string, std::string>> expected;
+    for (std::size_t i = 0; i < rep.parts.size(); ++i)
+        for (std::size_t j = i + 1; j < rep.parts.size(); ++j) {
+            const TopoDS_Shape& a = rep.parts[i].shape;
+            const TopoDS_Shape& b = rep.parts[j].shape;
+            auto common = bendcore::kernel::booleanOp(bendcore::kernel::BooleanType::Common, a, b, o.boolean);
+            ASSERT_TRUE(common.ok()) << common.error().message;
+            const double v = common.value().volume;
+            BRepExtrema_DistShapeShape dist(a, b);
+            ASSERT_TRUE(dist.IsDone());
+            const std::string na = rep.parts[i].pathName, nb = rep.parts[j].pathName;
+            if (v <= o.volumeTolerance && dist.Value() > o.contactTolerance) {
+                EXPECT_EQ(findPair(rep, na, nb), nullptr) << na << " - " << nb;
+                continue;
+            }
+            expected.emplace(na, nb);
+            const InterferencePair* p = findPair(rep, na, nb);
+            ASSERT_NE(p, nullptr) << na << " - " << nb;
+            if (v > o.volumeTolerance) {
+                EXPECT_EQ(p->kind, ContactKind::Interference) << na << " - " << nb;
+                EXPECT_NEAR(p->volume, v, 1e-9 * v + 1e-9) << na << " - " << nb;
+            } else {
+                EXPECT_EQ(p->kind, ContactKind::Touching) << na << " - " << nb;
+                EXPECT_NEAR(p->distance, dist.Value(), 1e-9) << na << " - " << nb;
+            }
+        }
+    EXPECT_EQ(rep.pairs.size(), expected.size());
+
+    // Аналитика: 3 касания штифтов, касание куба сверху, 2 натяга, вложенный куб.
+    const double ring = kPi * (3.5 * 3.5 - 3.0 * 3.0) * 10.0;
+    for (const char* t : {"Tight16", "Tight7"}) {
+        const InterferencePair* p = findPair(rep, "Plate", t);
+        ASSERT_NE(p, nullptr) << t;
+        EXPECT_EQ(p->kind, ContactKind::Interference);
+        EXPECT_NEAR(p->volume, ring, 1e-6 * ring) << t;
+    }
+    for (const char* t : {"Fit8", "Fit0", "Fit29", "OnTop"}) {
+        const InterferencePair* p = findPair(rep, "Plate", t);
+        ASSERT_NE(p, nullptr) << t;
+        EXPECT_EQ(p->kind, ContactKind::Touching) << t;
+    }
+    for (const char* t : {"Loose9", "Loose3", "Above"}) EXPECT_EQ(findPair(rep, "Plate", t), nullptr) << t;
+    const InterferencePair* in = findPair(rep, "Plate", "Inside");
+    ASSERT_NE(in, nullptr);
+    EXPECT_EQ(in->kind, ContactKind::Interference);
+    EXPECT_NEAR(in->volume, 8.0, 1e-9);
+    EXPECT_NEAR(rep.totalVolume, 2 * ring + 8.0, 1e-6);
 }
