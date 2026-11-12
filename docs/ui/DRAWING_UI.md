@@ -42,7 +42,7 @@ cmake --build build-wasm-drawing --target bendcore_drawing_wasm
 аннотации, спецификацию, писатели PDF/DXF/SVG, ядро OCCT. Результат —
 `build-wasm-drawing/wasm_drawing/`: `bendcore_drawing.mjs` (клей, `createBendcoreDrawing`),
 `bendcore_drawing.wasm` — **21,7 МБ** (`-Oz`, Release; для сравнения `bendcore_modeling.wasm` —
-19,7 МБ, `bendcore_kernel.wasm` — 12,6 МБ), JS API, `DejaVuSans.ttf` и `DejaVuSans-LICENSE.txt`.
+19 627 734 байт ≈ 18,7 МиБ, `bendcore_kernel.wasm` — 12,6 МБ), JS API, `DejaVuSans.ttf` и `DejaVuSans-LICENSE.txt`.
 Линковка — как у `bendcore_modeling_wasm` (`INITIAL_MEMORY=128MB`, стек 8 МБ, рост памяти),
 без потоков.
 
@@ -268,3 +268,4 @@ D1 = 60, текст «60» на листе ядра; ставит базу ще�
   не читаются); сценарий сборки (позиции, спецификация) проверен в нативных тестах
   `test_drawing_document`, в node и Playwright — только деталь.
 - Свойства детали хранятся в документе чертежа (в формате документа детали их нет).
+- Автоматическая простановка позиций (`autoBalloons`) есть в API, но в интерфейсе не выведена.

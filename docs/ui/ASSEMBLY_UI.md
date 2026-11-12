@@ -83,7 +83,7 @@ try {
   doc.interference();  doc.bom('flat');  doc.bom('structured');
   const mesh = doc.tessellate({ skip: [] });        // {meshes: {key: KernelMesh}, occurrences: [{path, mesh, world.matrix}]}
   doc.undo(); doc.redo();
-  const json = doc.save();  const step = doc.exportStep({ schema: 'AP242' });
+  const json = doc.save();  const step = doc.exportStep({ schema: 'AP242' });  // интерфейс экспортирует AP214 (по умолчанию)
 } finally {
   doc.dispose();
 }
@@ -256,8 +256,8 @@ node tests/assembly-fixtures/make_parts.mjs --module build-wasm/wasm_modeling
   обеим, нужно несколько жестов.
 - Положение вставляемой детали — рядом с габаритом сборки; поворот при вставке — через API
   (`placement`).
-- Все вызовы синхронны в главном потоке; проверка пересечений больших сборок (булевы операции)
-  блокирует страницу на время вызова. Перенос в Web Worker — отдельная задача.
+- Модуль однопоточный: вызовы идут в Web Worker (`APP_SHELL.md`), страница не блокируется, но
+  проверка пересечений больших сборок занимает время (`docs/qa/PERFORMANCE.md`).
 - Таблицы крепежа требуют сверки с официальными изданиями (`FASTENERS.md`, раздел 1); панель
   показывает это у стандарта со статусом `verified = false`.
 - Сквозной тест есть только для Chromium.
