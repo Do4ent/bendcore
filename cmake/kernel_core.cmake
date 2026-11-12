@@ -9,6 +9,7 @@ add_library(bendcore_kernel STATIC
   ${BENDCORE_KERNEL_ROOT}/src/kernel/brep_io.cpp
   ${BENDCORE_KERNEL_ROOT}/src/kernel/occt_fault_guard.cpp
   ${BENDCORE_KERNEL_ROOT}/src/kernel/step_io.cpp
+  ${BENDCORE_KERNEL_ROOT}/src/kernel/step_preflight.cpp
   ${BENDCORE_KERNEL_ROOT}/src/kernel/tessellation.cpp)
 target_compile_features(bendcore_kernel PUBLIC cxx_std_20)
 target_include_directories(bendcore_kernel PUBLIC "${BENDCORE_KERNEL_ROOT}/include")

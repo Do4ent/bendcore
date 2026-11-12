@@ -1,7 +1,9 @@
 #include <bendcore/kernel/xcaf_io.hpp>
+#include <bendcore/kernel/step_io.hpp>
 
 #include "occt_failure.hpp"
 #include "occt_fault_guard.hpp"
+#include "step_preflight.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -752,6 +754,12 @@ Result<AssemblyDocument> readStepAssembly(std::string_view data) {
     using R = Result<AssemblyDocument>;
     if (data.empty()) {
         return R::failure(ErrorCode::ParseError, "STEP input is empty");
+    }
+    if (data.size() > kStepDefaultMaxInputBytes) {
+        return R::failure(ErrorCode::InvalidInput, *detail::preflightStep(data, kStepDefaultMaxInputBytes));
+    }
+    if (auto invalid = detail::findInvalidStepCharacter(data)) {
+        return R::failure(ErrorCode::ParseError, std::move(*invalid));
     }
     try {
         // Under the fault guard: corrupted entity references can leave null handles that OCCT

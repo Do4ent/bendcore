@@ -19,7 +19,8 @@ target_link_libraries(bendcore_kernel_xcaf PUBLIC bendcore_kernel
   -Wl,--start-group ${BENDCORE_OCCT_LIBS} -Wl,--end-group pthread dl m)
 
 if(GTest_FOUND)
-  foreach(xcaf_test xcaf xcaf_roundtrip)
+  # malformed_input: damaged BRep/STEP/XCAF input (fault guard, preflight, OCCT Release checks).
+  foreach(xcaf_test xcaf xcaf_roundtrip malformed_input)
     add_executable(test_kernel_${xcaf_test}
       ${BENDCORE_KERNEL_XCAF_ROOT}/tests/kernel/test_kernel_${xcaf_test}.cpp)
     target_link_libraries(test_kernel_${xcaf_test} PRIVATE bendcore_kernel_xcaf GTest::gtest GTest::gtest_main)

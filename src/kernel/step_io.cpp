@@ -1,7 +1,9 @@
 #include <bendcore/kernel/step_io.hpp>
 
 #include "occt_failure.hpp"
+#include "memory_stream.hpp"
 #include "occt_fault_guard.hpp"
+#include "step_preflight.hpp"
 
 #include <exception>
 #include <optional>
@@ -37,10 +39,16 @@ UnitsMethods_LengthUnit toOcctUnit(StepLengthUnit unit) {
 
 }  // namespace
 
-Result<Shape> readStep(std::string_view data) {
+Result<Shape> readStep(std::string_view data, const StepReadOptions& options) {
     using R = Result<Shape>;
     if (data.empty()) {
         return R::failure(ErrorCode::ParseError, "STEP input is empty");
+    }
+    if (data.size() > options.maxInputBytes) {
+        return R::failure(ErrorCode::InvalidInput, *detail::preflightStep(data, options.maxInputBytes));
+    }
+    if (auto invalid = detail::findInvalidStepCharacter(data)) {
+        return R::failure(ErrorCode::ParseError, std::move(*invalid));
     }
     try {
         // Parsing and transfer run under the fault guard: corrupted entity references can leave
@@ -48,7 +56,9 @@ Result<Shape> readStep(std::string_view data) {
         std::optional<R> failure;
         TopoDS_Shape shape;
         detail::runConvertingFaults([&] {
-            std::istringstream in{std::string(data)};
+            // Read in place, without a copy of the text (the input may be hundreds of MiB).
+            detail::MemoryStreamBuf buffer(data.data(), data.size());
+            std::istream in(&buffer);
             STEPControl_Reader reader;
             const IFSelect_ReturnStatus status = reader.ReadStream("memory.step", in);
             if (status != IFSelect_RetDone) {
