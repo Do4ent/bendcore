@@ -11,6 +11,10 @@
 #   OCCT_BUILD     OCCT build directory             (default: third_party/occt-build)
 #   OCCT_INSTALL   OCCT install prefix              (default: third_party/occt-install)
 #   OCCT_JOBS      parallel compile jobs            (default: nproc)
+#   OCCT_CXX_STANDARD  C++ standard of the OCCT build: C++20 (default) or C++17 (OCCT's default).
+#                  With C++20 every `stream >> char_array` in OCCT's readers is bounded by the
+#                  array size (P0487); with C++17 a long word in a corrupted BRep file overflows
+#                  the 255-byte keyword buffers of BinTools/TopTools/BRepTools (stack smashing).
 #   OCCT_RELEASE_CHECKS  1 = keep OCCT's argument/index checks (Standard_OutOfRange_Raise_if
 #                  and the other *_Raise_if macros) in the Release build, i.e.
 #                  BUILD_RELEASE_DISABLE_EXCEPTIONS=OFF, no -DNo_Exception; 0 = OCCT's own
@@ -27,6 +31,7 @@ OCCT_BUILD="${OCCT_BUILD:-$ROOT/occt-build}"
 OCCT_INSTALL="${OCCT_INSTALL:-$ROOT/occt-install}"
 JOBS="${OCCT_JOBS:-$(nproc 2>/dev/null || echo 4)}"
 RELEASE_CHECKS="${OCCT_RELEASE_CHECKS:-1}"
+CXX_STANDARD="${OCCT_CXX_STANDARD:-C++20}"
 TOOLKITS_FILE="$ROOT/occt_toolkits.txt"
 LOG_DIR="$OCCT_BUILD/logs"
 
@@ -43,7 +48,11 @@ case "$RELEASE_CHECKS" in
   0) DISABLE_EXCEPTIONS=ON ;;
   *) die "OCCT_RELEASE_CHECKS must be 0 or 1, got '$RELEASE_CHECKS'" ;;
 esac
-echo "Release checks: $RELEASE_CHECKS (BUILD_RELEASE_DISABLE_EXCEPTIONS=$DISABLE_EXCEPTIONS)"
+case "$CXX_STANDARD" in
+  C++17|C++20|C++23) ;;
+  *) die "OCCT_CXX_STANDARD must be C++17, C++20 or C++23, got '$CXX_STANDARD'" ;;
+esac
+echo "Release checks: $RELEASE_CHECKS (BUILD_RELEASE_DISABLE_EXCEPTIONS=$DISABLE_EXCEPTIONS), $CXX_STANDARD"
 
 echo "[1/5] Checking prerequisites"
 for cmd in cmake ninja git; do
@@ -74,6 +83,7 @@ if ! cmake -S "$OCCT_SOURCE" -B "$OCCT_BUILD" -G Ninja \
     -DCMAKE_INSTALL_PREFIX="$OCCT_INSTALL" \
     -DBUILD_LIBRARY_TYPE=Static \
     -DBUILD_RELEASE_DISABLE_EXCEPTIONS="$DISABLE_EXCEPTIONS" \
+    -DBUILD_CPP_STANDARD="$CXX_STANDARD" \
     -DBUILD_MODULE_FoundationClasses=OFF \
     -DBUILD_MODULE_ModelingData=OFF \
     -DBUILD_MODULE_ModelingAlgorithms=OFF \
@@ -132,5 +142,5 @@ for f in "$LIB_DIR"/libTK*.a; do
   printf '  %-14s %10d bytes  (%s)\n' "$name" "$size" "$tag"
 done
 echo "Total: $count toolkits, $total bytes"
-printf 'OCCT %s release_checks=%s\n' "$OCCT_VERSION" "$RELEASE_CHECKS" >"$OCCT_INSTALL/bendcore_occt_build.txt"
+printf 'OCCT %s release_checks=%s cxx=%s\n' "$OCCT_VERSION" "$RELEASE_CHECKS" "$CXX_STANDARD" >"$OCCT_INSTALL/bendcore_occt_build.txt"
 echo "Done. Configure bendcore with -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$OCCT_INSTALL"

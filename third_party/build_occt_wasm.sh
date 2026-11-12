@@ -11,6 +11,10 @@
 #   OCCT_WASM_INSTALL  OCCT install prefix       (default: third_party/occt-install-wasm)
 #   EMSDK              emsdk root                (default: /root/emsdk); emsdk 6.0.12 is pinned in CI
 #   OCCT_JOBS          parallel compile jobs     (default: nproc)
+#   OCCT_CXX_STANDARD  C++ standard of the OCCT build: C++20 (default) or C++17 (OCCT's default).
+#                  With C++20 every `stream >> char_array` in OCCT's readers is bounded by the
+#                  array size (P0487); with C++17 a long word in a corrupted BRep file overflows
+#                  the 255-byte keyword buffers of BinTools/TopTools/BRepTools (stack smashing).
 #   OCCT_RELEASE_CHECKS 1 = keep OCCT's argument/index checks (*_Raise_if macros) in the
 #                      Release build: BUILD_RELEASE_DISABLE_EXCEPTIONS=OFF, no -DNo_Exception;
 #                      0 = OCCT's own default (checks compiled out). Default: 1.
@@ -26,6 +30,7 @@ OCCT_WASM_INSTALL="${OCCT_WASM_INSTALL:-$ROOT/occt-install-wasm}"
 EMSDK="${EMSDK:-/root/emsdk}"
 JOBS="${OCCT_JOBS:-$(nproc 2>/dev/null || echo 4)}"
 RELEASE_CHECKS="${OCCT_RELEASE_CHECKS:-1}"
+CXX_STANDARD="${OCCT_CXX_STANDARD:-C++20}"
 TOOLKITS_FILE="$ROOT/occt_toolkits.txt"
 LOG_DIR="$OCCT_WASM_BUILD/logs"
 
@@ -35,6 +40,10 @@ case "$RELEASE_CHECKS" in
   1) DISABLE_EXCEPTIONS=OFF ;;
   0) DISABLE_EXCEPTIONS=ON ;;
   *) die "OCCT_RELEASE_CHECKS must be 0 or 1, got '$RELEASE_CHECKS'" ;;
+esac
+case "$CXX_STANDARD" in
+  C++17|C++20|C++23) ;;
+  *) die "OCCT_CXX_STANDARD must be C++17, C++20 or C++23, got '$CXX_STANDARD'" ;;
 esac
 
 # --- Toolchain -------------------------------------------------------------------
@@ -56,7 +65,7 @@ mapfile -t TOOLKITS < <(grep -E '^TK' "$TOOLKITS_FILE" | cut -d' ' -f1)
 [[ ${#TOOLKITS[@]} -gt 0 ]] || die "no toolkits in $TOOLKITS_FILE"
 TOOLKITS_CMAKE="$(IFS=';'; echo "${TOOLKITS[*]}")"
 echo "Toolkits (${#TOOLKITS[@]}): ${TOOLKITS[*]}"
-echo "Release checks: $RELEASE_CHECKS (BUILD_RELEASE_DISABLE_EXCEPTIONS=$DISABLE_EXCEPTIONS)"
+echo "Release checks: $RELEASE_CHECKS (BUILD_RELEASE_DISABLE_EXCEPTIONS=$DISABLE_EXCEPTIONS), $CXX_STANDARD"
 
 # Exceptions: OCCT reports errors by throwing Standard_Failure; the bendcore WASM
 # build uses Emscripten's JS-based exceptions (-fexceptions, root CMakeLists.txt),
@@ -76,6 +85,7 @@ if [[ "${SKIP_OCCT_BUILD:-0}" != "1" ]]; then
       -DCMAKE_C_FLAGS="$EH_FLAGS" -DCMAKE_CXX_FLAGS="$EH_FLAGS" \
       -DBUILD_LIBRARY_TYPE=Static \
       -DBUILD_RELEASE_DISABLE_EXCEPTIONS="$DISABLE_EXCEPTIONS" \
+      -DBUILD_CPP_STANDARD="$CXX_STANDARD" \
       -DBUILD_MODULE_FoundationClasses=OFF \
       -DBUILD_MODULE_ModelingData=OFF \
       -DBUILD_MODULE_ModelingAlgorithms=OFF \
@@ -112,7 +122,7 @@ if [[ "${SKIP_OCCT_BUILD:-0}" != "1" ]]; then
     tail -n 40 "$LOG_DIR/install.log" >&2
     die "OCCT install failed (full log: $LOG_DIR/install.log)"
   fi
-  printf 'OCCT 8.0.1 wasm release_checks=%s\n' "$RELEASE_CHECKS" >"$OCCT_WASM_INSTALL/bendcore_occt_build.txt"
+  printf 'OCCT 8.0.1 wasm release_checks=%s cxx=%s\n' "$RELEASE_CHECKS" "$CXX_STANDARD" >"$OCCT_WASM_INSTALL/bendcore_occt_build.txt"
 fi
 
 LIB_DIR="$OCCT_WASM_INSTALL/lib"
