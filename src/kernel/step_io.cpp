@@ -16,6 +16,7 @@
 #include <STEPControl_Writer.hxx>
 #include <StepData_StepModel.hxx>
 #include <Standard_Failure.hxx>
+#include <TopExp_Explorer.hxx>
 #include <TopoDS_Shape.hxx>
 #include <UnitsMethods_LengthUnit.hxx>
 
@@ -83,6 +84,11 @@ Result<Shape> readStep(std::string_view data, const StepReadOptions& options) {
         }
         if (shape.IsNull()) {
             return R::failure(ErrorCode::OperationFailed, "STEP transfer returned a null shape");
+        }
+        if (!TopExp_Explorer(shape, TopAbs_VERTEX).More()) {
+            // Every root failed to translate (OCCT records the failures and returns an empty
+            // compound), e.g. after a reference to an entity of the wrong type.
+            return R::failure(ErrorCode::OperationFailed, "STEP transfer produced an empty shape (no vertices)");
         }
         return Shape(shape);
     } catch (const Standard_Failure& failure) {

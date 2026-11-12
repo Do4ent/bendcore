@@ -87,21 +87,28 @@ TEST(KernelMalformedInput, SubshapeIndexOutOfRangeIsParseError) {
     EXPECT_NE(r.error().message.find("Standard_OutOfRange"), std::string::npos) << r.error().message;
 }
 
-TEST(KernelMalformedInput, LocationIndexOutOfRangeIsParseError) {
-    // "Locations 0", the vertex reference uses location 7.
+TEST(KernelMalformedInput, LocationIndexOutOfRangeFallsBackToIdentity) {
+    // "Locations 0", the vertex reference uses location 7. Unlike subshape indices, OCCT checks
+    // location indices itself (TopTools_LocationSet::Location returns the identity for an index
+    // outside the table), so the edge is read unchanged.
     auto r = readBrepText(edgeText("1 0 0 0 1 0 0 ", "+3 7 -2 0"));
-    ASSERT_FALSE(r.ok());
-    EXPECT_EQ(r.error().code, ErrorCode::ParseError);
-    EXPECT_NE(r.error().message.find("Standard_OutOfRange"), std::string::npos) << r.error().message;
+    ASSERT_TRUE(r.ok()) << messageOf(r);
+    EXPECT_EQ(r.value().counts().edges, 1);
+    const auto box = r.value().boundingBox().value();
+    EXPECT_NEAR(box.min[0], 0.0, 1e-6);
+    EXPECT_NEAR(box.max[0], 10.0, 1e-6);
 }
 
 TEST(KernelMalformedInput, TrimmedCurveOnUnknownBasisIsParseError) {
     // Type 8 = trimmed curve; its basis has the unknown type 99, GeomTools returns a null curve
-    // and Geom_TrimmedCurve dereferences it (no check in OCCT): the fault guard turns the SIGSEGV
-    // into an error.
+    // and Geom_TrimmedCurve dereferences it (no check in OCCT, the fuzz defect brep_text #70).
+    // The SIGSEGV goes through the kernel's handler to the nearest OCC_CATCH_SIGNALS point, the
+    // one of GeomTools_CurveSet::ReadCurve: OCCT drops the curve, the stream is no longer at a
+    // section keyword, and the reader stops ("Not a TShape table") without a shape.
     auto r = readBrepText(edgeText("8 0 10\n99 0 0 0 1 0 0 "));
     ASSERT_FALSE(r.ok());
     EXPECT_EQ(r.error().code, ErrorCode::ParseError);
+    EXPECT_NE(r.error().message.find("holds no shape"), std::string::npos) << r.error().message;
 }
 
 TEST(KernelMalformedInput, OverlongKeywordInTextIsParseError) {
@@ -149,8 +156,14 @@ TEST(KernelMalformedInput, TwoHundredThousandBracketsAreRefusedBeforeParsing) {
     EXPECT_LT(s, 2.0);
     // Inside a string the same characters are text and the file reads normally (OCCT's string
     // end rule: an apostrophe followed by blanks and , or )).
-    auto quoted = readStep(replaced(boxStep(), "VECTOR('',", "VECTOR('" + std::string(200000, '[') + "',"));
+    auto quoted = readStep(replaced(boxStep(), "VECTOR('',", "VECTOR('" + std::string(1000, '[') + "',"));
     ASSERT_TRUE(quoted.ok()) << messageOf(quoted);
+    EXPECT_EQ(quoted.value().counts().faces, 6);
+    // A string longer than the flex buffer of OCCT's lexer is OCCT's own parse error
+    // ("input buffer overflow, can't enlarge buffer because scanner uses REJECT"), not a crash.
+    auto huge = readStep(replaced(boxStep(), "VECTOR('',", "VECTOR('" + std::string(200000, '[') + "',"));
+    ASSERT_FALSE(huge.ok());
+    EXPECT_EQ(huge.error().code, ErrorCode::ParseError);
 }
 
 TEST(KernelMalformedInput, SpecialCharactersInStringsAndCommentsAreAccepted) {
@@ -179,7 +192,7 @@ TEST(KernelMalformedInput, WrongTypeReferenceDoesNotCrash) {
     // The direction of a VECTOR refers to a CARTESIAN_POINT: OCCT leaves a null StepGeom_Direction
     // and StepToGeom dereferences it. The SIGSEGV happens inside OCCT's own per-entity
     // OCC_CATCH_SIGNALS point (the kernel's handler longjmps there), OCCT records a transfer
-    // failure for that edge and goes on; the result is an explicit outcome either way.
+    // failure for that entity and goes on.
     std::string step = boxStep();
     // First LINE of the file: "#a = LINE('',#p,#v); #p = CARTESIAN_POINT; #v = VECTOR('',#d,1.)".
     const auto vectorAt = step.find("= VECTOR('',#");
@@ -193,13 +206,12 @@ TEST(KernelMalformedInput, WrongTypeReferenceDoesNotCrash) {
     const auto refEnd = step.find(',', refAt);
     step.replace(refAt, refEnd - refAt, pointName);
     ASSERT_NE(step.substr(lineStart, 40).find("VECTOR"), std::string::npos);
+    // OCCT drops the whole shell (its transfer fails) and returns an empty compound: an explicit
+    // OperationFailed, not an "ok" without geometry.
     auto r = readStep(step);
-    if (r.ok()) {
-        EXPECT_LE(r.value().counts().faces, 6);
-    } else {
-        EXPECT_TRUE(r.error().code == ErrorCode::ParseError || r.error().code == ErrorCode::OperationFailed)
-            << r.error().message;
-    }
+    ASSERT_FALSE(r.ok());
+    EXPECT_EQ(r.error().code, ErrorCode::OperationFailed);
+    EXPECT_NE(r.error().message.find("empty shape"), std::string::npos) << r.error().message;
 }
 
 TEST(KernelMalformedInput, XcafReaderUsesTheSamePreflight) {
