@@ -406,4 +406,103 @@ describe('bendcore_drawing_wasm', () => {
     drawing.dispose();
     expectKernelError(() => drawing.describe(), 'Disposed', 'disposed');
   });
+
+  // Positions ГОСТ 2.109 on the drawing of the shaft unit (tests/assembly-fixtures/shaft_unit.mjs,
+  // made with the assembly module): two parts and three kinds of standard items — five positions.
+  const assemblyDir = argument('assembly-module', path.join(moduleDir, '../wasm_assembly'));
+  const haveAssembly = fs.existsSync(path.join(assemblyDir, 'bendcore_assembly.mjs'));
+  test(
+    'positions: automatic by the specification, manual with a leader, both follow the specification',
+    { skip: haveAssembly ? false : `no bendcore_assembly.mjs in ${assemblyDir} (--assembly-module)` },
+    async () => {
+      const glue = await import(pathToFileURL(path.join(assemblyDir, 'bendcore_assembly.mjs')).href);
+      const asmApi = await import(pathToFileURL(path.join(assemblyDir, 'bendcore_assembly_api.mjs')).href);
+      const { buildShaftUnit } = await import(pathToFileURL(path.join(repo, 'tests/assembly-fixtures/shaft_unit.mjs')).href);
+      const unit = buildShaftUnit(await asmApi.loadAssembly(glue.default));
+      const drawing = kernel.createFromAssembly(unit, { path: 'shaft_unit.bcasm.json' });
+      try {
+        // Specification by construction (ГОСТ 2.106: documentation, parts, standard items).
+        const spec = drawing.specification();
+        const items = spec.sections.flatMap((s) => s.items.filter((i) => i.position > 0).map((i) => [i.position, i.name, i.quantity]));
+        assert.deepEqual(items, [
+          [1, 'Втулка', 1],
+          [2, 'Вал', 1],
+          [3, 'Болт М10×40 ГОСТ 7798-70', 2],
+          [4, 'Гайка М10 ГОСТ 5915-70', 2],
+          [5, 'Шайба 10 ГОСТ 11371-78', 4],
+        ]);
+        const V = drawing.addView('S1', { kind: 'base', standard: 'front' });
+        drawing.setView('S1', V, { autoBalloons: true });
+        let sheet = drawing.describe().sheets[0];
+        // Every position of the specification once, the number of its definition.
+        assert.deepEqual(sheet.balloons.map((b) => Number(b.text)).sort(), [1, 2, 3, 4, 5]);
+        assert.ok(sheet.balloons.every((b) => b.id === null));
+        const numberOf = new Map(sheet.balloons.map((b) => [b.definition, b.text]));
+        assert.equal(numberOf.size, 5);
+
+        // Manual position on the top line of the shaft (the highest horizontal visible line of the
+        // front view: the shaft is 60 tall, the bushing 20, bolt heads below 30).
+        const v = view(drawing.sheetPicture('S1'), V);
+        const top = extremeLine(v, isHorizontal, 1, Math.max);
+        const shelf = [top.points[0][0] + 60, top.points[0][1] + 25];
+        const P = drawing.addBalloon('S1', V, top.index, { at: shelf });
+        sheet = drawing.describe().sheets[0];
+        assert.equal(sheet.positions.length, 1);
+        const p = sheet.positions[0];
+        assert.equal(p.id, P);
+        assert.equal(p.state, 'ok');
+        assert.equal(p.text, '2', 'the shaft is position 2');
+        assert.equal(p.text, numberOf.get(p.definition), 'the same number as the automatic position of that part');
+        assert.deepEqual(p.shelf, shelf);
+        // The leader point is on the picked line.
+        assert.ok(Math.abs(p.target[1] - top.points[0][1]) < 1e-6);
+        const [x0, x1] = [Math.min(top.points[0][0], top.points[1][0]), Math.max(top.points[0][0], top.points[1][0])];
+        assert.ok(p.target[0] >= x0 - 1e-6 && p.target[0] <= x1 + 1e-6);
+        // The automatic positions leave out the part that has a manual one.
+        assert.deepEqual(sheet.balloons.filter((b) => b.id === null).map((b) => Number(b.text)).sort(), [1, 3, 4, 5]);
+        assert.deepEqual(sheet.balloons.filter((b) => b.id === P).map((b) => b.text), ['2']);
+        // The sheet shows the number on the shelf (the kernel's SVG).
+        assert.ok(drawing.exportSheet('S1', 'svg').length > 0);
+
+        // Shelf moved, then saved and loaded: the position and its number stay.
+        drawing.setBalloon('S1', P, { at: [shelf[0] + 10, shelf[1]] });
+        assert.deepEqual(drawing.describe().sheets[0].positions[0].shelf, [shelf[0] + 10, shelf[1]]);
+        drawing.setBalloon('S1', P, { at: null });
+        const def = drawing.describe().sheets[0].positions[0];
+        assert.equal(def.at, null);
+        assert.deepEqual(def.shelf, [def.target[0] + 12, def.target[1] + 8]);
+        const loaded = kernel.load(drawing.save(), drawing.saveModel());
+        try {
+          const lp = loaded.drawing.describe().sheets[0].positions;
+          assert.deepEqual(lp.map((x) => [x.id, x.text, x.state]), [[P, '2', 'ok']]);
+        } finally {
+          loaded.drawing.dispose();
+        }
+
+        // Errors: silhouette lines are not edges of a part; unknown ids.
+        const silhouette = v.edges.find((e) => e.edgeIndex === null);
+        if (silhouette) expectKernelError(() => drawing.addBalloon('S1', V, silhouette.index), 'InvalidInput', 'silhouette');
+        expectKernelError(() => drawing.addBalloon('S1', V, 99999), 'InvalidInput', 'no such edge');
+        expectKernelError(() => drawing.setBalloon('S1', 'nope', { at: null }), 'InvalidInput', 'unknown position');
+
+        // Removed: the automatic position of the shaft comes back.
+        drawing.removeAnnotation('S1', P);
+        sheet = drawing.describe().sheets[0];
+        assert.equal(sheet.positions.length, 0);
+        assert.deepEqual(sheet.balloons.map((b) => Number(b.text)).sort(), [1, 2, 3, 4, 5]);
+      } finally {
+        drawing.dispose();
+      }
+
+      // A part drawing has no specification: no positions.
+      const part = kernel.createFromPart(partJson, { properties: PROPS });
+      try {
+        const F = part.addView('S1', { kind: 'base' });
+        const line = part.sheetPicture('S1').views[0].edges.find((e) => e.visible && e.edgeIndex !== null);
+        expectKernelError(() => part.addBalloon('S1', F, line.index), 'InvalidInput', 'positions need an assembly');
+      } finally {
+        part.dispose();
+      }
+    },
+  );
 });

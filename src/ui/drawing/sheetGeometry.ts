@@ -5,6 +5,7 @@
 // No geometry is made here: every curve comes from the kernel's sheetPicture().
 
 import type { PictureCurve, PictureView, Point } from '../../wasm/bendcore_drawing_api.mjs';
+import type { MessageKey } from '../app/i18n';
 
 /** Screen = (panX + zoom·x, panY + zoom·(sheetHeight − y)); zoom in px per mm. */
 export interface SheetTransform {
@@ -108,7 +109,7 @@ export function viewAt(views: PictureView[], p: Point): PictureView | null {
 
 // ---------------------------------------------------------------- tools
 
-export type Tool = 'select' | 'dimension' | 'roughness' | 'tolerance' | 'datum' | 'detail' | 'section';
+export type Tool = 'select' | 'dimension' | 'roughness' | 'tolerance' | 'datum' | 'balloon' | 'detail' | 'section';
 
 export interface EdgePick {
   view: string;
@@ -120,8 +121,8 @@ export interface PickState {
   picks: EdgePick[];
   /** The picks form a complete input of the tool: the editor sends them to the kernel. */
   ready: boolean;
-  /** Reason the last click was not taken. */
-  message: string | null;
+  /** Reason the last click was not taken, or what to click next (a message key). */
+  message: MessageKey | null;
 }
 
 export const emptyPicks: PickState = { picks: [], ready: false, message: null };
@@ -129,25 +130,36 @@ export const emptyPicks: PickState = { picks: [], ready: false, message: null };
 /**
  * Next pick state of an edge tool after a click on an edge. Dimension: up to two edges of one
  * view, ready at two (a single circle or arc is sent with the "Размер" button / Enter). Symbols:
- * one straight edge. A second click on a picked edge removes it.
+ * one straight edge. Position (balloon): one edge of any kind — the leader point; the shelf is the
+ * next click on the sheet (balloonShelf). A second click on a picked edge removes it.
  */
 export function addPick(state: PickState, tool: Tool, pick: EdgePick): PickState {
   const same = state.picks.findIndex((p) => p.view === pick.view && p.index === pick.index);
   if (same >= 0) return { picks: state.picks.filter((_, i) => i !== same), ready: false, message: null };
   if (tool === 'dimension') {
     if (state.picks.length > 0 && state.picks[0].view !== pick.view) {
-      return { picks: [pick], ready: false, message: 'Размер ставится по рёбрам одного вида: выбор начат заново' };
+      return { picks: [pick], ready: false, message: 'drawing.pick.oneView' };
     }
     const picks = [...state.picks, pick].slice(-2);
     return { picks, ready: picks.length === 2, message: null };
   }
   if (tool === 'roughness' || tool === 'tolerance' || tool === 'datum') {
     if (pick.type === 'circle' || pick.type === 'arc') {
-      return { ...state, ready: false, message: 'Знак ставится на прямолинейное ребро' };
+      return { ...state, ready: false, message: 'drawing.pick.straight' };
     }
     return { picks: [pick], ready: true, message: null };
   }
+  if (tool === 'balloon') return { picks: [pick], ready: false, message: 'drawing.pick.shelf' };
   return { ...state, ready: false, message: null };
+}
+
+/**
+ * The position tool after a click on the sheet at `p` (sheet mm): with a picked edge, the leader
+ * edge and the shelf point to send to the kernel (addBalloon); without one, null.
+ */
+export function balloonShelf(state: PickState, p: Point): { view: string; index: number; at: Point } | null {
+  if (state.picks.length !== 1) return null;
+  return { view: state.picks[0].view, index: state.picks[0].index, at: [p[0], p[1]] };
 }
 
 /** A single picked circle or arc can be dimensioned on request (diameter / radius). */

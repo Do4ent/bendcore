@@ -130,7 +130,21 @@ export interface SheetInfo {
   roughnessRemainder: RoughnessSpec | null;
   technicalRequirements: string[];
   partsList: boolean;
-  balloons: { definition: number; text: string; at: Point; target: Point }[];
+  /** Positions on the sheet: automatic ones of the views (id null) and the manual ones (id). */
+  balloons: { id: string | null; definition: number; text: string; at: Point; target: Point }[];
+  /** Manual positions (addBalloon); state null before the first update. */
+  positions: {
+    id: string;
+    view: string;
+    /** Shelf point given by the user; null — the default place. */
+    at: Point | null;
+    state: 'ok' | 'dangling' | null;
+    definition?: number;
+    /** Number from the specification. */
+    text?: string;
+    target?: Point;
+    shelf?: Point;
+  }[];
   name?: string;
   width?: number;
   height?: number;
@@ -287,6 +301,8 @@ export class DrawingHandle {
   addRoughness(sheet: string, view: string, pick: number, spec?: RoughnessSpec & { id?: string; at?: number }): string;
   addTolerance(sheet: string, view: string, pick: number, spec: { characteristic: GeometricCharacteristic; tolerance: string; datums?: string[]; diameterZone?: boolean; id?: string; at?: number }): string;
   addDatum(sheet: string, view: string, pick: number, letter: string, spec?: { id?: string; at?: number }): string;
+  addBalloon(sheet: string, view: string, pick: number, spec?: { id?: string; at?: Point | null }): string;
+  setBalloon(sheet: string, id: string, changes: { at: Point | null }): EditResult;
   removeAnnotation(sheet: string, id: string): EditResult;
   sheetPicture(sheet: string): SheetPicture;
   specification(): SpecificationTable;

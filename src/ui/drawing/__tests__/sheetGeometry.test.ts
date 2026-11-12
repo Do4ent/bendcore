@@ -4,6 +4,7 @@
 
 import {
   addPick,
+  balloonShelf,
   canDimensionSingle,
   curvePath,
   downloadName,
@@ -135,7 +136,7 @@ describe('picks of the edge tools', () => {
     const s = addPick(addPick(emptyPicks, 'dimension', line(1)), 'dimension', line(2, 'V2'));
     expect(s.picks).toEqual([line(2, 'V2')]);
     expect(s.ready).toBe(false);
-    expect(s.message).toMatch(/одного вида/);
+    expect(s.message).toBe('drawing.pick.oneView');
   });
 
   test('a single circle or arc can be dimensioned, a single line cannot', () => {
@@ -149,7 +150,18 @@ describe('picks of the edge tools', () => {
     const c = addPick(emptyPicks, 'datum', { view: 'V1', index: 3, type: 'circle' });
     expect(c.ready).toBe(false);
     expect(c.picks).toEqual([]);
-    expect(c.message).toMatch(/прямолинейн/);
+    expect(c.message).toBe('drawing.pick.straight');
+  });
+
+  test('position: an edge of any kind, then the shelf point on the sheet', () => {
+    expect(balloonShelf(emptyPicks, [10, 20])).toBeNull();
+    const s = addPick(emptyPicks, 'balloon', { view: 'V1', index: 3, type: 'circle' });
+    expect(s.ready).toBe(false);
+    expect(s.message).toBe('drawing.pick.shelf');
+    expect(balloonShelf(s, [150.5, 80])).toEqual({ view: 'V1', index: 3, at: [150.5, 80] });
+    // Another edge replaces the leader edge.
+    const t = addPick(s, 'balloon', line(7, 'V2'));
+    expect(balloonShelf(t, [1, 2])).toEqual({ view: 'V2', index: 7, at: [1, 2] });
   });
 
   test('download names', () => {

@@ -166,6 +166,20 @@ export class DrawingHandle {
     return this.#call('addSymbol', sheet, view, 'datum', text(pick), text({ ...spec, letter })).id;
   }
 
+  /**
+   * Manual position (ГОСТ 2.109) with a leader to a picked model edge of an assembly view; the
+   * number is the specification position of the edge's part. spec: { id?, at?: [x, y] } — the
+   * shelf point on the sheet (default 12 mm right and 8 mm above the leader point).
+   */
+  addBalloon(sheet, view, pick, spec = {}) {
+    return this.#call('addBalloon', sheet, view, text(pick), text(spec)).id;
+  }
+
+  /** Moves the shelf of a manual position: { at: [x, y] | null }. */
+  setBalloon(sheet, id, changes) {
+    return this.#call('setBalloon', sheet, id, text(changes));
+  }
+
   removeAnnotation(sheet, id) {
     return this.#call('removeAnnotation', sheet, id);
   }

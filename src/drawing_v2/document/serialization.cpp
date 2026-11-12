@@ -404,6 +404,13 @@ Result<std::string> DrawingDocument::toJson() const {
         for (const DatumItem& dm : s.datums)
             dms.push_back({{"id", dm.id}, {"view", dm.view}, {"edge", refJson(dm.edge)}, {"at", dm.at}, {"letter", dm.letter}});
         js["datums"] = std::move(dms);
+        if (!s.balloons.empty()) {
+            json bs = json::array();
+            for (const BalloonItem& b : s.balloons)
+                bs.push_back({{"id", b.id}, {"view", b.view}, {"edge", refJson(b.edge)},
+                              {"at", b.at ? pt(*b.at) : json(nullptr)}});
+            js["balloons"] = std::move(bs);
+        }
         js["roughnessRemainder"] = s.roughnessRemainder ? roughJson(*s.roughnessRemainder) : json(nullptr);
         js["technicalRequirements"] = s.technicalRequirements;
         js["partsList"] = s.partsList;
@@ -560,6 +567,16 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                     dm.at = num(jdm, "at", 0.5);
                     dm.letter = str(jdm, "letter");
                     s.datums.push_back(std::move(dm));
+                }
+            }
+            if (js.contains("balloons")) {
+                for (const json& jb : js.at("balloons")) {
+                    BalloonItem b;
+                    b.id = str(jb, "id");
+                    b.view = str(jb, "view");
+                    b.edge = refFrom(field(jb, "edge"));
+                    if (jb.contains("at") && !jb.at("at").is_null()) b.at = ptFrom(jb.at("at"));
+                    s.balloons.push_back(std::move(b));
                 }
             }
             if (js.contains("roughnessRemainder") && !js.at("roughnessRemainder").is_null())
