@@ -37,6 +37,10 @@ HTTP-сервис тела трубы и распознавания трубы �
 | Сборка (`web/assembly`) | дерево сборки, сопряжения, перетаскивание с перерешением, пересечения, BOM, разнесённый вид, крепёж | [`docs/ui/ASSEMBLY_UI.md`](docs/ui/ASSEMBLY_UI.md) |
 | Чертёж (`web/drawing`) | листы, виды, размеры, аннотации, обновление по модели, спецификация, экспорт PDF/DXF/SVG | [`docs/ui/DRAWING_UI.md`](docs/ui/DRAWING_UI.md) |
 
+Руководство пользователя (быстрый старт, справка по эскизу, детали, сборке, чертежу, обмену
+данными, ограничения версии) — [`docs/USER_GUIDE/`](docs/USER_GUIDE/README.md). Оболочка с
+вкладками всех редакторов — `web/app` (`npm run dev:app`, `docs/ui/APP_SHELL.md`).
+
 Исходники страниц — `src/ui/{kernel,modeling,assembly,drawing}`, JS API модулей — `src/wasm/`.
 `web/index.html` и `web/view.html` — проверочные страницы модуля `bendcore_wasm`
 (эскиз 2D, импорт и просмотр трубы, `src/wasm/bindings.cpp`).
