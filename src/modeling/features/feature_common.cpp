@@ -270,8 +270,12 @@ std::string checkSolidResult(const TopoDS_Shape& shape) {
     if (!isValidShape(shape)) return "result is invalid (BRepCheck_Analyzer)";
     // Одно тело: его объём равен объёму всей формы (возможно, уже известному).
     if (countSolids(shape) == 1) {
+        // ... if the shape holds nothing but that solid (no free faces besides it).
         TopExp_Explorer ex(shape, TopAbs_SOLID);
-        const double v = shape.ShapeType() == TopAbs_SOLID ? volumeOf(shape) : volumeOf(ex.Current());
+        int faces = 0, solidFaces = 0;
+        for (TopExp_Explorer f(shape, TopAbs_FACE); f.More(); f.Next()) ++faces;
+        for (TopExp_Explorer f(ex.Current(), TopAbs_FACE); f.More(); f.Next()) ++solidFaces;
+        const double v = faces == solidFaces ? volumeOf(shape) : volumeOf(ex.Current());
         if (!(v > 0.0)) return "result contains a solid with non-positive volume";
         return {};
     }
