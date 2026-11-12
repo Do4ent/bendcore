@@ -57,6 +57,8 @@ import BusyIndicator from '../app/BusyIndicator';
 import { useHotkeys } from '../app/hotkeys';
 import { useI18n } from '../app/i18n';
 import type { DocumentFile, EditorHostProps } from '../app/editorHost';
+import { DRAWING_FILE_EXTENSION, drawingFileName, packDrawingFile, readDrawingFiles, unpackDrawingFile } from './drawingFile';
+import type { DrawingFileContent, DrawingFileError } from './drawingFile';
 import './DrawingEditor.css';
 
 type Variable = { name: string; expression: string; value: number | null; error: string | null };
@@ -139,7 +141,7 @@ export default function DrawingEditorApp({
   /** Serialises drawing bodies: one runs at a time, in click order. */
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
   /** Drawing and model JSON after the last completed change (cancel restores them). */
-  const snapshotRef = useRef<{ text: string; model: string; name: string } | null>(null);
+  const snapshotRef = useRef<{ text: string; model: string; name: string; modelName: string } | null>(null);
   const savedRef = useRef<string | null>(null);
   const hostRef = useRef({ onChange, onFile });
   hostRef.current = { onChange, onFile };
@@ -236,13 +238,16 @@ export default function DrawingEditorApp({
   );
 
   /** Snapshot of the drawing and its model after a completed change; reported as a draft. */
-  const takeSnapshot = useCallback(async (d: Drawing, name: string) => {
+  const takeSnapshot = useCallback(async (d: Drawing) => {
     const [text, model] = await Promise.all([d.save(), d.saveModel()]);
     if (drawingRef.current !== d) return;
-    snapshotRef.current = { text, model, name };
-    hostRef.current.onChange?.({ kind: 'drawing', name, text, model }, text !== savedRef.current);
+    const names = namesRef.current;
+    snapshotRef.current = { text, model, name: names.drawing, modelName: names.model };
+    const file = packDrawingFile({ drawing: text, model, modelName: names.model });
+    hostRef.current.onChange?.({ kind: 'drawing', name: names.drawing, text: file }, text !== savedRef.current);
   }, []);
-  const modelNameRef = useRef('');
+  /** File name of the drawing (.bcdrw.json) and of the model it was made from. */
+  const namesRef = useRef({ drawing: '', model: '' });
 
   // Runs a kernel action; any failure is shown in the status line and the page is refreshed.
   const sheetIdRef = useRef(sheetId);
@@ -270,7 +275,7 @@ export default function DrawingEditorApp({
         if (!keepPicks) setPickState(emptyPicks);
         try {
           await refresh(next);
-          if (ok) await takeSnapshot(d, modelNameRef.current);
+          if (ok) await takeSnapshot(d);
         } catch (e) {
           if (!isCancelled(e)) setError(errorOf(e));
         }
@@ -282,10 +287,14 @@ export default function DrawingEditorApp({
     [refresh, takeSnapshot],
   );
 
-  /** Makes `make`'s drawing the current one; `saved` is the file text it was opened from. */
+  /**
+   * Makes `make`'s drawing the current one; `saved` is the drawing document JSON of the file it was
+   * opened from (null: not saved yet). `name` is the drawing file name, `model` the model's.
+   */
   const openDrawing = async (
     make: (k: DrawingModule) => Promise<Drawing>,
     name: string,
+    model: string,
     saved: string | null = null,
     k: DrawingModule | undefined = kernel?.root,
   ): Promise<boolean> => {
@@ -296,8 +305,8 @@ export default function DrawingEditorApp({
       if (old) void old.dispose().catch(() => undefined);
       drawingRef.current = d;
       savedRef.current = saved;
-      modelNameRef.current = name;
-      setModelName(name);
+      namesRef.current = { drawing: name, model };
+      setModelName(model);
       setReport(null);
       setSelectedView(null);
       setPickState(emptyPicks);
@@ -314,15 +323,40 @@ export default function DrawingEditorApp({
     }
   };
 
-  /** Document given by the shell: a model to draw, or a drawing with its model. */
+  /** Opens drawing file content: the drawing on its embedded model, with the load report. */
+  const openContent = async (content: DrawingFileContent, name: string, saved: boolean, k?: DrawingModule): Promise<boolean> => {
+    const loaded: { report: UpdateReport | null } = { report: null };
+    const ok = await openDrawing(
+      async (m) => {
+        const r = await m.load(content.drawing, content.model);
+        loaded.report = r.report;
+        return r.drawing;
+      },
+      name,
+      content.modelName,
+      saved ? content.drawing : null,
+      k,
+    );
+    if (loaded.report) setReport(loaded.report);
+    return ok;
+  };
+
+  const fileError = (e: DrawingFileError) =>
+    setError({ code: 'InvalidInput', message: e.code === 'needsModel' ? t('drawing.file.needsModel') : e.detail });
+
+  /** Document given by the shell: a model to draw, or a drawing file. */
   const openInitial = async (k: DrawingModule, file: DocumentFile) => {
-    if (file.kind === 'drawing' && file.model !== undefined) {
-      const model = file.model;
-      await openDrawing(async (m) => (await m.load(file.text, model)).drawing, file.name, initialDirty ? null : file.text, k);
-      if (!initialDirty) hostRef.current.onFile?.(file);
+    if (file.kind === 'drawing') {
+      const r = unpackDrawingFile(file.text);
+      if (!r.ok) {
+        fileError(r.error);
+        return;
+      }
+      const ok = await openContent(r.content, file.name, !initialDirty, k);
+      if (ok && !initialDirty) hostRef.current.onFile?.(file);
     } else {
       // A new drawing of a part or an assembly document.
-      await openDrawing((m) => fromModel(m, file.text, file.name), file.name, null, k);
+      await openDrawing((m) => fromModel(m, file.text, file.name), drawingFileName(file.name), file.name, null, k);
     }
   };
 
@@ -330,56 +364,54 @@ export default function DrawingEditorApp({
     if (!files || files.length === 0) return;
     const file = files[0];
     const text = await file.text();
-    await openDrawing((k) => fromModel(k, text, file.name), file.name);
+    await openDrawing((k) => fromModel(k, text, file.name), drawingFileName(file.name), file.name);
   };
 
+  /** A drawing file (.bcdrw.json), or an older drawing document chosen with its model file. */
   const onOpenDrawing = async (files: FileList | null) => {
-    if (!files || files.length < 2) {
-      setError({ code: 'InvalidInput', message: 'Выберите два файла: чертёж (.drawing.json) и его модель' });
+    if (!files || files.length === 0) return;
+    const texts = await Promise.all(Array.from(files).map(async (f) => ({ name: f.name, text: await f.text() })));
+    const r = readDrawingFiles(texts);
+    if (!r.ok) {
+      fileError(r.error);
       return;
     }
-    const texts = await Promise.all(Array.from(files).map((f) => f.text().then((t) => ({ name: f.name, t }))));
-    const isDrawing = (t: string) => {
-      try {
-        return JSON.parse(t).format === 'bendcore-drawing';
-      } catch {
-        return false;
-      }
-    };
-    const drawingFile = texts.find((x) => isDrawing(x.t));
-    const modelFile = texts.find((x) => x !== drawingFile);
-    if (!drawingFile || !modelFile) {
-      setError({ code: 'InvalidInput', message: 'Среди файлов нет документа чертежа "bendcore-drawing"' });
-      return;
+    const ok = await openContent(r.content, r.name, !r.migrated);
+    if (!ok) return;
+    if (r.migrated) setMessage(t('drawing.file.migrated', { name: r.name }));
+    else hostRef.current.onFile?.({ kind: 'drawing', name: r.name, text: packDrawingFile(r.content) });
+  };
+
+  /**
+   * Replaces the model of the drawing by a newer file of it: the drawing is loaded on that model
+   * (DrawingKernel.load), the report lists the changed and dangling dimensions.
+   */
+  const onReplaceModel = async (files: FileList | null) => {
+    const d = drawingRef.current;
+    if (!files || files.length === 0 || !d) return;
+    const file = files[0];
+    const model = await file.text();
+    const drawingText = await d.save();
+    if (await openContent({ drawing: drawingText, model, modelName: file.name }, namesRef.current.drawing, false)) {
+      setMessage(t('drawing.file.modelReplaced', { name: file.name }));
     }
-    const loaded: { report: UpdateReport | null } = { report: null };
-    const ok = await openDrawing(
-      async (k) => {
-        const r = await k.load(drawingFile.t, modelFile.t);
-        loaded.report = r.report;
-        return r.drawing;
-      },
-      drawingFile.name,
-      drawingFile.t,
-    );
-    if (loaded.report) setReport(loaded.report);
-    if (ok) hostRef.current.onFile?.({ kind: 'drawing', name: drawingFile.name, text: drawingFile.t, model: modelFile.t });
   };
 
   const onSave = async () => {
     const d = drawingRef.current;
     if (!d || !desc) return;
     try {
-      const designation = sheet?.titleShown?.designation ?? '';
+      const designation = sheet?.titleShown?.designation?.trim() ?? '';
       const [text, model] = await Promise.all([d.save(), d.saveModel()]);
-      const name = downloadName(designation, '', 'drawing.json');
-      download(text, name, 'application/json');
-      download(model, downloadName(designation, '', desc.model.kind === 'part' ? 'part.json' : 'assembly.json'), 'application/json');
+      const name = designation ? downloadName(designation, '', DRAWING_FILE_EXTENSION.slice(1)) : drawingFileName(namesRef.current.drawing);
+      const fileText = packDrawingFile({ drawing: text, model, modelName: namesRef.current.model });
+      download(fileText, name, 'application/json');
       savedRef.current = text;
-      const file: DocumentFile = { kind: 'drawing', name, text, model };
+      namesRef.current = { ...namesRef.current, drawing: name };
+      const file: DocumentFile = { kind: 'drawing', name, text: fileText };
       hostRef.current.onFile?.(file);
       hostRef.current.onChange?.(file, false);
-      setMessage('Сохранено: документ чертежа и модель');
+      setMessage(t('drawing.file.saved', { name }));
     } catch (e) {
       if (!isCancelled(e)) setError(errorOf(e));
     }
@@ -403,7 +435,7 @@ export default function DrawingEditorApp({
       const client = await loadDrawingFrom(defaultDrawingBaseUrl());
       setKernel(client);
       setStatus('ready');
-      if (snap) await openDrawing(async (m) => (await m.load(snap.text, snap.model)).drawing, snap.name, saved, client.root);
+      if (snap) await openDrawing(async (m) => (await m.load(snap.text, snap.model)).drawing, snap.name, snap.modelName, saved, client.root);
       else {
         setDesc(null);
         setPicture(null);
@@ -577,9 +609,13 @@ export default function DrawingEditorApp({
           Открыть модель…
           <input type="file" accept=".json,application/json" data-testid="open-model" onChange={(e) => void onOpenModel(e.target.files)} disabled={!kernel} />
         </label>
-        <label className="dr-file">
-          Открыть чертёж…
+        <label className="dr-file" title={t('drawing.file.openHint')}>
+          {t('drawing.file.open')}
           <input ref={openDrawingInput} type="file" accept=".json,application/json" multiple data-testid="open-drawing" onChange={(e) => void onOpenDrawing(e.target.files)} disabled={!kernel} />
+        </label>
+        <label className="dr-file" title={t('drawing.file.replaceModelHint')}>
+          {t('drawing.file.replaceModel')}
+          <input type="file" accept=".json,application/json" data-testid="replace-model" onChange={(e) => void onReplaceModel(e.target.files)} disabled={!drawing} />
         </label>
         <button onClick={() => void onSave()} disabled={!drawing} data-testid="drawing-save" title="Ctrl+S">Сохранить</button>
         <span className="dr-sep" />

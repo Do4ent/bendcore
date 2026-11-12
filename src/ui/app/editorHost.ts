@@ -12,9 +12,15 @@ export interface DocumentFile {
   kind: DocKind;
   /** File name shown in the tab and used for downloads. */
   name: string;
-  /** Document JSON (bendcore-part, bendcore-assembly, bendcore-drawing). */
+  /**
+   * Document JSON: bendcore-part, bendcore-assembly, or the drawing file bendcore-drawing-file
+   * with the drawing and its model (src/ui/drawing/drawingFile.ts).
+   */
   text: string;
-  /** Drawing only: the model JSON the drawing is made from (DrawingHandle.saveModel). */
+  /**
+   * Drafts and recent files written by the earlier shell only: a drawing kept as the drawing
+   * document in `text` and its model here. migrateDrawingDocument() packs them into one file.
+   */
   model?: string;
   /**
    * Assembly only: part JSON of the definitions inserted from bendcore parts. The assembly file

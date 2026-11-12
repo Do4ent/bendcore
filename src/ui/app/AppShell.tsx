@@ -20,6 +20,7 @@ import { I18nContext, LANGS, storeLang, storedLang, translate } from './i18n';
 import type { I18n, Lang, MessageKey } from './i18n';
 import { useHotkeys } from './hotkeys';
 import { AppStore, DraftEntry, RecentEntry, detectKind, openAppStore, recentId } from './storage';
+import { migrateDrawingDocument, packDrawingFile, readDrawingFiles } from '../drawing/drawingFile';
 import './AppShell.css';
 
 /** Interval of draft writes (ms); drafts are also written when the page is hidden or closed. */
@@ -244,30 +245,34 @@ const AppShell: React.FC = () => {
     const files = list ? await Promise.all([...list].map(async (f) => ({ name: f.name, text: await f.text() }))) : [];
     if (files.length === 0) return;
     const typed = files.map((f) => ({ ...f, detected: detectKind(f.text) }));
-    const drawing = typed.find((f) => 'kind' in f.detected && f.detected.kind === 'drawing');
+    // Model files used by drawings of the earlier two-file format are not tabs of their own.
+    const consumed = new Set<string>();
+    for (const f of typed) {
+      if (!('kind' in f.detected) || f.detected.kind !== 'drawing') continue;
+      const models = typed.filter((m) => m !== f && 'kind' in m.detected && m.detected.kind !== 'drawing' && !consumed.has(m.name));
+      const r = readDrawingFiles([f, ...models.slice(0, 1)]);
+      if (!r.ok) {
+        notify('error', r.error.code === 'needsModel' ? t('notify.drawingNeedsModel', { name: f.name }) : t('notify.unknownFile', { name: f.name, reason: r.error.detail }));
+        continue;
+      }
+      if (r.migrated) consumed.add(models[0].name);
+      openTab('drawing', { kind: 'drawing', name: r.name, text: r.migrated ? packDrawingFile(r.content) : f.text });
+      notify('info', r.migrated ? t('notify.drawingMigrated', { name: f.name, file: r.name }) : t('notify.opened', { name: f.name }));
+    }
     for (const f of typed) {
       if ('error' in f.detected) {
         notify('error', t('notify.unknownFile', { name: f.name, reason: f.detected.error }));
         continue;
       }
       const kind = f.detected.kind;
-      if (kind === 'drawing') {
-        const model = typed.find((m) => m !== f && 'kind' in m.detected && m.detected.kind !== 'drawing');
-        if (!model) {
-          notify('error', t('notify.drawingNeedsModel', { name: f.name }));
-          continue;
-        }
-        openTab('drawing', { kind: 'drawing', name: f.name, text: f.text, model: model.text });
-      } else if (!drawing) {
-        // A model chosen together with its drawing is the drawing's model, not a tab of its own.
-        openTab(kind, { kind, name: f.name, text: f.text });
-      }
+      if (kind === 'drawing' || consumed.has(f.name)) continue;
+      openTab(kind, { kind, name: f.name, text: f.text });
       notify('info', t('notify.opened', { name: f.name }));
     }
   };
 
   const restoreDrafts = () => {
-    for (const d of offered) openTab(d.file.kind, d.file, { id: d.id, dirty: true });
+    for (const d of offered) openTab(d.file.kind, migrateDrawingDocument(d.file), { id: d.id, dirty: true });
     setOffered([]);
   };
 
@@ -513,7 +518,7 @@ const AppShell: React.FC = () => {
                   <ul data-testid="recent-list">
                     {recent.map((r) => (
                       <li key={r.id}>
-                        <button type="button" className="app-link" onClick={() => openTab(r.file.kind, r.file)} data-testid={`recent-${r.id}`}>
+                        <button type="button" className="app-link" onClick={() => openTab(r.file.kind, migrateDrawingDocument(r.file))} data-testid={`recent-${r.id}`}>
                           {t(KIND_KEY[r.file.kind])}: {r.file.name}
                         </button>
                         <span className="app-hint"> {timeText(r.usedAt)}</span>
