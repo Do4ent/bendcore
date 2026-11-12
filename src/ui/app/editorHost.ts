@@ -5,7 +5,9 @@
  * to itself.
  */
 
-export type DocKind = 'part' | 'assembly' | 'drawing';
+import type { ModuleFaultInfo } from './faultReport';
+
+export type DocKind ='part' | 'assembly' | 'drawing';
 
 /** A document as text, the way it is saved, kept as a draft and passed between editors. */
 export interface DocumentFile {
@@ -55,6 +57,12 @@ export interface EditorHostProps {
   onCreateDrawing?: (part: DocumentFile) => void;
   /** Assembly editor: "open component part" of a component defined by a bendcore part. */
   onOpenPart?: (part: DocumentFile) => void;
+  /**
+   * The editor's kernel module failed (a trap in a call or the worker died: its state can no
+   * longer be trusted). The shell saves the last document reported by onChange as a draft and
+   * offers to restart the module with it (docs/ui/APP_SHELL.md, "Сбой модуля").
+   */
+  onFault?: (info: ModuleFaultInfo) => void;
 }
 
 export function downloadText(name: string, text: string | Uint8Array, type: string): void {

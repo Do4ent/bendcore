@@ -9,9 +9,11 @@ export type KernelErrorCode =
   | 'Unsupported'
   | 'Disposed'
   // Raised by the main-thread worker client (src/ui/worker/wasmClient.ts), not by the module:
-  // the worker was terminated by cancel(), or failed.
+  // the worker was terminated by cancel(), or failed; a call trapped inside the module
+  // (WebAssembly.RuntimeError: the module state is unknown, docs/ui/APP_SHELL.md "Сбой модуля").
   | 'Cancelled'
-  | 'WorkerFailed';
+  | 'WorkerFailed'
+  | 'ModuleFault';
 
 export type SurfaceType = 'Plane' | 'Cylinder' | 'Cone' | 'Sphere' | 'Torus' | 'BSpline' | 'Other';
 export type CurveType = 'Line' | 'Circle' | 'Ellipse' | 'BSpline' | 'Other' | 'Degenerated';

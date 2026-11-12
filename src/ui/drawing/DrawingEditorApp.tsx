@@ -57,6 +57,7 @@ import BusyIndicator from '../app/BusyIndicator';
 import { useHotkeys } from '../app/hotkeys';
 import { useI18n } from '../app/i18n';
 import type { DocumentFile, EditorHostProps } from '../app/editorHost';
+import { useFaultReport } from '../app/faultReport';
 import { DRAWING_FILE_EXTENSION, drawingFileName, packDrawingFile, readDrawingFiles, unpackDrawingFile } from './drawingFile';
 import type { DrawingFileContent, DrawingFileError } from './drawingFile';
 import './DrawingEditor.css';
@@ -133,9 +134,11 @@ export default function DrawingEditorApp({
   initialDirty = false,
   onChange,
   onFile,
+  onFault,
 }: EditorHostProps = {}): JSX.Element {
   const { t } = useI18n();
   const [kernel, setKernel] = useState<WasmClient<DrawingKernel> | null>(null);
+  useFaultReport(kernel as WasmClient<unknown> | null, onFault);
   const kernelRef = useRef(kernel);
   kernelRef.current = kernel;
   /** Serialises drawing bodies: one runs at a time, in click order. */

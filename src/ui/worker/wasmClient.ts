@@ -15,7 +15,7 @@
 
 import { KernelError } from '../../wasm/bendcore_kernel_api.mjs';
 import type { KernelErrorCode } from '../../wasm/bendcore_kernel_api.mjs';
-import { LONG_OPERATIONS, ModuleKind, Request, Response, isRemoteRef } from './protocol';
+import { CONVERTED_SIGNAL, LONG_OPERATIONS, ModuleKind, Request, Response, isRemoteRef } from './protocol';
 
 /** The part of Worker the client uses (a real Worker, or an in-process one in tests). */
 export interface WorkerLike {
@@ -52,6 +52,7 @@ export interface PendingCall {
 }
 
 export type ActivityListener = (pending: PendingCall[]) => void;
+export type FaultListener = (error: KernelError, module: ModuleKind) => void;
 
 interface Waiting extends PendingCall {
   resolve(v: unknown): void;
@@ -144,7 +145,13 @@ export class WasmClient<Root> {
     if (!w) return;
     this.pending.delete(m.id);
     if (m.type === 'result') w.resolve(this.decode(m.value));
-    else w.reject(new KernelError(m.error.code as KernelErrorCode, m.error.detail));
+    else {
+      const error = new KernelError(m.error.code as KernelErrorCode, m.error.detail);
+      w.reject(error);
+      // A trap in the module: its state is unknown, the client closes (every pending and later
+      // call rejects with this error) and the owner is told through onFault().
+      if (error.code === 'ModuleFault') this.close(error);
+    }
     this.emit();
   }
 
@@ -178,9 +185,26 @@ export class WasmClient<Root> {
     );
   }
 
+  private readonly faultListeners = new Set<FaultListener>();
+
+  /** The failure that closed the client when it was a module fault (isModuleFault), else null. */
+  get fault(): KernelError | null {
+    return this.closed && isModuleFault(this.closed) ? this.closed : null;
+  }
+
+  /**
+   * Called once when the module fails: a trap in a call (ModuleFault) or the worker died
+   * (WorkerFailed). Not called for cancel() and dispose(). Returns the unsubscribe function.
+   */
+  onFault(listener: FaultListener): () => void {
+    this.faultListeners.add(listener);
+    return () => this.faultListeners.delete(listener);
+  }
+
   private close(error: KernelError) {
     if (this.closed) return;
     this.closed = error;
+    if (isModuleFault(error)) for (const l of this.faultListeners) l(error, this.module);
     WasmClient.running.delete(this as WasmClient<unknown>);
     this.worker.terminate();
     const list = [...this.pending.values()];
@@ -201,6 +225,17 @@ export class WasmClient<Root> {
   dispose(): void {
     this.close(new KernelError('Disposed', 'the module worker was closed'));
   }
+}
+
+/**
+ * True when `e` says the module itself failed, so its state can no longer be trusted
+ * (docs/ui/APP_SHELL.md, "Сбой модуля"): ModuleFault (a WebAssembly trap in a call, protocol.ts
+ * isWasmTrap), WorkerFailed (the worker died), or a native kernel error made from a hardware
+ * fault by occt_fault_guard (ParseError whose text names SIGSEGV / SIGBUS / SIGFPE inside OCCT).
+ */
+export function isModuleFault(e: unknown): boolean {
+  if (!(e instanceof KernelError)) return false;
+  return e.code === 'ModuleFault' || e.code === 'WorkerFailed' || CONVERTED_SIGNAL.test(e.detail);
 }
 
 export function isCancelled(e: unknown): boolean {

@@ -26,7 +26,18 @@ export class WorkerHost {
     return id;
   };
 
+  /** Set after a call trapped in the module (protocol.ts, isWasmTrap): every later call fails. */
+  private fault: string | null = null;
+
+  get faulted(): boolean {
+    return this.fault !== null;
+  }
+
   handle(req: CallRequest): void {
+    if (this.fault !== null) {
+      this.post({ type: 'error', id: req.id, error: { name: 'KernelError', code: 'ModuleFault', detail: `the module stopped at an earlier fault: ${this.fault}` } }, []);
+      return;
+    }
     const target = this.objects.get(req.target);
     try {
       if (!target) throw Object.assign(new Error(`object ${req.target} is not in the worker (disposed)`), { code: 'Disposed', detail: `object ${req.target} is not in the worker (disposed)` });
@@ -39,7 +50,11 @@ export class WorkerHost {
       const { value, transfer } = encodeResult(raw, this.register);
       this.post({ type: 'result', id: req.id, value }, transfer);
     } catch (e) {
-      this.post({ type: 'error', id: req.id, error: serializeError(e) }, []);
+      const error = serializeError(e);
+      // A trap leaves the module's memory in an unknown state (destructors, locks and the
+      // allocator were cut off): the host refuses every further call.
+      if (error.code === 'ModuleFault') this.fault = error.detail;
+      this.post({ type: 'error', id: req.id, error }, []);
     }
   }
 }

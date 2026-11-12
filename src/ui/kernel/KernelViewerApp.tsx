@@ -21,6 +21,8 @@ import type { FacePick, KernelViewportHandle } from './KernelViewport';
 import { defaultKernelBaseUrl, loadKernelFrom } from './kernelLoader';
 import type { Remote, WasmClient } from '../worker/wasmClient';
 import { waitIdle } from '../worker/idle';
+import type { EditorHostProps } from '../app/editorHost';
+import { useFaultReport } from '../app/faultReport';
 import './KernelViewer.css';
 
 interface ModelSummary {
@@ -95,8 +97,9 @@ function parameterValue(key: string, value: unknown): string {
   return String(value);
 }
 
-const KernelViewerApp: React.FC = () => {
+const KernelViewerApp: React.FC<Pick<EditorHostProps, 'onFault'>> = ({ onFault }) => {
   const [kernel, setKernel] = useState<WasmClient<Kernel> | null>(null);
+  useFaultReport(kernel as WasmClient<unknown> | null, onFault);
   const [kernelStatus, setKernelStatus] = useState<KernelViewerState['kernelStatus']>('loading');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<KernelViewerState['error']>(null);

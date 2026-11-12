@@ -21,6 +21,8 @@ import type { I18n, Lang, MessageKey } from './i18n';
 import { useHotkeys } from './hotkeys';
 import { AppStore, DraftEntry, RecentEntry, detectKind, openAppStore, recentId } from './storage';
 import { migrateDrawingDocument, packDrawingFile, readDrawingFiles } from '../drawing/drawingFile';
+import type { ModuleFaultInfo } from './faultReport';
+import type { ModuleKind } from '../worker/protocol';
 import './AppShell.css';
 
 /** Interval of draft writes (ms); drafts are also written when the page is hidden or closed. */
@@ -37,6 +39,18 @@ interface Tab {
   /** Latest document reported by the editor. */
   snapshot: DocumentFile | null;
   dirty: boolean;
+  /** The editor's module failed; the shell offers a restart (docs/ui/APP_SHELL.md, "Сбой модуля"). */
+  fault: TabFault | null;
+  /** Mount number of the editor: a restart after a fault mounts it again with the draft. */
+  generation: number;
+}
+
+interface TabFault extends ModuleFaultInfo {
+  /** When the draft of the last completed document was written; null — not written. */
+  draftAt: number | null;
+  /** Why the draft was not written (storage closed, nothing to save, write failed). */
+  draftError: string | null;
+  restarting: boolean;
 }
 
 interface Notification {
@@ -46,7 +60,7 @@ interface Notification {
 }
 
 export interface AppShellState {
-  tabs: { id: string; kind: TabKind; title: string; dirty: boolean }[];
+  tabs: { id: string; kind: TabKind; title: string; dirty: boolean; fault: { module: string; code: string; draftAt: number | null } | null; generation: number }[];
   active: string;
   draftSavedAt: number | null;
   storage: 'loading' | 'ready' | 'unavailable';
@@ -70,6 +84,13 @@ const KIND_KEY: Record<TabKind, MessageKey> = {
   assembly: 'kind.assembly',
   drawing: 'kind.drawing',
   viewer: 'start.viewStep',
+};
+
+const MODULE_KEY: Record<ModuleKind, MessageKey> = {
+  kernel: 'module.kernel',
+  modeling: 'module.modeling',
+  assembly: 'module.assembly',
+  drawing: 'module.drawing',
 };
 
 const timeText = (ms: number) => new Date(ms).toLocaleTimeString();
@@ -211,7 +232,7 @@ const AppShell: React.FC = () => {
     const title = opts.title ?? initial?.name ?? '';
     setTabs((list) => [
       ...list.filter((x) => x.id !== id),
-      { id, kind, title, initial, initialDirty: opts.dirty ?? false, snapshot: initial, dirty: opts.dirty ?? false },
+      { id, kind, title, initial, initialDirty: opts.dirty ?? false, snapshot: initial, dirty: opts.dirty ?? false, fault: null, generation: 0 },
     ]);
     setActive(id);
     return id;
@@ -240,6 +261,64 @@ const AppShell: React.FC = () => {
     setTabs((list) => list.map((x) => (x.id === id ? { ...x, snapshot: file, dirty, title: file.name || x.title } : x)));
     pendingDrafts.current.add(id);
   }, []);
+
+  /**
+   * The module of a tab failed: the last completed document of the tab (its latest onChange
+   * snapshot) is written as a draft at once, the tab shows the failure and a restart button.
+   */
+  const onModuleFault = useCallback(
+    (id: string, info: ModuleFaultInfo) => {
+      const tab = tabsRef.current.find((x) => x.id === id);
+      if (!tab || tab.fault) return;
+      const setFault = (fault: TabFault) => setTabs((list) => list.map((x) => (x.id === id ? { ...x, fault } : x)));
+      const base: TabFault = { ...info, draftAt: null, draftError: null, restarting: false };
+      notify('error', `${t('fault.title')}: ${info.code}: ${info.detail}`);
+      const s = storeRef.current;
+      if (!tab.snapshot) {
+        setFault({ ...base, draftError: t('fault.nothingToSave') });
+        return;
+      }
+      if (!s) {
+        setFault({ ...base, draftError: storageReason ?? 'IndexedDB is not available' });
+        return;
+      }
+      const now = Date.now();
+      // Not left to the autosave timer: the draft must exist before the user restarts.
+      pendingDrafts.current.delete(id);
+      s.putDrafts([{ id, file: tab.snapshot, savedAt: now }]).then(
+        () => {
+          storedDrafts.current.add(id);
+          setDraftSavedAt(now);
+          setFault({ ...base, draftAt: now });
+        },
+        (e: unknown) => setFault({ ...base, draftError: e instanceof Error ? e.message : String(e) }),
+      );
+    },
+    [notify, t, storageReason],
+  );
+
+  /** Mounts the editor of a failed tab again (a new worker) with the document of its draft. */
+  const restartTab = async (id: string) => {
+    const tab = tabsRef.current.find((x) => x.id === id);
+    if (!tab || !tab.fault) return;
+    setTabs((list) => list.map((x) => (x.id === id && x.fault ? { ...x, fault: { ...x.fault, restarting: true } } : x)));
+    let file = tab.snapshot;
+    const s = storeRef.current;
+    if (s && tab.fault.draftAt !== null) {
+      try {
+        const draft = (await s.drafts()).find((d) => d.id === id);
+        if (draft) file = migrateDrawingDocument(draft.file);
+      } catch (e) {
+        notify('error', t('fault.restoreFailed', { reason: e instanceof Error ? e.message : String(e) }));
+      }
+    }
+    setTabs((list) =>
+      list.map((x) =>
+        x.id === id ? { ...x, initial: file, initialDirty: x.dirty, snapshot: file, fault: null, generation: x.generation + 1 } : x,
+      ),
+    );
+    notify('info', file ? t('fault.restored') : t('fault.restartedEmpty'));
+  };
 
   const openFiles = async (list: FileList | null) => {
     const files = list ? await Promise.all([...list].map(async (f) => ({ name: f.name, text: await f.text() }))) : [];
@@ -323,7 +402,14 @@ const AppShell: React.FC = () => {
 
   const stateRef = useRef<AppShellState | null>(null);
   stateRef.current = {
-    tabs: tabs.map((x) => ({ id: x.id, kind: x.kind, title: x.title, dirty: x.dirty })),
+    tabs: tabs.map((x) => ({
+      id: x.id,
+      kind: x.kind,
+      title: x.title,
+      dirty: x.dirty,
+      fault: x.fault && { module: x.fault.module, code: x.fault.code, draftAt: x.fault.draftAt },
+      generation: x.generation,
+    })),
     active,
     draftSavedAt,
     storage,
@@ -354,6 +440,7 @@ const AppShell: React.FC = () => {
       initialDirty: tab.initialDirty,
       onChange: (file: DocumentFile, dirty: boolean) => onEditorChange(tab.id, file, dirty),
       onFile: recordFile,
+      onFault: (info: ModuleFaultInfo) => onModuleFault(tab.id, info),
     };
     switch (tab.kind) {
       case 'part':
@@ -368,7 +455,7 @@ const AppShell: React.FC = () => {
       case 'drawing':
         return <DrawingEditorApp {...common} />;
       case 'viewer':
-        return <KernelViewerApp />;
+        return <KernelViewerApp onFault={common.onFault} />;
     }
   };
 
@@ -553,7 +640,36 @@ const AppShell: React.FC = () => {
               data-active={tab.id === active ? 'true' : 'false'}
               style={{ display: tab.id === active ? undefined : 'none' }}
             >
-              {editorOf(tab)}
+              {tab.fault && (
+                <div className="app-fault" role="alert" data-testid="fault-card" data-module={tab.fault.module} data-code={tab.fault.code}>
+                  <h2>{t('fault.title')}</h2>
+                  <p>
+                    {t('fault.text', {
+                      module: t(MODULE_KEY[tab.fault.module]),
+                      code: tab.fault.code,
+                      detail: tab.fault.detail,
+                      name: tab.title || t(KIND_KEY[tab.kind]),
+                    })}
+                  </p>
+                  <p data-testid="fault-draft">
+                    {tab.fault.draftAt !== null
+                      ? t('fault.draftSaved', { time: timeText(tab.fault.draftAt) })
+                      : tab.fault.draftError !== null
+                        ? t('fault.draftFailed', { reason: tab.fault.draftError })
+                        : t('fault.draftSaving')}
+                  </p>
+                  <button
+                    type="button"
+                    className="app-primary"
+                    disabled={tab.fault.restarting || (tab.fault.draftAt === null && tab.fault.draftError === null)}
+                    onClick={() => void restartTab(tab.id)}
+                    data-testid="fault-restart"
+                  >
+                    {tab.fault.restarting ? t('fault.restarting') : t('fault.restart')}
+                  </button>
+                </div>
+              )}
+              <React.Fragment key={tab.generation}>{editorOf(tab)}</React.Fragment>
             </section>
           ))}
         </main>

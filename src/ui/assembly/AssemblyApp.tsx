@@ -42,6 +42,7 @@ import BusyIndicator from '../app/BusyIndicator';
 import { useHotkeys } from '../app/hotkeys';
 import { useI18n } from '../app/i18n';
 import type { DocumentFile, EditorHostProps, PartSource } from '../app/editorHost';
+import { useFaultReport } from '../app/faultReport';
 import { dofText } from './labels';
 import { nextMateSlots } from './mateRules';
 import type { PickedElement } from './mateRules';
@@ -128,10 +129,12 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   onChange,
   onFile,
   onOpenPart,
+  onFault,
   partLibrary,
 }) => {
   const { t } = useI18n();
   const [kernel, setKernel] = useState<WasmClient<AssemblyKernel> | null>(null);
+  useFaultReport(kernel as WasmClient<unknown> | null, onFault);
   const kernelRef = useRef(kernel);
   kernelRef.current = kernel;
   const docRef = useRef<AssemblyDoc | null>(null);

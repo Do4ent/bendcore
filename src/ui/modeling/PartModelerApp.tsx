@@ -46,6 +46,7 @@ import { useHotkeys } from '../app/hotkeys';
 import { useI18n } from '../app/i18n';
 import { downloadText } from '../app/editorHost';
 import type { DocumentFile, EditorHostProps } from '../app/editorHost';
+import { useFaultReport } from '../app/faultReport';
 import { applySketchDimensions, templateProfiles } from './sketchDimensions';
 import type { TreeAction } from './treeActions';
 import '../kernel/KernelViewer.css';
@@ -127,9 +128,10 @@ type PartDoc = Remote<PartDocumentHandle>;
 
 const NEW_FILE_NAME = 'деталь.bcpart.json';
 
-const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = null, initialDirty = false, onChange, onFile, onCreateDrawing }) => {
+const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = null, initialDirty = false, onChange, onFile, onCreateDrawing, onFault }) => {
   const { t } = useI18n();
   const [kernel, setKernel] = useState<WasmClient<ModelingKernel> | null>(null);
+  useFaultReport(kernel as WasmClient<unknown> | null, onFault);
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<PartModelerState['status']>('loading');
   const [catalog, setCatalog] = useState<FeatureTypeSpec[]>([]);
