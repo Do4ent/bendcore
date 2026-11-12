@@ -68,20 +68,24 @@ auto back2 = readBrepText(text.value());
 ```
 
 `BrepWriteOptions::withTriangles` — сохранять ли триангуляцию граней и полигоны рёбер
-(по умолчанию нет). Пустой вход, мусор, обрезанный файл → `ParseError`; пустая форма при
-записи → `InvalidInput`.
+(по умолчанию нет). Пустой вход, мусор, обрезанный файл, повреждённая структура (индекс
+подформы вне таблицы, неизвестный тип кривой, слишком длинное ключевое слово) → `ParseError`
+(индекс положения вне таблицы OCCT сам заменяет тождественным преобразованием) (раздел «Повреждённые файлы»); пустая форма при записи → `InvalidInput`.
 
 ### STEP (`step_io.hpp`)
 
 ```cpp
 auto step = writeStep(shape, {.fileUnit = StepLengthUnit::Metre});  // Result<std::string>
 auto read = readStep(step.value());                                 // Result<Shape>, в мм
+auto big  = readStep(text, {.maxInputBytes = std::size_t(1) << 30});  // свой предел размера
 ```
 
 Запись: AP214 IS, `STEPControl_AsIs`, единица файла — мм (по умолчанию), м или дюйм.
 Чтение: все корни (`TransferRoots`), несколько корней — один компаунд
-(`OneShape`). Нечитаемый текст, файл без корней → `ParseError`; корни без формы после
-передачи → `OperationFailed`.
+(`OneShape`). Нечитаемый текст, файл без корней, символ вне лексем STEP → `ParseError`;
+вход больше `StepReadOptions::maxInputBytes` (по умолчанию `kStepDefaultMaxInputBytes` =
+256 МиБ) → `InvalidInput`; корни без формы после передачи или пустая форма (ни одна вершина не передана — например, все корни отвергнуты
+из-за ссылки на сущность неверного типа) → `OperationFailed`.
 
 ### Тесселяция (`tessellation.hpp`)
 
@@ -158,6 +162,69 @@ for (const FaceSpan& span : mesh.value().faceSpans)
     `BRep_Tool::Polygon3D`. Вырожденные рёбра полилинии не имеют и в `missingEdges` не
     попадают.
 
+## Повреждённые файлы
+
+Файл пользователя может быть повреждён как угодно; читатели ядра (`readBrepBinary`,
+`readBrepText`, `readStep`, `readStepAssembly` из `xcaf_io.hpp`, а через них загрузчики
+документов детали и сборки) обязаны вернуть ошибку, а не уронить процесс. Fuzz-проверка
+(`docs/qa/QA.md`, раздел 7) нашла 229 падений внутри читателей OCCT; защита в четыре слоя:
+
+1. **OCCT с проверками в Release** (`docs/kernel/OCCT_BUILD.md`, раздел 6): без `-DNo_Exception`
+   индекс подформы, положения, кривой, поверхности вне таблицы даёт `Standard_OutOfRange`
+   (`NCollection_Array1::Value`, `TopTools_IndexedMapOfShape::FindKey` и др.), который
+   читатели переводят в `ParseError`.
+2. **OCCT как C++20**: ключевые слова разделов (`TShapes`, `Curves`…) OCCT читает
+   `stream >> char[255]`; в C++20 это чтение ограничено размером массива (P0487), в C++17
+   слово длиннее 254 байт переполняет стек (`stack smashing detected`).
+3. **Защита от аппаратных сбоев** (`src/kernel/occt_fault_guard.*`, native POSIX): чтение
+   выполняется внутри `runConvertingFaults`. Обработчик SIGSEGV/SIGBUS/SIGFPE, установленный
+   один раз на процесс, переводит сбой потока, находящегося внутри защищённого вызова, в
+   исключение OCCT (`OSD_SIGSEGV`, `OSD_SIGBUS`, `Standard_NumericError`) через
+   `Standard_ErrorHandler::Abort` — тот же механизм `OCC_CATCH_SIGNALS`, что у OCCT в Draw и в
+   самих трансляторах (STEP переводит каждую сущность в своей точке перехвата, поэтому сбой на
+   одной сущности OCCT записывает как ошибку передачи и продолжает). Сбой вне защищённого
+   вызова и в других потоках передаётся прежнему обработчику (ASan, libFuzzer, системный
+   дамп) или действию по умолчанию. Это нужно для разыменования нулевых дескрипторов, которые
+   OCCT не проверяет и в Debug: базовая кривая обрезанной кривой неизвестного типа
+   (`GeomTools_CurveSet::ReadCurve` → `Geom_TrimmedCurve`), направление `VECTOR`, указывающее на
+   `CARTESIAN_POINT` (`StepToGeom`). Ограничения: `longjmp` пропускает деструкторы кадров
+   между сбоем и точкой перехвата — объекты прерванного чтения теряются (утечка памяти на
+   каждый такой файл); сбой с порчей кучи обычно заканчивается SIGABRT распределителя и не
+   перехватывается; переполнение стека не перехватывается (нет альтернативного стека
+   сигналов); захваченный при сбое мьютекс OCCT останется захваченным. В WebAssembly сигналов
+   нет: обращение по нулевому адресу читает линейную память, выход за её пределы — ловушка
+   (`RuntimeError` JS), после которой модуль непригоден; там изоляция — Web Worker импорта
+   (`docs/ui/APP_SHELL.md`), а слои 1, 2 и 4 действуют так же, как в native.
+4. **Предварительная проверка STEP** (`src/kernel/step_preflight.*`) до разбора:
+   - предел размера `maxInputBytes` (256 МиБ: читателю нужно около 10× размера файла,
+     `docs/qa/PERFORMANCE.md`, — это ~2,5 ГиБ, предел 32-битного WASM-модуля 4 ГиБ);
+   - лексическая проверка по ISO 10303-21: вне строк и комментариев допустимы только буквы,
+     цифры, `_`, пробельные символы и `# $ & ( ) * + , - . / ; = ! "`. Лексер OCCT (`step.lex`,
+     последнее правило `[^)]`) превращает любой другой символ в отдельный параметр, и строка
+     из 200 000 символов `[` заставляла читатель выделить больше 8 ГиБ. Сканер повторяет
+     состояния лексера OCCT (комментарий `/* */`, строка с правилом конца «апостроф, затем
+     пробелы и `,` или `)`», всё после `END-ISO-10303-21;` пропускается), поэтому любой файл,
+     который OCCT читает по назначению, проходит проверку; сообщение называет символ, строку
+     и столбец. Проверены все 49 файлов STEP репозитория и сгенерированный файл 68 МБ
+     нагрузочного теста — ни один не отвергнут.
+
+Чтение STEP идёт из памяти без копии текста (`MemoryStreamBuf`), прежде `std::istringstream`
+копировал вход.
+
+Регрессия: `tests/kernel/test_kernel_malformed_input.cpp` (ctest `kernel_malformed_input`) —
+по одному детерминированному входу на каждый класс дефектов (индекс подформы вне
+диапазона — сообщение содержит `Standard_OutOfRange`; индекс положения вне диапазона —
+тождественное положение, ребро от 0 до 10; ключевое слово 100 000 и 4096 символов в
+тексте и двоичном BRep; обрезанная кривая на неизвестной базе; символ `[` с позицией; 200 000
+`[` отвергаются быстрее 2 с, а внутри строки читаются; `[ ] { } ~ @ % ?` в строке и
+комментарии не мешают (объём бруска 120 000, 6 граней), строка длиннее буфера лексера OCCT —
+его собственная `ParseError`; предел размера; ссылка неверного типа — SIGSEGV внутри OCCT
+доходит до точки перехвата транслятора, оболочка отброшена, `OperationFailed` «empty shape»;
+тот же предварительный контроль у `readStepAssembly`), `tests/kernel/test_kernel_fault_guard.cpp`
+(ctest `kernel_fault_guard`: SIGSEGV и SIGFPE → исключение, 50 сбоев подряд, вложенность,
+исключения и значения проходят без изменений, сбой вне защиты по-прежнему убивает процесс
+исходным сигналом).
+
 ## Допуски и единицы
 
 - Длины — миллиметры везде внутри bendcore; STEP пересчитывается при чтении из единицы
@@ -180,6 +247,9 @@ for (const FaceSpan& span : mesh.value().faceSpans)
   `missingFaces` или дают ошибку.
 - STEP: читается только геометрия; при записи — AP214 IS без атрибутов. Имена, цвета, слои
   и структура сборки — модуль `bendcore_kernel_xcaf` (`docs/kernel/XCAF_IO.md`).
+- Повреждённые файлы: см. одноимённый раздел; в WASM нет перевода аппаратных сбоев в ошибки.
+- STEP больше 256 МиБ читается только с явно увеличенным `StepReadOptions::maxInputBytes`;
+  `readStepAssembly` использует предел по умолчанию.
 - `BrepWriteOptions` не сохраняет нормали триангуляции (нормали вычисляются заново при
   тесселяции).
 - Отчёт валидности перечисляет статусы BRepCheck; исправление формы — модуль лечения
@@ -189,9 +259,9 @@ for (const FaceSpan& span : mesh.value().faceSpans)
 
 ```bash
 cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install
+  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install-checked
 cmake --build build-occt --target test_kernel_shape test_kernel_brep_io \
-  test_kernel_step_io test_kernel_tessellation
+  test_kernel_step_io test_kernel_tessellation test_kernel_fault_guard test_kernel_malformed_input
 ctest --test-dir build-occt -R '^kernel_' --output-on-failure
 ```
 

@@ -150,10 +150,10 @@ int legacy_bridge(int /*code*/) {  // qa-allow(literal-return): ABI shim, value 
 | Workflow / задача | Когда | Что делает |
 |---|---|---|
 | `qa.yml` / `no-stubs` | push, PR | самотест; `check_no_stubs.sh --diff origin/<base_ref>` на PR, `--diff <before>` на push (на новой ветке — только полная проверка); нарушения выводятся аннотациями `::error file=…,line=…` и роняют задачу |
-| `qa.yml` / `occt-native` | push, PR | apt: Ninja, GTest, Eigen, **zlib и expat** (3MF в `bendcore_kernel_analysis`, без них тест молча пропускается), **`fonts-dejavu-core`** (системный шрифт нативных тестов чертежа). OCCT 8.0.1 скриптом `third_party/build_occt.sh` с `actions/cache` установки (ключ `occt-native-V<версия>-ubuntu-24.04-<hashFiles(occt_toolkits.txt, build_occt.sh)>`). Полная сборка `build-occt` (RelWithDebInfo), `ctest --parallel 4 -E '^(performance\|offset_performance\|stress_.*)$'`, затем **отдельным последовательным шагом** (выполняется и после падения предыдущего) `-R '^(performance\|offset_performance\|stress_.*)$'` с `BENDCORE_STRESS_TIME_SCALE=1.5`; отчёт нагрузки (`stress-report.jsonl`) — таблицей в сводку и артефактом `stress-report`. Затем образ сервиса и запросы к нему. Артефакты: свежий корпус (всегда), журналы и входы дефектов fuzz (при падении) |
+| `qa.yml` / `occt-native` | push, PR | apt: Ninja, GTest, Eigen, **zlib и expat** (3MF в `bendcore_kernel_analysis`, без них тест молча пропускается), **`fonts-dejavu-core`** (системный шрифт нативных тестов чертежа). OCCT 8.0.1 скриптом `third_party/build_occt.sh` (с проверками в Release и C++20, `docs/kernel/OCCT_BUILD.md`, раздел 6) в `third_party/occt-install-checked` с `actions/cache` установки (ключ `occt-native-checks<OCCT_RELEASE_CHECKS>-V<версия>-ubuntu-24.04-<hashFiles(occt_toolkits.txt, build_occt.sh)>`). Полная сборка `build-occt` (RelWithDebInfo), `ctest --parallel 4 -E '^(performance\|offset_performance\|stress_.*)$'`, затем **отдельным последовательным шагом** (выполняется и после падения предыдущего) `-R '^(performance\|offset_performance\|stress_.*)$'` с `BENDCORE_STRESS_TIME_SCALE=1.5`; отчёт нагрузки (`stress-report.jsonl`) — таблицей в сводку и артефактом `stress-report`. Затем образ сервиса и запросы к нему. Артефакты: свежий корпус (всегда), журналы и входы дефектов fuzz (при падении) |
 | `qa.yml` / `fuzz` | после `occt-native` | clang 18 + `libclang-rt-18-dev`; OCCT из кэша `occt-native` (`fail-on-cache-miss`); конфигурация `build-fuzz` с `-DBENDCORE_FUZZ=ON`, ASan/UBSan (`-fno-sanitize-recover=undefined`); `ctest -L fuzz` (мутационный тест, регрессия, прогон фаззеров по затравочному корпусу); libFuzzer по 60 с на цель. Находки — артефакт `fuzz-findings` (раздел 7) |
 | `wasm.yml` / `wasm` | push в main, PR | прежняя сборка `scripts/build_wasm.sh` и проверка `web/index.html` (не менялась) |
-| `wasm.yml` / `wasm-modules` | push в main, PR, вызов из `production-deploy.yml` | apt: Ninja, Eigen, **`fonts-dejavu-core`** (`cmake/wasm_drawing.cmake` кладёт `DejaVuSans.ttf` и лицензию рядом с модулем чертежа; шаг проверяет, что оба файла есть). emsdk 6.0.12; кэш `third_party/occt-install-wasm` и `third_party/occt-build-wasm/probe` (ключ `occt-wasm-V8.0.1-emsdk-6.0.12-<hashFiles(occt_toolkits.txt, build_occt_wasm.sh)>`), при промахе — `git clone` OCCT и `build_occt_wasm.sh`. **Одна** сборка `build-wasm-modules` с четырьмя целями `bendcore_kernel_wasm`, `bendcore_modeling_wasm`, `bendcore_assembly_wasm`, `bendcore_drawing_wasm` (библиотеки ядра компилируются один раз, а не четыре); node-тесты `ctest -R '^wasm_' --no-tests=error` (и проверка, что их не меньше 5: `wasm_kernel_corpus`, `wasm_modeling_document`, `wasm_sketch_editor`, `wasm_assembly_document`, `wasm_drawing_document`); размеры `.wasm`/`.mjs` всех модулей (байт и gzip -9) и `sizes.txt` пробной программы — в сводку и `sizes.md`; артефакт `bendcore-wasm-modules` (четыре каталога модулей) |
+| `wasm.yml` / `wasm-modules` | push в main, PR, вызов из `production-deploy.yml` | apt: Ninja, Eigen, **`fonts-dejavu-core`** (`cmake/wasm_drawing.cmake` кладёт `DejaVuSans.ttf` и лицензию рядом с модулем чертежа; шаг проверяет, что оба файла есть). emsdk 6.0.12; кэш `third_party/occt-install-wasm-checked` и `third_party/occt-build-wasm/probe` (ключ `occt-wasm-checks<OCCT_RELEASE_CHECKS>-V8.0.1-emsdk-6.0.12-<hashFiles(occt_toolkits.txt, build_occt_wasm.sh)>`), при промахе — `git clone` OCCT и `build_occt_wasm.sh`. **Одна** сборка `build-wasm-modules` с четырьмя целями `bendcore_kernel_wasm`, `bendcore_modeling_wasm`, `bendcore_assembly_wasm`, `bendcore_drawing_wasm` (библиотеки ядра компилируются один раз, а не четыре); node-тесты `ctest -R '^wasm_' --no-tests=error` (и проверка, что их не меньше 5: `wasm_kernel_corpus`, `wasm_modeling_document`, `wasm_sketch_editor`, `wasm_assembly_document`, `wasm_drawing_document`); размеры `.wasm`/`.mjs` всех модулей (байт и gzip -9) и `sizes.txt` пробной программы — в сводку и `sizes.md`; артефакт `bendcore-wasm-modules` (четыре каталога модулей) |
 | `wasm.yml` / `wasm-e2e` (матрица `kernel`, `modeling`, `assembly`, `drawing`, `app`) | после `wasm-modules` | модули из артефакта; `npm ci --ignore-scripts`, `npx playwright install --with-deps chromium`, `npm run test:e2e:<набор> -- --trace off` с `CI=true` и каталогом модуля в `BENDCORE_{KERNEL,MODELING,ASSEMBLY,DRAWING}_WASM_DIR` (набор `app` — оболочка приложения, `docs/ui/APP_SHELL.md`, — получает все четыре; перед запуском проверяется, что `.wasm` на месте); `fail-fast: false`. При падении — артефакт `e2e-<набор>-results` = `test-results/{kernel-viewer,part-modeler,assembly,drawing,app}/`: снимки экрана упавших тестов (`screenshot: 'only-on-failure'` в конфигурациях модуля детали, сборки и чертежа), снимки самих тестов и `error-context.md` |
 | `production-deploy.yml` | только вручную | см. ниже |
 
@@ -222,9 +222,9 @@ int legacy_bridge(int /*code*/) {  // qa-allow(literal-return): ABI shim, value 
 scripts/check_no_stubs.sh --diff ccr-d188a25e-rml7z8
 bash tests/qa/test_check_no_stubs.sh
 
-# корпус и регрессия (OCCT установлен в third_party/occt-install)
+# корпус и регрессия (OCCT с проверками установлен в third_party/occt-install-checked)
 cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install
+  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install-checked
 cmake --build build-occt --target generate_corpus test_step_corpus
 ctest --test-dir build-occt -R 'corpus|qa_' --output-on-failure
 
@@ -234,7 +234,7 @@ build-occt/generate_corpus tests/corpus/generated
 # нагрузка и fuzz (разделы 6, 7)
 ctest --test-dir build-occt -L stress --output-on-failure
 ctest --test-dir build-occt -L fuzz --output-on-failure
-build-occt/fuzz_replay step build-occt/fuzz-artifacts/crash-step-82.bin
+build-fuzz/fuzz_replay brep_binary build-fuzz/fuzz-artifacts/crash-brep_binary-98.bin
 ```
 
 ## 6. Нагрузочные тесты
@@ -292,7 +292,7 @@ build-occt/fuzz_replay step build-occt/fuzz-artifacts/crash-step-82.bin
 
 ```bash
 CC=clang CXX=clang++ cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install -DBENDCORE_FUZZ=ON \
+  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install-checked -DBENDCORE_FUZZ=ON \
   -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
   -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,fuzzer-no-link -fno-sanitize-recover=undefined -fno-omit-frame-pointer" \
   -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
@@ -307,7 +307,8 @@ build-fuzz/fuzz_dxf build-fuzz/fuzz-corpus/dxf -max_total_time=60     # поис
 `build-fuzz/fuzz-corpus/<цель>/` (в git не хранится), `fuzz_corpus_<цель>` — прогон фаззера по
 нему (`-runs=0`). В CI (задача `fuzz`) — ещё 60 с поиска на цель; находки `part_json`,
 `drawing_json`, `dxf` роняют задачу, находки целей, читающих через OCCT (`step`, `brep_*`,
-`assembly_json`), — предупреждение и артефакт `fuzz-findings`.
+`assembly_json`), — предупреждение и артефакт `fuzz-findings` (после перехода на OCCT с
+проверками можно сделать и их блокирующими — решение инженера качества).
 
 ### Найдено и исправлено
 
@@ -317,24 +318,36 @@ build-fuzz/fuzz_dxf build-fuzz/fuzz-corpus/dxf -max_total_time=60     # поис
    `fuzz_loader_regressions` (`test_loader_regressions.cpp`: тот же вход у загрузчиков сборки,
    детали и чертежа).
 
+2. **229 падений внутри читателей OCCT** (каждая конфигурация; brep_binary 103, brep_text 69,
+   step 47, assembly_json 10; 2026-11-11) — устранены 2026-11-12 (`docs/kernel/OCCT_BUILD.md`,
+   раздел 6; `docs/kernel/KERNEL_CORE.md`, «Повреждённые файлы»):
+
+   | Шаг | native: дефектов | Что устранил |
+   |---|---:|---|
+   | OCCT 8.0.1 с `No_Exception`, C++17 (было) | 229 | — |
+   | OCCT с проверками в Release (`OCCT_RELEASE_CHECKS=1`) | 59 | индексы вне диапазона в `BinTools_*Set`/`TopTools_ShapeSet` (`Standard_OutOfRange` → `ParseError`), в т. ч. все 10 `assembly_json` и `BSplCLib::InsertKnots` |
+   | + защита ядра от аппаратных сбоев (`src/kernel/occt_fault_guard.*`) | 8 | нулевые дескрипторы: `StepToGeom::Make*` на ссылках неверного типа (46 step), `Geom_TrimmedCurve`/`Geom_SurfaceOfLinearExtrusion` на нулевой базе (7 brep_text, 1 brep_binary) — SIGSEGV → исключение OCCT → ошибка |
+   | + OCCT как C++20 (`OCCT_CXX_STANDARD=C++20`) | 3 | 5 brep_binary: `IS >> char[255]` ключевого слова 4 МБ — переполнение стека (`stack smashing detected`) |
+   | + предварительная проверка STEP (`src/kernel/step_preflight.*`) | **0** | 2 step: строка из 200 000 `[` (> 8 ГиБ в лексере OCCT) — недопустимый символ вне строк; 1 step: вход 1 ГБ — предел 256 МиБ |
+
+   ASan/UBSan (`build-fuzz`, OCCT с проверками, C++20): **1** дефект (было 229). Мутации, которые
+   раньше роняли процесс, теперь явные отказы: у `step` в ASan 134 приёма и 166 отказов из 300.
+   Регрессия — `kernel_malformed_input` и `kernel_fault_guard` (`tests/kernel/`), по одному
+   детерминированному входу на класс дефектов.
+
 ### Найдено, не исправлено (OCCT) — `known_defects.txt`
 
-Все падения native-конфигурации (229 из 2100 мутаций) — внутри читателей OCCT 8.0.1, собранного
-с `No_Exception` (`BUILD_RELEASE_DISABLE_EXCEPTIONS=ON` по умолчанию, `third_party/build_occt.sh`):
-проверки `Standard_OutOfRange_Raise_if` вырезаны.
+| Конфигурация | Цель | № | Вид | Причина |
+|---|---|---:|---|---|
+| asan | `brep_binary` | 98 | crash (exit 1) | 4,8 КБ двоичного BRep с испорченным числом полюсов 2D B-сплайна (~2²⁸): `BinTools_Curve2dSet` выделяет `NCollection_Array1<gp_Pnt2d>(1, nbpoles)` по числу из файла до чтения полюсов. Без ASan память только резервируется, поток кончается на первых полюсах → `ParseError` (в WASM выделение > 4 ГиБ → `Standard_OutOfMemory` → `ParseError`); ASan трогает выделенное и превышает `hard_rss_limit_mb=4096`. Исправимо только в OCCT (сверка числа с длиной потока) или полным разбором формата BinTools до OCCT |
 
-| Цель | Падений | Где |
-|---|---:|---|
-| `brep_binary` | 103 | `BinTools_ShapeSet::ReadSubs/ReadShape` → `BinTools_{Location,Shape,Curve,Curve2d,Surface}Set::…(int)`: индекс вне диапазона |
-| `brep_text` | 69 | `TopTools_ShapeSet::Read`: индекс подформы вне диапазона |
-| `step` | 47 | `StepToGeom::Make*` / `StepToTopoDS_TranslateVertex`: нулевые `StepGeom_Direction`, `_Vector`, `_CartesianPoint`, `_BSplineCurveWithKnots` после порчи ссылки на сущность; `BSplCLib::InsertKnots` — порча кучи; один вход требует > 8 ГиБ |
-| `assembly_json` | 10 | тот же `BinTools` на встроенном BRep детали |
+В native дефектов нет. Чтение недоверенных файлов в браузере по-прежнему стоит держать в Web
+Worker: в WASM нет сигналов, и обращение OCCT по нулевому дескриптору там не переводится в
+ошибку (слои «проверки», «C++20» и «предварительная проверка STEP» действуют).
 
-JSON-документы детали и чертежа и DXF — 0 дефектов (ни падений, ни зависаний, ни исключений).
-Предложение инженеру ядра (через руководителя проекта): собрать OCCT с
-`-DBUILD_RELEASE_DISABLE_EXCEPTIONS=OFF` (индексы проверяются и бросают `Standard_OutOfRange`,
-который `brep_io.cpp`/`step_io.cpp` уже переводят в `ParseError`) и проверить этим же тестом,
-сколько падений остаётся; нулевые дескрипторы STEP — сообщить в OCCT; до исправления — чтение
-недоверенных STEP/BRep в отдельном процессе (native) или Web Worker (браузер). После изменения
-OCCT `known_defects.txt` перегенерируется: прогон теста печатает строки
-`[fuzz] <конфигурация> <цель> #<номер>: <вид>`.
+Известная особенность самого теста: `fuzz_loaders` держит вход и его копии в памяти дочернего
+процесса; мутация `step` #272 (повтор блока — 1 ГБ) даёт пик около 1,9 ГиБ дочернего процесса
+даже при отказе ядра до разбора (предел размера), а `part_json` #246 — около 1,9 ГиБ. При
+параллельном `ctest` под общим лимитом памяти тест может упасть из-за нехватки памяти машины,
+отдельно (`-j1`) проходит. После изменения OCCT `known_defects.txt` перегенерируется: прогон
+теста печатает строки `[fuzz] <конфигурация> <цель> #<номер>: <вид>`.

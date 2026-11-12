@@ -1,6 +1,7 @@
 #include <bendcore/kernel/brep_io.hpp>
 
 #include "memory_stream.hpp"
+#include "occt_fault_guard.hpp"
 #include "occt_failure.hpp"
 
 #include <exception>
@@ -32,7 +33,9 @@ Result<Shape> readFromMemory(const char* data, std::size_t size, const char* for
         std::istream in(&buffer);
         detail::throwOnFailedExtraction(in);
         TopoDS_Shape result;
-        read(result, in);
+        // Corrupted input can still fault inside OCCT where no check exists (null handles):
+        // the fault becomes OSD_SIGSEGV (Standard_Failure) and a ParseError below.
+        detail::runConvertingFaults([&] { read(result, in); });
         if (result.IsNull()) {
             return R::failure(ErrorCode::ParseError, prefix + " holds no shape");
         }

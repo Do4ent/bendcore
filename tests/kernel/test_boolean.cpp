@@ -519,3 +519,63 @@ TEST(KernelBooleanHistory, EmptyResultHasNoHistory) {
     EXPECT_EQ(solids(cut.value().shape), 0);
     EXPECT_TRUE(cut.value().history.IsNull());
 }
+
+// ---------------------------------------------------------------------------------------------
+// Масса входов и результата (BooleanOptions::argumentMass/toolMass, BooleanResult::mass).
+
+TEST(KernelBooleanMass, ResultMassMatchesAnalyticAndChainsIntoTheNextCut) {
+    // Брусок 40×30×10 минус сквозное отверстие R5: V = 12000 − 250π,
+    // A = 2·(1200 − 25π) + 2·(40 + 30)·10 + 2π·5·10 = 3800 + 50π.
+    const TopoDS_Shape plate = box(0, 0, 0, 40, 30, 10);
+    auto first = booleanOp(BooleanType::Cut, plate, cylinder(gp_Pnt(10, 15, -1), gp_Dir(0, 0, 1), 5, 12));
+    ASSERT_TRUE(first.ok()) << first.error().message;
+    ASSERT_TRUE(first.value().mass.has_value());
+    const double v1 = 12000.0 - 250.0 * kPi, a1 = 3800.0 + 50.0 * kPi;
+    EXPECT_NEAR(first.value().mass->volume, v1, 1e-6 * v1);
+    EXPECT_NEAR(first.value().mass->area, a1, 1e-6 * a1);
+    EXPECT_NEAR(first.value().volume, v1, 1e-6 * v1);
+
+    // Второе отверстие: масса аргумента — из первого результата, без пересчёта.
+    BooleanOptions o;
+    o.argumentMass = {first.value().mass};
+    auto second = booleanOp(BooleanType::Cut, first.value().shape,
+                            cylinder(gp_Pnt(30, 15, -1), gp_Dir(0, 0, 1), 5, 12), o);
+    ASSERT_TRUE(second.ok()) << second.error().message;
+    const double v2 = 12000.0 - 500.0 * kPi, a2 = 3800.0 + 100.0 * kPi;
+    expectValidSolid(second.value(), v2, 1e-6);
+    ASSERT_TRUE(second.value().mass.has_value());
+    EXPECT_NEAR(second.value().mass->area, a2, 1e-6 * a2);
+}
+
+TEST(KernelBooleanMass, PassedMassIsUsedInsteadOfRecomputation) {
+    // Заведомо неверный объём аргумента (1 мм³ вместо 12000): допустимый объём выреза
+    // [max(0, 1 − V_tool), 1] не содержит настоящего результата — каждая попытка отвергнута.
+    // Это доказывает, что переданное значение заменяет вычисление.
+    BooleanOptions o;
+    o.argumentMass = {BooleanInputMass{1.0, 1.0}};
+    auto r = booleanOp(BooleanType::Cut, box(0, 0, 0, 40, 30, 10),
+                       cylinder(gp_Pnt(10, 15, -1), gp_Dir(0, 0, 1), 5, 12), o);
+    ASSERT_FALSE(r.ok());
+    EXPECT_EQ(r.error().code, ErrorCode::OperationFailed);
+    EXPECT_NE(r.error().message.find("outside"), std::string::npos) << r.error().message;
+    // Без проверки границ масса входов не нужна и не участвует; масса результата не сообщается.
+    o.checkVolumeBounds = false;
+    auto unchecked = booleanOp(BooleanType::Cut, box(0, 0, 0, 40, 30, 10),
+                               cylinder(gp_Pnt(10, 15, -1), gp_Dir(0, 0, 1), 5, 12), o);
+    ASSERT_TRUE(unchecked.ok()) << unchecked.error().message;
+    expectValidSolid(unchecked.value(), 12000.0 - 250.0 * kPi, 1e-6);
+    EXPECT_FALSE(unchecked.value().mass.has_value());
+}
+
+TEST(KernelBooleanMass, MassVectorOfWrongSizeOrValueIsInvalidInput) {
+    BooleanOptions o;
+    o.argumentMass = {BooleanInputMass{1.0, 1.0}, BooleanInputMass{1.0, 1.0}};
+    auto r = booleanOp(BooleanType::Cut, box(0, 0, 0, 1, 1, 1), box(0.5, 0, 0, 1, 1, 1), o);
+    ASSERT_FALSE(r.ok());
+    EXPECT_EQ(r.error().code, ErrorCode::InvalidInput);
+    o.argumentMass = {};
+    o.toolMass = {BooleanInputMass{-1.0, 1.0}};
+    auto r2 = booleanOp(BooleanType::Cut, box(0, 0, 0, 1, 1, 1), box(0.5, 0, 0, 1, 1, 1), o);
+    ASSERT_FALSE(r2.ok());
+    EXPECT_EQ(r2.error().code, ErrorCode::InvalidInput);
+}

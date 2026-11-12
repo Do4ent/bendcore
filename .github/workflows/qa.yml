@@ -55,6 +55,9 @@ jobs:
     timeout-minutes: 180
     env:
       OCCT_VERSION: 8.0.1
+      # Проверки OCCT в Release (BUILD_RELEASE_DISABLE_EXCEPTIONS=OFF, docs/kernel/OCCT_BUILD.md,
+      # раздел 6); значение входит в ключ кэша установки.
+      OCCT_RELEASE_CHECKS: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -66,20 +69,22 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ninja-build libgtest-dev libeigen3-dev libexpat1-dev zlib1g-dev fonts-dejavu-core python3
 
       # Ключ зависит от версии OCCT, списка тулкитов и скрипта сборки: при изменении любого из
-      # них OCCT пересобирается. Прежний ключ (occt-build-…-v3, 48 тулкитов) больше не совпадает.
+      # них OCCT пересобирается, а также от OCCT_RELEASE_CHECKS: установка без проверок
+      # (occt-native-V…, -DNo_Exception) больше не совпадает.
       - name: Кэш установки OCCT
         id: occt-cache
         uses: actions/cache@v4
         with:
-          path: third_party/occt-install
-          key: occt-native-V${{ env.OCCT_VERSION }}-ubuntu-24.04-${{ hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt.sh') }}
+          path: third_party/occt-install-checked
+          key: occt-native-checks${{ env.OCCT_RELEASE_CHECKS }}-V${{ env.OCCT_VERSION }}-ubuntu-24.04-${{ hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt.sh') }}
 
       - name: Сборка OCCT из исходников (тулкиты из third_party/occt_toolkits.txt)
         if: steps.occt-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -o pipefail
-          third_party/build_occt.sh 2>&1 | tee occt-build.log
+          OCCT_INSTALL="$GITHUB_WORKSPACE/third_party/occt-install-checked" \
+            third_party/build_occt.sh 2>&1 | tee occt-build.log
 
       - name: Состав установки OCCT
         shell: bash
@@ -88,14 +93,14 @@ jobs:
         run: |
           set -euo pipefail
           listed=$(grep -c -E '^TK' third_party/occt_toolkits.txt)
-          installed=$(ls third_party/occt-install/lib/libTK*.a | wc -l)
+          installed=$(ls third_party/occt-install-checked/lib/libTK*.a | wc -l)
           echo "Тулкитов в списке: $listed, установлено: $installed"
           echo "OCCT $OCCT_VERSION (native): тулкитов в списке $listed, установлено $installed, кэш: ${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Конфигурация (BENDCORE_WITH_OCCT=ON)
         run: |
           cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install"
+            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install-checked"
 
       - name: Сборка
         shell: bash
@@ -182,7 +187,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          docker build --build-context occt="$GITHUB_WORKSPACE/third_party/occt-install" -f docker/Dockerfile -t bendcore-server:ci . \
+          docker build --build-context occt="$GITHUB_WORKSPACE/third_party/occt-install-checked" -f docker/Dockerfile -t bendcore-server:ci . \
             2>&1 | tee docker-build.log
 
       - name: Проверка сервиса в контейнере
@@ -220,6 +225,9 @@ jobs:
     timeout-minutes: 120
     env:
       OCCT_VERSION: 8.0.1
+      # Проверки OCCT в Release (BUILD_RELEASE_DISABLE_EXCEPTIONS=OFF, docs/kernel/OCCT_BUILD.md,
+      # раздел 6); значение входит в ключ кэша установки.
+      OCCT_RELEASE_CHECKS: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -232,14 +240,14 @@ jobs:
       - name: Кэш установки OCCT (из occt-native)
         uses: actions/cache/restore@v4
         with:
-          path: third_party/occt-install
-          key: occt-native-V${{ env.OCCT_VERSION }}-ubuntu-24.04-${{ hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt.sh') }}
+          path: third_party/occt-install-checked
+          key: occt-native-checks${{ env.OCCT_RELEASE_CHECKS }}-V${{ env.OCCT_VERSION }}-ubuntu-24.04-${{ hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt.sh') }}
           fail-on-cache-miss: true
 
       - name: Конфигурация build-fuzz (BENDCORE_FUZZ=ON, ASan/UBSan)
         run: |
           CC=clang-18 CXX=clang++-18 cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install" \
+            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install-checked" \
             -DBENDCORE_FUZZ=ON \
             -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
             -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,fuzzer-no-link -fno-sanitize-recover=undefined -fno-omit-frame-pointer" \

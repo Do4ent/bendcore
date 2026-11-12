@@ -11,6 +11,15 @@
 #   OCCT_BUILD     OCCT build directory             (default: third_party/occt-build)
 #   OCCT_INSTALL   OCCT install prefix              (default: third_party/occt-install)
 #   OCCT_JOBS      parallel compile jobs            (default: nproc)
+#   OCCT_CXX_STANDARD  C++ standard of the OCCT build: C++20 (default) or C++17 (OCCT's default).
+#                  With C++20 every `stream >> char_array` in OCCT's readers is bounded by the
+#                  array size (P0487); with C++17 a long word in a corrupted BRep file overflows
+#                  the 255-byte keyword buffers of BinTools/TopTools/BRepTools (stack smashing).
+#   OCCT_RELEASE_CHECKS  1 = keep OCCT's argument/index checks (Standard_OutOfRange_Raise_if
+#                  and the other *_Raise_if macros) in the Release build, i.e.
+#                  BUILD_RELEASE_DISABLE_EXCEPTIONS=OFF, no -DNo_Exception; 0 = OCCT's own
+#                  default (checks compiled out). Default: 1. Corrupted BRep/STEP input then
+#                  fails with Standard_OutOfRange instead of reading out of bounds.
 # Details and the toolkit rationale: docs/kernel/OCCT_BUILD.md.
 set -euo pipefail
 
@@ -21,6 +30,8 @@ OCCT_SOURCE="${OCCT_SOURCE:-$ROOT/occt-$OCCT_VERSION}"
 OCCT_BUILD="${OCCT_BUILD:-$ROOT/occt-build}"
 OCCT_INSTALL="${OCCT_INSTALL:-$ROOT/occt-install}"
 JOBS="${OCCT_JOBS:-$(nproc 2>/dev/null || echo 4)}"
+RELEASE_CHECKS="${OCCT_RELEASE_CHECKS:-1}"
+CXX_STANDARD="${OCCT_CXX_STANDARD:-C++20}"
 TOOLKITS_FILE="$ROOT/occt_toolkits.txt"
 LOG_DIR="$OCCT_BUILD/logs"
 
@@ -31,6 +42,17 @@ echo "Version: $OCCT_VERSION"
 echo "Source:  $OCCT_SOURCE"
 echo "Build:   $OCCT_BUILD"
 echo "Install: $OCCT_INSTALL"
+
+case "$RELEASE_CHECKS" in
+  1) DISABLE_EXCEPTIONS=OFF ;;
+  0) DISABLE_EXCEPTIONS=ON ;;
+  *) die "OCCT_RELEASE_CHECKS must be 0 or 1, got '$RELEASE_CHECKS'" ;;
+esac
+case "$CXX_STANDARD" in
+  C++17|C++20|C++23) ;;
+  *) die "OCCT_CXX_STANDARD must be C++17, C++20 or C++23, got '$CXX_STANDARD'" ;;
+esac
+echo "Release checks: $RELEASE_CHECKS (BUILD_RELEASE_DISABLE_EXCEPTIONS=$DISABLE_EXCEPTIONS), $CXX_STANDARD"
 
 echo "[1/5] Checking prerequisites"
 for cmd in cmake ninja git; do
@@ -60,6 +82,8 @@ if ! cmake -S "$OCCT_SOURCE" -B "$OCCT_BUILD" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$OCCT_INSTALL" \
     -DBUILD_LIBRARY_TYPE=Static \
+    -DBUILD_RELEASE_DISABLE_EXCEPTIONS="$DISABLE_EXCEPTIONS" \
+    -DBUILD_CPP_STANDARD="$CXX_STANDARD" \
     -DBUILD_MODULE_FoundationClasses=OFF \
     -DBUILD_MODULE_ModelingData=OFF \
     -DBUILD_MODULE_ModelingAlgorithms=OFF \
@@ -78,6 +102,15 @@ if ! cmake -S "$OCCT_SOURCE" -B "$OCCT_BUILD" -G Ninja \
   die "OCCT configuration failed (full log: $LOG_DIR/configure.log)"
 fi
 
+# The flag must have reached the compiler: a stale CMake cache (BUILD_RELEASE_DISABLE_EXCEPTIONS
+# is a cached option) would silently keep the previous mode.
+if grep -q -- '-DNo_Exception' "$OCCT_BUILD/build.ninja"; then have_no_exc=1; else have_no_exc=0; fi
+if [[ "$RELEASE_CHECKS" == "1" && "$have_no_exc" == "1" ]]; then
+  die "OCCT_RELEASE_CHECKS=1 but -DNo_Exception is in $OCCT_BUILD/build.ninja (stale cache?)"
+fi
+if [[ "$RELEASE_CHECKS" == "0" && "$have_no_exc" == "0" ]]; then
+  die "OCCT_RELEASE_CHECKS=0 but -DNo_Exception is not in $OCCT_BUILD/build.ninja"
+fi
 echo "[4/5] Building OCCT with $JOBS jobs (log: $LOG_DIR/build.log)"
 if ! cmake --build "$OCCT_BUILD" --parallel "$JOBS" >"$LOG_DIR/build.log" 2>&1; then
   grep -n -E "error:|FAILED" "$LOG_DIR/build.log" | head -n 40 >&2 || true
@@ -109,4 +142,5 @@ for f in "$LIB_DIR"/libTK*.a; do
   printf '  %-14s %10d bytes  (%s)\n' "$name" "$size" "$tag"
 done
 echo "Total: $count toolkits, $total bytes"
+printf 'OCCT %s release_checks=%s cxx=%s\n' "$OCCT_VERSION" "$RELEASE_CHECKS" "$CXX_STANDARD" >"$OCCT_INSTALL/bendcore_occt_build.txt"
 echo "Done. Configure bendcore with -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$OCCT_INSTALL"

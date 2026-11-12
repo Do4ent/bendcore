@@ -7,7 +7,9 @@ set(BENDCORE_KERNEL_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
 add_library(bendcore_kernel STATIC
   ${BENDCORE_KERNEL_ROOT}/src/kernel/shape.cpp
   ${BENDCORE_KERNEL_ROOT}/src/kernel/brep_io.cpp
+  ${BENDCORE_KERNEL_ROOT}/src/kernel/occt_fault_guard.cpp
   ${BENDCORE_KERNEL_ROOT}/src/kernel/step_io.cpp
+  ${BENDCORE_KERNEL_ROOT}/src/kernel/step_preflight.cpp
   ${BENDCORE_KERNEL_ROOT}/src/kernel/tessellation.cpp)
 target_compile_features(bendcore_kernel PUBLIC cxx_std_20)
 target_include_directories(bendcore_kernel PUBLIC "${BENDCORE_KERNEL_ROOT}/include")
@@ -17,7 +19,7 @@ target_link_libraries(bendcore_kernel PUBLIC
 
 find_package(GTest QUIET)
 if(GTest_FOUND)
-  foreach(kernel_test shape brep_io step_io tessellation)
+  foreach(kernel_test shape brep_io step_io tessellation fault_guard)
     add_executable(test_kernel_${kernel_test}
       ${BENDCORE_KERNEL_ROOT}/tests/kernel/test_kernel_${kernel_test}.cpp)
     target_link_libraries(test_kernel_${kernel_test} PRIVATE bendcore_kernel GTest::gtest GTest::gtest_main)

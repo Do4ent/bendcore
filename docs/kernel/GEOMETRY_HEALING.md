@@ -114,19 +114,33 @@ std::vector<double> fuzzyLadder(const BooleanOptions&);
    `maxFuzzyValue`) или явная `fuzzyLadder`, отсортированная и обрезанная по `maxFuzzyValue`.
 3. Каждая попытка: `BRepAlgoAPI_Fuse/Cut/Common` через `SetArguments`/`SetTools`,
    `SetFuzzyValue`, `SetRunParallel`, `SetNonDestructive(true)`, `Build()`; затем `HasErrors`
-   (тексты ошибок из отчёта), `HasWarnings` (сохраняются), `BRepCheck_Analyzer`, и критерии
-   ожидаемого результата:
-   - `checkVolumeBounds`: объём в пределах, допустимых для операции (Fuse:
-     `[max Vi, ΣVi]`, Cut: `[Va − Vt, Va]`, Common: `[0, min]`) с запасом `(fuzzy+1e-6)·ΣA`;
+   (тексты ошибок из отчёта), `HasWarnings` (сохраняются). Сразу после `Build()` (при
+   `simplifyResult`) вызывается `BRepAlgoAPI_BuilderAlgo::SimplifyResult` (UnifySameDomain с
+   нечётким допуском), и **проверяется один раз** упрощённый результат; неупрощённый
+   проверяется, только если упрощённый отвергнут (тогда предупреждение «SimplifyResult
+   rejected» и возвращается неупрощённый). Проверка результата: `BRepCheck_Analyzer`, объём
+   (`BRepGProp::VolumeProperties`, нужен для `BooleanResult::volume`) и критерии ожидаемого
+   результата:
+   - `checkVolumeBounds` (только если все входы — тела): объём в пределах, допустимых для
+     операции (Fuse: `[max Vi, ΣVi]`, Cut: `[Va − Vt, Va]`, Common: `[0, min]`) с запасом
+     `(fuzzy+1e-6)·ΣA + 1e-9·ΣV`. Объём и площадь входов считаются один раз на вызов и только
+     при этой проверке; известные значения передаются в `argumentMass`/`toolMass` (вектор по
+     числу входов, `nullopt` — вычислить; неверный размер или отрицательное значение →
+     `InvalidInput`). Площадь результата при этой проверке тоже считается и возвращается в
+     `BooleanResult::mass` — её можно передать следующей операции цепочки как `argumentMass`;
    - `expectedSolidCount`: число тел;
    - `minSolidThickness`: тела с `2V/A` меньше порога считаются щелями-артефактами;
    - результат Fuse не может быть пустым.
-4. Первая приемлемая попытка: при `simplifyResult` вызывается
-   `BRepAlgoAPI_BuilderAlgo::SimplifyResult` (UnifySameDomain с нечётким допуском), результат
-   снова проверяется; если упрощение портит результат, остаётся неупрощённый (предупреждение).
+4. Первая приемлемая попытка возвращается.
 5. Все попытки неудачны → `OperationFailed`, сообщение содержит причину каждой попытки.
 
+Стоимость (2026-11-12): раньше каждая принятая попытка проверялась дважды (`BRepCheck_Analyzer`
+и масса до и после упрощения), а объём и площадь аргумента пересчитывались на каждом вызове —
+по профилю около 60 % времени выреза в цепочке `stress_part_300` уходило на проверки и массу, а
+не на булеву операцию. Замер после изменения — `docs/qa/PERFORMANCE.md`.
+
 `BooleanResult`: форма, `fuzzyValue` удачной попытки, `attempts`, `simplifyApplied`, `volume`,
+`mass` (объём и площадь — если проверялись границы объёма),
 `warnings` (причины отказа прежних попыток и предупреждения OCCT), `history`.
 
 ### История (`BooleanResult::history`)
@@ -226,7 +240,7 @@ if (r.value().fuzzyValue > 0) note("использован допуск " + std:
 
 ```bash
 cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install
+  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install-checked
 cmake --build build-occt --target test_kernel_healing test_kernel_boolean
 ctest --test-dir build-occt -R "kernel_(healing|boolean)" --output-on-failure
 ```
@@ -258,3 +272,9 @@ ctest --test-dir build-occt -R "kernel_(healing|boolean)" --output-on-failure
   согласованность: каждый образ лежит в результате, каждый элемент входа ровно в одном
   состоянии (удалён / изменён / сохранён) и каждая грань результата достижима из истории или
   является неизменённой гранью входа. Пустой результат — без истории.
+- `KernelBooleanMass.*` (там же): масса результата выреза R5 в бруске 40×30×10 — объём
+  12000 − 250π и площадь 3800 + 50π; переданная следующему вырезу как `argumentMass` даёт
+  12000 − 500π и 3800 + 100π (отн. 1e-6). Заведомо неверная переданная масса (1 мм³) заставляет
+  проверку границ отвергнуть каждую попытку — значит, она заменяет вычисление; без
+  `checkVolumeBounds` масса не нужна и `mass` пуст. Неверный размер вектора или отрицательный
+  объём → `InvalidInput`.

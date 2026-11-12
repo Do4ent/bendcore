@@ -90,17 +90,21 @@ TKService, TKV3d, TKVCAF), её нельзя убрать без патча OCCT
 ## 2. Native
 
 ```bash
-# OCCT (один раз; 29 тулкитов из occt_toolkits.txt, 215 МБ статических библиотек)
-third_party/build_occt.sh            # -> third_party/occt-install
+# OCCT (один раз; 29 тулкитов из occt_toolkits.txt, 249 МиБ статических библиотек;
+# с проверками в Release и C++20 — раздел 6)
+OCCT_INSTALL=$PWD/third_party/occt-install-checked third_party/build_occt.sh
 
 cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install
+  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install-checked
 cmake --build build-occt
 ctest --test-dir build-occt --output-on-failure
 ```
 
+Если `BENDCORE_OCCT_DIR` не задан, а `third_party/occt-install-checked` (в Emscripten —
+`third_party/occt-install-wasm-checked`) существует, конфигурация берёт его по умолчанию.
+
 В рабочих копиях (git worktree) `BENDCORE_OCCT_DIR` — абсолютный путь к основной
-установке `/home/user/bendcore/third_party/occt-install`.
+установке `/home/user/bendcore/third_party/occt-install-checked`.
 
 Цели, линкующие OCCT: `bendcore_import` (+ `test_occt_init`, `test_step_reader`,
 `test_parametric_builder`, `test_geometry_cache`, `test_dxf_reader`,
@@ -160,8 +164,8 @@ OCCT не использует) падает при параллельном з�
 ```bash
 source /root/emsdk/emsdk_env.sh      # emsdk 6.0.12 (как в CI); скрипт делает это сам
 OCCT_SOURCE=/home/user/bendcore/third_party/occt-8.0.1 \
-OCCT_WASM_INSTALL=/home/user/bendcore/third_party/occt-install-wasm \
-OCCT_WASM_BUILD=/home/user/bendcore/third_party/occt-build-wasm \
+OCCT_WASM_INSTALL=/home/user/bendcore/third_party/occt-install-wasm-checked \
+OCCT_WASM_BUILD=/home/user/bendcore/third_party/occt-build-wasm-checked \
   third_party/build_occt_wasm.sh
 ```
 
@@ -276,7 +280,119 @@ bendcore с этим флагом и не делалась.
   WASM-биндингах ядра.
 - Однопоточная сборка: без `-pthread` (иначе нужны заголовки COOP/COEP), параллельный
   режим `BRepMesh` и `BOPAlgo` в браузере не используется.
-- `BUILD_RELEASE_DISABLE_EXCEPTIONS` оставлен по умолчанию OCCT (ON), как и в native:
-  в Release часть проверок аргументов OCCT (`Standard_OutOfRange` и т. п.) не
-  компилируется; ошибки алгоритмов (`Standard_Failure` из `StdFail_NotDone` и др.)
-  бросаются как обычно.
+- Проверки OCCT в Release и стандарт C++ — раздел 6 (с 2026-11-12 обе установки собираются с
+  проверками и как C++20).
+
+## 6. Проверки OCCT в Release и стандарт C++ (2026-11-12)
+
+### Проблема
+
+Fuzz-проверка загрузчиков (`docs/qa/QA.md`, раздел 7) нашла 229 падений (SIGSEGV, SIGABRT,
+> 8 ГиБ памяти) внутри читателей OCCT на искажённых файлах BRep, STEP и BRep, встроенном в
+документ сборки: повреждённый файл пользователя ронял приложение.
+
+### Что включает проверки в OCCT 8.0.1 (по исходникам)
+
+- **`BUILD_RELEASE_DISABLE_EXCEPTIONS`** (`CMakeLists.txt`, по умолчанию `ON`;
+  `adm/cmake/occt_defs_flags.cmake`) добавляет `-DNo_Exception` в `CMAKE_CXX_FLAGS_RELEASE`.
+  Каждое исключение `Standard_*.hxx` определяет макрос `<Имя>_Raise_if(условие, текст)`, который
+  при `No_Exception` (или `No_<Имя>`) пуст. В исходниках 8.0.1 — 1 517 вызовов `*_Raise_if` в
+  498 файлах: `Standard_OutOfRange_Raise_if` 298 (индексы `NCollection_Array1/2`, `Sequence`,
+  `IndexedMap::FindKey`, `TColStd`…), `StdFail_NotDone_Raise_if` 278, `Standard_NoSuchObject`
+  149, `Standard_ProgramError` 106, `Standard_ConstructionError` 104 (нулевое направление
+  `gp_Dir`), `Standard_DomainError` 93, `Standard_DimensionError` 65, `Standard_RangeError` 49,
+  `Standard_NullObject` 42 и др. Флаг действует только на единицы трансляции OCCT; код bendcore,
+  подключающий заголовки OCCT, `No_Exception` не определяет, и встроенные проверки заголовков в
+  нём и раньше работали. Часть HLR (`HLRBRep_*`, `Intrv_Intervals`) определяет `No_Exception`
+  в самом файле — там проверок нет при любом флаге.
+- **`OCCT_DEBUG`** — только в конфигурации Debug и при `BUILD_WITH_DEBUG=ON`: включает
+  отладочный вывод алгоритмов (`std::cout`), а не проверки; для Release неприменим.
+- **`Standard_ASSERT_*`** (`Standard_Assert.hxx`) ведут себя одинаково в Release и Debug (в
+  Debug добавляется только сообщение) — от флагов не зависят.
+- **`OCC_CONVERT_SIGNALS`** OCCT определяет сам для GCC/Clang на POSIX: точки
+  `OCC_CATCH_SIGNALS` (301 в `.cxx`, в т. ч. `STEPControl_ActorRead`, `StepToGeom`,
+  `StepToTopoDS_*`, `BinTools_ShapeReader`, `GeomTools_CurveSet::ReadCurve`) превращают сигнал
+  в исключение, если установлен обработчик сигналов (`OSD::SetSignal`). bendcore ставит свой,
+  ограниченный вызовами чтения (`docs/kernel/KERNEL_CORE.md`, «Повреждённые файлы»).
+- **`BUILD_CPP_STANDARD`** (по умолчанию `C++17`). Читатели BRep (`BinTools_*Set`,
+  `TopTools_*Set`, `BRepTools_ShapeSet` — 15 мест) читают ключевые слова разделов
+  `IS >> buffer` в `char buffer[255]`. В C++17 это `operator>>(istream&, char*)` без предела
+  (слово длиннее 254 байт — переполнение стека, `stack smashing detected`, 5 падений
+  `brep_binary`, неустранимых защитой ядра); в C++20 — `operator>>(istream&, char(&)[N])`
+  (P0487), чтение ограничено размером массива, длинное слово просто не совпадает с ключевым и
+  OCCT бросает `Standard_Failure`. OCCT 8.0.1 собирается в C++20 без изменений (1 предупреждение
+  компилятора, как и в C++17).
+
+### Решение
+
+`third_party/build_occt.sh` и `third_party/build_occt_wasm.sh`:
+
+| Переменная | По умолчанию | Передаётся в OCCT |
+|---|---|---|
+| `OCCT_RELEASE_CHECKS` | `1` (`0` — прежнее поведение OCCT) | `BUILD_RELEASE_DISABLE_EXCEPTIONS=OFF` (`ON` при 0) |
+| `OCCT_CXX_STANDARD` | `C++20` (`C++17`, `C++23`) | `BUILD_CPP_STANDARD` |
+
+После конфигурации скрипт проверяет `build.ninja`: при `OCCT_RELEASE_CHECKS=1` там не должно
+быть `-DNo_Exception` (кэшированный параметр мог остаться от прежней конфигурации), при `0` —
+должен быть. В установку пишется `bendcore_occt_build.txt`
+(`OCCT 8.0.1 release_checks=1 cxx=C++20`).
+
+Корневой `CMakeLists.txt`:
+
+- `BENDCORE_OCCT_DIR` по умолчанию — `third_party/occt-install-checked` (Emscripten —
+  `third_party/occt-install-wasm-checked`), если каталог существует;
+- `bendcore_check_occt_release_checks()` читает установленный
+  `lib/cmake/opencascade/OpenCASCADECompileDefinitionsAndFlags-release.cmake` OCCT (там записаны
+  флаги Release) и при `No_Exception` останавливает конфигурацию с объяснением; принять такую
+  установку можно явно: `-DBENDCORE_OCCT_REQUIRE_CHECKS=OFF` (тогда предупреждение).
+
+CI: `qa.yml` (`occt-native`, `fuzz`) и `wasm.yml` собирают и кэшируют
+`third_party/occt-install-checked` / `occt-install-wasm-checked`; переменная
+`OCCT_RELEASE_CHECKS: "1"` входит в ключ кэша (`occt-native-checks1-V8.0.1-…`,
+`occt-wasm-checks1-V8.0.1-…`) вместе с хэшем скриптов, так что прежняя установка без проверок
+из кэша не берётся. `docker/Dockerfile` — та же установка.
+
+Установки на машине разработки (2026-11-12): `/home/user/bendcore/third_party/occt-install-checked`
+и `/home/user/bendcore/third_party/occt-install-wasm-checked`; прежние `occt-install` и
+`occt-install-wasm` (без проверок, C++17) оставлены для сравнения.
+
+### Цена
+
+Машина: 4 vCPU, 15 ГиБ, gcc 13.3, emsdk 6.0.12; одна и та же ревизия bendcore
+(`build-occt` RelWithDebInfo) против двух установок OCCT, нагрузочные тесты по одному (`-j1`),
+без параллельной сборки. Подробно — `docs/qa/PERFORMANCE.md`, раздел 2.
+
+| Замер | Без проверок, C++17 | С проверками, C++20 | Разница |
+|---|---:|---:|---:|
+| `part_300`: 300 операций с нуля / после правки эскиза, с | 12,99 / 12,94 (12,84) | 13,27 / 12,96 (12,55) | 0…+2 % (в шуме) |
+| `assembly_300`: пересечения 299 кандидатов, с | 6,50 | 6,70 | +3 % |
+| `step_large`: импорт 65 МиБ / тесселяция, с | 20,32 / 2,31 | 21,23 / 2,31 | +4,5 % / 0 |
+| `hlr_1000`: изометрия, с (три прогона) | 6,12; 6,32; 6,19 | 7,13; 6,88; 6,85 | +10…+16 % |
+| `hlr_1000`: точный вид сверху, с | 0,086 | 0,098 | +0,01 с |
+| Сборка OCCT native (`-j2`) | — | около 75 минут, 5 112 единиц | — |
+| `libTK*.a` native, 29 тулкитов | 224 923 268 байт | 261 338 332 байт | +16 % |
+| `libTK*.a` WASM, 29 тулкитов | 187 936 950 байт | 208 051 348 байт | +11 % |
+| Пробная программа WASM (`occt_size_probe`), `-Oz`: `.wasm` / gzip -9 | 15 879 908 / 4 627 505 | 17 113 804 / 4 784 616 | +7,8 % / +3,4 % |
+| то же, `-O2` | 18 489 733 / 4 794 651 | 20 011 145 / 5 001 162 | +8,2 % / +4,3 % |
+
+Вывод пробной программы под node (объём, 7 граней, 120 треугольников, площадь сетки) с
+проверками тот же, что без них. Размеры модулей bendcore с новой установкой —
+`docs/qa/PERFORMANCE.md`, раздел 5.
+
+Решение: проверки включены по умолчанию в обеих установках. Цена — единицы процентов на
+булевых операциях и импорте STEP, около 10 % на изометрическом HLR и +3–4 % сжатого `.wasm`;
+взамен индексы вне диапазона в читателях становятся `Standard_OutOfRange` → `ParseError`, а не
+чтением чужой памяти. Без проверок (`OCCT_RELEASE_CHECKS=0`) нельзя доверять чтению файлов из
+внешних источников.
+
+### Результат fuzz-проверки
+
+| Конфигурация | OCCT без проверок, C++17 | + проверки | + защита ядра от сбоев | + C++20 и предварительная проверка STEP |
+|---|---:|---:|---:|---:|
+| native (gcc) | 229 | 59 (step 46, brep_text 7, brep_binary 6) | 8 (brep_binary 5 — стек, step 3 — память) | **0** |
+| asan (clang, ASan/UBSan) | 229 | — | — | **1** |
+
+Промежуточные столбцы измерены в native: «+ проверки» — та же ревизия с отключённой защитой ядра
+(`runConvertingFaults` как простой вызов), «+ защита» — с ней, OCCT ещё C++17. Оставшийся
+дефект ASan и его причина — `tests/regression/fuzz/known_defects.txt` и `docs/qa/QA.md`,
+раздел 7.

@@ -94,6 +94,8 @@ jobs:
     env:
       OCCT_VERSION: 8.0.1
       EMSDK_VERSION: 6.0.12
+      # Проверки OCCT в Release (docs/kernel/OCCT_BUILD.md, раздел 6); входит в ключ кэша.
+      OCCT_RELEASE_CHECKS: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -120,9 +122,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            third_party/occt-install-wasm
+            third_party/occt-install-wasm-checked
             third_party/occt-build-wasm/probe
-          key: occt-wasm-V${{ env.OCCT_VERSION }}-emsdk-${{ env.EMSDK_VERSION }}-${{ hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt_wasm.sh') }}
+          key: occt-wasm-checks${{ env.OCCT_RELEASE_CHECKS }}-V${{ env.OCCT_VERSION }}-emsdk-${{ env.EMSDK_VERSION }}-${{ hashFiles('third_party/occt_toolkits.txt', 'third_party/build_occt_wasm.sh') }}
 
       # Тот же источник, что в build_occt.sh. Успех скрипта — код 0: внутри он собирает пробную
       # программу tests/kernel/wasm/occt_size_probe.cpp и проверяет её вывод OK под node.
@@ -134,12 +136,13 @@ jobs:
           git clone --depth 1 --branch "V${OCCT_VERSION}" https://github.com/Open-Cascade-SAS/OCCT.git \
             "third_party/occt-${OCCT_VERSION}"
           OCCT_SOURCE="$GITHUB_WORKSPACE/third_party/occt-${OCCT_VERSION}" \
+          OCCT_WASM_INSTALL="$GITHUB_WORKSPACE/third_party/occt-install-wasm-checked" \
             third_party/build_occt_wasm.sh 2>&1 | tee occt-wasm-build.log
 
       - name: Конфигурация bendcore (Emscripten, BENDCORE_WITH_OCCT=ON)
         run: |
           emcmake cmake -S . -B build-wasm-modules -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install-wasm" \
+            -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR="$GITHUB_WORKSPACE/third_party/occt-install-wasm-checked" \
             -DBENDCORE_EIGEN_DIR=/usr/include/eigen3
 
       - name: Сборка четырёх модулей
