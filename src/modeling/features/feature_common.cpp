@@ -1,5 +1,7 @@
 #include "feature_common.hpp"
 
+#include <BOPAlgo_CheckResult.hxx>
+#include <BRepAlgoAPI_Check.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepCheck_Analyzer.hxx>
@@ -20,7 +22,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <map>
+#include <mutex>
 #include <sstream>
 
 namespace bendcore::modeling {
@@ -54,7 +58,82 @@ namespace {
 
 bool hasSolid(const TopoDS_Shape& s) { return !s.IsNull() && TopExp_Explorer(s, TopAbs_SOLID).More(); }
 
+struct FactsCache {
+    std::mutex mutex;
+    std::deque<std::pair<TopoDS_Shape, ShapeFacts>> entries;  // most recent last
+};
+
+FactsCache& factsCache() {
+    static FactsCache cache;
+    return cache;
+}
+
+const char* checkStatusName(BOPAlgo_CheckStatus status) {
+    switch (status) {
+        case BOPAlgo_CheckUnknown: return "CheckUnknown";
+        case BOPAlgo_BadType: return "BadType";
+        case BOPAlgo_SelfIntersect: return "SelfIntersect";
+        case BOPAlgo_TooSmallEdge: return "TooSmallEdge";
+        case BOPAlgo_NonRecoverableFace: return "NonRecoverableFace";
+        case BOPAlgo_IncompatibilityOfVertex: return "IncompatibilityOfVertex";
+        case BOPAlgo_IncompatibilityOfEdge: return "IncompatibilityOfEdge";
+        case BOPAlgo_IncompatibilityOfFace: return "IncompatibilityOfFace";
+        case BOPAlgo_OperationAborted: return "OperationAborted";
+        case BOPAlgo_GeomAbs_C0: return "GeomAbs_C0";
+        case BOPAlgo_InvalidCurveOnSurface: return "InvalidCurveOnSurface";
+        case BOPAlgo_NotValid: return "NotValid";
+    }
+    return "Unknown";
+}
+
+// BRepAlgoAPI_Check (малые рёбра и самопересечения) — то же, что kernel::booleanOp делает при
+// BooleanOptions::checkInputs; формы booleanReady пропускаются.
+std::string checkBooleanInput(const TopoDS_Shape& s, const char* role, std::size_t index) {
+    if (s.IsNull() || !TopExp_Explorer(s, TopAbs_EDGE).More()) return {};  // kernel::booleanOp reports it
+    if (auto f = knownFacts(s); f && f->booleanReady) return {};
+    BRepAlgoAPI_Check check(s, true, true);
+    if (check.IsValid()) return {};
+    std::ostringstream msg;
+    msg << role << " #" << index << " failed BRepAlgoAPI_Check:";
+    for (const BOPAlgo_CheckResult& r : check.Result()) msg << ' ' << checkStatusName(r.GetCheckStatus());
+    return msg.str();
+}
+
 }  // namespace
+
+std::optional<ShapeFacts> knownFacts(const TopoDS_Shape& shape) {
+    if (shape.IsNull()) return std::nullopt;
+    FactsCache& c = factsCache();
+    std::lock_guard<std::mutex> lock(c.mutex);
+    for (auto it = c.entries.rbegin(); it != c.entries.rend(); ++it)
+        if (it->first.IsEqual(shape)) return it->second;
+    return std::nullopt;
+}
+
+void rememberFacts(const TopoDS_Shape& shape, const ShapeFacts& facts) {
+    if (shape.IsNull()) return;
+    FactsCache& c = factsCache();
+    std::lock_guard<std::mutex> lock(c.mutex);
+    ShapeFacts merged = facts;
+    for (auto it = c.entries.begin(); it != c.entries.end(); ++it) {
+        if (!it->first.IsEqual(shape)) continue;
+        merged.valid = merged.valid || it->second.valid;
+        merged.booleanReady = merged.booleanReady || it->second.booleanReady;
+        if (!merged.volume) merged.volume = it->second.volume;
+        c.entries.erase(it);
+        break;
+    }
+    c.entries.emplace_back(shape, merged);
+    while (c.entries.size() > kShapeFactsCapacity) c.entries.pop_front();
+}
+
+bool isValidShape(const TopoDS_Shape& shape) {
+    if (shape.IsNull()) return false;
+    if (auto f = knownFacts(shape); f && f->valid) return true;
+    if (!BRepCheck_Analyzer(shape, true, true).IsValid()) return false;
+    rememberFacts(shape, ShapeFacts{true, false, std::nullopt});
+    return true;
+}
 
 std::string occtMessage(const char* where, const char* what) {
     return std::string("OCCT exception in ") + where + ": " + (what ? what : "");
@@ -62,8 +141,10 @@ std::string occtMessage(const char* where, const char* what) {
 
 double volumeOf(const TopoDS_Shape& shape) {
     if (!hasSolid(shape)) return 0.0;
+    if (auto f = knownFacts(shape); f && f->volume) return *f->volume;
     GProp_GProps props;
     BRepGProp::VolumeProperties(shape, props);
+    rememberFacts(shape, ShapeFacts{false, false, props.Mass()});
     return props.Mass();
 }
 
@@ -179,14 +260,21 @@ Result<gp_Pln> validateProfile(const Profile& profile) {
 std::string checkSolidInput(const TopoDS_Shape& shape, const char* role) {
     if (shape.IsNull()) return std::string(role) + " is null";
     if (!hasSolid(shape)) return std::string(role) + " contains no solid";
-    if (!BRepCheck_Analyzer(shape).IsValid()) return std::string(role) + " is invalid (BRepCheck_Analyzer)";
+    if (!isValidShape(shape)) return std::string(role) + " is invalid (BRepCheck_Analyzer)";
     return {};
 }
 
 std::string checkSolidResult(const TopoDS_Shape& shape) {
     if (shape.IsNull()) return "result is null";
     if (!hasSolid(shape)) return "result contains no solid";
-    if (!BRepCheck_Analyzer(shape).IsValid()) return "result is invalid (BRepCheck_Analyzer)";
+    if (!isValidShape(shape)) return "result is invalid (BRepCheck_Analyzer)";
+    // Одно тело: его объём равен объёму всей формы (возможно, уже известному).
+    if (countSolids(shape) == 1) {
+        TopExp_Explorer ex(shape, TopAbs_SOLID);
+        const double v = shape.ShapeType() == TopAbs_SOLID ? volumeOf(shape) : volumeOf(ex.Current());
+        if (!(v > 0.0)) return "result contains a solid with non-positive volume";
+        return {};
+    }
     for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next())
         if (!(volumeOf(ex.Current()) > 0.0)) return "result contains a solid with non-positive volume";
     return {};
@@ -217,8 +305,29 @@ Result<TransformedCopy> transformCopy(const TopoDS_Shape& shape, const gp_Trsf& 
 Result<BooleanStep> booleanWithHistory(kernel::BooleanType type, const std::vector<TopoDS_Shape>& arguments,
                                        const std::vector<TopoDS_Shape>& tools, bool trackArguments,
                                        bool trackTools) {
-    auto res = kernel::booleanOp(type, arguments, tools);
+    // Входы проверяются BRepAlgoAPI_Check здесь, а не в ядре: результат предыдущей булевой
+    // операции (booleanReady) повторно не проверяется.
+    {
+        std::string problems;
+        try {
+            for (std::size_t i = 0; i < arguments.size(); ++i)
+                if (std::string p = checkBooleanInput(arguments[i], "argument", i); !p.empty())
+                    problems += (problems.empty() ? "" : "; ") + p;
+            for (std::size_t i = 0; i < tools.size(); ++i)
+                if (std::string p = checkBooleanInput(tools[i], "tool", i); !p.empty())
+                    problems += (problems.empty() ? "" : "; ") + p;
+        } catch (const Standard_Failure& e) {
+            return Error{ErrorCode::OperationFailed, occtMessage("BRepAlgoAPI_Check", e.what())};
+        }
+        if (!problems.empty()) return Error{ErrorCode::InvalidInput, problems};
+    }
+    kernel::BooleanOptions options;
+    options.checkInputs = false;
+    auto res = kernel::booleanOp(type, arguments, tools, options);
     if (!res) return res.error();
+    // kernel::booleanOp принимает результат только после BRepCheck_Analyzer и вычисляет его объём.
+    if (TopExp_Explorer(res.value().shape, TopAbs_SOLID).More())
+        rememberFacts(res.value().shape, ShapeFacts{true, res.value().fuzzyValue == 0.0, res.value().volume});
     BooleanStep step;
     step.shape = res.value().shape;
     step.warnings = res.value().warnings;

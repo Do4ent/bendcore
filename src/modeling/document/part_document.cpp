@@ -2,11 +2,14 @@
 
 #include "part_document_internal.hpp"
 
+#include "../features/feature_common.hpp"
+
 #include <bendcore/formula.hpp>
 #include <bendcore/kernel/shape.hpp>
 
 #include <Standard_Failure.hxx>
 #include <TopExp.hxx>
+#include <TopExp_Explorer.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -17,6 +20,9 @@
 #include <stdexcept>
 
 namespace bendcore::modeling {
+
+namespace fc = ::bendcore::modeling::detail;
+
 
 namespace {
 
@@ -816,9 +822,13 @@ RebuildReport PartDocument::rebuild() {
             linkKeys.emplace_back(slot.name + "=" + t->id, t->hash.value_or(0));
         }
 
+        // Sketches and datums without references do not see the body: the chain stays out of
+        // their hash, and they do not advance it.
+        bool bodyIndependent = !n.feature->readsInputBody();
+        for (const auto& [slot, refs] : n.references) bodyIndependent = bodyIndependent && refs.empty();
         auto inputHash = [&]() {
             Hasher h;
-            h.add(chain);
+            h.add(bodyIndependent ? std::uint64_t(0x6e6f2d626f6479ULL) : chain);  // "no-body"
             h.add(n.id);
             h.add(n.type);
             h.add(n.suppressed ? "suppressed" : "active");
@@ -855,7 +865,7 @@ RebuildReport PartDocument::rebuild() {
             report.reused.push_back(n.id);
             if (n.state == FeatureState::Error) report.failed.push_back(n.id);
             if (n.output) current = n.output;
-            chain = key;
+            if (!bodyIndependent) chain = key;
             continue;
         }
         if (n.cache && n.cache->hash == key && !n.suppressed) {
@@ -864,7 +874,7 @@ RebuildReport PartDocument::rebuild() {
             report.fromCache.push_back(n.id);
             if (n.state == FeatureState::Error) report.failed.push_back(n.id);
             if (n.output) current = n.output;
-            chain = key;
+            if (!bodyIndependent) chain = key;
             continue;
         }
         n.cache.reset();
@@ -875,7 +885,7 @@ RebuildReport PartDocument::rebuild() {
                 report.reused.push_back(n.id);
                 if (n.state == FeatureState::Error) report.failed.push_back(n.id);
                 if (n.output) current = n.output;
-                chain = key;
+                if (!bodyIndependent) chain = key;
                 continue;
             }
         }
@@ -885,7 +895,7 @@ RebuildReport PartDocument::rebuild() {
         if (n.suppressed) {
             n.state = FeatureState::Suppressed;
             n.hash = key;
-            chain = key;
+            if (!bodyIndependent) chain = key;
             continue;
         }
         report.recomputed.push_back(n.id);
@@ -987,14 +997,19 @@ RebuildReport PartDocument::rebuild() {
                         n.state = warning ? FeatureState::Warning : FeatureState::Ok;
                     }
                 } else {
-                    kernel::Shape shape(out.value().shape);
-                    auto validity = shape.checkValidity();
-                    auto volume = shape.volumeProperties();
+                    // Validity and volume are usually known already: the operation checked its
+                    // result (detail::ShapeFacts), so BRepCheck/GProp run only for new shapes.
+                    const TopoDS_Shape& result = out.value().shape;
+                    kernel::ValidityReport validity;
+                    validity.valid = fc::isValidShape(result);
+                    if (!validity.valid) validity = kernel::Shape(result).checkValidity();
+                    const bool hasSolid = TopExp_Explorer(result, TopAbs_SOLID).More();
+                    const double volume = hasSolid ? fc::volumeOf(result) : 0.0;
                     if (!validity.valid) {
                         std::string issues;
                         for (std::size_t q = 0; q < validity.issues.size() && q < 3; ++q) issues += " " + validity.issues[q] + ";";
                         markError("result is not a valid shape:" + issues);
-                    } else if (!volume || !(volume.value().volume > 0)) {
+                    } else if (!hasSolid || !(volume > 0)) {
                         markError("result is not a solid with positive volume");
                     } else {
                         NamingRequest req;
@@ -1037,7 +1052,7 @@ RebuildReport PartDocument::rebuild() {
         // References may have been renamed: the stored hash describes the stored inputs.
         key = inputHash();
         n.hash = key;
-        chain = key;
+        if (!bodyIndependent) chain = key;
         if (n.output) current = n.output;
         n.pool.erase(std::remove_if(n.pool.begin(), n.pool.end(), [&](const CachedResult& r) { return r.hash == key; }),
                      n.pool.end());

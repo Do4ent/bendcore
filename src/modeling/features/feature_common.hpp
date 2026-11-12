@@ -15,6 +15,7 @@
 #include <gp_Pln.hxx>
 #include <gp_Trsf.hxx>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,7 +38,30 @@ std::string checkSolidInput(const TopoDS_Shape& shape, const char* role);
 // Результат операции: валиден, содержит тела с положительным объёмом.
 std::string checkSolidResult(const TopoDS_Shape& shape);
 
+// Объём (BRepGProp::VolumeProperties); значение запоминается в кэше фактов о формах.
 double volumeOf(const TopoDS_Shape& shape);
+
+// Кэш фактов о формах (docs/modeling/PART_DOCUMENT.md, «Инкрементальное перестроение»).
+// TopoDS_Shape неизменяема: форма с тем же TShape, Location и Orientation (IsEqual) имеет те же
+// свойства. Кэш хранит до kShapeFactsCapacity последних форм (сами формы удерживаются, поэтому
+// адрес TShape не переиспользуется), доступ под мьютексом.
+//   valid        — BRepCheck_Analyzer(shape).IsValid() был true;
+//   booleanReady — форма — результат kernel::booleanOp с нулевым нечётким допуском и прошла
+//                  BRepCheck_Analyzer, поэтому как вход следующей булевой операции не проверяется
+//                  BRepAlgoAPI_Check повторно (самопересечений результат булевой операции не
+//                  содержит; вход, из которого он построен, уже прошёл эту проверку);
+//   volume       — объём BRepGProp::VolumeProperties.
+struct ShapeFacts {
+    bool valid = false;
+    bool booleanReady = false;
+    std::optional<double> volume;
+};
+constexpr std::size_t kShapeFactsCapacity = 64;
+std::optional<ShapeFacts> knownFacts(const TopoDS_Shape& shape);
+// Дополняет факты формы (флаги — логическое ИЛИ, объём — если задан).
+void rememberFacts(const TopoDS_Shape& shape, const ShapeFacts& facts);
+// BRepCheck_Analyzer с учётом кэша (успешная проверка запоминается).
+bool isValidShape(const TopoDS_Shape& shape);
 int countSolids(const TopoDS_Shape& shape);
 // Диагональ габарита объединения форм (пустые пропускаются).
 double boundingDiagonal(const std::vector<TopoDS_Shape>& shapes);

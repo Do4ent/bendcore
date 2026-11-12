@@ -250,11 +250,29 @@ Result<NamedShape> buildNamedShape(const NamingRequest& request) {
         out.shape_ = request.result;
         out.indexShape();
 
+        // Signatures. An element that passes unchanged from an input (same TShape, location and
+        // orientation) keeps the input's signature: the geometry is the same, so only new and
+        // modified elements are measured (BRepGProp per face and edge dominates naming).
         std::array<std::vector<GeometricSignature>, 3> sigs;
         for (ElementKind kind : kKinds) {
             const int n = out.maps_[ki(kind)].Extent();
+            std::vector<const GeometricSignature*> known(static_cast<std::size_t>(n), nullptr);
+            for (const NamedShape* input : request.inputs) {
+                if (input == nullptr || input->isNull()) continue;
+                for (std::size_t i = 0; i < input->count(kind); ++i) {
+                    const ElementRecord& r = input->record(kind, i);
+                    if (!r.signature.valid) continue;
+                    const TopoDS_Shape& e = input->element(kind, i);
+                    const int j = out.maps_[ki(kind)].FindIndex(e);
+                    if (j > 0 && out.maps_[ki(kind)].FindKey(j).IsEqual(e)) known[static_cast<std::size_t>(j - 1)] = &r.signature;
+                }
+            }
             sigs[ki(kind)].reserve(static_cast<std::size_t>(n));
             for (int i = 1; i <= n; ++i) {
+                if (const GeometricSignature* k = known[static_cast<std::size_t>(i - 1)]) {
+                    sigs[ki(kind)].push_back(*k);
+                    continue;
+                }
                 auto sig = computeSignature(out.maps_[ki(kind)].FindKey(i));
                 if (!sig) return Result<NamedShape>::failure(sig.error().code, sig.error().message);
                 sigs[ki(kind)].push_back(std::move(sig).value());
