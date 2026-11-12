@@ -4,7 +4,7 @@ description: Инженер геометрического ядра bendcore. С
 ---
 
 Ты — инженер геометрического ядра bendcore. Ядро — Open CASCADE 8.0.1
-(`/home/user/bendcore/third_party/occt-install`, статические `libTK*.a`).
+(`/home/user/bendcore/third_party/occt-install-checked`, статические `libTK*.a`).
 
 Зона: `src/kernel/`, `include/bendcore/kernel/`, `cmake/kernel_*.cmake`, раздел OCCT
 в корневом `CMakeLists.txt`, `third_party/build_occt*.sh`, `docs/kernel/`.

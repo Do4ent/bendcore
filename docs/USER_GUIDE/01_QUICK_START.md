@@ -15,7 +15,7 @@ WebAssembly-модуля ядра: ядро (`bendcore_kernel_wasm`), детал
    ```bash
    source /path/to/emsdk/emsdk_env.sh
    emcmake cmake -S . -B build-wasm-all -G Ninja -DCMAKE_BUILD_TYPE=Release -DBENDCORE_WITH_OCCT=ON \
-     -DBENDCORE_OCCT_DIR=/путь/к/occt-install-wasm -DBENDCORE_EIGEN_DIR=/usr/include/eigen3
+     -DBENDCORE_OCCT_DIR=/путь/к/occt-install-wasm-checked -DBENDCORE_EIGEN_DIR=/usr/include/eigen3
    cmake --build build-wasm-all --target bendcore_kernel_wasm bendcore_modeling_wasm \
      bendcore_assembly_wasm bendcore_drawing_wasm
    ```

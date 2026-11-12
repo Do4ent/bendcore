@@ -68,13 +68,13 @@ cmake --build build && ctest --test-dir build --output-on-failure
 
 # Native с OCCT (ядро, деталь, сборка, чертёж, сервер)
 cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install
+  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install-checked
 cmake --build build-occt && ctest --test-dir build-occt --output-on-failure
 
 # WebAssembly-модули страниц: emsdk, OCCT, собранный для WASM, Eigen
 source /path/to/emsdk/emsdk_env.sh
 emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release -DBENDCORE_WITH_OCCT=ON \
-  -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install-wasm -DBENDCORE_EIGEN_DIR=/usr/include/eigen3
+  -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install-wasm-checked -DBENDCORE_EIGEN_DIR=/usr/include/eigen3
 cmake --build build-wasm --target bendcore_kernel_wasm bendcore_modeling_wasm \
   bendcore_assembly_wasm bendcore_drawing_wasm
 ```

@@ -32,7 +32,7 @@
 source /root/emsdk/emsdk_env.sh
 emcmake cmake -S . -B build-wasm-drawing -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DBENDCORE_WITH_OCCT=ON \
-  -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install-wasm \
+  -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install-wasm-checked \
   -DBENDCORE_EIGEN_DIR=/usr/include/eigen3
 cmake --build build-wasm-drawing --target bendcore_drawing_wasm
 ```

@@ -31,7 +31,7 @@
 export EMSDK=/root/emsdk PATH=/root/emsdk/upstream/emscripten:$PATH
 emcmake cmake -S . -B build-wasm-modeling -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DBENDCORE_WITH_OCCT=ON \
-  -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install-wasm \
+  -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install-wasm-checked \
   -DBENDCORE_EIGEN_DIR=/usr/include/eigen3
 cmake --build build-wasm-modeling --target bendcore_modeling_wasm
 ```

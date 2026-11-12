@@ -50,14 +50,14 @@
 ```bash
 # Native с OCCT (основная конфигурация разработки ядра)
 cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install
+  -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=$PWD/third_party/occt-install-checked
 cmake --build build-occt --target <цель>
 ctest --test-dir build-occt -R <шаблон> --output-on-failure
 ```
 
-OCCT не хранится в git (`third_party/occt-install` в `.gitignore`). В отдельных рабочих
+OCCT не хранится в git (`third_party/occt-*` в `.gitignore`). В отдельных рабочих
 копиях (git worktree) указывайте абсолютный путь к основной установке:
-`-DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install`.
+`-DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install-checked`.
 
 ## 5. Владение файлами при параллельной работе
 

@@ -28,7 +28,7 @@
 export EMSDK=/root/emsdk PATH=/root/emsdk/upstream/emscripten:$PATH   # или source emsdk_env.sh
 emcmake cmake -S . -B build-wasm-kernel -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DBENDCORE_WITH_OCCT=ON \
-  -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install-wasm \
+  -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install-wasm-checked \
   -DBENDCORE_EIGEN_DIR=/home/user/bendcore/third_party/eigen-5.0.0
 cmake --build build-wasm-kernel --target bendcore_kernel_wasm
 ```
@@ -52,7 +52,7 @@ Eigen к ним и относится).
 
 ### Размер
 
-Измерено 2026-11-07, emsdk 6.0.12, OCCT 8.0.1 (`occt-install-wasm`, 29 тулкитов, Release):
+Измерено 2026-11-07, emsdk 6.0.12, OCCT 8.0.1 (`occt-install-wasm`, 29 тулкитов, Release, без проверок):
 
 | `BENDCORE_WASM_KERNEL_OPT` | `.wasm`, байт | gzip -9, байт | клей `.mjs` (gzip) |
 |---|---|---|---|
