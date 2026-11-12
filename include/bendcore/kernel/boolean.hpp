@@ -19,6 +19,12 @@ enum class BooleanType { Fuse, Cut, Common };
 
 const char* toString(BooleanType type) noexcept;
 
+// Объём (мм³) и площадь поверхности (мм²) формы — для проверки границ объёма.
+struct BooleanInputMass {
+    double volume = 0.0;
+    double area = 0.0;
+};
+
 struct BooleanOptions {
     // Лестница FuzzyValue: если fuzzyLadder пуст, строится 0, fuzzyStart, fuzzyStart*fuzzyFactor, ...
     // до maxFuzzyValue включительно. Если задан явно — используется как есть (по возрастанию,
@@ -32,6 +38,11 @@ struct BooleanOptions {
     bool checkInputs = true;       // BRepAlgoAPI_Check для каждого аргумента и инструмента
     bool simplifyResult = true;    // BRepAlgoAPI_BuilderAlgo::SimplifyResult после успеха
     bool checkVolumeBounds = true; // объём результата в пределах, допустимых для операции
+    // Известные объём и площадь входов (по порядку аргументов/инструментов; пусто или nullopt —
+    // вычислить). Нужны только при checkVolumeBounds; например, BooleanResult::mass предыдущего
+    // шага цепочки вырезов. Непустой вектор — ровно по числу входов, иначе InvalidInput.
+    std::vector<std::optional<BooleanInputMass>> argumentMass;
+    std::vector<std::optional<BooleanInputMass>> toolMass;
 
     // Ожидаемое число тел в результате (например, 1 для Fuse соприкасающихся деталей).
     std::optional<int> expectedSolidCount;
@@ -45,6 +56,9 @@ struct BooleanResult {
     int attempts = 0;          // число выполненных попыток, включая удачную
     bool simplifyApplied = false;  // применён SimplifyResult
     double volume = 0.0;       // объём результата, мм³
+    // Объём и площадь результата, если границы объёма проверялись (checkVolumeBounds и тела на
+    // входе): можно передать следующей операции как argumentMass, не пересчитывая.
+    std::optional<BooleanInputMass> mass;
     std::vector<std::string> warnings;  // предупреждения OCCT и причины отказа прежних попыток
     // История удачной попытки от элементов входов (аргументов и инструментов) к shape:
     // BRepAlgoAPI_BuilderAlgo::History() — история булевой операции (BOPAlgo_Builder), а если

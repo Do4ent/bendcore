@@ -78,24 +78,23 @@ int countSolids(const TopoDS_Shape& s) {
     return n;
 }
 
-struct MassInfo {
-    double volume = 0.0;
-    double area = 0.0;
-};
+using MassInfo = BooleanInputMass;
 
-MassInfo massOf(const TopoDS_Shape& s) {
-    MassInfo m;
-    if (s.IsNull()) return m;
-    if (hasSolids(s)) {
-        GProp_GProps vp;
-        BRepGProp::VolumeProperties(s, vp);
-        m.volume = vp.Mass();
-    }
+double volumeOf(const TopoDS_Shape& s) {
+    if (s.IsNull() || !hasSolids(s)) return 0.0;
+    GProp_GProps vp;
+    BRepGProp::VolumeProperties(s, vp);
+    return vp.Mass();
+}
+
+double areaOf(const TopoDS_Shape& s) {
+    if (s.IsNull()) return 0.0;
     GProp_GProps sp;
     BRepGProp::SurfaceProperties(s, sp);
-    m.area = sp.Mass();
-    return m;
+    return sp.Mass();
 }
+
+MassInfo massOf(const TopoDS_Shape& s) { return MassInfo{volumeOf(s), areaOf(s)}; }
 
 std::string checkInput(const TopoDS_Shape& s, const char* role, std::size_t index) {
     BRepAlgoAPI_Check check(s, true, true);
@@ -106,18 +105,26 @@ std::string checkInput(const TopoDS_Shape& s, const char* role, std::size_t inde
     return msg.str();
 }
 
-// Returns an empty string if the attempt result is acceptable, otherwise the reason.
+// Measured properties of an accepted attempt.
+struct Judged {
+    double volume = 0.0;
+    std::optional<double> area;  // only when the volume bounds were checked
+};
+
+// Returns an empty string if the attempt result is acceptable, otherwise the reason. One
+// BRepCheck_Analyzer pass and one VolumeProperties per call; the surface area only when the
+// volume bounds are checked (to pass on as BooleanResult::mass). Input masses come from the caller.
 std::string judge(BooleanType type, const TopoDS_Shape& result, const BooleanOptions& opt,
-                  const std::vector<MassInfo>& args, const std::vector<MassInfo>& tools, bool solidInputs,
-                  double fuzzy, double& volumeOut) {
+                  const std::vector<MassInfo>& args, const std::vector<MassInfo>& tools, bool checkBounds,
+                  double fuzzy, Judged& out) {
     if (result.IsNull()) return "result is null";
-    if (!BRepCheck_Analyzer(result).IsValid()) return "result is invalid (BRepCheck_Analyzer)";
     const bool empty = !TopExp_Explorer(result, TopAbs_FACE).More();
     if (type == BooleanType::Fuse && empty) return "fuse result is empty";
-    const MassInfo mass = massOf(result);
-    volumeOut = mass.volume;
+    if (!BRepCheck_Analyzer(result).IsValid()) return "result is invalid (BRepCheck_Analyzer)";
+    out.volume = volumeOf(result);
+    out.area.reset();
 
-    if (opt.checkVolumeBounds && solidInputs) {
+    if (checkBounds) {
         double va = 0.0, vt = 0.0, aa = 0.0, at = 0.0, vaMax = 0.0, vtMax = 0.0;
         for (const auto& m : args) { va += m.volume; aa += m.area; vaMax = std::max(vaMax, m.volume); }
         for (const auto& m : tools) { vt += m.volume; at += m.area; vtMax = std::max(vtMax, m.volume); }
@@ -129,9 +136,9 @@ std::string judge(BooleanType type, const TopoDS_Shape& result, const BooleanOpt
             case BooleanType::Cut: lo = std::max(0.0, va - vt); hi = va; break;
             case BooleanType::Common: lo = 0.0; hi = std::min(va, vt); break;
         }
-        if (mass.volume < lo - slack || mass.volume > hi + slack) {
+        if (out.volume < lo - slack || out.volume > hi + slack) {
             std::ostringstream msg;
-            msg << "volume " << mass.volume << " outside [" << lo << ", " << hi << "] +- " << slack;
+            msg << "volume " << out.volume << " outside [" << lo << ", " << hi << "] +- " << slack;
             return msg.str();
         }
     }
@@ -154,6 +161,7 @@ std::string judge(BooleanType type, const TopoDS_Shape& result, const BooleanOpt
             }
         }
     }
+    if (checkBounds) out.area = areaOf(result);
     return {};
 }
 
@@ -171,6 +179,10 @@ std::optional<Error> validateOptions(const BooleanOptions& o) {
     if (o.expectedSolidCount && *o.expectedSolidCount < 0)
         return Error{ErrorCode::InvalidInput, "expectedSolidCount must be >= 0"};
     if (!(o.minSolidThickness >= 0.0)) return Error{ErrorCode::InvalidInput, "minSolidThickness must be >= 0"};
+    for (const auto* masses : {&o.argumentMass, &o.toolMass})
+        for (const auto& m : *masses)
+            if (m && (!(m->volume >= 0.0) || !(m->area >= 0.0) || !std::isfinite(m->volume) || !std::isfinite(m->area)))
+                return Error{ErrorCode::InvalidInput, "argumentMass/toolMass values must be finite and >= 0"};
     return std::nullopt;
 }
 
@@ -232,18 +244,33 @@ Result<BooleanResult> booleanOp(BooleanType type, const std::vector<TopoDS_Shape
             if (!problems.empty()) return Error{ErrorCode::InvalidInput, problems};
         }
 
+        if (!options.argumentMass.empty() && options.argumentMass.size() != arguments.size())
+            return Error{ErrorCode::InvalidInput, "argumentMass must be empty or have one entry per argument"};
+        if (!options.toolMass.empty() && options.toolMass.size() != tools.size())
+            return Error{ErrorCode::InvalidInput, "toolMass must be empty or have one entry per tool"};
+
         NCollection_List<TopoDS_Shape> argList, toolList;
-        std::vector<MassInfo> argMass, toolMass;
         bool solidInputs = true;
         for (const auto& s : arguments) {
             argList.Append(s);
-            argMass.push_back(massOf(s));
             solidInputs = solidInputs && hasSolids(s);
         }
         for (const auto& s : tools) {
             toolList.Append(s);
-            toolMass.push_back(massOf(s));
             solidInputs = solidInputs && hasSolids(s);
+        }
+        // Input masses only for the volume-bounds check; a value passed by the caller
+        // (BooleanOptions::argumentMass/toolMass, e.g. BooleanResult::mass of a previous step)
+        // replaces the computation.
+        const bool checkBounds = options.checkVolumeBounds && solidInputs;
+        std::vector<MassInfo> argMass, toolMass;
+        if (checkBounds) {
+            for (std::size_t i = 0; i < arguments.size(); ++i)
+                argMass.push_back(i < options.argumentMass.size() && options.argumentMass[i] ? *options.argumentMass[i]
+                                                                                             : massOf(arguments[i]));
+            for (std::size_t i = 0; i < tools.size(); ++i)
+                toolMass.push_back(i < options.toolMass.size() && options.toolMass[i] ? *options.toolMass[i]
+                                                                                       : massOf(tools[i]));
         }
 
         BooleanResult out;
@@ -272,39 +299,46 @@ Result<BooleanResult> booleanOp(BooleanType type, const std::vector<TopoDS_Shape
             std::string warnings;
             if (op->HasWarnings()) warnings = alertsText(op->GetReport(), Message_Warning);
 
-            double volume = 0.0;
-            TopoDS_Shape shape = op->Shape();
+            const TopoDS_Shape raw = op->Shape();
             // SimplifyResult объединяет историю упрощения с историей операции на месте
             // (myHistory->Merge), поэтому история до упрощения сохраняется копией на случай,
             // если упрощённый результат будет отвергнут.
-            occ::handle<BRepTools_History> history = copyHistory(op->History());
-            std::string reason = judge(type, shape, options, argMass, toolMass, solidInputs, fuzzy, volume);
-            if (!reason.empty()) {
-                failures.push_back(tag.str() + reason + (warnings.empty() ? "" : " [warnings: " + warnings + "]"));
-                continue;
-            }
-
+            occ::handle<BRepTools_History> rawHistory =
+                options.simplifyResult ? copyHistory(op->History()) : op->History();
+            TopoDS_Shape shape;
+            occ::handle<BRepTools_History> history;
+            Judged judged;
+            std::string simplifyReason;
+            // One result check per accepted attempt: with simplifyResult the simplified shape is
+            // judged first; the raw shape only if the simplified one is rejected.
             if (options.simplifyResult) {
                 op->SimplifyResult(true, true);
-                TopoDS_Shape unified = op->Shape();
-                double unifiedVolume = 0.0;
-                const std::string sreason =
-                    judge(type, unified, options, argMass, toolMass, solidInputs, fuzzy, unifiedVolume);
-                if (sreason.empty()) {
+                const TopoDS_Shape unified = op->Shape();
+                simplifyReason = judge(type, unified, options, argMass, toolMass, checkBounds, fuzzy, judged);
+                if (simplifyReason.empty()) {
                     shape = unified;
-                    volume = unifiedVolume;
                     history = op->History();
                     out.simplifyApplied = true;
-                } else {
-                    out.warnings.push_back(tag.str() + "SimplifyResult rejected: " + sreason);
                 }
+            }
+            if (shape.IsNull()) {
+                const std::string reason = judge(type, raw, options, argMass, toolMass, checkBounds, fuzzy, judged);
+                if (!reason.empty()) {
+                    failures.push_back(tag.str() + reason + (warnings.empty() ? "" : " [warnings: " + warnings + "]"));
+                    continue;
+                }
+                shape = raw;
+                history = rawHistory;
+                if (!simplifyReason.empty())
+                    out.warnings.push_back(tag.str() + "SimplifyResult rejected: " + simplifyReason);
             }
 
             out.warnings.insert(out.warnings.begin(), failures.begin(), failures.end());
             if (!warnings.empty()) out.warnings.push_back(tag.str() + "OCCT warnings: " + warnings);
             out.shape = shape;
             out.fuzzyValue = fuzzy;
-            out.volume = volume;
+            out.volume = judged.volume;
+            if (judged.area) out.mass = BooleanInputMass{judged.volume, *judged.area};
             if (TopExp_Explorer(shape, TopAbs_FACE).More()) {
                 if (history.IsNull())
                     return Error{ErrorCode::OperationFailed,
