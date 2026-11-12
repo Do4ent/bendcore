@@ -3,10 +3,13 @@
 // Дерево: эскиз прямоугольника L × W на плоскости XY и выдавливание на H (2 операции), затем
 // 149 пар «эскиз окружности радиуса r на XY + вырез насквозь» — сетка 15 × 10 без последнего
 // узла. Всего 2 + 2·149 = 300 операций. Изменение первого эскиза (переменная L, от которой
-// зависит прямоугольник) заставляет перестроить все 300 операций.
+// зависит прямоугольник) заставляет перестроить эскиз, выдавливание и все 149 вырезов; эскизы
+// окружностей тела не видят (нет ссылок) и переиспользуются. Изменение последней операции
+// (радиус последнего отверстия, переменная RL) перестраивает только её эскиз и вырез;
+// перестроение без изменений ничего не пересчитывает.
 //
-// Эталон — аналитика: объём L·W·H − 149·π·r²·H, число цилиндрических граней 149, габариты
-// [0, L] × [0, W] × [0, H]; ни одна операция не в ошибке, перестроены все.
+// Эталон — аналитика: объём L·W·H − 148·π·r²·H − π·RL²·H, число цилиндрических граней 149,
+// габариты [0, L] × [0, W] × [0, H]; ни одна операция не в ошибке.
 
 #include "stress_util.hpp"
 
@@ -25,6 +28,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 using namespace bendcore::modeling;
 using bendcore::qa::stress::timed;
@@ -85,9 +89,9 @@ Measured measure(const TopoDS_Shape& s) {
     return m;
 }
 
-void expectPlate(const PartDocument& doc, double length) {
+void expectPlate(const PartDocument& doc, double length, double lastR = kR) {
     const Measured m = measure(doc.finalShape().shape());
-    const double expected = length * kW * kH - kHoles * kPi * kR * kR * kH;
+    const double expected = length * kW * kH - (kHoles - 1) * kPi * kR * kR * kH - kPi * lastR * lastR * kH;
     EXPECT_NEAR(m.volume, expected, 1e-6 * expected) << "L = " << length;
     EXPECT_EQ(m.cylinders, kHoles);
     const double want[6] = {0, 0, 0, length, kW, kH};
@@ -100,6 +104,7 @@ TEST(StressPart, ThreeHundredFeaturesRebuildAfterFirstSketchEdit) {
     PartDocument doc(partRegistry());
     ASSERT_TRUE(doc.setVariable("L", "130").ok());
     ASSERT_TRUE(doc.setVariable("W", num(kW)).ok());
+    ASSERT_TRUE(doc.setVariable("RL", num(kR)).ok());
 
     SketchBuilder base;
     base.fixedPolygon({{"0", "0"}, {"L", "0"}, {"L", "W"}, {"0", "W"}});
@@ -109,7 +114,7 @@ TEST(StressPart, ThreeHundredFeaturesRebuildAfterFirstSketchEdit) {
     for (int j = 0; j < kRows; ++j) {
         for (int i = 0; i < kCols && n < kHoles; ++i, ++n) {
             SketchBuilder c;
-            c.fixedCircle(num(kStart + kPitch * i), num(kStart + kPitch * j), num(kR));
+            c.fixedCircle(num(kStart + kPitch * i), num(kStart + kPitch * j), n == kHoles - 1 ? "RL" : num(kR));
             const std::string id = "Hole" + std::to_string(n);
             addOrFail(doc, sketchOnXY(id + "Sketch", c.build()));
             addOrFail(doc, extrude(id, id + "Sketch", "cut", "throughAllBoth", ""));
@@ -118,20 +123,36 @@ TEST(StressPart, ThreeHundredFeaturesRebuildAfterFirstSketchEdit) {
     ASSERT_EQ(doc.size(), 300u);
 
     RebuildReport rep;
-    timed("part_300", "initial_rebuild", 180, [&] { rep = doc.rebuild(); });
+    timed("part_300", "initial_rebuild", 60, [&] { rep = doc.rebuild(); });
     EXPECT_TRUE(rep.failed.empty()) << rep.failed.size() << " failed, first " << rep.failed.front();
     EXPECT_EQ(rep.recomputed.size(), 300u);
     expectPlate(doc, 130);
 
-    // Изменение первого эскиза: прямоугольник длиннее на 10 мм — перестраивается всё дерево.
+    // Изменение первого эскиза: прямоугольник длиннее на 10 мм — перестраиваются выдавливание и
+    // все вырезы (тело изменилось), эскизы окружностей переиспользуются.
     ASSERT_TRUE(doc.setVariable("L", "140").ok());
-    timed("part_300", "rebuild_after_sketch_edit", 180, [&] { rep = doc.rebuild(); });
+    timed("part_300", "rebuild_after_sketch_edit", 60, [&] { rep = doc.rebuild(); });
     EXPECT_TRUE(rep.failed.empty());
-    EXPECT_EQ(rep.recomputed.size(), 300u) << "every feature depends on the first sketch";
+    EXPECT_EQ(rep.recomputed.size(), std::size_t(2 + kHoles)) << "base sketch, base and every cut";
+    EXPECT_EQ(rep.reused.size(), std::size_t(kHoles)) << "hole sketches do not depend on the body";
+    for (const auto& id : rep.reused) EXPECT_NE(id.find("Sketch"), std::string::npos) << id;
+    expectPlate(doc, 140);
+
+    // Изменение последней операции: перестраиваются только эскиз и вырез последнего отверстия.
+    ASSERT_TRUE(doc.setVariable("RL", "2").ok());
+    timed("part_300", "rebuild_after_last_edit", 3, [&] { rep = doc.rebuild(); });
+    EXPECT_TRUE(rep.failed.empty());
+    const std::string last = "Hole" + std::to_string(kHoles - 1);
+    EXPECT_EQ(rep.recomputed, (std::vector<std::string>{last + "Sketch", last}));
+    EXPECT_EQ(rep.reused.size(), 298u);
+    expectPlate(doc, 140, 2.0);
+    ASSERT_TRUE(doc.setVariable("RL", num(kR)).ok());
+    timed("part_300", "rebuild_last_edit_back", 1, [&] { rep = doc.rebuild(); });
+    EXPECT_TRUE(rep.recomputed.empty()) << "the previous result of the last pair comes from the pool";
     expectPlate(doc, 140);
 
     // Перестроение без изменений — только повторное использование результатов.
-    timed("part_300", "idle_rebuild", 5, [&] { rep = doc.rebuild(); });
+    timed("part_300", "idle_rebuild", 0.5, [&] { rep = doc.rebuild(); });
     EXPECT_TRUE(rep.recomputed.empty());
     EXPECT_EQ(rep.reused.size(), 300u);
 
