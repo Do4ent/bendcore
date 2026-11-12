@@ -50,15 +50,19 @@ double volumeOf(const TopoDS_Shape& shape);
 //                  BRepCheck_Analyzer, поэтому как вход следующей булевой операции не проверяется
 //                  BRepAlgoAPI_Check повторно (самопересечений результат булевой операции не
 //                  содержит; вход, из которого он построен, уже прошёл эту проверку);
-//   volume       — объём BRepGProp::VolumeProperties.
+//   volume       — объём BRepGProp::VolumeProperties;
+//   mass         — объём и площадь, которые kernel::booleanOp вычислил для проверки границ объёма
+//                  (BooleanResult::mass); передаются следующей булевой операции как
+//                  BooleanOptions::argumentMass / toolMass, чтобы ядро их не пересчитывало.
 struct ShapeFacts {
     bool valid = false;
     bool booleanReady = false;
     std::optional<double> volume;
+    std::optional<kernel::BooleanInputMass> mass;
 };
 constexpr std::size_t kShapeFactsCapacity = 64;
 std::optional<ShapeFacts> knownFacts(const TopoDS_Shape& shape);
-// Дополняет факты формы (флаги — логическое ИЛИ, объём — если задан).
+// Дополняет факты формы (флаги — логическое ИЛИ, объём и масса — если заданы).
 void rememberFacts(const TopoDS_Shape& shape, const ShapeFacts& facts);
 // BRepCheck_Analyzer с учётом кэша (успешная проверка запоминается).
 bool isValidShape(const TopoDS_Shape& shape);
@@ -101,6 +105,17 @@ struct BooleanStep {
 Result<BooleanStep> booleanWithHistory(kernel::BooleanType type, const std::vector<TopoDS_Shape>& arguments,
                                        const std::vector<TopoDS_Shape>& tools, bool trackArguments,
                                        bool trackTools);
+
+// Тела формы с ограничивающими коробками, которые пересекаются с коробкой инструмента
+// (с запасом tolerance): кандидаты многотельной булевой операции.
+std::vector<TopoDS_Shape> bodiesNear(const std::vector<TopoDS_Shape>& bodies, const TopoDS_Shape& tool,
+                                     double tolerance);
+
+// Объединение историй независимых шагов над непересекающимися входами (каждая — от своих
+// входов к своей части результата). Для элементов inputs: Modified/Generated — объединение
+// образов всех шагов, IsRemoved — только если ни один шаг не дал образа и хотя бы один удалил.
+History combineHistories(const std::vector<TopoDS_Shape>& inputs, const std::vector<History>& steps,
+                         const TopoDS_Shape& result);
 
 // Применение инструмента к целевому телу (Boss/Cut) с объединением истории
 // инструмента (toolHistory: профиль → tool) и истории булевой операции.
