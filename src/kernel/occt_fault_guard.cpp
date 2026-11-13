@@ -14,22 +14,40 @@
 
 #include <Standard_ErrorHandler.hxx>
 #include <Standard_Failure.hxx>
-
-#if BENDCORE_KERNEL_CONVERT_FAULTS
 #include <OSD_SIGBUS.hxx>
 #include <OSD_SIGSEGV.hxx>
 #include <Standard_NumericError.hxx>
 
+#include <cstring>
+#include <typeinfo>
+
+#if BENDCORE_KERNEL_CONVERT_FAULTS
 #include <csignal>
 #include <cstdio>
-#include <cstring>
 #include <mutex>
-#include <typeinfo>
 
 #include <signal.h>
 #endif
 
 namespace bendcore::kernel::detail {
+
+namespace {
+// Message of the last fault converted on this thread (written by the signal handler, no
+// allocation): isConvertedFault() compares the caught exception with it. Never set in builds
+// without fault conversion (WASM, Windows).
+thread_local char t_lastFault[128] = {};
+thread_local bool t_hasFault = false;
+}  // namespace
+
+bool isConvertedFault(const Standard_Failure& failure) {
+    if (!t_hasFault) return false;
+    const std::type_info& type = typeid(failure);
+    if (type != typeid(OSD_SIGSEGV) && type != typeid(OSD_SIGBUS) && type != typeid(Standard_NumericError)) {
+        return false;
+    }
+    const char* text = failure.GetMessageString();
+    return text != nullptr && std::strcmp(text, t_lastFault) == 0;
+}
 
 #if BENDCORE_KERNEL_CONVERT_FAULTS
 
@@ -37,10 +55,6 @@ namespace {
 
 // Nesting depth of runConvertingFaults() on this thread; the handler converts only when > 0.
 thread_local int t_guardDepth = 0;
-// Message of the last fault converted on this thread (written by the handler, no allocation):
-// isConvertedFault() compares the caught exception with it.
-thread_local char t_lastFault[128] = {};
-thread_local bool t_hasFault = false;
 
 constexpr int kSignals[] = {SIGSEGV, SIGBUS, SIGFPE};
 struct sigaction g_previous[3];
@@ -127,16 +141,6 @@ struct DepthScope {
 
 bool faultConversionAvailable() { return true; }
 
-bool isConvertedFault(const Standard_Failure& failure) {
-    if (!t_hasFault) return false;
-    const std::type_info& type = typeid(failure);
-    if (type != typeid(OSD_SIGSEGV) && type != typeid(OSD_SIGBUS) && type != typeid(Standard_NumericError)) {
-        return false;
-    }
-    const char* text = failure.GetMessageString();
-    return text != nullptr && std::strcmp(text, t_lastFault) == 0;
-}
-
 void runConvertingFaults(const std::function<void()>& fn) {
     std::call_once(g_installed, install);
     DepthScope depth;
@@ -148,8 +152,6 @@ void runConvertingFaults(const std::function<void()>& fn) {
 #else
 
 bool faultConversionAvailable() { return false; }
-
-bool isConvertedFault(const Standard_Failure&) { return false; }
 
 void runConvertingFaults(const std::function<void()>& fn) { fn(); }
 
