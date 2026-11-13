@@ -36,6 +36,7 @@ add_executable(test_drawing_document
   tests/drawing_v2/test_drawing_document_parts.cpp
   tests/drawing_v2/test_drawing_document_assembly.cpp
   tests/drawing_v2/test_drawing_document_io.cpp
+  tests/drawing_v2/test_drawing_threads.cpp
 )
 target_include_directories(test_drawing_document PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawing_v2
                            ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
