@@ -41,5 +41,8 @@ Result<gp_Ax1> axisFromOption(const FeatureContext& ctx, const std::string& choi
 
 void addSketchFeatures(std::vector<std::pair<std::string, FeatureRegistry::Factory>>& all);
 void addBodyFeatures(std::vector<std::pair<std::string, FeatureRegistry::Factory>>& all);
+// Sweep, Loft, Rib, ThreadedHole, BodyBoolean, DeleteBody, BodyLinearPattern,
+// BodyCircularPattern, BodyMirror (advanced_features.cpp).
+void addAdvancedFeatures(std::vector<std::pair<std::string, FeatureRegistry::Factory>>& all);
 
 }  // namespace bendcore::modeling::features

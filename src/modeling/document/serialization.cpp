@@ -5,6 +5,8 @@
 
 #include <bendcore/kernel/brep_io.hpp>
 
+#include <TopExp_Explorer.hxx>
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -200,11 +202,17 @@ json elementsToJson(const NamedShape& shape) {
     for (ElementKind kind : {ElementKind::Face, ElementKind::Edge, ElementKind::Vertex}) {
         json arr = json::array();
         for (const auto& r : shape.records(kind)) {
-            arr.push_back(json{{"name", r.name},
-                               {"origin", toString(r.origin)},
-                               {"feature", r.feature},
-                               {"aliases", r.aliases},
-                               {"signature", signatureToJson(r.signature)}});
+            json e{{"name", r.name},
+                   {"origin", toString(r.origin)},
+                   {"feature", r.feature},
+                   {"aliases", r.aliases},
+                   {"signature", signatureToJson(r.signature)}};
+            if (!r.attributes.empty()) {
+                json attrs = json::array();
+                for (const auto& [k, v] : r.attributes) attrs.push_back(json::array({k, v}));
+                e["attributes"] = std::move(attrs);
+            }
+            arr.push_back(std::move(e));
         }
         kinds[toString(kind)] = std::move(arr);
     }
@@ -212,7 +220,7 @@ json elementsToJson(const NamedShape& shape) {
     for (const auto& [name, d] : shape.deletions()) {
         del[name] = json{{"feature", d.feature}, {"successors", d.successors}};
     }
-    return json{{"elements", kinds}, {"deletions", del}};
+    return json{{"elements", kinds}, {"deletions", del}, {"bodies", shape.bodyNames()}};
 }
 
 Result<NamedShape> namedShapeFromJson(const std::string& brep64, const json& j) {
@@ -231,6 +239,10 @@ Result<NamedShape> namedShapeFromJson(const std::string& brep64, const json& j) 
             r.feature = e.at("feature").get<std::string>();
             r.aliases = e.at("aliases").get<std::vector<std::string>>();
             r.signature = signatureFromJson(e.at("signature"), kind);
+            if (e.contains("attributes")) {
+                for (const auto& kv : e.at("attributes"))
+                    r.attributes.emplace_back(kv.at(0).get<std::string>(), kv.at(1).get<std::string>());
+            }
             records[static_cast<std::size_t>(kind)].push_back(std::move(r));
         }
     }
@@ -239,7 +251,13 @@ Result<NamedShape> namedShapeFromJson(const std::string& brep64, const json& j) 
         deletions[name] = DeletionRecord{d.at("feature").get<std::string>(),
                                          d.at("successors").get<std::vector<std::string>>()};
     }
-    return NamedShape::fromRecords(shape.value().occt(), std::move(records), std::move(deletions));
+    // Body names are part of the cache since the multibody part; an entry without them is
+    // recomputed (fromRecords would invent names that differ from the rebuilt ones).
+    if (!j.contains("bodies")) return Result<NamedShape>::failure(ErrorCode::ParseError, "cache: no body names");
+    auto bodies = j.at("bodies").get<std::vector<std::string>>();
+    if (bodies.empty() && TopExp_Explorer(shape.value().occt(), TopAbs_SOLID).More())
+        return Result<NamedShape>::failure(ErrorCode::ParseError, "cache: no body names");
+    return NamedShape::fromRecords(shape.value().occt(), std::move(records), std::move(deletions), std::move(bodies));
 }
 
 std::string numberText(double v) {
@@ -656,7 +674,10 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
                     auto toolNamed = nameTool(n->id, tool.value().occt());
                     if (!toolNamed) continue;
                     c.tool = tool.value().occt();
-                    c.toolMode = entry.at("toolMode").get<std::string>() == "cut" ? FeatureMode::Cut : FeatureMode::Boss;
+                    // toString(FeatureMode): "Boss", "Cut", "NewBody".
+                    auto mode = featureModeFromString(entry.at("toolMode").get<std::string>());
+                    if (!mode) continue;
+                    c.toolMode = *mode;
                     c.toolNamed = std::make_shared<const NamedShape>(std::move(toolNamed).value());
                 }
                 n->cache = std::move(c);

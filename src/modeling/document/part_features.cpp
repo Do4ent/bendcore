@@ -38,12 +38,12 @@ namespace fc = ::bendcore::modeling::detail;
 constexpr double kDeg = M_PI / 180.0;
 
 std::vector<OptionSpec> withMode(std::vector<OptionSpec> specs) {
-    specs.insert(specs.begin(), OptionSpec{"mode", {"boss", "cut"}});
+    specs.insert(specs.begin(), OptionSpec{"mode", {"boss", "cut", "newBody"}});
     return specs;
 }
 
 FeatureMode modeOf(const FeatureContext& ctx) {
-    return ctx.option("mode") == "cut" ? FeatureMode::Cut : FeatureMode::Boss;
+    return featureModeFromString(ctx.option("mode")).value_or(FeatureMode::Boss);
 }
 
 TopoDS_Shape compound(const std::vector<TopoDS_Shape>& shapes) {
@@ -664,6 +664,7 @@ Status registerPartFeatures(FeatureRegistry& registry) {
     std::vector<std::pair<std::string, FeatureRegistry::Factory>> all;
     features::addSketchFeatures(all);
     features::addBodyFeatures(all);
+    features::addAdvancedFeatures(all);
     for (const auto& [type, factory] : all) {
         auto st = registry.add(type, factory);
         if (!st) return st;

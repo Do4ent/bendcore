@@ -17,7 +17,8 @@ add_library(bendcore_modeling_document STATIC
   ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/serialization.cpp
   ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/transactions.cpp
   ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/sketch_features.cpp
-  ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/part_features.cpp)
+  ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/part_features.cpp
+  ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/advanced_features.cpp)
 target_compile_features(bendcore_modeling_document PUBLIC cxx_std_20)
 target_include_directories(bendcore_modeling_document PUBLIC "${BENDCORE_MODELING_DOC_ROOT}/include")
 target_include_directories(bendcore_modeling_document PRIVATE "${BENDCORE_MODELING_DOC_ROOT}/third_party")
@@ -32,7 +33,7 @@ if(NOT GTest_FOUND)
   return()
 endif()
 
-foreach(_t naming tree io survival sketch reference_parts)
+foreach(_t naming tree io survival sketch reference_parts advanced multibody)
   add_executable(test_modeling_document_${_t}
     ${BENDCORE_MODELING_DOC_ROOT}/tests/modeling/test_modeling_document_${_t}.cpp)
   target_include_directories(test_modeling_document_${_t} PRIVATE "${BENDCORE_MODELING_DOC_ROOT}/third_party")

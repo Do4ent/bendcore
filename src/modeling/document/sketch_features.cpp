@@ -328,7 +328,11 @@ public:
     std::vector<ReferenceSlot> referenceSlots() const override {
         return {{"face", ElementKind::Face, false, true}, {"projected", ElementKind::Edge, true, true}};
     }
-    std::vector<OptionSpec> optionSpecs() const override { return {{"plane", {"XY", "XZ", "YZ", "face", "datum"}}}; }
+    // contour: "closed" — profile curves form regions (extrude, revolve, ...); "open" — they form
+    // one chain, open or closed, for a sweep path or a rib contour (no regions).
+    std::vector<OptionSpec> optionSpecs() const override {
+        return {{"plane", {"XY", "XZ", "YZ", "face", "datum"}}, {"contour", {"closed", "open"}}};
+    }
     std::vector<LinkSlot> linkSlots() const override { return {{"plane", {"DatumPlane"}, true}}; }
     bool hasSketchData() const override { return true; }
     bool readsInputBody() const override { return false; }
@@ -618,7 +622,11 @@ public:
         }
         const bool hasProfile = std::any_of(result->curves.begin(), result->curves.end(),
                                             [](const SketchCurve& c) { return !c.construction; });
-        if (hasProfile) {
+        if (hasProfile && ctx.option("contour") == "open") {
+            if (!data->regions.empty()) return fail(ErrorCode::InvalidInput, "an open-contour sketch has no regions to select");
+            auto path = buildSketchPath(pl, result->curves, ProfileOptions{1e-6 * scale});
+            if (!path) return path.error();
+        } else if (hasProfile) {
             auto profile = SketchProfile::build(pl, result->curves, ProfileOptions{1e-6 * scale});
             if (!profile) return profile.error();
             auto shared = std::make_shared<const SketchProfile>(std::move(profile).value());
