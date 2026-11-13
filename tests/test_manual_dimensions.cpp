@@ -27,8 +27,8 @@ static DrawingSheet make_dummy_sheet() {
     sheet.count = 1;
     sheet.standard = Standard::GOST;
     sheet.projection = Projection::FirstAngle;
-    sheet.frame.drawable = {{0, 0}, {420, 297}};  // A3 format
-    sheet.frame.border = {{5, 5}, {415, 292}};
+    sheet.frame.drawable = {0, 0, 420, 297};  // A3 format
+    sheet.frame.border = {5, 5, 415, 292};
     return sheet;
 }
 
@@ -268,5 +268,6 @@ int main() {
     std::printf("Tests passed: %d\n", test_count - fail_count);
     std::printf("========================================\n");
 
-    return fail_count > 0 ? 1 : 0;
+    if (fail_count > 0) return 1;
+    return 0;
 }

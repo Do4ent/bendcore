@@ -323,13 +323,6 @@ set(BENDCORE_SOURCES
   src/fea/fea_solver.cpp
   src/fea/result_processor.cpp
 
-  # M7 Phase: Mesh Optimization (GAP-028) - SKIPPED FOR NOW
-  # src/mesh_optimization/quality_analyzer.cpp
-  # src/mesh_optimization/adaptive_refinement.cpp
-  # src/mesh_optimization/mesh_smoothing.cpp
-  # src/mesh_optimization/mesh_optimization.cpp
-  # src/mesh_optimization/parallel_mesh_generation.cpp
-  # src/mesh_optimization/mesh_io.cpp
 
   # M6 Phase: Generative Design (GAP-026)
   src/generative/design_space.cpp
@@ -429,6 +422,13 @@ bendcore_add_test(instances test_instances)
 add_executable(test_drawing tests/test_drawing.cpp)
 target_link_libraries(test_drawing PRIVATE bendcore_core)
 bendcore_add_test(drawing test_drawing)
+
+# Ручные размеры и 2D-эскизы на листе трубы (src/drawing.cpp): раньше не входили в сборку.
+foreach(t manual_dimensions drawing_sketches)
+  add_executable(test_${t} tests/test_${t}.cpp)
+  target_link_libraries(test_${t} PRIVATE bendcore_core)
+  bendcore_add_test(${t} test_${t})
+endforeach()
 
 add_executable(test_dwg_export tests/test_dwg_export.cpp)
 target_link_libraries(test_dwg_export PRIVATE bendcore_core)
