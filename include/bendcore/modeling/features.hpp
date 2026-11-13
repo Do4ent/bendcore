@@ -77,6 +77,9 @@ struct FeatureResult {
     // Элементы, названные самой операцией (ребро жёсткости: SideA, SideB, Top, Wall.E<k>…):
     // элемент инструмента или результата и его роль; в результат они попадают по history.
     std::vector<std::pair<TopoDS_Shape, std::string>> roles;
+    // Массивы и зеркала: преобразования копий (без исходного экземпляра) — по ним копии
+    // условной резьбы получают атрибуты (threadCopies).
+    std::vector<gp_Trsf> copies;
 };
 
 // Плоский профиль эскиза: грань (внешний контур и, возможно, отверстия) и система
@@ -369,6 +372,19 @@ std::string threadDesignation(const MetricThread& t, ThreadHand hand);
 // Атрибуты «thread.*» (строки) ↔ ThreadSpec.
 std::vector<std::pair<std::string, std::string>> threadAttributes(const ThreadSpec& spec);
 Result<ThreadSpec> threadFromAttributes(const std::vector<std::pair<std::string, std::string>>& attributes);
+
+// Резьба после преобразования копии (массив, зеркало): вход и направление переносятся
+// преобразованием; номинал, шаг, длина и направление витков (hand) не меняются — зеркальная
+// копия резьбового отверстия остаётся резьбой того же обозначения (ГОСТ 2.311 изображает её так
+// же; левая резьба задаётся явно).
+ThreadSpec transformedThread(const ThreadSpec& spec, const gp_Trsf& transform);
+
+// Атрибуты «thread.*» копий: для каждой резьбы seeds и каждого преобразования — цилиндрические
+// грани result радиусом drill/2 (отн. допуск 1e-6), ось которых совпадает с осью
+// преобразованной резьбы (допуск 1e-6·max(1, D)), а участок оси пересекается с длиной резьбы.
+// Пусто, если копия не найдена (копия не пересекла тело).
+std::vector<std::pair<TopoDS_Shape, std::vector<std::pair<std::string, std::string>>>> threadCopies(
+    const std::vector<ThreadSpec>& seeds, const std::vector<gp_Trsf>& transforms, const TopoDS_Shape& result);
 
 enum class ThreadEnd { Blind, Through };
 

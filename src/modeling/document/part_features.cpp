@@ -390,8 +390,25 @@ Result<const LinkedFeature*> sourceTool(const FeatureContext& ctx) {
     return src;
 }
 
-FeatureOutput fromResult(FeatureResult r, const LinkedFeature* src, std::optional<FeatureMode> mode) {
+// Threads of the copies (threadCopies): the threaded walls named by the source feature (src)
+// or, without a source (mirror of the body), every threaded wall of the input body.
+std::vector<std::pair<TopoDS_Shape, ElementAttributes>> copiedThreads(const FeatureResult& r, const LinkedFeature* src,
+                                                                      const NamedShape& input) {
+    if (r.copies.empty()) return {};
+    const NamedShape* named = src ? src->output.get() : &input;
+    if (!named) return {};
+    std::vector<ThreadSpec> seeds;
+    for (const ThreadInfo& t : threadsOf(*named)) {
+        if (src && named->record(ElementKind::Face, t.face).feature != src->id) continue;
+        seeds.push_back(t.thread);
+    }
+    return threadCopies(seeds, r.copies, r.shape);
+}
+
+FeatureOutput fromResult(FeatureResult r, const LinkedFeature* src, std::optional<FeatureMode> mode,
+                         const NamedShape& input) {
     FeatureOutput out;
+    out.attributes = copiedThreads(r, src, input);
     out.shape = std::move(r.shape);
     out.history = std::move(r.history);
     out.warnings = std::move(r.warnings);
@@ -449,7 +466,7 @@ public:
         }
         auto res = linearPattern(ctx.input().shape(), src.value()->tool, *src.value()->toolMode, p);
         if (!res) return res.error();
-        return fromResult(std::move(res).value(), src.value(), src.value()->toolMode);
+        return fromResult(std::move(res).value(), src.value(), src.value()->toolMode, ctx.input());
     }
 };
 
@@ -477,7 +494,7 @@ public:
         p.equalSpacing = ctx.option("spacing") == "equal";
         auto res = circularPattern(ctx.input().shape(), src.value()->tool, *src.value()->toolMode, p);
         if (!res) return res.error();
-        return fromResult(std::move(res).value(), src.value(), src.value()->toolMode);
+        return fromResult(std::move(res).value(), src.value(), src.value()->toolMode, ctx.input());
     }
 };
 
@@ -498,13 +515,13 @@ public:
         if (ctx.option("what") == "body") {
             auto res = mirrorBody(ctx.input().shape(), plane, ctx.option("merge") == "true");
             if (!res) return res.error();
-            return fromResult(std::move(res).value(), nullptr, std::nullopt);
+            return fromResult(std::move(res).value(), nullptr, std::nullopt, ctx.input());
         }
         auto src = sourceTool(ctx);
         if (!src) return src.error();
         auto res = mirrorFeature(ctx.input().shape(), src.value()->tool, *src.value()->toolMode, plane);
         if (!res) return res.error();
-        return fromResult(std::move(res).value(), src.value(), src.value()->toolMode);
+        return fromResult(std::move(res).value(), src.value(), src.value()->toolMode, ctx.input());
     }
 };
 
@@ -521,7 +538,7 @@ public:
         auto res = shell(ctx.input().shape(), ctx.references("faces"), ctx.parameter("thickness"),
                          ctx.option("direction") == "outward" ? ShellDirection::Outward : ShellDirection::Inward);
         if (!res) return res.error();
-        return fromResult(std::move(res).value(), nullptr, std::nullopt);
+        return fromResult(std::move(res).value(), nullptr, std::nullopt, ctx.input());
     }
 };
 
@@ -548,7 +565,7 @@ public:
         auto res = draftFaces(ctx.input().shape(), ctx.references("faces"), pull, ctx.parameter("angle") * kDeg,
                               pln.value().Position());
         if (!res) return res.error();
-        return fromResult(std::move(res).value(), nullptr, std::nullopt);
+        return fromResult(std::move(res).value(), nullptr, std::nullopt, ctx.input());
     }
 };
 

@@ -10,7 +10,9 @@
 #include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
+#include <gp_Cylinder.hxx>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -260,6 +262,55 @@ Result<FeatureResult> threadedHole(const TopoDS_Shape& target, const TopoDS_Face
     } catch (const Standard_Failure& e) {
         return Error{ErrorCode::OperationFailed, occtMessage("threadedHole", e.what())};
     }
+}
+
+ThreadSpec transformedThread(const ThreadSpec& spec, const gp_Trsf& transform) {
+    ThreadSpec t = spec;
+    t.entry = spec.entry.Transformed(transform);
+    t.direction = spec.direction.Transformed(transform);
+    return t;
+}
+
+std::vector<std::pair<TopoDS_Shape, std::vector<std::pair<std::string, std::string>>>> threadCopies(
+    const std::vector<ThreadSpec>& seeds, const std::vector<gp_Trsf>& transforms, const TopoDS_Shape& result) {
+    std::vector<std::pair<TopoDS_Shape, std::vector<std::pair<std::string, std::string>>>> out;
+    if (result.IsNull()) return out;
+    struct Wall {
+        TopoDS_Face face;
+        gp_Cylinder cylinder;
+    };
+    std::vector<Wall> walls;
+    for (TopExp_Explorer ex(result, TopAbs_FACE); ex.More(); ex.Next()) {
+        const TopoDS_Face& f = TopoDS::Face(ex.Current());
+        BRepAdaptor_Surface s(f, false);
+        if (s.GetType() == GeomAbs_Cylinder) walls.push_back({f, s.Cylinder()});
+    }
+    for (const ThreadSpec& seed : seeds) {
+        const double radius = seed.drill / 2.0;
+        const double tol = 1e-6 * std::max(1.0, seed.nominal);
+        for (const gp_Trsf& t : transforms) {
+            const ThreadSpec copy = transformedThread(seed, t);
+            const gp_Vec axis(copy.direction);
+            for (const Wall& w : walls) {
+                if (std::abs(w.cylinder.Radius() - radius) > 1e-6 * std::max(1.0, radius)) continue;
+                if (!w.cylinder.Axis().Direction().IsParallel(copy.direction, 1e-9)) continue;
+                // Distance from the copied entry to the cylinder axis.
+                const gp_Vec toEntry(w.cylinder.Location(), copy.entry);
+                if (toEntry.Crossed(gp_Vec(w.cylinder.Axis().Direction())).Magnitude() > tol) continue;
+                // The wall must overlap the threaded length [0, length] along the axis.
+                double lo = 1e300, hi = -1e300;
+                for (TopExp_Explorer vx(w.face, TopAbs_VERTEX); vx.More(); vx.Next()) {
+                    const double a = gp_Vec(copy.entry, BRep_Tool::Pnt(TopoDS::Vertex(vx.Current()))).Dot(axis);
+                    lo = std::min(lo, a);
+                    hi = std::max(hi, a);
+                }
+                if (hi < lo || hi <= tol || lo >= copy.length - tol) continue;
+                const bool seen = std::any_of(out.begin(), out.end(), [&](const auto& e) { return e.first.IsSame(w.face); });
+                if (!seen) out.emplace_back(w.face, threadAttributes(copy));
+            }
+        }
+    }
+    return out;
 }
 
 }  // namespace bendcore::modeling

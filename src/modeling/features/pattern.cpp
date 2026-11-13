@@ -43,6 +43,7 @@ Result<FeatureResult> applyCopies(const TopoDS_Shape& target, const TopoDS_Shape
             }
             FeatureResult out = std::move(applied).value();
             addCopyGenerations(out.history, pairs, out.shape, out.history);
+            out.copies = transforms;
             return out;
         }
         const kernel::BooleanType type = mode == FeatureMode::Boss ? kernel::BooleanType::Fuse : kernel::BooleanType::Cut;
@@ -61,6 +62,7 @@ Result<FeatureResult> applyCopies(const TopoDS_Shape& target, const TopoDS_Shape
         out.history = st.history;
         out.warnings = st.warnings;
         addCopyGenerations(out.history, pairs, out.shape, st.history);
+        out.copies = transforms;
         const int solids = countSolids(out.shape);
         if (solids > 1) out.warnings.push_back("result has " + std::to_string(solids) + " solids");
         return out;
@@ -130,6 +132,7 @@ Result<FeatureResult> mirrorBody(const TopoDS_Shape& body, const gp_Ax2& plane, 
         auto copy = transformCopy(body, t);
         if (!copy) return copy.error();
         FeatureResult out;
+        out.copies = {t};
         if (!merge) {
             BRep_Builder bb;
             TopoDS_Compound compound;
