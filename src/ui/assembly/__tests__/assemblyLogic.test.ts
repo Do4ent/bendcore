@@ -2,6 +2,7 @@ import { bomTableRows, clampProgress, flattenOccurrences, insertionDirection, ra
 import { allowedMateTypes, mateAccepts, nextMateSlots, suggestMateType } from '../mateRules';
 import type { PickedElement } from '../mateRules';
 import { dofText, massText } from '../labels';
+import { translate } from '../../app/i18n';
 import type { BomRow, OccurrenceInfo } from '../../../wasm/bendcore_assembly_api.mjs';
 
 const pick = (occ: number, index: number, type: 'plane' | 'cylinder' | 'axis' | 'point' | 'sphere'): PickedElement => ({
@@ -92,6 +93,9 @@ describe('labels', () => {
     expect(dofText(11)).toBe('11 степеней свободы');
     expect(dofText(21)).toBe('21 степень свободы');
     expect(dofText(0)).toBe('0 степеней свободы');
+    const en = (k: Parameters<typeof translate>[1], p?: Record<string, string | number>) => translate('en', k, p);
+    expect(dofText(1, en, 'en')).toBe('1 degree of freedom');
+    expect(dofText(21, en, 'en')).toBe('21 degrees of freedom');
   });
 
   it('formats masses', () => {

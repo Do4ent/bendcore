@@ -567,7 +567,7 @@ const AppShell: React.FC = () => {
             <div className="app-start-grid">
               <div className="app-card">
                 <h2>{t('start.new')}</h2>
-                <button type="button" className="app-primary" onClick={() => openTab('part', null, { title: 'деталь.bcpart.json' })} data-testid="new-part">
+                <button type="button" className="app-primary" onClick={() => openTab('part', null, { title: t('part.newFile') })} data-testid="new-part">
                   {t('start.newPart')}
                 </button>
                 <button type="button" className="app-primary" onClick={() => openTab('assembly', null, { title: 'assembly.json' })} data-testid="new-assembly">

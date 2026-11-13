@@ -1,58 +1,24 @@
-// Russian labels of the assembly page (docs/ui/ASSEMBLY_UI.md).
+// Texts of the assembly page that depend on numbers (docs/ui/ASSEMBLY_UI.md). Captions of mate
+// types, mate states, geometry and fastener kinds are messages of
+// src/ui/app/messages/assembly.ts (assembly.mateType.*, assembly.mateStatus.*,
+// assembly.geometry.*, assembly.fastenerKind.*), looked up with caption().
 
-import type { MateStatus, MateType } from '../../wasm/bendcore_assembly_api.mjs';
+import { translate } from '../app/i18n';
+import type { Lang, Translate } from '../app/i18n';
 
-export const MATE_LABELS: Record<MateType, string> = {
-  coincident: 'Совпадение',
-  concentric: 'Соосность',
-  distance: 'Расстояние',
-  angle: 'Угол',
-  parallel: 'Параллельность',
-  perpendicular: 'Перпендикулярность',
-  tangent: 'Касание',
-  rigid: 'Жёсткая связь',
-};
+const RU: Translate = (key, params) => translate('ru', key, params);
 
-export const MATE_STATUS_LABELS: Record<MateStatus, string> = {
-  solved: 'решено',
-  redundant: 'избыточно',
-  conflicting: 'противоречит',
-  unsolved: 'не решено',
-  broken: 'ссылка потеряна',
-  suppressed: 'подавлено',
-};
-
-export const GEOMETRY_LABELS: Record<string, string> = {
-  Plane: 'плоскость',
-  Cylinder: 'цилиндр',
-  Cone: 'конус',
-  Sphere: 'сфера',
-  Torus: 'тор',
-  BSpline: 'сплайн',
-  Line: 'прямая',
-  Circle: 'окружность',
-  Ellipse: 'эллипс',
-  Point: 'точка',
-  Other: 'другое',
-};
-
-export const FASTENER_KIND_LABELS: Record<string, string> = {
-  'hex-bolt': 'Болт',
-  'socket-head-screw': 'Винт',
-  'hex-nut': 'Гайка',
-  'plain-washer': 'Шайба',
-  'spring-washer': 'Шайба пружинная',
-  'parallel-pin': 'Штифт',
-};
-
-/** "1 степень свободы", "2 степени свободы", "5 степеней свободы". */
-export function dofText(n: number): string {
+/**
+ * "1 степень свободы", "2 степени свободы", "5 степеней свободы" (Russian plural forms by the
+ * last two digits); English: "1 degree of freedom", "2 degrees of freedom".
+ */
+export function dofText(n: number, t: Translate = RU, lang: Lang = 'ru'): string {
+  if (lang === 'en') return t(n === 1 ? 'assembly.dof.one' : 'assembly.dof.many', { n });
   const mod10 = n % 10;
   const mod100 = n % 100;
-  let word = 'степеней';
-  if (mod10 === 1 && mod100 !== 11) word = 'степень';
-  else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) word = 'степени';
-  return `${n} ${word} свободы`;
+  if (mod10 === 1 && mod100 !== 11) return t('assembly.dof.one', { n });
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return t('assembly.dof.few', { n });
+  return t('assembly.dof.many', { n });
 }
 
 /** Mass in kg with three significant decimals, or a dash when unknown. */
