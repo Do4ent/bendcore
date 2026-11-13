@@ -265,21 +265,12 @@ set(BENDCORE_SOURCES
   # M3 Phase: Mass Properties Analysis (GAP-015)
   src/analysis/mass_properties.cpp
 
-  # M6 Phase: Simulation Engine (GAP-024)
+  # CFD, теплопроводность, линейная упругость (модели и ограничения: docs/simulation/SIMULATION.md)
   src/simulation/cfd_solver.cpp
   src/simulation/structural_solver.cpp
   src/simulation/thermal_solver.cpp
   src/simulation/simulation_manager.cpp
   src/simulation/result_visualization.cpp
-
-  # M7 Phase: Real-time Solver (GAP-030)
-  src/solver/real_time_solver.cpp
-  src/solver/iterative_solvers.cpp
-  src/solver/preconditioners.cpp
-  src/solver/reduced_order_model.cpp
-  src/solver/solver_scheduler.cpp
-  src/solver/adaptive_refinement.cpp
-  src/solver/performance_metrics.cpp
 
   # Совместная работа над моделью трубы: изменения, версии, комментарии
   src/collaboration.cpp
@@ -418,11 +409,6 @@ bendcore_add_test(axis test_axis)
 add_executable(test_analysis tests/test_analysis.cpp)
 target_link_libraries(test_analysis PRIVATE bendcore_core)
 bendcore_add_test(analysis test_analysis)
-
-# M7 Phase: Real-time Solver (GAP-030)
-add_executable(test_real_time_solver tests/solver/test_real_time_solver.cpp)
-target_link_libraries(test_real_time_solver PRIVATE bendcore_core)
-bendcore_add_test(real_time_solver test_real_time_solver)
 
 add_executable(test_visualization tests/test_visualization.cpp)
 target_link_libraries(test_visualization PRIVATE bendcore_core)
@@ -690,7 +676,7 @@ add_executable(test_mass_properties tests/analysis/test_mass_properties.cpp)
 target_link_libraries(test_mass_properties PRIVATE bendcore_core)
 bendcore_add_test(mass_properties test_mass_properties)
 
-# M6 Phase: Simulation Engine (GAP-024) - 30+ unit tests
+# CFD, теплопроводность, упругость: проверки против аналитических решений
 find_package(GTest QUIET)
 if(GTest_FOUND)
   add_executable(test_simulation_m6 tests/simulation/test_simulation_m6.cpp)
