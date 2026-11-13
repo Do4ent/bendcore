@@ -18,6 +18,7 @@
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
+#include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 
@@ -522,4 +523,41 @@ TEST(ModelingSketchProfile, BoundSketchArc) {
     ASSERT_FALSE(bad.ok());
     EXPECT_NE(bad.error().message.find("arc entity 1"), std::string::npos);
     EXPECT_EQ(bound.entity(arc).kind, BoundSketch::EntityKind::Arc);
+}
+
+// Path: one chain of curves, listed in any order and direction, traversed from a free end.
+TEST(ModelingSketchPath, OpenChainFromFreeEnd) {
+    std::vector<SketchCurve> curves;
+    // Entity 3: arc around (10, 10) counter-clockwise from (10, 0) (-90°) to (20, 10) (0°);
+    // entities 1, 2: lines (20, 30)-(20, 10) and (0, 0)-(10, 0).
+    curves.push_back({1, LineSegment2d{{20, 30}, {20, 10}}, false});
+    curves.push_back({2, LineSegment2d{{0, 0}, {10, 0}}, false});
+    curves.push_back({3, CircularArc2d{{10, 10}, {10, 0}, {20, 10}, true}, false});
+    curves.push_back({4, LineSegment2d{{-5, -5}, {50, 50}}, true});  // construction: ignored
+    auto path = buildSketchPath(xy(), curves);
+    ASSERT_TRUE(path.ok()) << path.error().message;
+    EXPECT_FALSE(path.value().closed);
+    EXPECT_EQ(path.value().entities, (std::vector<SketchEntityId>{1, 3, 2}));
+    GProp_GProps g;
+    BRepGProp::LinearProperties(path.value().wire, g);
+    EXPECT_NEAR(g.Mass(), 20 + 10 + 3.14159265358979323846 * 10 / 2, 1e-9);
+    // The first edge starts at the free end of the smallest entity, (20, 30).
+    TopoDS_Vertex v1, v2;
+    TopExp::Vertices(path.value().edges.front(), v1, v2, true);
+    EXPECT_NEAR(BRep_Tool::Pnt(v1).Distance(gp_Pnt(20, 30, 0)), 0.0, 1e-9);
+}
+
+TEST(ModelingSketchPath, ClosedChainAndErrors) {
+    std::vector<SketchCurve> circle{{1, Circle2d{{0, 0}, 5}, false}};
+    auto closed = buildSketchPath(xy(), circle);
+    ASSERT_TRUE(closed.ok()) << closed.error().message;
+    EXPECT_TRUE(closed.value().closed);
+    std::vector<SketchCurve> twoChains{{1, LineSegment2d{{0, 0}, {10, 0}}, false}, {2, LineSegment2d{{0, 5}, {10, 5}}, false}};
+    auto two = buildSketchPath(xy(), twoChains);
+    ASSERT_FALSE(two.ok());
+    EXPECT_NE(two.error().message.find("separate chains"), std::string::npos) << two.error().message;
+    std::vector<SketchCurve> tee{{1, LineSegment2d{{0, 0}, {10, 0}}, false}, {2, LineSegment2d{{10, 0}, {20, 0}}, false},
+                                 {3, LineSegment2d{{10, 0}, {10, 10}}, false}};
+    EXPECT_FALSE(buildSketchPath(xy(), tee).ok());
+    EXPECT_FALSE(buildSketchPath(xy(), {}).ok());
 }

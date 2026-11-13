@@ -6,6 +6,9 @@
 //   Sketch, DatumPlane, DatumAxis                       — nodes without a body
 //   Extrude, Revolve, Hole, Fillet, Chamfer, LinearPattern, CircularPattern, Mirror,
 //   Shell, Draft                                        — body operations
+//   Sweep, Loft, Rib, ThreadedHole                      — phase 2 body operations
+//   BodyBoolean, DeleteBody, BodyLinearPattern, BodyCircularPattern, BodyMirror
+//                                                       — nodes of a multibody part
 //   Box, Cylinder                                       — primitives (rectangle / circle
 //                                                         profile extruded by extrude())
 
