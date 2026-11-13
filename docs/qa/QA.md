@@ -8,21 +8,21 @@
 ### Режимы
 
 ```bash
-scripts/check_no_stubs.sh                      # полная проверка каталогов нового кода
+scripts/check_no_stubs.sh                      # полная проверка src, include, tests, web/<модуль>
 scripts/check_no_stubs.sh --diff origin/ccr-d188a25e-rml7z8   # + добавленные строки относительно базы
 scripts/check_no_stubs.sh --list-rules         # список правил
 ```
 
-* Полная проверка всегда сканирует `src/{kernel,modeling,assembly_v2,drawing_v2,wasm,ui/kernel}`
-  (в `src/wasm` — `kernel_bindings.cpp` и JS API ядра),
-  `include/bendcore/{kernel,modeling,assembly_v2,drawing_v2}`,
-  `tests/{kernel,modeling,assembly_v2,drawing_v2,corpus,wasm,e2e-kernel,e2e-modeling,e2e-assembly,e2e-drawing,assembly-fixtures,regression}`,
-  `web/{kernel-viewer,part-modeler,assembly,drawing}`;
-  отсутствующие каталоги пропускаются.
+* Полная проверка всегда сканирует **весь** `src`, `include`, `tests` — и новые модули, и
+  старый код (трубный модуль, расчёты `src/simulation`, сервер, CLI, Electron `src/ui`,
+  `core_api`, WASM-мост) — а также `web/{kernel-viewer,part-modeler,assembly,drawing}`;
+  отсутствующие каталоги пропускаются. С 2026-11-13 (`docs/STUB_REMOVAL.md`, раздел 9) старый
+  код очищен до 0 нарушений, поэтому новое нарушение в любом его файле роняет CI
+  (`qa_check_no_stubs_tree`, задача `no-stubs`).
 * `--diff <ref>` дополнительно проверяет **только добавленные строки** во всех файлах кода,
   изменённых относительно `merge-base(<ref>, HEAD)`, включая незакоммиченные изменения
-  отслеживаемых файлов (неотслеживаемые новые файлы — после `git add`). Старый код с
-  нарушениями не мешает, пока его не трогают.
+  отслеживаемых файлов (неотслеживаемые новые файлы — после `git add`) — в том числе вне
+  каталогов полной проверки (`scripts/`, `backend/`, `examples/` и др.).
 * `--no-full` — только diff; `--root <dir>` — другой корень; `--paths <p>...` — свои пути.
 * Файлы кода: C/C++ (`.c .cc .cpp .cxx .h .hh .hpp .hxx .ipp .inl .tpp`), CMake, `.sh`,
   `.py`, JS/TS (`.js .mjs .cjs .jsx .ts .mts .cts .tsx`). Исключены: `tests/qa/fixtures/`
@@ -41,7 +41,7 @@ scripts/check_no_stubs.sh --list-rules         # список правил
 | Правило | Что ловит | Как снижены ложные срабатывания |
 |---|---|---|
 | `todo` | `TODO`, `FIXME`, `XXX`, `HACK` | только заглавными целыми словами (`todo_list` не ловится) |
-| `placeholder` | «placeholder» | не ловятся `std::placeholders`, CSS `::placeholder`, атрибут `placeholder="…"` и поле `placeholder: '…'` |
+| `placeholder` | «placeholder» | не ловятся `std::placeholders`, CSS `::placeholder`, атрибут `placeholder="…"`/`placeholder={…}`, поле `placeholder: '…'`, тип свойства `placeholder?: string;` и обращение `x.placeholder` |
 | `real-implementation` | «in a real/full/production implementation», «real implementation would/should» | только устойчивые обороты |
 | `would` | «would normally/actually/typically/go here», «we would», «would be computed here/later», «real code would» | одиночное «would» («иначе нормаль была бы перевёрнута») не ловится |
 | `stub` | «stub», «stubs», «stubbed», идентификаторы `zlib_stub` | `stubborn`, `check_no_stubs` не ловятся |
@@ -63,12 +63,13 @@ scripts/check_no_stubs.sh --list-rules         # список правил
 настоящие заглушки (`expect(true).toBe(true)` в `__tests__/*.spec.ts`, пустые
 `dispose()`/`onKeyUp()`), ложных срабатываний при выборке не найдено.
 
-Контроль точности: на всём существующем коде (`--paths src include tests`) скрипт находит
-~1100 нарушений; выборочная проверка показала, что это действительно заглушки старого кода
-(«Placeholder implementation», `EXPECT_TRUE(true)`, «For now, just return…»). Ложные
-срабатывания, найденные при выборке (`result.valid = true` перед проверками, фабрика
-`success_result`, `SetUp() override {}` в тестах), устранены и закреплены в
-`tests/qa/fixtures/clean/`.
+Контроль точности: до очистки старого кода скрипт находил на `src include tests` ~1100
+нарушений, к 2026-11-13 — 674; разбор каждого (`docs/STUB_REMOVAL.md`, раздел 9) подтвердил, что
+почти все — настоящие заглушки («Placeholder implementation», `EXPECT_TRUE(true)`, «For now,
+just return…»). Ложные срабатывания (`result.valid = true` перед проверками, фабрика
+`success_result`, `SetUp() override {}` в тестах, свойство `placeholder?: string` и
+`field.placeholder` в React) устранены в правилах и закреплены в `tests/qa/fixtures/clean/`;
+подавлений `qa-allow` в старом коде не понадобилось.
 
 ### Подавление ложного срабатывания
 
@@ -90,7 +91,7 @@ int legacy_bridge(int /*code*/) {  // qa-allow(literal-return): ABI shim, value 
 `tests/qa/test_check_no_stubs.sh` (ctest: `qa_check_no_stubs_selftest`):
 
 1. `tests/qa/fixtures/violations` → множество `файл:строка:правило` точно совпадает с
-   `tests/qa/fixtures/expected_violations.txt` (42 нарушения: все правила для C++ и
+   `tests/qa/fixtures/expected_violations.txt` (44 нарушения: все правила для C++ и
    JS/TS-правила на `src/ui/kernel/bad_viewer.ts`, `tests/wasm/bad_kernel.test.mjs`,
    `tests/e2e-kernel/no_checks.spec.ts`), код 1;
 2. `tests/qa/fixtures/clean` (законные конструкции) → 0 нарушений, код 0;
@@ -100,7 +101,8 @@ int legacy_bridge(int /*code*/) {  // qa-allow(literal-return): ABI shim, value 
 4. полная проверка без `--paths` находит нарушение в каждом каталоге нового кода
    (`src/wasm/kernel_bindings.cpp`, `.mjs`, `.d.mts`, `src/ui/kernel/*.tsx`, `src/modeling`,
    `src/assembly_v2`, `src/drawing_v2`, `tests/wasm`, `tests/e2e-kernel`, `web/kernel-viewer`)
-   и не сканирует каталог вне списка;
+   и в старом коде (`src/legacy`, `src/server`, `src/ui/RibbonBar.tsx`, `include/bendcore`,
+   `tests/test_*.cpp`) и не сканирует `examples/` и `tests/qa/fixtures/`;
 5. ошибки запуска → код 2.
 
 При изменении фикстур `expected_violations.txt` правится вручную — только после проверки,
