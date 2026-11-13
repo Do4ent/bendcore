@@ -4,7 +4,8 @@
 #      с tests/qa/fixtures/expected_violations.txt, код выхода 1.
 #   2. Полный режим на законном коде (fixtures/clean): нарушений нет, код выхода 0.
 #   3. Режим --diff во временном git-репозитории: сообщаются только добавленные строки
-#      (закоммиченные и незакоммиченные), старые нарушения и каталог фикстур не сообщаются.
+#      (закоммиченные и незакоммиченные), старые нарушения и каталог фикстур не сообщаются;
+#      полная проверка без --paths охватывает src, include, tests целиком.
 #   4. Ошибки запуска: код выхода 2.
 set -euo pipefail
 
@@ -116,14 +117,17 @@ else
 fi
 
 # --- 3б. каталоги полной проверки и типы файлов ---------------------------------------
-# Каждый каталог нового кода (включая WASM-привязки и вьюпорт ядра) входит в полную проверку;
-# .mts и .tsx — файлы кода; каталог вне списка не сканируется.
+# Полная проверка охватывает весь src, include, tests (новые модули и старый код: трубный
+# модуль, сервер, CLI, Electron) и страницы web/<модуль>; .mts и .tsx — файлы кода;
+# каталог вне списка (examples/) и фикстуры самотеста не сканируются.
 full="$tmp/full"
 for f in src/wasm/kernel_bindings.cpp src/wasm/bendcore_kernel_api.mjs src/wasm/api.d.mts \
          src/ui/kernel/KernelViewport.tsx src/modeling/features/extrude.cpp \
          src/assembly_v2/solver.cpp src/drawing_v2/model.cpp src/kernel/shape.cpp \
          tests/wasm/kernel_corpus.test.mjs tests/e2e-kernel/kernel_viewport.spec.ts \
-         web/kernel-viewer/playwright.config.ts src/legacy/old_code.cpp; do
+         web/kernel-viewer/playwright.config.ts src/legacy/old_code.cpp src/server/main.cpp \
+         src/ui/RibbonBar.tsx include/bendcore/tubegeom.hpp tests/test_tubegeom.cpp \
+         examples/old_demo.cpp tests/qa/fixtures/marker.cpp; do
   mkdir -p "$full/$(dirname "$f")"
   printf '%s\n' '// TODO marker for the directory check' >"$full/$f"
 done
@@ -135,9 +139,11 @@ normalize <"$tmp/out5" >"$tmp/got5"
 printf '%s:1:todo\n' src/wasm/kernel_bindings.cpp src/wasm/bendcore_kernel_api.mjs src/wasm/api.d.mts \
   src/ui/kernel/KernelViewport.tsx src/modeling/features/extrude.cpp src/assembly_v2/solver.cpp \
   src/drawing_v2/model.cpp src/kernel/shape.cpp tests/wasm/kernel_corpus.test.mjs \
-  tests/e2e-kernel/kernel_viewport.spec.ts web/kernel-viewer/playwright.config.ts | sort >"$tmp/want5"
+  tests/e2e-kernel/kernel_viewport.spec.ts web/kernel-viewer/playwright.config.ts \
+  src/legacy/old_code.cpp src/server/main.cpp src/ui/RibbonBar.tsx include/bendcore/tubegeom.hpp \
+  tests/test_tubegeom.cpp | sort >"$tmp/want5"
 if [[ $rc -eq 1 ]] && diff -u "$tmp/want5" "$tmp/got5" >"$tmp/d5"; then
-  pass "полная проверка: все каталоги нового кода (wasm, ui/kernel, modeling, assembly_v2, drawing_v2, ...)"
+  pass "полная проверка: src, include, tests целиком (новый и старый код), web/<модуль>; examples/ и фикстуры — нет"
 else
   fail "полная проверка каталогов: код $rc, расхождение (- ожидалось, + получено)"; cat "$tmp/d5" >&2 || true
 fi

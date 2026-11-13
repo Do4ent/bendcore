@@ -82,8 +82,8 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
     const x = e.clientX;
     const y = e.clientY;
 
-    // Generate context menu based on what was clicked
-    // For now, show empty space menu
+    // The shell has no selection model, so the viewport always offers the
+    // empty-space menu (create commands; paste is disabled).
     const actions: ContextMenuAction[] = [
       { id: 'new-tube', label: 'New Tube', icon: '➕', shortcut: 'Ctrl+T', action: () => handleCommand('new-tube') },
       { id: 'new-sketch', label: 'New Sketch', icon: '✏', shortcut: 'Ctrl+Shift+K', action: () => handleCommand('new-sketch') },

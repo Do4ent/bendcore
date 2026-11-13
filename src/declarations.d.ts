@@ -9,7 +9,7 @@ declare module '*.css' {
   export default classes;
 }
 
-// Three.js type stubs (minimal, for projects without @types/three)
+// Minimal Three.js type declarations (for builds without @types/three)
 declare module 'three' {
   export class Vector3 {
     x: number;
