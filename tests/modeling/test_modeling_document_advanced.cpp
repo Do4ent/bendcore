@@ -5,6 +5,9 @@
 
 #include "modeling_document_test_util.hpp"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <map>
 
 using namespace bendcore::modeling;
@@ -240,6 +243,63 @@ TEST(DocumentAdvanced, Errors) {
     auto one = info(doc, "One");
     EXPECT_EQ(one.state, FeatureState::Error);
     EXPECT_NE(messages(one).find("section2"), std::string::npos) << messages(one);
+}
+
+// Copies of a threaded hole made by a feature pattern, a feature mirror and a body pattern get the
+// thread attributes (FEATURES.md, «Резьбовое отверстие»; drawing_v2 draws them, ГОСТ 2.311): the
+// copied entry is the seed entry moved by the copy transformation, the rest of the spec is the same.
+TEST(DocumentAdvanced, PatternAndMirrorCopiesCarryTheThread) {
+    PartDocument doc(partRegistry());
+    add(doc, {"Box", "Block", "", {{"length", "60"}, {"width", "40"}, {"height", "20"}, {"x", "-30"}}, {}, {}, false});
+    doc.rebuild();
+    NamedShape s = doc.finalShape();
+    add(doc, {"ThreadedHole", "Tap", "", {{"nominal", "8"}, {"threadLength", "12"}, {"drillDepth", "15"}, {"x", "10"}, {"y", "20"}},
+              {{"face", {refTo(s, planarFace(s.shape(), gp::DZ(), 20))}}}, {{"drillPoint", "false"}}, false});
+    add(doc, {"LinearPattern", "Row", "", {{"count1", "2"}, {"spacing1", "15"}}, {}, {{"direction1", "X"}}, false,
+              {{"feature", "Tap"}}});
+    add(doc, {"Mirror", "Twin", "", {}, {}, {{"what", "feature"}, {"plane", "YZ"}}, false, {{"feature", "Tap"}}});
+    doc.rebuild();
+    for (const char* id : {"Tap", "Row", "Twin"}) ASSERT_EQ(info(doc, id).state, FeatureState::Ok) << id << ": " << messages(info(doc, id));
+
+    auto entries = [](const std::vector<ThreadInfo>& threads) {
+        std::vector<std::array<double, 3>> e;
+        for (const ThreadInfo& t : threads) {
+            EXPECT_EQ(t.thread.designation, "M8");
+            EXPECT_DOUBLE_EQ(t.thread.length, 12.0);
+            EXPECT_NEAR(t.thread.drill, 8.0 - 1.25, 1e-12);  // D - P, ISO 2306
+            EXPECT_TRUE(t.thread.direction.IsEqual(gp_Dir(0, 0, -1), 1e-9)) << t.name;
+            e.push_back({std::round(t.thread.entry.X() * 1e6) / 1e6, std::round(t.thread.entry.Y() * 1e6) / 1e6,
+                         std::round(t.thread.entry.Z() * 1e6) / 1e6});
+        }
+        std::sort(e.begin(), e.end());
+        return e;
+    };
+    const auto threads = threadsOf(doc.finalShape());
+    using E = std::vector<std::array<double, 3>>;
+    EXPECT_EQ(entries(threads), (E{{-10, 20, 20}, {10, 20, 20}, {25, 20, 20}}));
+    // The copy faces really are the hole walls at the copied centres.
+    const TopoDS_Shape shape = doc.finalShape().shape();
+    for (double x : {-10.0, 10.0, 25.0}) EXPECT_TRUE(hasHoleWall(shape, 3.375, 2, x, 20)) << "x = " << x;
+    // The seed keeps its role name; the copies keep their generated names.
+    EXPECT_EQ(std::count_if(threads.begin(), threads.end(), [](const ThreadInfo& t) { return t.name == "Tap:Wall"; }), 1);
+
+    // Body pattern along Z: a second body with three more threads at z = 50.
+    s = doc.finalShape();
+    add(doc, {"BodyLinearPattern", "Stack", "", {{"count1", "2"}, {"spacing1", "30"}},
+              {{"bodies", {refTo(s, planarFace(s.shape(), gp::DZ(), 20))}}}, {{"direction1", "Z"}}, false});
+    doc.rebuild();
+    ASSERT_EQ(info(doc, "Stack").state, FeatureState::Ok) << messages(info(doc, "Stack"));
+    const E stacked{{-10, 20, 20}, {-10, 20, 50}, {10, 20, 20}, {10, 20, 50}, {25, 20, 20}, {25, 20, 50}};
+    EXPECT_EQ(entries(threadsOf(doc.finalShape())), stacked);
+
+    // The attributes survive the result cache of the file.
+    auto json = doc.toJson(SaveOptions{true});
+    ASSERT_TRUE(json.ok());
+    RebuildReport rep;
+    auto loaded = PartDocument::fromJson(json.value(), partRegistry(), &rep);
+    ASSERT_TRUE(loaded.ok()) << loaded.error().message;
+    EXPECT_FALSE(rep.fromCache.empty());
+    EXPECT_EQ(entries(threadsOf(loaded.value().finalShape())), stacked);
 }
 
 TEST(DocumentAdvanced, ZSurvivalSummary) {
