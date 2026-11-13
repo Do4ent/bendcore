@@ -42,22 +42,12 @@ struct Color {
 };
 
 /**
- * @brief Contour level for iso-surface generation
+ * @brief Contour level (value, colour, opacity) kept for the caller's renderer
  */
 struct ContourLevel {
     double value = 0.0;
     Color color;
     double opacity = 1.0;
-};
-
-/**
- * @brief Iso-surface representation
- */
-struct IsoSurface {
-    double iso_value = 0.0;
-    std::vector<Vector3D> vertices;
-    std::vector<std::array<size_t, 3>> triangles;  // Triangle indices
-    Color color;
 };
 
 /**
@@ -151,10 +141,6 @@ public:
     void generateScalarFieldColors(const std::string& field_name, ColorMapType colormap = ColorMapType::JET);
     [[nodiscard]] const std::vector<ScalarFieldColor>& getScalarFieldColors() const { return scalar_colors_; }
 
-    // Iso-surface generation
-    void generateIsoSurface(const std::string& field_name, double iso_value);
-    [[nodiscard]] const std::vector<IsoSurface>& getIsoSurfaces() const { return iso_surfaces_; }
-
     // Vector field visualization
     void generateVectorGlyphs(const std::string& field_name, size_t skip = 1, double scale = 1.0);
     [[nodiscard]] const std::vector<VectorGlyph>& getVectorGlyphs() const { return vector_glyphs_; }
@@ -167,7 +153,9 @@ public:
     void addContourLevel(const ContourLevel& level);
     [[nodiscard]] const std::vector<ContourLevel>& getContourLevels() const { return contour_levels_; }
 
-    // Export visualization data
+    // Export visualization data. Legacy VTK point cloud (one VTK_VERTEX per node) with all
+    // scalar and vector fields as POINT_DATA; every field must share the node positions
+    // of the first field, otherwise nothing is written and false is returned.
     bool exportToVTK(const std::string& filename);
     bool exportColormap(const std::string& filename);
 
@@ -175,13 +163,8 @@ private:
     std::vector<std::shared_ptr<VisualizationField>> fields_;
     ColorMap colormap_;
     std::vector<ScalarFieldColor> scalar_colors_;
-    std::vector<IsoSurface> iso_surfaces_;
     std::vector<VectorGlyph> vector_glyphs_;
     std::vector<ContourLevel> contour_levels_;
-
-    // Internal methods
-    void extractIsoSurfaceTriangles(const std::string& field_name, double iso_value, IsoSurface& surface);
-    void computeContourColors(const std::shared_ptr<VisualizationField>& field);
 };
 
 }  // namespace BendCore::CadCore::Simulation

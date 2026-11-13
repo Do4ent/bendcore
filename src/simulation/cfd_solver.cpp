@@ -244,6 +244,11 @@ bool CFDSolver::solve() {
     if (!mesh_ || mesh_->getNumPoints() == 0) {
         return false;
     }
+    // Only laminar flow and standard k-epsilon have equations here (see the header).
+    if (turbulence_model_ != TurbulenceModel::LAMINAR &&
+        turbulence_model_ != TurbulenceModel::K_EPSILON) {
+        return false;
+    }
 
     initializeFields();
 
