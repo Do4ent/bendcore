@@ -179,14 +179,19 @@ Result<std::vector<ThreadImage>> threadImages(const std::vector<modeling::Thread
                 const auto near = std::max_element(circles.begin(), circles.end(), [](const EdgeCircle& x, const EdgeCircle& y) {
                     return x.towardViewer < y.towardViewer;
                 });
+                // Окружности краёв стенки проецируются в одну; совпадающие участки HLR удаляет
+                // (removeOverlaps), поэтому видимость — по любому изображению окружностей стенки.
                 bool any = false, visible = false;
                 for (const ViewEdge& e : view.edges) {
-                    if (!e.edgeIndex || *e.edgeIndex != near->edge) continue;
+                    if (!e.edgeIndex) continue;
+                    if (std::none_of(circles.begin(), circles.end(), [&](const EdgeCircle& x) { return x.edge == *e.edgeIndex; }))
+                        continue;
                     any = true;
                     if (e.visibility == Visibility::Visible) visible = true;
                 }
                 if (!any) continue;
-                // Резьба видна с этого края, только если доходит до него (вход — всегда).
+                // Резьба видна с ближнего к наблюдателю края стенки, только если доходит до него
+                // (вход — всегда); глухое отверстие со стороны дна — край не виден вовсе.
                 const bool reaches = near->along <= tol || g.thread.length >= near->along - tol;
                 img.visibility = visible && reaches ? Visibility::Visible : Visibility::Hidden;
                 img.majorArc = Arc{img.entry, R, opt.arcStartDeg, std::fmod(opt.arcStartDeg + opt.arcSweepDeg, 360.0)};

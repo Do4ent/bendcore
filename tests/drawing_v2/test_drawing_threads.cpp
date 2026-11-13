@@ -235,7 +235,8 @@ TEST(DrawingThreads, DesignationDimensionOnSideAndEndViews) {
     const Model md = modelOf(part.doc);
     const auto fv = projectShape(md.binding.shape(), defaultFrontFrame()).value();
     const SheetView sv{fv, kScale, {100, 150}};
-    const ThreadImage* m10 = byNominal(imagesOn(md, fv), 10);
+    const auto sideImages = imagesOn(md, fv);
+    const ThreadImage* m10 = byNominal(sideImages, 10);
     ASSERT_TRUE(m10);
     const ThreadImage img = *m10;
     ThreadDimensionDef def;
@@ -245,13 +246,20 @@ TEST(DrawingThreads, DesignationDimensionOnSideAndEndViews) {
     ASSERT_TRUE(r.ok()) << r.error().message;
     EXPECT_EQ(r.value().text, "M10×1,25LH-6H");
     EXPECT_NEAR(r.value().value, 10.0, 1e-9);
-    // Размерная линия над входом (z = 20 → y листа 150 + 40 = 190) на 10 мм, длина 2·10 = 20.
+    // Размерная линия над входом (z = 20 → y листа 150 + 40 = 190) на 10 мм; стрелки на x = 130 и
+    // 150 (2·15, 2·25). Надпись шире 20 мм — вынесена на продолжение размерной линии (ГОСТ 2.307).
     ASSERT_EQ(r.value().geometry.dimensionLines.size(), 1u);
     const LineSeg dl = r.value().geometry.dimensionLines[0];
     EXPECT_NEAR(dl.a.y, 200.0, 1e-9);
     EXPECT_NEAR(dl.b.y, 200.0, 1e-9);
-    EXPECT_NEAR(std::abs(dl.b.x - dl.a.x), 20.0, 1e-9);
-    EXPECT_NEAR(std::min(dl.a.x, dl.b.x), 100 + kScale * 15, 1e-9);
+    EXPECT_LE(std::min(dl.a.x, dl.b.x), 130.0 + 1e-9);
+    EXPECT_GE(std::max(dl.a.x, dl.b.x), 150.0 - 1e-9);
+    std::vector<double> tips;
+    for (const SolidFill& a : r.value().geometry.arrows) tips.push_back(a.points[0].x);
+    std::sort(tips.begin(), tips.end());
+    ASSERT_EQ(tips.size(), 2u);
+    EXPECT_NEAR(tips[0], 130.0, 1e-9);
+    EXPECT_NEAR(tips[1], 150.0, 1e-9);
     // Выносные линии от концов линий резьбы у входа.
     ASSERT_EQ(r.value().geometry.extensionLines.size(), 2u);
     for (const LineSeg& e : r.value().geometry.extensionLines) EXPECT_NEAR(std::min(e.a.y, e.b.y), 190.0, 1e-9);
@@ -259,7 +267,8 @@ TEST(DrawingThreads, DesignationDimensionOnSideAndEndViews) {
 
     const auto top = projectShape(md.binding.shape(), standardFrame(defaultFrontFrame(), StandardView::Top)).value();
     const SheetView tv{top, kScale, {100, 40}};
-    const ThreadImage* m8 = byNominal(imagesOn(md, top), 8);
+    const auto endImages = imagesOn(md, top);
+    const ThreadImage* m8 = byNominal(endImages, 8);
     ASSERT_TRUE(m8);
     const ThreadImage end = *m8;
     auto e = threadDimension(end, tv, {});
@@ -373,8 +382,7 @@ TEST(DrawingThreads, DocumentDrawsThreadsAndExportsDxfPdf) {
     ASSERT_NE(ents, nullptr);
     bool thinLine = false, boundary = false, arc = false, hiddenThread = false;
     std::vector<std::string> texts;
-    auto match = [](double x0, double y0, double x1, double y1, Point2 a, Point2 b) {
-        const double t = 1e-6;
+    auto match = [](double x0, double y0, double x1, double y1, Point2 a, Point2 b, double t = 1e-6) {
         return (std::abs(x0 - a.x) < t && std::abs(y0 - a.y) < t && std::abs(x1 - b.x) < t && std::abs(y1 - b.y) < t) ||
                (std::abs(x0 - b.x) < t && std::abs(y0 - b.y) < t && std::abs(x1 - a.x) < t && std::abs(y1 - a.y) < t);
     };
@@ -430,7 +438,7 @@ TEST(DrawingThreads, DocumentDrawsThreadsAndExportsDxfPdf) {
             double x0, y0, x1, y1;
             char m1[4], l1s[4];
             if (std::sscanf(ln.c_str(), "%lf %lf %3s %lf %lf %3s", &x0, &y0, m1, &x1, &y1, l1s) == 6 && std::string(m1) == "m" &&
-                std::string(l1s) == "l" && match(x0 / pt, y0 / pt, x1 / pt, y1 / pt, b0, b1))
+                std::string(l1s) == "l" && match(x0 / pt, y0 / pt, x1 / pt, y1 / pt, b0, b1, 1e-3))  // PDF: 4 знака в пунктах
                 pdfBoundary = true;
         }
     }
