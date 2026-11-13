@@ -57,6 +57,10 @@ class Api {
     const instance = new WebAssembly.Instance(new WebAssembly.Module(bytes));
     return (instance.exports.f as () => number)();
   }
+  /** A native fault caught by the kernel's fault guard (ErrorCode::Fault, occt_fault_guard). */
+  readFaulty() {
+    throw new KernelError('Fault', 'binary BRep input is malformed: OSD_SIGSEGV: SIGSEGV (invalid memory access at 0x8) inside OCCT');
+  }
   /** Never answers in time: the host is told to hold this call (cancel test). */
   slow() {
     return 'late';
@@ -215,6 +219,18 @@ describe('worker protocol', () => {
     expect(WasmClient.live()).not.toContain(r.client);
   });
 
+  test('a kernel Fault closes the client like a trap and is reported once', async () => {
+    const faults: string[] = [];
+    r.client.onFault((e, module) => faults.push(`${module}:${e.code}`));
+    const err = await r.client.call(0, 'readFaulty', []).catch((e: unknown) => e);
+    expect(err).toMatchObject({ code: 'Fault' });
+    expect(isModuleFault(err)).toBe(true);
+    await expect(r.client.root.info()).rejects.toMatchObject({ code: 'Fault' });
+    expect(r.client.terminated).toBe(true);
+    expect(r.client.fault?.code).toBe('Fault');
+    expect(faults).toEqual(['modeling:Fault']);
+  });
+
   test('cancel and dispose are not module faults', async () => {
     const faults: string[] = [];
     r.client.onFault((e) => faults.push(e.code));
@@ -259,14 +275,30 @@ describe('protocol helpers', () => {
     expect(posted[1].type === 'error' && posted[1].error.detail).toMatch(/earlier fault/);
   });
 
-  test('module faults: trap, dead worker, native fault guard text; not ordinary errors', () => {
+  test('the host refuses every call after a kernel Fault', () => {
+    const posted: Response[] = [];
+    const host = new WorkerHost(new Api(), (m) => posted.push(m));
+    host.handle({ type: 'call', id: 1, target: 0, method: 'readFaulty', args: [] });
+    host.handle({ type: 'call', id: 2, target: 0, method: 'info', args: [] });
+    expect(host.faulted).toBe(true);
+    expect(posted.map((p) => (p.type === 'error' ? p.error.code : p.type))).toEqual(['Fault', 'ModuleFault']);
+    expect(posted[1].type === 'error' && posted[1].error.detail).toMatch(/earlier fault: Fault: /);
+  });
+
+  test('module faults are told by the code only', () => {
     expect(isModuleFault(new KernelError('WorkerFailed', 'worker error'))).toBe(true);
-    // occt_fault_guard.cpp in native: the reader returns ParseError with the signal in the text.
-    expect(isModuleFault(new KernelError('ParseError', 'binary BRep input is malformed: SIGSEGV (invalid memory access at 0x8) inside OCCT'))).toBe(true);
-    expect(isModuleFault(new KernelError('ParseError', 'SIGFPE (arithmetic fault at 0x1) inside OCCT'))).toBe(true);
+    expect(isModuleFault(new KernelError('ModuleFault', 'WebAssembly trap: unreachable'))).toBe(true);
+    // occt_fault_guard in native: kernel ErrorCode::Fault.
+    expect(isModuleFault(new KernelError('Fault', 'SIGFPE (arithmetic fault at 0x1) inside OCCT'))).toBe(true);
+    // The signal text alone is no longer recognised: a ParseError stays an ordinary error.
+    expect(isModuleFault(new KernelError('ParseError', 'binary BRep input is malformed: SIGSEGV (invalid memory access at 0x8) inside OCCT'))).toBe(false);
     expect(isModuleFault(new KernelError('ParseError', 'binary BRep input holds no shape'))).toBe(false);
     expect(isModuleFault(new KernelError('Cancelled', 'stop'))).toBe(false);
-    expect(isModuleFault(new Error('SIGSEGV inside OCCT'))).toBe(false);
+    expect(isModuleFault(new Error('Fault'))).toBe(false);
+  });
+
+  test('serializeError keeps the Fault code', () => {
+    expect(serializeError(new KernelError('Fault', 'SIGBUS (bus error at 0x2) inside OCCT'))).toEqual({ name: 'KernelError', code: 'Fault', detail: 'SIGBUS (bus error at 0x2) inside OCCT' });
   });
 
   test('serializeError keeps the kernel code and detail', () => {

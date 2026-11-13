@@ -3,7 +3,7 @@
  * its calls return, executes calls in arrival order and posts the results.
  */
 
-import { CallRequest, Response, encodeResult, serializeError } from './protocol';
+import { CallRequest, MODULE_FAULT_CODES, Response, encodeResult, serializeError } from './protocol';
 
 export type Post = (message: Response, transfer: ArrayBuffer[]) => void;
 
@@ -26,7 +26,10 @@ export class WorkerHost {
     return id;
   };
 
-  /** Set after a call trapped in the module (protocol.ts, isWasmTrap): every later call fails. */
+  /**
+   * Set after a call trapped in the module (protocol.ts, isWasmTrap) or the kernel reported a
+   * caught native fault (code Fault): every later call fails.
+   */
   private fault: string | null = null;
 
   get faulted(): boolean {
@@ -51,9 +54,10 @@ export class WorkerHost {
       this.post({ type: 'result', id: req.id, value }, transfer);
     } catch (e) {
       const error = serializeError(e);
-      // A trap leaves the module's memory in an unknown state (destructors, locks and the
-      // allocator were cut off): the host refuses every further call.
-      if (error.code === 'ModuleFault') this.fault = error.detail;
+      // A trap (or a native fault the kernel caught, code Fault) leaves the module's memory in
+      // an unknown state (destructors, locks and the allocator were cut off): the host refuses
+      // every further call.
+      if (MODULE_FAULT_CODES.includes(error.code)) this.fault = `${error.code}: ${error.detail}`;
       this.post({ type: 'error', id: req.id, error }, []);
     }
   }

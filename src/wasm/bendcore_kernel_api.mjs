@@ -8,7 +8,7 @@
 //   finally { shape.dispose(); }
 //
 // Every kernel failure is thrown as KernelError { code, message }; code is the kernel ErrorCode
-// (InvalidInput, InvalidShape, OperationFailed, ParseError, IoError, Unsupported) or
+// (InvalidInput, InvalidShape, OperationFailed, ParseError, IoError, Unsupported, Fault) or
 // "Disposed" for a call on a shape that was already disposed.
 
 export class KernelError extends Error {

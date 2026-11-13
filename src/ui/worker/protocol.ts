@@ -83,11 +83,13 @@ export function isWasmTrap(e: unknown): boolean {
 }
 
 /**
- * Message of a native kernel error made from a hardware fault by occt_fault_guard
- * ("SIGSEGV (invalid memory access at 0x…) inside OCCT", SIGBUS, "SIGFPE (arithmetic fault …)").
- * In native there is no separate error code: the reader returns ParseError with this text.
+ * Error codes that mean the module itself failed and its state can no longer be trusted
+ * (docs/ui/APP_SHELL.md, "Сбой модуля"): ModuleFault — a WebAssembly trap in a call (isWasmTrap);
+ * Fault — kernel ErrorCode::Fault, a native hardware fault (SIGSEGV / SIGBUS / SIGFPE inside OCCT)
+ * caught by occt_fault_guard (docs/kernel/KERNEL_CORE.md). The worker host refuses every later
+ * call after either and the client closes.
  */
-export const CONVERTED_SIGNAL = /\bSIG(SEGV|BUS|FPE)\b[^]*\binside OCCT\b/;
+export const MODULE_FAULT_CODES: readonly string[] = ['ModuleFault', 'Fault'];
 
 export function serializeError(e: unknown): SerializedError {
   if (isWasmTrap(e)) {

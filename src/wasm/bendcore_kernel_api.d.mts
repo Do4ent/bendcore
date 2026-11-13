@@ -7,6 +7,10 @@ export type KernelErrorCode =
   | 'ParseError'
   | 'IoError'
   | 'Unsupported'
+  // A hardware fault (SIGSEGV / SIGBUS / SIGFPE) inside OCCT caught by the kernel's fault guard
+  // (native builds; WASM has no signals and traps instead — ModuleFault). The module state is
+  // suspect: the UI treats it as a module fault (docs/ui/APP_SHELL.md, "Сбой модуля").
+  | 'Fault'
   | 'Disposed'
   // Raised by the main-thread worker client (src/ui/worker/wasmClient.ts), not by the module:
   // the worker was terminated by cancel(), or failed; a call trapped inside the module
