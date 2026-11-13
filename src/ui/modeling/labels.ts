@@ -1,25 +1,9 @@
-// Russian captions of the part document's feature types, parameters, options and states
-// (docs/ui/PART_MODELING_UI.md). Names without a caption are shown as is.
+// Feature types of the part editor's toolbar (docs/ui/PART_MODELING_UI.md). Captions of feature
+// types, parameters, options, option values, reference slots and states are messages of
+// src/ui/app/messages/part.ts (part.feature.*, part.param.*, part.option.*, part.value.*,
+// part.slot.*, part.state.*); a name without a caption is shown as the kernel reports it.
 
-export const FEATURE_LABELS: Record<string, string> = {
-  Sketch: 'Эскиз',
-  Extrude: 'Выдавливание',
-  Revolve: 'Вращение',
-  Hole: 'Отверстие',
-  Fillet: 'Скругление',
-  Chamfer: 'Фаска',
-  LinearPattern: 'Линейный массив',
-  CircularPattern: 'Круговой массив',
-  Mirror: 'Зеркало',
-  Shell: 'Оболочка',
-  Draft: 'Уклон',
-  DatumPlane: 'Плоскость',
-  DatumAxis: 'Ось',
-  Box: 'Параллелепипед',
-  Cylinder: 'Цилиндр',
-};
-
-/** Toolbar order of the feature types (types missing from the kernel catalog are not shown). */
+/** Toolbar order of the feature types the editor knows; the kernel catalog decides what is shown. */
 export const TOOLBAR_TYPES = [
   'Sketch',
   'Extrude',
@@ -36,129 +20,19 @@ export const TOOLBAR_TYPES = [
   'DatumAxis',
 ];
 
-export const PARAMETER_LABELS: Record<string, string> = {
-  distance: 'Расстояние, мм',
-  distance2: 'Расстояние 2, мм',
-  draftAngle: 'Угол уклона, °',
-  thickness: 'Толщина, мм',
-  angle: 'Угол, °',
-  angle2: 'Угол 2, °',
-  axisEntity: 'Ось: сущность эскиза',
-  diameter: 'Диаметр, мм',
-  depth: 'Глубина, мм',
-  cbDiameter: 'Диаметр цековки, мм',
-  cbDepth: 'Глубина цековки, мм',
-  csDiameter: 'Диаметр зенковки, мм',
-  csAngle: 'Угол зенковки, °',
-  drillAngle: 'Угол сверла, °',
-  radius: 'Радиус, мм',
-  count: 'Количество',
-  count1: 'Количество 1',
-  spacing1: 'Шаг 1, мм',
-  count2: 'Количество 2',
-  spacing2: 'Шаг 2, мм',
-  offset: 'Смещение, мм',
-  originX: 'Начало X, мм',
-  originY: 'Начало Y, мм',
-  originZ: 'Начало Z, мм',
-  length: 'Длина, мм',
-  width: 'Ширина, мм',
-  height: 'Высота, мм',
-  x: 'X, мм',
-  y: 'Y, мм',
-  z: 'Z, мм',
-};
+/**
+ * Primitive bodies of the catalog that are not offered on the toolbar: a part is built from
+ * sketches and features; Box and Cylinder exist for documents made through the API.
+ */
+export const NOT_ON_TOOLBAR = new Set(['Box', 'Cylinder']);
 
-export const OPTION_LABELS: Record<string, string> = {
-  mode: 'Режим',
-  extent: 'Граница',
-  reversed: 'Обратное направление',
-  draftDirection: 'Направление уклона',
-  thin: 'Тонкостенное',
-  axis: 'Ось',
-  type: 'Тип',
-  end: 'Окончание',
-  drillPoint: 'Конец сверла',
-  direction1: 'Направление 1',
-  reversed1: 'Обратно 1',
-  direction2: 'Направление 2',
-  reversed2: 'Обратно 2',
-  spacing: 'Шаг',
-  what: 'Что отражать',
-  plane: 'Плоскость',
-  merge: 'Объединить',
-  direction: 'Направление',
-  neutral: 'Нейтраль',
-  method: 'Способ',
-  base: 'База',
-};
-
-export const OPTION_VALUE_LABELS: Record<string, string> = {
-  boss: 'добавить',
-  cut: 'вырезать',
-  blind: 'на глубину',
-  symmetric: 'симметрично',
-  twoSided: 'в две стороны',
-  throughAll: 'через всё',
-  throughAllBoth: 'через всё в обе стороны',
-  upToFace: 'до грани',
-  upToSurface: 'до поверхности',
-  full: 'полный оборот',
-  angle: 'на угол',
-  entity: 'линия эскиза',
-  edge: 'ребро',
-  datum: 'вспомогательная',
-  face: 'грань',
-  false: 'нет',
-  true: 'да',
-  inward: 'внутрь',
-  outward: 'наружу',
-  none: 'нет',
-  inside: 'внутрь',
-  outside: 'наружу',
-  simple: 'простое',
-  counterbore: 'с цековкой',
-  countersink: 'с зенковкой',
-  through: 'насквозь',
-  equal: 'равные',
-  twoDistances: 'два расстояния',
-  distanceAngle: 'расстояние и угол',
-  step: 'с шагом',
-  feature: 'операцию',
-  body: 'тело',
-  offset: 'смещение',
-  midway: 'посередине',
-  planes: 'пересечение плоскостей',
-};
-
-export const SLOT_LABELS: Record<string, string> = {
-  edges: 'Рёбра',
-  faces: 'Грани',
-  face: 'Грань',
-  face2: 'Грань 2',
-  edge: 'Ребро',
-  limit: 'Граница (грань)',
-  axisEdge: 'Ребро оси',
-  axisFace: 'Грань оси',
-  edge1: 'Ребро направления 1',
-  edge2: 'Ребро направления 2',
-  neutralFace: 'Нейтральная грань',
-  projected: 'Проецируемые рёбра',
-  sketch: 'Эскиз',
-  feature: 'Операция',
-  plane: 'Плоскость',
-  plane2: 'Плоскость 2',
-  axis: 'Ось',
-  axis1: 'Ось 1',
-  axis2: 'Ось 2',
-};
-
-export const STATE_LABELS: Record<string, string> = {
-  ok: 'построено',
-  warning: 'предупреждение',
-  error: 'ошибка',
-  suppressed: 'подавлено',
-  'rolled-back': 'за маркером отката',
-};
-
-export const label = (table: Record<string, string>, key: string): string => table[key] ?? key;
+/**
+ * Toolbar buttons for the kernel catalog: the known types in TOOLBAR_TYPES order, then every
+ * other catalog type in catalog order (a feature the kernel gains later appears without a change
+ * here, under its caption or its kernel name).
+ */
+export function toolbarTypes(catalog: readonly string[]): string[] {
+  const known = TOOLBAR_TYPES.filter((t) => catalog.includes(t));
+  const added = catalog.filter((t) => !TOOLBAR_TYPES.includes(t) && !NOT_ON_TOOLBAR.has(t));
+  return [...known, ...added];
+}

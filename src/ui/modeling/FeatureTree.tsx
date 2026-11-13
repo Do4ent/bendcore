@@ -6,8 +6,8 @@
 
 import React, { useEffect, useState } from 'react';
 import type { FeatureView } from '../../wasm/bendcore_modeling_api.mjs';
-import { FEATURE_LABELS, STATE_LABELS, label } from './labels';
-import { TREE_ACTION_LABELS, TreeAction, treeActions } from './treeActions';
+import { TREE_ACTION_KEYS, TreeAction, treeActions } from './treeActions';
+import { caption, useI18n } from '../app/i18n';
 
 export interface FeatureTreeProps {
   features: FeatureView[];
@@ -36,6 +36,7 @@ const FeatureTree: React.FC<FeatureTreeProps> = ({
   onAction,
   onClearRollback,
 }) => {
+  const { t } = useI18n();
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,15 +63,16 @@ const FeatureTree: React.FC<FeatureTreeProps> = ({
         }}
         title={f.messages.join('\n')}
       >
-        <span className="pm-state-mark" aria-label={label(STATE_LABELS, f.state)}>
+        <span className="pm-state-mark" aria-label={caption(t, 'part.state.', f.state)}>
           {STATE_MARK[f.state] ?? '?'}
         </span>
         <span className="pm-tree-label">{f.label}</span>
-        <span className="pm-tree-type">{label(FEATURE_LABELS, f.type)}</span>
+        <span className="pm-tree-type">{caption(t, 'part.feature.', f.type)}</span>
         <button
           type="button"
           className="pm-tree-menu-button"
           data-testid={`tree-menu-${f.id}`}
+          aria-label={t('part.tree.actions')}
           disabled={disabled}
           onClick={(e) => {
             e.stopPropagation();
@@ -92,7 +94,7 @@ const FeatureTree: React.FC<FeatureTreeProps> = ({
                     onAction(f, a);
                   }}
                 >
-                  {TREE_ACTION_LABELS[a]}
+                  {t(TREE_ACTION_KEYS[a])}
                 </button>
               </li>
             ))}
@@ -108,9 +110,9 @@ const FeatureTree: React.FC<FeatureTreeProps> = ({
 
   return (
     <section className="pm-tree">
-      <h2>Дерево построения</h2>
+      <h2>{t('part.tree.title')}</h2>
       {features.length === 0 ? (
-        <p className="pm-hint">Начните с эскиза.</p>
+        <p className="pm-hint">{t('part.tree.empty')}</p>
       ) : (
         <ul data-testid="feature-tree">{rows}</ul>
       )}
@@ -118,13 +120,16 @@ const FeatureTree: React.FC<FeatureTreeProps> = ({
   );
 };
 
-const RollbackMarker: React.FC<{ onClear: () => void; disabled: boolean }> = ({ onClear, disabled }) => (
-  <li className="pm-rollback" data-testid="rollback-marker">
-    <span>маркер отката</span>
-    <button type="button" data-testid="rollback-clear" disabled={disabled} onClick={onClear}>
-      Снять
-    </button>
-  </li>
-);
+const RollbackMarker: React.FC<{ onClear: () => void; disabled: boolean }> = ({ onClear, disabled }) => {
+  const { t } = useI18n();
+  return (
+    <li className="pm-rollback" data-testid="rollback-marker">
+      <span>{t('part.tree.rollbackMarker')}</span>
+      <button type="button" data-testid="rollback-clear" disabled={disabled} onClick={onClear}>
+        {t('part.tree.removeMarker')}
+      </button>
+    </li>
+  );
+};
 
 export default FeatureTree;

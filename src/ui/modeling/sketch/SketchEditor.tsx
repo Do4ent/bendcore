@@ -23,8 +23,10 @@ import SketchCanvas from './SketchCanvas';
 import type { SketchCanvasHandle, SketchPointerEvent } from './SketchCanvas';
 import { dimensionGraphic, formatValue, offsetFor, twoPointDimension } from './dimensionLayout';
 import type { DimensionGraphic } from './dimensionLayout';
-import { DRAW_TOOL_LABELS, DrawError, DrawTool, PICK_COUNT, PICK_HINTS, drawShape } from './drawTools';
-import { CONSTRAINT_LABELS, DEFINITION_LABELS, describeConstraint } from './sketchLabels';
+import { DRAW_TOOLS, DrawError, DrawTool, PICK_COUNT, PICK_HINTS, drawShape } from './drawTools';
+import { constraintCaption, definitionCaption, describeConstraint } from './sketchLabels';
+import { useI18n } from '../../app/i18n';
+import type { MessageKey } from '../../app/i18n';
 import {
   ConstraintProposal,
   DIMENSION_TYPES,
@@ -50,28 +52,10 @@ import './SketchEditor.css';
 
 export type EditorTool = 'select' | DrawTool | 'dimension' | 'trim' | 'extend' | 'fillet' | 'chamfer' | 'regions';
 
-const DRAW_TOOLS = Object.keys(DRAW_TOOL_LABELS) as DrawTool[];
 const isDrawTool = (t: EditorTool): t is DrawTool => (DRAW_TOOLS as string[]).includes(t);
 
-const EDIT_TOOL_LABELS: Record<string, string> = {
-  select: 'Выбор',
-  dimension: 'Размер',
-  trim: 'Обрезать',
-  extend: 'Удлинить',
-  fillet: 'Скругление угла',
-  chamfer: 'Фаска угла',
-  regions: 'Области',
-};
-
-const EDIT_TOOL_HINTS: Record<string, string> = {
-  select: 'Щелчок выбирает точку или кривую (Shift — добавить); точку можно перетащить.',
-  dimension: 'Щёлкните элемент (или два), затем место текста размера.',
-  trim: 'Щёлкните участок кривой, который нужно удалить.',
-  extend: 'Щёлкните кривую у конца, который нужно продлить.',
-  fillet: 'Щёлкните вершину угла двух отрезков.',
-  chamfer: 'Щёлкните вершину угла двух отрезков.',
-  regions: 'Щёлкните внутри области, чтобы включить или исключить её из профиля.',
-};
+/** Captions sketch.tool.<tool> and hints sketch.hint.<tool> of the tools other than drawing. */
+const EDIT_TOOLS = ['dimension', 'trim', 'extend', 'fillet', 'chamfer', 'regions'] as const;
 
 /**
  * Dimension text offsets by "<document handle>:<sketch id>": the part file has no place for
@@ -140,6 +124,7 @@ function errorText(e: unknown): string {
 }
 
 const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExit, onCancel }) => {
+  const { t } = useI18n();
   const [data, setData] = useState<SketchData>(emptySketch);
   const [solution, setSolution] = useState<SketchSolution | null>(null);
   const [history, setHistory] = useState<SketchData[]>([]);
@@ -251,8 +236,8 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     };
   }, [doc, featureId, commit]);
 
-  const setTool = (t: EditorTool) => {
-    setToolState(t);
+  const setTool = (next: EditorTool) => {
+    setToolState(next);
     setPicks([]);
     setPreview([]);
     setDimPicks([]);
@@ -306,10 +291,10 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
       }
     });
 
-  const numberParam = (key: keyof typeof params, what: string): number | null => {
+  const numberParam = (key: keyof typeof params, what: MessageKey): number | null => {
     const v = Number(params[key]);
     if (!Number.isFinite(v)) {
-      setMessage(`${what}: нужно число`);
+      setMessage(t('sketch.needNumber', { what: t(what) }));
       return null;
     }
     return v;
@@ -338,7 +323,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     const makeReference = pending.existing ? Boolean(c.driven) : reference;
     if (!makeReference) {
       if (!pending.text.trim()) {
-        setMessage('введите значение размера');
+        setMessage(t('sketch.enterValue'));
         return;
       }
       c.value = pending.text.trim();
@@ -403,11 +388,11 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
     if (!hit) return;
     const chosen = regions.filter((r) => (r === hit ? !r.selected : r.selected));
     if (chosen.some((r) => r.selector === null)) {
-      setMessage('эту область нельзя выбрать отдельно: у неё нет собственной кривой внешнего контура');
+      setMessage(t('sketch.regionNoOwnCurve'));
       return;
     }
     if (chosen.length === 0) {
-      setMessage('в профиле должна остаться хотя бы одна область');
+      setMessage(t('sketch.regionKeepOne'));
       return;
     }
     void commit({ ...cloneSketch(dataRef.current), regions: chosen.map((r) => r.selector as number) });
@@ -446,7 +431,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
         setPicks(sol && shape.next ? [shape.next] : []);
       } catch (e) {
         if (!(e instanceof DrawError)) throw e;
-        setMessage(e.message);
+        setMessage(t(e.key, e.params));
         setPicks([]);
       }
       setPreview([]);
@@ -567,7 +552,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
         const only = dimPicks.length === 1 && dimPicks[0].kind === 'entity' ? dataRef.current.geometry[dimPicks[0].id - 1] : null;
         if (only?.type === 'circle') choice = options.find((p) => p.type === 'diameter') ?? choice;
         if (!choice) {
-          setMessage('для выбранных элементов нет размера');
+          setMessage(t('sketch.noDimension'));
           setDimPicks([]);
           return;
         }
@@ -583,15 +568,15 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
         if (hit?.kind !== 'point') return;
         const lines = cornerLines(dataRef.current, hit.index);
         if (!lines) {
-          setMessage('в этой точке не сходятся два отрезка');
+          setMessage(t('sketch.noCorner'));
           return;
         }
         if (tool === 'fillet') {
-          const r = numberParam('filletRadius', 'радиус скругления');
+          const r = numberParam('filletRadius', 'sketch.what.filletRadius');
           if (r !== null) void runTool({ name: 'fillet', a: lines[0], b: lines[1], radius: r });
         } else {
-          const d1 = numberParam('chamfer1', 'катет фаски');
-          const d2 = numberParam('chamfer2', 'катет фаски');
+          const d1 = numberParam('chamfer1', 'sketch.what.chamfer');
+          const d2 = numberParam('chamfer2', 'sketch.what.chamfer');
           if (d1 !== null && d2 !== null) void runTool({ name: 'chamfer', a: lines[0], b: lines[1], d1, d2 });
         }
         return;
@@ -719,8 +704,8 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
   // ------------------------------------------------------------------ render
 
   const hint = isDrawTool(tool)
-    ? `${DRAW_TOOL_LABELS[tool]}: ${PICK_HINTS[tool][Math.min(picks.length, PICK_HINTS[tool].length - 1)]}`
-    : EDIT_TOOL_HINTS[tool];
+    ? t('sketch.toolHint', { tool: t(`sketch.tool.${tool}`), pick: t(PICK_HINTS[tool][Math.min(picks.length, PICK_HINTS[tool].length - 1)]) })
+    : t(`sketch.hint.${tool}`);
   const pendingGraphic =
     pending && solution && pending.existing ? dimensions.find((g) => g.constraint === pending.k) ?? null : null;
   const inputAt = (() => {
@@ -734,16 +719,16 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
       <input value={params[key]} data-testid={`sketch-param-${key}`} onChange={(e) => setParams({ ...params, [key]: e.target.value })} />
     </label>
   );
-  const toolButton = (t: EditorTool, text: string) => (
+  const toolButton = (k: EditorTool) => (
     <button
       type="button"
-      key={t}
-      className={tool === t ? 'sk-active' : ''}
-      data-testid={`tool-${t}`}
-      aria-pressed={tool === t}
-      onClick={() => setTool(t)}
+      key={k}
+      className={tool === k ? 'sk-active' : ''}
+      data-testid={`tool-${k}`}
+      aria-pressed={tool === k}
+      onClick={() => setTool(k)}
     >
-      {text}
+      {t(`sketch.tool.${k}`)}
     </button>
   );
   const lastLine = [...selEntities].reverse().find((id) => data.geometry[id - 1]?.type === 'line');
@@ -810,27 +795,29 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
               value={pending.text}
               data-testid="dim-input"
               disabled={pending.existing ? Boolean(shown.constraints[pending.k - 1]?.driven) : reference}
-              aria-label={`${CONSTRAINT_LABELS[shown.constraints[pending.k - 1]?.type] ?? 'размер'}: выражение`}
+              aria-label={t('sketch.dimensionExpression', {
+                what: shown.constraints[pending.k - 1] ? constraintCaption(t, shown.constraints[pending.k - 1].type) : t('sketch.dimension'),
+              })}
               onChange={(e) => setPending({ ...pending, text: e.target.value })}
               onFocus={(e) => e.target.select()}
             />
             <button type="submit" data-testid="dim-ok">
-              ОК
+              {t('sketch.ok')}
             </button>
           </form>
         )}
       </SketchCanvas>
       <aside className="pm-right kv-panel sk-panel" data-testid="sketch-panel">
-        <h2>Эскиз {featureId}</h2>
+        <h2>{t('sketch.title', { id: featureId })}</h2>
         <div
           className={`sk-status sk-status-${definition}`}
           data-testid="sketch-status"
           data-definition={definition}
           data-dof={solution?.dof ?? ''}
         >
-          {DEFINITION_LABELS[definition] ?? definition}
-          {solution ? ` · степеней свободы: ${solution.dof}` : ''}
-          {solution && !solution.converged ? ' · решатель не сошёлся' : ''}
+          {definitionCaption(t, definition)}
+          {solution ? t('sketch.dof', { dof: solution.dof }) : ''}
+          {solution && !solution.converged ? t('sketch.notConverged') : ''}
         </div>
         {message && (
           <div className="sk-message" role="alert" data-testid="sketch-message">
@@ -839,45 +826,45 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
         )}
         <div className="pm-panel-buttons">
           <button type="button" className="pm-primary" data-testid="sketch-exit" onClick={() => void commitQueue.current.then(() => onExit(dataRef.current))}>
-            Выйти из эскиза
+            {t('sketch.exit')}
           </button>
           <button type="button" data-testid="sketch-cancel" onClick={onCancel}>
-            Отмена
+            {t('sketch.cancel')}
           </button>
           <button type="button" data-testid="sketch-undo" disabled={history.length === 0} onClick={undoStep}>
-            Шаг назад
+            {t('sketch.undoStep')}
           </button>
           <button type="button" data-testid="sketch-fit" onClick={() => canvasRef.current?.fit()}>
-            Вписать
+            {t('sketch.fit')}
           </button>
         </div>
 
         <fieldset className="pm-group sk-tools">
-          <legend>Рисование</legend>
-          {toolButton('select', EDIT_TOOL_LABELS.select)}
-          {DRAW_TOOLS.map((t) => toolButton(t, DRAW_TOOL_LABELS[t]))}
+          <legend>{t('sketch.drawing')}</legend>
+          {toolButton('select')}
+          {DRAW_TOOLS.map((k) => toolButton(k))}
           <label className="sk-check">
             <input type="checkbox" checked={construction} data-testid="sketch-construction" onChange={(e) => setConstruction(e.target.checked)} />
-            вспомогательная геометрия
+            {t('sketch.construction')}
           </label>
           <label className="sk-check">
             <input type="checkbox" checked={gridSnap} data-testid="sketch-grid-snap" onChange={(e) => setGridSnap(e.target.checked)} />
-            привязка к сетке 1 мм
+            {t('sketch.gridSnap')}
           </label>
         </fieldset>
 
         <fieldset className="pm-group sk-tools">
-          <legend>Размеры и редактирование</legend>
-          {(['dimension', 'trim', 'extend', 'fillet', 'chamfer', 'regions'] as EditorTool[]).map((t) => toolButton(t, EDIT_TOOL_LABELS[t]))}
+          <legend>{t('sketch.editing')}</legend>
+          {EDIT_TOOLS.map((k) => toolButton(k))}
           <label className="sk-check">
             <input type="checkbox" checked={reference} data-testid="sketch-reference" onChange={(e) => setReference(e.target.checked)} />
-            новый размер — справочный
+            {t('sketch.referenceNew')}
           </label>
-          {tool === 'fillet' && paramField('filletRadius', 'Радиус, мм')}
+          {tool === 'fillet' && paramField('filletRadius', t('sketch.filletRadius'))}
           {tool === 'chamfer' && (
             <>
-              {paramField('chamfer1', 'Катет 1, мм')}
-              {paramField('chamfer2', 'Катет 2, мм')}
+              {paramField('chamfer1', t('sketch.chamfer1'))}
+              {paramField('chamfer2', t('sketch.chamfer2'))}
             </>
           )}
         </fieldset>
@@ -885,70 +872,71 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
         {tool === 'select' && selection.length > 0 && (
           <fieldset className="pm-group sk-tools" data-testid="sketch-selection">
             <legend>
-              Выбрано: {selPoints.length > 0 ? `точек ${selPoints.length}` : ''} {selEntities.length > 0 ? `кривых ${selEntities.length}` : ''}
+              {t('sketch.selected')} {selPoints.length > 0 ? t('sketch.selectedPoints', { count: selPoints.length }) : ''}{' '}
+              {selEntities.length > 0 ? t('sketch.selectedCurves', { count: selEntities.length }) : ''}
             </legend>
             {proposals.map((p) => (
               <button type="button" key={p.type} data-testid={`constraint-${p.type}`} onClick={() => applyConstraint(p)}>
-                {CONSTRAINT_LABELS[p.type] ?? p.type}
+                {constraintCaption(t, p.type)}
               </button>
             ))}
             {selEntities.length > 0 && (
               <button type="button" data-testid="sketch-toggle-construction" onClick={() => void commit(toggleConstruction(data, selEntities))}>
-                Вспомогательная ⇄ основная
+                {t('sketch.toggleConstruction')}
               </button>
             )}
             <button type="button" data-testid="sketch-delete" onClick={deleteSelection}>
-              Удалить
+              {t('sketch.delete')}
             </button>
             {selEntities.length > 0 && (
               <div className="sk-subtools">
-                {paramField('offset', 'Эквидистанта, мм')}
+                {paramField('offset', t('sketch.offsetField'))}
                 <button
                   type="button"
                   data-testid="sketch-offset"
                   onClick={() => {
-                    const d = numberParam('offset', 'смещение');
+                    const d = numberParam('offset', 'sketch.what.offset');
                     if (d !== null) void runTool({ name: 'offset', chain: selEntities, distance: d });
                   }}
                 >
-                  Эквидистанта
+                  {t('sketch.offset')}
                 </button>
                 <button
                   type="button"
                   data-testid="sketch-mirror"
                   disabled={lastLine === undefined || selEntities.length < 2}
-                  title="Ось — отрезок, выбранный последним"
+                  title={t('sketch.mirrorHint')}
                   onClick={() =>
                     lastLine !== undefined && void runTool({ name: 'mirror', entities: selEntities.filter((id) => id !== lastLine), axis: lastLine })
                   }
                 >
-                  Зеркало (ось — последний отрезок)
+                  {t('sketch.mirror')}
                 </button>
-                {paramField('stepX', 'Шаг X, мм')}
-                {paramField('stepY', 'Шаг Y, мм')}
-                {paramField('count', 'Количество')}
+                {paramField('stepX', t('sketch.stepX'))}
+                {paramField('stepY', t('sketch.stepY'))}
+                {paramField('count', t('sketch.count'))}
                 <button
                   type="button"
                   data-testid="sketch-linear-pattern"
                   onClick={() => {
-                    const [dx, dy, n] = [numberParam('stepX', 'шаг X'), numberParam('stepY', 'шаг Y'), numberParam('count', 'количество')];
+                    const [dx, dy, n] = [numberParam('stepX', 'sketch.what.stepX'), numberParam('stepY', 'sketch.what.stepY'), numberParam('count', 'sketch.what.count')];
                     if (dx !== null && dy !== null && n !== null) void runTool({ name: 'linear-pattern', entities: selEntities, step: [dx, dy], count: n });
                   }}
                 >
-                  Линейный массив
+                  {t('sketch.linearPattern')}
                 </button>
-                {paramField('angle', 'Шаг угла, °')}
+                {paramField('angle', t('sketch.angleStep'))}
                 <button
                   type="button"
                   data-testid="sketch-circular-pattern"
                   disabled={selPoints.length !== 1}
-                  title="Центр — выбранная точка"
+                  title={t('sketch.circularHint')}
                   onClick={() => {
-                    const [n, a] = [numberParam('count', 'количество'), numberParam('angle', 'шаг угла')];
+                    const [n, a] = [numberParam('count', 'sketch.what.count'), numberParam('angle', 'sketch.what.angle')];
                     if (n !== null && a !== null) void runTool({ name: 'circular-pattern', entities: selEntities, center: selPoints[0], count: n, angle: a });
                   }}
                 >
-                  Круговой массив (центр — точка)
+                  {t('sketch.circularPattern')}
                 </button>
               </div>
             )}
@@ -957,22 +945,22 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
 
         {(marks.conflicting.size > 0 || marks.redundant.size > 0) && (
           <section className="sk-conflicts" data-testid="sketch-conflicts">
-            {marks.conflicting.size > 0 && <h2>Конфликтующие ограничения</h2>}
+            {marks.conflicting.size > 0 && <h2>{t('sketch.conflicting')}</h2>}
             <ul>
               {[...marks.conflicting].sort((a, b) => a - b).map((k) => (
                 <li key={`c${k}`} className="sk-c-conflict" data-testid={`conflict-${k}`}>
                   <button type="button" onClick={() => setSelectedConstraints([k])}>
-                    #{k} {describeConstraint(data.constraints[k - 1], solution?.constraintValues[k - 1])}
+                    #{k} {describeConstraint(data.constraints[k - 1], solution?.constraintValues[k - 1], t)}
                   </button>
                 </li>
               ))}
             </ul>
-            {marks.redundant.size > 0 && <h2>Избыточные ограничения</h2>}
+            {marks.redundant.size > 0 && <h2>{t('sketch.redundant')}</h2>}
             <ul>
               {[...marks.redundant].sort((a, b) => a - b).map((k) => (
                 <li key={`r${k}`} className="sk-c-redundant" data-testid={`redundant-${k}`}>
                   <button type="button" onClick={() => setSelectedConstraints([k])}>
-                    #{k} {describeConstraint(data.constraints[k - 1], solution?.constraintValues[k - 1])}
+                    #{k} {describeConstraint(data.constraints[k - 1], solution?.constraintValues[k - 1], t)}
                   </button>
                 </li>
               ))}
@@ -981,25 +969,28 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
         )}
 
         <section data-testid="sketch-profile">
-          <h2>Профиль</h2>
-          {!profile && <p className="pm-hint">Профиль строится, когда эскиз решён без конфликтов.</p>}
-          {profile && !profile.hasProfile && <p className="pm-hint">Нет кривых профиля.</p>}
+          <h2>{t('sketch.profile')}</h2>
+          {!profile && <p className="pm-hint">{t('sketch.profilePending')}</p>}
+          {profile && !profile.hasProfile && <p className="pm-hint">{t('sketch.noProfile')}</p>}
           {profile?.issues.map((i, k) => (
             <p key={k} className="sk-issue">
-              {i.kind}: кривые {i.entities.join(', ')} {i.detail}
+              {t('sketch.issue', { kind: i.kind, entities: i.entities.join(', '), detail: i.detail })}
             </p>
           ))}
           {profile?.error && <p className="sk-issue">{profile.error}</p>}
           {profile && profile.regions.length > 0 && (
             <p>
-              Областей: {profile.regions.length}, в профиле: {profile.regions.filter((r) => r.selected).length} (площадь{' '}
-              {formatValue(profile.regions.filter((r) => r.selected).reduce((s, r) => s + r.area, 0))} мм²)
+              {t('sketch.regions', {
+                count: profile.regions.length,
+                selected: profile.regions.filter((r) => r.selected).length,
+                area: formatValue(profile.regions.filter((r) => r.selected).reduce((s, r) => s + r.area, 0)),
+              })}
             </p>
           )}
         </section>
 
         <section>
-          <h2>Ограничения ({data.constraints.length})</h2>
+          <h2>{t('sketch.constraints', { count: data.constraints.length })}</h2>
           <ul className="sk-constraints" data-testid="sketch-constraints">
             {data.constraints.map((c, i) => {
               const k = i + 1;
@@ -1013,12 +1004,12 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
                   data-type={c.type}
                 >
                   <button type="button" className="sk-c-name" onClick={() => setSelectedConstraints(selectedConstraints.includes(k) ? [] : [k])}>
-                    #{k} {describeConstraint(c, solution?.constraintValues[i])}
+                    #{k} {describeConstraint(c, solution?.constraintValues[i], t)}
                   </button>
                   {DIMENSION_TYPES.has(c.type) && (
-                    <label title="Справочный размер: измеряется, не управляет эскизом">
+                    <label title={t('sketch.drivenHint')}>
                       <input type="checkbox" checked={Boolean(c.driven)} data-testid={`constraint-driven-${k}`} onChange={() => toggleDriven(k)} />
-                      спр.
+                      {t('sketch.driven')}
                     </label>
                   )}
                   {hasValue(c.type) && !c.driven && (
@@ -1041,7 +1032,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
                   )}
                   <button
                     type="button"
-                    aria-label={`удалить ограничение ${k}`}
+                    aria-label={t('sketch.removeConstraint', { k })}
                     data-testid={`constraint-remove-${k}`}
                     onClick={() => {
                       const { data: next, constraintMap } = removeItems(data, [], [k]);
