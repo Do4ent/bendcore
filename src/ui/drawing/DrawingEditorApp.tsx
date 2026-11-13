@@ -79,6 +79,9 @@ declare global {
   }
 }
 
+/** Scale of a list value "n:d" ('' — automatic). */
+const scaleOf = (v: string): [number, number] | null => (v ? (v.split(':').map(Number) as [number, number]) : null);
+
 const scaleText = ([n, d]: [number, number]) => (n === 5 && d === 2 ? '2,5:1' : n === 2 && d === 5 ? '1:2,5' : `${n}:${d}`);
 
 function download(bytes: Uint8Array | string, name: string, type: string) {
@@ -675,7 +678,10 @@ export default function DrawingEditorApp({
                   <select
                     value={sheet.format}
                     data-testid="sheet-format"
-                    onChange={(e) => run(t('drawing.done.format'), (d) => d.setSheet(sheet.id, { format: e.target.value as SheetInfo['format'] }))}
+                    onChange={(e) => {
+                      const format = e.target.value as SheetInfo['format'];
+                      run(t('drawing.done.format'), (d) => d.setSheet(sheet.id, { format }));
+                    }}
                   >
                     {['A0', 'A1', 'A2', 'A3', 'A4'].map((f) => (
                       <option key={f} value={f}>{t(`drawing.sheetFormat.${f}` as MessageKey)}</option>
@@ -686,7 +692,10 @@ export default function DrawingEditorApp({
                   <select
                     value={sheet.orientation}
                     data-testid="sheet-orientation"
-                    onChange={(e) => run(t('drawing.done.orientation'), (d) => d.setSheet(sheet.id, { orientation: e.target.value as SheetInfo['orientation'] }))}
+                    onChange={(e) => {
+                      const orientation = e.target.value as SheetInfo['orientation'];
+                      run(t('drawing.done.orientation'), (d) => d.setSheet(sheet.id, { orientation }));
+                    }}
                   >
                     <option value="landscape">{t('drawing.landscape')}</option>
                     <option value="portrait">{t('drawing.portrait')}</option>
@@ -697,11 +706,10 @@ export default function DrawingEditorApp({
                   <select
                     value={sheet.scale ? sheet.scale.ratio.join(':') : ''}
                     data-testid="sheet-scale"
-                    onChange={(e) =>
-                      run(t('drawing.done.sheetScale'), (d) =>
-                        d.setSheet(sheet.id, { scale: e.target.value ? (e.target.value.split(':').map(Number) as [number, number]) : null }),
-                      )
-                    }
+                    onChange={(e) => {
+                      const scale = scaleOf(e.target.value);
+                      run(t('drawing.done.sheetScale'), (d) => d.setSheet(sheet.id, { scale }));
+                    }}
                   >
                     <option value="">{t('drawing.scaleAuto', { scale: sheet.computedScale?.label ?? '' })}</option>
                     {SCALES.map((s) => (
@@ -761,11 +769,10 @@ export default function DrawingEditorApp({
                       {t('drawing.viewScale')}
                       <select
                         value={selected.scale ? selected.scale.ratio.join(':') : ''}
-                        onChange={(e) =>
-                          run(t('drawing.done.viewScale'), (d) =>
-                            d.setView(sheet.id, selected.id, { scale: e.target.value ? (e.target.value.split(':').map(Number) as [number, number]) : null }),
-                          )
-                        }
+                        onChange={(e) => {
+                          const scale = scaleOf(e.target.value);
+                          run(t('drawing.done.viewScale'), (d) => d.setView(sheet.id, selected.id, { scale }));
+                        }}
                       >
                         <option value="">{t('drawing.scaleAuto', { scale: selected.computedScale?.label ?? '' })}</option>
                         {SCALES.map((s) => (
@@ -775,7 +782,7 @@ export default function DrawingEditorApp({
                     </label>
                   )}
                   <label className="dr-check">
-                    <input type="checkbox" checked={selected.hidden} onChange={(e) => run(t('drawing.done.hidden'), (d) => d.setView(sheet.id, selected.id, { hidden: e.target.checked }))} />
+                    <input type="checkbox" checked={selected.hidden} onChange={(e) => run(t('drawing.done.hidden'), (d) => d.setView(sheet.id, selected.id, { hidden: !selected.hidden }))} />
                     {t('drawing.hiddenLines')}
                   </label>
                   {desc.model.kind === 'assembly' && (
@@ -784,7 +791,7 @@ export default function DrawingEditorApp({
                         type="checkbox"
                         checked={selected.autoBalloons}
                         data-testid="view-auto-balloons"
-                        onChange={(e) => run(t('drawing.done.autoBalloons'), (d) => d.setView(sheet.id, selected.id, { autoBalloons: e.target.checked }))}
+                        onChange={(e) => run(t('drawing.done.autoBalloons'), (d) => d.setView(sheet.id, selected.id, { autoBalloons: !selected.autoBalloons }))}
                       />
                       {t('drawing.autoBalloons')}
                     </label>
@@ -929,7 +936,7 @@ export default function DrawingEditorApp({
                   type="checkbox"
                   checked={!!sheet.roughnessRemainder}
                   onChange={(e) =>
-                    run(t('drawing.done.remainder'), (d) => d.setSheet(sheet.id, { roughnessRemainder: e.target.checked ? { value: rough.value, parameter: rough.parameter } : null }))
+                    run(t('drawing.done.remainder'), (d) => d.setSheet(sheet.id, { roughnessRemainder: !sheet.roughnessRemainder ? { value: rough.value, parameter: rough.parameter } : null }))
                   }
                 />
                 {t('drawing.remainder', { parameter: rough.parameter, value: rough.value })}
@@ -995,7 +1002,7 @@ export default function DrawingEditorApp({
               )}
               {desc?.model.kind === 'assembly' && sheet && (
                 <label className="dr-check">
-                  <input type="checkbox" checked={sheet.partsList} onChange={(e) => run(t('drawing.done.partsList'), (d) => d.setSheet(sheet.id, { partsList: e.target.checked }))} />
+                  <input type="checkbox" checked={sheet.partsList} onChange={(e) => run(t('drawing.done.partsList'), (d) => d.setSheet(sheet.id, { partsList: !sheet.partsList }))} />
                   {t('drawing.partsList')}
                 </label>
               )}

@@ -87,7 +87,6 @@ test('assembly drawing: positions by the specification and a manual position wit
   await expect(page.getByTestId('balloon-missing')).toContainText('1, 2, 3, 4, 5');
 
   // The "Позиции" switch of the view: one balloon per position of the specification.
-  await page.getByTestId('tab-specification').click();
   await page.locator('.dr-tabs button').first().click();
   await page.getByTestId('view-list').locator('li').first().click();
   // A controlled checkbox: it shows the state of the kernel after the call.
