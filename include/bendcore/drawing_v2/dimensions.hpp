@@ -145,6 +145,16 @@ Result<DimensionResult> evaluateDimension(const DimensionDef& def, const ModelBi
 // п. 2), стрелки — заливка, текст — шрифт ГОСТ 2.304. Висячий размер — ошибка InvalidInput.
 Status renderDimension(Drawing& drawing, const DimensionResult& result, const AnnotationStyle& style = {});
 
+// Геометрия размера с готовой надписью text (обозначение резьбы и т. п., ГОСТ 2.311) в
+// координатах листа, оформление — как у evaluateDimension:
+//   линейный: измерение между a и b вдоль a→b, размерная линия ∥ a→b на расстоянии offset за
+//   крайней из точек в направлении side (единичный вектор ⟂ a→b), выносные линии от a и b;
+//   по окружности: размерная линия через центр под angleDeg, стрелки на окружности radius.
+DimensionGeometry labelledLinearGeometry(Point2 a, Point2 b, Point2 side, double offset, const std::string& text,
+                                         double textShift, const AnnotationStyle& style = {});
+DimensionGeometry labelledDiameterGeometry(Point2 center, double radius, double angleDeg, const std::string& text,
+                                           const AnnotationStyle& style = {});
+
 // --- Ассоциативность ---
 
 struct RebindResult {

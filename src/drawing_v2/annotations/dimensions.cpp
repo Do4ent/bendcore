@@ -556,6 +556,23 @@ Result<Point2> anchorPoint(const Anchor& a, const ModelBinding& m, const Project
     return invalid("anchor: unknown kind");
 }
 
+DimensionGeometry labelledLinearGeometry(Point2 a, Point2 b, Point2 side, double offset, const std::string& text,
+                                         double textShift, const AnnotationStyle& st) {
+    DimensionGeometry g;
+    const Point2 u = unit(sub(b, a));
+    const Point2 n = unit(side);
+    const double out = std::max(dot2(a, n), dot2(b, n));
+    buildLinear(g, a, b, u, n, out + offset, composeText(text, std::nullopt, "", st), textShift, st);
+    return g;
+}
+
+DimensionGeometry labelledDiameterGeometry(Point2 center, double radius, double angleDeg, const std::string& text,
+                                           const AnnotationStyle& st) {
+    DimensionGeometry g;
+    buildCircleDim(g, center, radius, true, angleDeg, composeText(text, std::nullopt, "", st), st);
+    return g;
+}
+
 // --- Вычисление размера ---
 
 Result<DimensionResult> evaluateDimension(const DimensionDef& def, const ModelBinding& m, const SheetView& sv,
