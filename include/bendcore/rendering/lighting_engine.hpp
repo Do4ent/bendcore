@@ -25,35 +25,17 @@ struct ShadowMap {
 
 class LightingShadows {
 public:
-    void addLight(const Light& light) { lights_.push_back(light); }
-
-    size_t getLightCount() const { return lights_.size(); }
-
-    void enableShadows(bool enabled) { shadows_.is_enabled = enabled; }
-    bool areShadowsEnabled() const { return shadows_.is_enabled; }
-
-    void setShadowResolution(int res) { shadows_.resolution = res; }
-    int getShadowResolution() const { return shadows_.resolution; }
-
-    void setShadowBias(double bias) { shadows_.bias = bias; }
-    double getShadowBias() const { return shadows_.bias; }
-
-    double calculateIlluminance(const Light& light, double distance) {
-        if (light.type == LightType::DIRECTIONAL) return light.intensity;
-        return light.intensity / (distance * distance + 0.001);
-    }
-
-    double calculateGlobalIllumination(double ambient_intensity) {
-        double gi = ambient_intensity;
-        for (const auto& light : lights_) {
-            gi += light.intensity * 0.1;
-        }
-        return std::min(1.0, gi);
-    }
-
-    bool canCastShadow(const Light& light) {
-        return light.type != LightType::POINT || light.range > 0;
-    }
+    void addLight(const Light& light);
+    size_t getLightCount() const;
+    void enableShadows(bool enabled);
+    bool areShadowsEnabled() const;
+    void setShadowResolution(int res);
+    int getShadowResolution() const;
+    void setShadowBias(double bias);
+    double getShadowBias() const;
+    double calculateIlluminance(const Light& light, double distance);
+    double calculateGlobalIllumination(double ambient_intensity);
+    bool canCastShadow(const Light& light);
 
 private:
     std::vector<Light> lights_;
