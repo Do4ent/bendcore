@@ -195,6 +195,26 @@ for (const FaceSpan& span : mesh.value().faceSpans)
    нет: обращение по нулевому адресу читает линейную память, выход за её пределы — ловушка
    (`RuntimeError` JS), после которой модуль непригоден; там изоляция — Web Worker импорта
    (`docs/ui/APP_SHELL.md`), а слои 1, 2 и 4 действуют так же, как в native.
+
+   **Код ошибки `ErrorCode::Fault`** (`include/bendcore/kernel/result.hpp`). Сбой, дошедший до
+   точки перехвата читателя, возвращается не как `ParseError`, а с отдельным кодом `Fault`
+   (`toString` — `"Fault"`): после `longjmp` состояние процесса уже не полностью надёжно
+   (утечка объектов, возможно захваченный мьютекс), и вызывающий должен это знать, не разбирая
+   текст. Распознавание — `detail::isConvertedFault(failure)` / `detail::faultOr(failure,
+   иначе)`: обработчик сигнала записывает текст сбоя (с адресом) в `thread_local` буфер, и
+   исключение считается сбоем, только если его тип — `OSD_SIGSEGV`, `OSD_SIGBUS` или
+   `Standard_NumericError` (точно, `typeid`) и сообщение совпадает с записанным; обычное
+   исключение OCCT того же типа (например, `Standard_NumericError("…")` из кода OCCT) остаётся
+   `ParseError`. Сбой, который перехватила собственная точка OCCT (STEP — по сущностям), наружу
+   не выходит и кода `Fault` не даёт (результат — обычный `ParseError`/`OperationFailed`).
+   Проброс: `readBrepBinary`, `readBrepText`, `readStep`, `readStepAssembly` → `Fault`;
+   загрузчик сборки (`assembly_v2`, встроенный BRep и внешний источник детали — сбой внешнего
+   источника не заменяется встроенной геометрией, загрузка целиком завершается `Fault`),
+   кэш документа детали (`modeling`: запись кэша со сбоем не пропускается, загрузка
+   завершается `Fault`), загрузчик модели чертежа (`drawing_v2::fileModelLoader`) передают код
+   без изменений; WASM-биндинги пишут `toString(code)` в `code` ответа, JS — `KernelError.code
+   === 'Fault'` (`src/wasm/bendcore_kernel_api.d.mts`). В WASM сигналов нет, код возникает
+   только в native; интерфейс распознаёт его по коду (`docs/ui/APP_SHELL.md`, «Сбой модуля»).
 4. **Предварительная проверка STEP** (`src/kernel/step_preflight.*`) до разбора:
    - предел размера `maxInputBytes` (256 МиБ: читателю нужно около 10× размера файла,
      `docs/qa/PERFORMANCE.md`, — это ~2,5 ГиБ, предел 32-битного WASM-модуля 4 ГиБ);
@@ -223,7 +243,9 @@ for (const FaceSpan& span : mesh.value().faceSpans)
 тот же предварительный контроль у `readStepAssembly`), `tests/kernel/test_kernel_fault_guard.cpp`
 (ctest `kernel_fault_guard`: SIGSEGV и SIGFPE → исключение, 50 сбоев подряд, вложенность,
 исключения и значения проходят без изменений, сбой вне защиты по-прежнему убивает процесс
-исходным сигналом).
+исходным сигналом; `ConvertedFaultsAreToldApartByCode` — SIGSEGV и SIGFPE дают `Fault`, а
+`Standard_OutOfRange`, `Standard_NumericError` и `OSD_SIGSEGV`, брошенные кодом, — `ParseError`,
+в том числе сразу после сбоя на том же потоке).
 
 ## Допуски и единицы
 

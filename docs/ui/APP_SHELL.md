@@ -194,16 +194,21 @@ drawing.sheetPicture('S1')               → {type:'call', id, target:1, ...}
 
 | Где | Как проявляется | Код в интерфейсе |
 |---|---|---|
-| native | `occt_fault_guard` (`src/kernel/occt_fault_guard.*`) переводит SIGSEGV/SIGBUS/SIGFPE внутри чтения BRep/STEP в исключение OCCT; читатель возвращает обычный `ParseError` с текстом «SIGSEGV (invalid memory access at 0x…) inside OCCT» (SIGBUS, «SIGFPE (arithmetic fault …)»). Отдельного кода нет; чаще сбой перехватывает собственная точка OCCT, и наружу выходит только `ParseError`/`OperationFailed` без следа сигнала | `isModuleFault` узнаёт текст (`CONVERTED_SIGNAL`, `src/ui/worker/protocol.ts`) |
+| native | `occt_fault_guard` (`src/kernel/occt_fault_guard.*`) переводит SIGSEGV/SIGBUS/SIGFPE внутри чтения BRep/STEP в исключение OCCT; читатель возвращает ошибку с кодом `Fault` (`ErrorCode::Fault`, `docs/kernel/KERNEL_CORE.md`), модули передают код без изменений. Если сбой перехватила собственная точка OCCT, наружу выходит только `ParseError`/`OperationFailed` | `Fault` — по коду (`MODULE_FAULT_CODES`, `src/ui/worker/protocol.ts`); текст ошибки не разбирается |
 | WASM | сигналов нет: выход за линейную память, неверный косвенный вызов, деление на ноль, `abort()` — `WebAssembly.RuntimeError` из вызова; до этой фазы воркер отвечал кодом `Error`, и модуль продолжал работать на испорченной памяти | `ModuleFault` |
 | WASM | воркер упал целиком (событие `error`: нехватка памяти, ошибка вне вызова) | `WorkerFailed` |
 
 Поведение:
 
-1. `WorkerHost` превращает `RuntimeError` в ошибку `ModuleFault` («WebAssembly trap: …») и
-   отказывает во всех последующих вызовах; `WasmClient` при `ModuleFault` закрывается (все
-   ожидающие и новые вызовы отклоняются той же ошибкой) и один раз вызывает слушателей
-   `onFault(error, module)`. `cancel()` и `dispose()` сбоем не считаются.
+1. `WorkerHost` превращает `RuntimeError` в ошибку `ModuleFault` («WebAssembly trap: …»); после
+   `ModuleFault` или ошибки ядра с кодом `Fault` он отказывает во всех последующих вызовах
+   (`ModuleFault` «the module stopped at an earlier fault: Fault: …»); `WasmClient` при
+   `ModuleFault` или `Fault` закрывается (все ожидающие и новые вызовы отклоняются той же
+   ошибкой) и один раз вызывает слушателей `onFault(error, module)`. `isModuleFault` —
+   `ModuleFault`, `Fault`, `WorkerFailed`, только по коду. `cancel()` и `dispose()` сбоем не
+   считаются. Тесты Jest: `src/ui/worker/__tests__/workerProtocol.test.ts` («a kernel Fault
+   closes the client like a trap…», «the host refuses every call after a kernel Fault»,
+   «module faults are told by the code only» — `ParseError` с текстом SIGSEGV больше не сбой).
 2. Редактор передаёт сбой оболочке (`useFaultReport`, `EditorHostProps.onFault`).
 3. Оболочка сразу (не дожидаясь таймера автосохранения) записывает в IndexedDB черновик
    вкладки — последний документ, который редактор сообщил после завершённого изменения, то
