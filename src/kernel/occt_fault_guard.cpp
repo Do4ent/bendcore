@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <typeinfo>
 
 #include <signal.h>
 #endif
@@ -128,9 +129,8 @@ bool faultConversionAvailable() { return true; }
 
 bool isConvertedFault(const Standard_Failure& failure) {
     if (!t_hasFault) return false;
-    const Handle(Standard_Type) type = failure.DynamicType();
-    if (type != STANDARD_TYPE(OSD_SIGSEGV) && type != STANDARD_TYPE(OSD_SIGBUS) &&
-        type != STANDARD_TYPE(Standard_NumericError)) {
+    const std::type_info& type = typeid(failure);
+    if (type != typeid(OSD_SIGSEGV) && type != typeid(OSD_SIGBUS) && type != typeid(Standard_NumericError)) {
         return false;
     }
     const char* text = failure.GetMessageString();
