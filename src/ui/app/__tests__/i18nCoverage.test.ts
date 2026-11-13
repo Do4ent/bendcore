@@ -5,7 +5,7 @@
 // an English one and back, no key is defined in two area dictionaries, every key the sources ask
 // for exists, every key is used, and the editors' components hold no interface text of their own
 // (a simple check of the sources: Cyrillic outside comments, Latin words in JSX text and in
-// title / placeholder / aria-label attributes).
+// title / placeholder / aria-label attributes).  // qa-allow(placeholder): the HTML attribute name that the test scans
 
 import fs from 'fs';
 import path from 'path';
@@ -126,6 +126,7 @@ describe('components', () => {
     expect(found).toEqual([]);
   });
 
+  // qa-allow(placeholder): the HTML attribute name that the test scans
   test('no Latin interface words in JSX text and in title / placeholder / aria-label', () => {
     // Words that are not language: file formats, standards, plane and slot names.
     const allowed = /^(PDF|DXF|SVG|ISO|STEP|BOM|XY|XZ|YZ|A|B|M\{d\}|Ctrl\+[A-Z])$/;
@@ -138,6 +139,7 @@ describe('components', () => {
         if (/^(Promise|Record|Array|Set|Map|Partial)$/.test(text)) continue;
         if (!allowed.test(text)) found.push(`${s.file}: >${text}<`);
       }
+      // qa-allow(placeholder): the HTML attribute name that the test scans
       for (const m of s.code.matchAll(/\b(title|placeholder|aria-label)="([^"]*)"/g)) {
         if (/[A-Za-z]{2,}/.test(m[2]) && !allowed.test(m[2])) found.push(`${s.file}: ${m[1]}="${m[2]}"`);
       }

@@ -149,6 +149,20 @@ test('part with a fillet, its drawing in PDF, an assembly of two parts', async (
   await pdf.saveAs(pdfFile);
   expect(fs.readFileSync(pdfFile).subarray(0, 5).toString('latin1')).toBe('%PDF-');
 
+  // The drawing saves as one .bcdrw.json with its model; the start page opens it in a new tab.
+  const [drw] = await Promise.all([page.waitForEvent('download'), Dr.getByTestId('drawing-save').click()]);
+  expect(drw.suggestedFilename()).toMatch(/\.bcdrw\.json$/);
+  const drwFile = path.join(out, drw.suggestedFilename());
+  await drw.saveAs(drwFile);
+  const drwJson = JSON.parse(fs.readFileSync(drwFile, 'utf8'));
+  expect(drwJson.format).toBe('bendcore-drawing-file');
+  expect(JSON.parse(drwJson.model).format).toBe('bendcore-part');
+  await page.getByTestId('tab-start').click();
+  await page.getByTestId('open-files').setInputFiles(drwFile);
+  await expect(page.getByTestId('doc-tab-drawing')).toHaveCount(2);
+  await expect(activePanel(page).getByTestId('view-list').locator('li')).toHaveCount(2);
+  await expect(activePanel(page).getByTestId('view-V1')).toHaveCount(1);
+
   // Second part, then an assembly of both from the shell's part library.
   const P2 = await buildBlock(page, 30, 30, 10);
   await expect(P2.getByTestId('doc-save')).toBeEnabled();
@@ -186,10 +200,14 @@ test('part with a fillet, its drawing in PDF, an assembly of two parts', async (
   await page.getByTestId('lang').selectOption('en');
   await expect(page.getByTestId('tab-start')).toHaveText('Start');
   await expect(page.getByTestId('app-status-doc')).toContainText('Part');
+  // ...and the panels of the editors.
+  await expect(opened.getByTestId('modeling-status')).toHaveText('Kernel ready');
+  await expect(opened.getByTestId('add-Extrude')).toHaveText('Extrude');
   await page.getByTestId('lang').selectOption('ru');
+  await expect(opened.getByTestId('add-Extrude')).toHaveText('Выдавливание');
 
   // Documentation screenshot of the shell with the drawing tab.
-  await page.getByTestId('doc-tab-drawing').click();
+  await page.getByTestId('doc-tab-drawing').first().click();
   await page.screenshot({ path: process.env.BENDCORE_DOC_SCREENSHOT || path.join(out, 'app_shell.png') });
 });
 

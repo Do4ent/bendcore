@@ -408,7 +408,9 @@ export default function DrawingEditorApp({
     try {
       const designation = sheet?.titleShown?.designation?.trim() ?? '';
       const [text, model] = await Promise.all([d.save(), d.saveModel()]);
-      const name = designation ? downloadName(designation, '', DRAWING_FILE_EXTENSION.slice(1)) : drawingFileName(namesRef.current.drawing);
+      // Latin letters: Chromium replaces a download name with Cyrillic by "download".
+      const base = designation || drawingFileName(namesRef.current.drawing).slice(0, -DRAWING_FILE_EXTENSION.length);
+      const name = downloadName(base, '', DRAWING_FILE_EXTENSION.slice(1));
       const fileText = packDrawingFile({ drawing: text, model, modelName: namesRef.current.model });
       download(fileText, name, 'application/json');
       savedRef.current = text;
