@@ -175,15 +175,32 @@ Result<TopoDS_Wire> chainEdges(const std::vector<TopoDS_Shape>& input) {
 
 // ---------------------------------------------------------------- кинематика
 
-Result<FeatureResult> sweep(const Profile& profile, const TopoDS_Wire& path, const TopoDS_Shape& target,
+Result<FeatureResult> sweep(const Profile& profile, const TopoDS_Wire& pathIn, const TopoDS_Shape& target,
                             const SweepParams& p) {
     auto pln = validateProfile(profile);
     if (!pln) return pln.error();
-    if (path.IsNull() || !TopExp_Explorer(path, TopAbs_EDGE).More())
+    if (pathIn.IsNull() || !TopExp_Explorer(pathIn, TopAbs_EDGE).More())
         return Error{ErrorCode::InvalidInput, "sweep path is empty"};
     if (p.orientation == SweepOrientation::Guide && (p.guide.IsNull() || !TopExp_Explorer(p.guide, TopAbs_EDGE).More()))
         return Error{ErrorCode::InvalidInput, "guide orientation needs a guide curve"};
     try {
+        // Траектория, которая кончается в плоскости профиля (цепочка рёбер модели обходится от
+        // любого свободного конца), обходится в обратную сторону.
+        TopoDS_Wire path = pathIn;
+        {
+            BRepTools_WireExplorer first(pathIn);
+            if (!first.More()) return Error{ErrorCode::InvalidInput, "sweep path is not a connected wire"};
+            const gp_Pnt s0 = BRep_Tool::Pnt(first.CurrentVertex());
+            gp_Pnt s1 = s0;
+            for (; first.More(); first.Next()) {
+                TopoDS_Vertex a, b;
+                TopExp::Vertices(first.Current(), a, b, true);
+                s1 = BRep_Tool::Pnt(b);
+            }
+            const double tolPlane = 1e-6 * std::max(1.0, boundingDiagonal({profile.face, pathIn}));
+            if (pln.value().Distance(s0) > tolPlane && pln.value().Distance(s1) <= tolPlane)
+                path = TopoDS::Wire(pathIn.Reversed());
+        }
         // Начало и конец траектории в порядке обхода проволоки.
         BRepTools_WireExplorer wex(path);
         if (!wex.More()) return Error{ErrorCode::InvalidInput, "sweep path is not a connected wire"};
