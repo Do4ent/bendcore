@@ -241,8 +241,6 @@ set(BENDCORE_SOURCES
   src/compensation.cpp
   src/core_api.cpp
   src/drawing.cpp
-  src/ipc_bridge.cpp
-  src/performance.cpp
   src/ports.cpp
   src/refs.cpp
   src/reporting.cpp
@@ -260,9 +258,6 @@ set(BENDCORE_SOURCES
   src/entity_id.cpp
   src/feature_system.cpp
 
-
-  # Constraint solver
-  src/constraint_system.cpp
 
   # M2 Phase: Advanced Sketcher (GAP-002, GAP-003, GAP-004)
   src/sketch/constraint_diagnostics.cpp
@@ -320,8 +315,6 @@ set(BENDCORE_SOURCES
   src/analytics/report_generator.cpp
   src/analytics/data_visualization.cpp
 
-  # P1-02: Security & Reliability
-  src/security.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -503,13 +496,8 @@ if(GTest_FOUND)
   bendcore_add_test(templates test_templates)
 endif()
 
-# test_performance написан на GoogleTest: собирается, только если GTest установлен.
 find_package(GTest QUIET)
 if(GTest_FOUND)
-  add_executable(test_performance tests/test_performance.cpp)
-  target_link_libraries(test_performance PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(performance test_performance)
-
   # Offset modules performance benchmarks
   add_executable(test_offset_performance tests/test_offset_performance.cpp
     src/combined_3d_offset.cpp
@@ -781,17 +769,6 @@ if(GTest_FOUND)
   bendcore_add_test(direct_editing_manager test_direct_editing_manager)
 
 endif()
-
-# ============================================================================
-# P1-02: Security & Reliability (80+ tests)
-# ============================================================================
-# Comprehensive security hardening: input validation, serialization, memory safety,
-# network security, vulnerability assessment, secret management, crash recovery, fuzz testing
-
-add_executable(test_security tests/test_security.cpp)
-target_link_libraries(test_security PRIVATE bendcore_core)
-target_include_directories(test_security PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(security test_security)
 
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.
