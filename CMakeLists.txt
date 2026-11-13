@@ -291,22 +291,7 @@ set(BENDCORE_SOURCES
   # M5 Phase: Direct Editing (GAP-022)
   src/editing/direct_editing_manager.cpp
 
-  # M5 Phase: Performance Optimization and Caching (GAP-023)
-  src/optimization/geometry_cache.cpp
-  src/optimization/computation_cache.cpp
-  src/optimization/parallel_executor.cpp
-  src/optimization/memory_management.cpp
-  src/optimization/optimization_profiles.cpp
-  src/optimization/memory_optimizer.cpp
-  src/optimization/performance_tuning.cpp
 
-  # M6 Phase: Parametric AI (GAP-027)
-  src/parametric_ai/design_learning.cpp
-  src/parametric_ai/regression_engine.cpp
-  src/parametric_ai/classification_system.cpp
-  src/parametric_ai/prediction_system.cpp
-  src/parametric_ai/learning_pipeline.cpp
-  src/parametric_ai/design_advice.cpp
 
   # M6 Phase: Simulation Engine (GAP-024)
   src/simulation/cfd_solver.cpp
@@ -315,23 +300,8 @@ set(BENDCORE_SOURCES
   src/simulation/simulation_manager.cpp
   src/simulation/result_visualization.cpp
 
-  # M6 Phase: FEA Integration (GAP-025)
-  src/fea/mesh_generator.cpp
-  src/fea/element_library.cpp
-  src/fea/material_database.cpp
-  src/fea/boundary_conditions.cpp
-  src/fea/fea_solver.cpp
-  src/fea/result_processor.cpp
 
 
-  # M6 Phase: Generative Design (GAP-026)
-  src/generative/design_space.cpp
-  src/generative/genetic_algorithm.cpp
-  src/generative/particle_swarm.cpp
-  src/generative/constraint_handler.cpp
-  src/generative/design_generator.cpp
-  src/generative/optimization_manager.cpp
-  src/generative/visualization.cpp
 
   # M7 Phase: Real-time Solver (GAP-030)
   src/solver/real_time_solver.cpp
@@ -342,15 +312,8 @@ set(BENDCORE_SOURCES
   src/solver/adaptive_refinement.cpp
   src/solver/performance_metrics.cpp
 
-  # M7 Phase: Cloud & Collaboration (GAP-031)
+  # Совместная работа над моделью трубы: изменения, версии, комментарии
   src/collaboration.cpp
-  src/cloud/cloud_storage_manager.cpp
-  src/cloud/realtime_collaboration.cpp
-  src/cloud/rest_api_handler.cpp
-  src/cloud/serialization.cpp
-  src/cloud/user_management.cpp
-  src/cloud/analytics_monitoring.cpp
-  src/cloud/cloud_manager.cpp
 
   # M8 Phase: Cost Analysis (GAP-035)
   src/cost_analysis.cpp
@@ -567,10 +530,6 @@ if(GTest_FOUND)
   target_link_libraries(test_sketch_m2 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(sketch_m2 test_sketch_m2)
 
-  # M6 Phase: Parametric AI (GAP-027)
-  add_executable(test_parametric_ai_m6 tests/parametric_ai/test_parametric_ai_m6.cpp)
-  target_link_libraries(test_parametric_ai_m6 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(parametric_ai_m6 test_parametric_ai_m6)
 endif()
 
 # PlaneGCS (LGPL-2.1-or-later, извлечён из FreeCAD Sketcher, см. third_party/planegcs/NOTICE.md) — 2D-эскизы.
@@ -794,10 +753,6 @@ bendcore_add_test(phase_i_main test_phase_i_main)
 # M6 Phase: FEA Integration (GAP-025)
 # ============================================================================
 
-# M6 Phase: FEA Integration - 35+ unit tests
-add_executable(test_fea_m6 tests/fea/test_fea_m6.cpp)
-target_link_libraries(test_fea_m6 PRIVATE bendcore_core)
-bendcore_add_test(fea_m6 test_fea_m6)
 
 # ============================================================================
 # BOM, массовые свойства, расчётные модули
@@ -830,51 +785,7 @@ if(GTest_FOUND)
   target_link_libraries(test_direct_editing_manager PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(direct_editing_manager test_direct_editing_manager)
 
-  # M6 Phase: Generative Design (GAP-026) - 32+ unit tests
-  add_executable(test_generative_m6 tests/generative/test_generative_m6.cpp)
-  target_link_libraries(test_generative_m6 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(generative_m6 test_generative_m6)
 endif()
-
-# ============================================================================
-# M20: Production Hardening (GAP-088 to GAP-093) - 220 tests
-# ============================================================================
-
-# GAP-088: ErrorHandling (37 tests)
-add_executable(test_gap088_error_handling tests/GAP-088-ErrorHandling.test.cpp src/hardening/error_handling.cpp)
-target_link_libraries(test_gap088_error_handling PRIVATE bendcore_core)
-target_include_directories(test_gap088_error_handling PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap088_error_handling test_gap088_error_handling)
-
-# GAP-089: CrashRecovery (35 tests)
-add_executable(test_gap089_crash_recovery tests/GAP-089-CrashRecovery.test.cpp src/hardening/crash_recovery.cpp)
-target_link_libraries(test_gap089_crash_recovery PRIVATE bendcore_core)
-target_include_directories(test_gap089_crash_recovery PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap089_crash_recovery test_gap089_crash_recovery)
-
-# GAP-090: LoggingMonitoring (34 tests)
-add_executable(test_gap090_logging_monitoring tests/GAP-090-LoggingMonitoring.test.cpp src/hardening/logging_monitoring.cpp)
-target_link_libraries(test_gap090_logging_monitoring PRIVATE bendcore_core)
-target_include_directories(test_gap090_logging_monitoring PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap090_logging_monitoring test_gap090_logging_monitoring)
-
-# GAP-091: PerformanceTuning (36 tests)
-add_executable(test_gap091_performance_tuning tests/GAP-091-PerformanceTuning.test.cpp src/hardening/performance_tuning.cpp)
-target_link_libraries(test_gap091_performance_tuning PRIVATE bendcore_core)
-target_include_directories(test_gap091_performance_tuning PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap091_performance_tuning test_gap091_performance_tuning)
-
-# GAP-092: LoadTesting (38 tests)
-add_executable(test_gap092_load_testing tests/GAP-092-LoadTesting.test.cpp src/hardening/load_testing.cpp)
-target_link_libraries(test_gap092_load_testing PRIVATE bendcore_core)
-target_include_directories(test_gap092_load_testing PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap092_load_testing test_gap092_load_testing)
-
-# GAP-093: ProductionDeployment (40 tests)
-add_executable(test_gap093_production_deployment tests/GAP-093-ProductionDeployment.test.cpp src/hardening/production_deployment.cpp)
-target_link_libraries(test_gap093_production_deployment PRIVATE bendcore_core)
-target_include_directories(test_gap093_production_deployment PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap093_production_deployment test_gap093_production_deployment)
 
 # ============================================================================
 # P1-02: Security & Reliability (80+ tests)
