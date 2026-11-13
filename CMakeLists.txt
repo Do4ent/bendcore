@@ -118,11 +118,6 @@ if(NOT LibDWG_FOUND)
   endif()
 endif()
 
-# OpenMP: только для parallel_geometry (вне ядра); необязателен.
-if(NOT EMSCRIPTEN)
-  find_package(OpenMP QUIET)
-endif()
-
 # OCCT (Open Cascade Technology) для импорта STEP файлов (Q3 2027, Task 1)
 # Find OCCT on all platforms (Windows, Linux, macOS)
 # Default install: the one with OCCT's Release checks (third_party/build_occt.sh and
