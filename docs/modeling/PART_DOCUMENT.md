@@ -142,7 +142,12 @@ doc.undo();                          // W = 40, прежние результа�
   (`IsEqual`), получает сигнатуру входа; `BRepGProp` считается только для новых и изменённых
   элементов.
 
-Не ускорено (в зоне ядра): `kernel::booleanOp` каждый раз считает массу и площадь аргументов,
+- **Известные массы входов**: объём и площадь, вычисленные ядром для результата булевой
+  операции (`BooleanResult::mass`), хранятся в кэше фактов и передаются следующей булевой
+  операции как `argumentMass`/`toolMass` (`FEATURES.md`, раздел 1; `stress_part_300`
+  13,6 → 11,7 с).
+
+Не ускорено (в зоне ядра; масса аргумента теперь передаётся, см. выше): `kernel::booleanOp` каждый раз считает массу и площадь аргументов,
 проверяет результат `BRepCheck_Analyzer` и объёмом дважды (до и после `SimplifyResult`) — после
 изменений это ≈ 60 % времени выреза. Локальная булева операция для детали из одного тела не
 применима: вырез меняет это тело.
@@ -192,6 +197,10 @@ doc.undo();                          // W = 40, прежние результа�
 
 Перестроение эскиза:
 
+0. **Вид контура** (опция `contour`): `closed` (по умолчанию) — кривые образуют области
+   (профиль для выдавливания, вращения, …); `open` — кривые образуют одну цепочку, открытую
+   или замкнутую (траектория кинематики, контур ребра жёсткости): `buildSketchPath`, областей
+   нет; ветвление, пересечения и несколько цепочек — ошибка узла.
 1. **Размещение** (опция `plane`): `XY` (нормаль +Z, X = +X), `XZ` (нормаль −Y, X = +X,
    Y = +Z), `YZ` (нормаль +X, X = +Y) со сдвигом `offset` по нормали; `face` — плоская грань
    (ссылка `face`, через карту элементов), нормаль — наружная, начало — проекция точки
@@ -244,7 +253,7 @@ doc.undo();                          // W = 40, прежние результа�
 | `Sketch` | `offset, originX/Y/Z` | `face`, `projected` (необяз.); связь `plane`; `plane = XY\|XZ\|YZ\|face\|datum` | `SketchPlacement`, `BoundSketch`, `SketchProfile`, `projectEdge` |
 | `DatumPlane` | `offset, angle` | `face, face2, edge`; связи `plane, axis`; `method = offset\|angle\|midway`, `base`, `axis` | `planeOffset`, `planeAtAngle`, `planeMidway`, `planeOfFace` |
 | `DatumAxis` | — | `face, edge`; связи `plane, plane2`; `method = X\|Y\|Z\|face\|edge\|planes` | `axisOfFace`, `axisOfEdge`, `axisOfPlaneIntersection` |
-| `Extrude` | `distance, distance2, draftAngle, thickness` | связь `sketch`; `limit` (грань); `mode = boss\|cut`, `extent` (все 7 условий), `reversed`, `draftDirection`, `thin = none\|inside\|outside` | `extrude` по каждой области, истории объединяются |
+| `Extrude` | `distance, distance2, draftAngle, thickness` | связь `sketch`; `limit` (грань); `mode = boss\|cut\|newBody`, `extent` (все 7 условий), `reversed`, `draftDirection`, `thin = none\|inside\|outside` | `extrude` по каждой области, истории объединяются |
 | `Revolve` | `angle, angle2, axisEntity` | связи `sketch, axis`; `axisEdge`; `mode`, `extent = full\|angle\|symmetric\|twoSided`, `axis = entity\|X\|Y\|Z\|edge\|datum`, `reversed` | `revolve` |
 | `Hole` | `diameter, depth, cbDiameter, cbDepth, csDiameter, csAngle, drillAngle, x, y, z` | `face`; связь `sketch` (центры — точки эскиза, не занятые кривыми); `type = simple\|counterbore\|countersink`, `end`, `drillPoint` | `hole` по каждой точке, грань размещения отслеживается по истории |
 | `Fillet` | `radius` | `edges` | `fillet` |
@@ -254,6 +263,15 @@ doc.undo();                          // W = 40, прежние результа�
 | `Mirror` | — | связи `feature, plane`; `face`; `what = feature\|body`, `plane`, `merge` | `mirrorFeature` / `mirrorBody` |
 | `Shell` | `thickness` | `faces` (удаляемые, может быть пусто); `direction` | `shell` |
 | `Draft` | `angle` | `faces`, `neutralFace`; связь `plane`; `neutral = face\|datum\|XY\|XZ\|YZ`, `reversed` | `draftFaces`; направление извлечения — от нейтральной плоскости внутрь тела (для грани — против её наружной нормали) |
+| `Sweep` | `thickness` | связи `sketch` (профиль), `pathSketch`, `guideSketch` (эскизы `contour = open`); `pathEdges`, `guideEdges` (рёбра модели); `mode = boss\|cut\|newBody`, `path = sketch\|edges`, `orientation = correctedFrenet\|frenet\|fixed\|binormal\|guide`, `binormal = Z\|X\|Y`, `guide`, `thin` | `sweep` по каждой области профиля |
+| `Loft` | — | связи `section1` … `section8` (эскизы, по одной области; 1 и 2 обязательны, без пропусков); `mode`, `surface = smooth\|ruled`, `closed` | `loft` |
+| `Rib` | `thickness` | связь `sketch` (`contour = open`, открытая цепочка); `direction = parallel\|perpendicular`, `side = symmetric\|first\|second`, `flip = auto\|false\|true` | `rib`; роли `SideA`, `SideB`, `Top`, `Wall.E<id сущности>.A\|B\|End` |
+| `ThreadedHole` | `nominal, pitch` (0 — крупный), `threadLength, drillDepth` (0 — длина + 3P), `drillDiameter` (0 — D − P), `x, y, z` | `face`; связь `sketch` (точки — центры); `end = blind\|through`, `hand = right\|left`, `drillPoint` | `threadedHole`; роли `Wall` (с атрибутами резьбы), `Tip`, `Bottom` (`H<k>.` при нескольких) |
+| `BodyBoolean` | — | `target` (грань тела), `tools` (грани тел); `operation = union\|subtract\|intersect`, `keepTools` | `bodyBoolean` |
+| `DeleteBody` | — | `bodies` (грани тел) | `deleteBodies` |
+| `BodyLinearPattern` | `count1, spacing1, count2, spacing2` | `bodies`, `edge1/2`; связи `axis1/2`; `direction1/2`, `reversed1/2`, `merge` | `copyBodies` |
+| `BodyCircularPattern` | `count, angle` | `bodies`, `axisFace`, `axisEdge`; связь `axis`; `axis`, `spacing`, `merge` | `copyBodies` |
+| `BodyMirror` | — | `bodies`, `face`; связь `plane`; `plane`, `merge` | `copyBodies` |
 | `Box`, `Cylinder` | `length, width, height, x, y, z` / `radius, height, x, y, z` | — | примитив: профиль (прямоугольник/круг) → `extrude` без цели → `applyTool` (Fuse с входом) |
 
 Имена, которые операции дают сами (`roles`): грани `Box` — `Top, Bottom, Front (YMin),
@@ -266,6 +284,33 @@ Back (YMax), Left (XMin), Right (XMax)`, `Cylinder` — `Top, Bottom, Side`; г�
 
 `basic_features.hpp` оставлен для совместимости: `basic::basicRegistry()` возвращает
 `partRegistry()` (Box, Cylinder, Fillet, Chamfer с прежними параметрами и именами).
+
+## Многотельная деталь
+
+Тело документа — по-прежнему один `NamedShape`; у многотельной детали это составное из тел
+(`TopoDS_Solid`). Каждое тело имеет имя (`NamedShape::bodyNames`, `TOPOLOGICAL_NAMING.md`):
+тело, созданное операцией, называется её идентификатором (`Peg`; несколько новых —
+`<id>;B<i>` в геометрическом порядке), дальше имя наследуется по истории (то же тело, его
+`Modified`-образ или образы его граней), при слиянии остаётся меньшее из имён, части
+разрезанного тела — `<имя>;S<i>`. `PartDocument::bodies()` — список тел итоговой формы
+(имя, объём, число граней).
+
+* Новое тело — `mode = newBody` у `Extrude`, `Revolve`, `Sweep`, `Loft` (`FeatureMode::NewBody`).
+* Операции Boss/Cut на многотельной детали действуют только на задетые тела (`FEATURES.md`,
+  раздел 1); отверстия, скругления и прочие — как раньше, по ссылкам на элементы.
+* Узлы тел (`BodyBoolean`, `DeleteBody`, `BodyLinearPattern`, `BodyCircularPattern`,
+  `BodyMirror`) получают тела ссылками на **любую грань тела** — обычные ссылки карты
+  элементов, поэтому разрешаются по имени, истории и сигнатуре и переживают изменения
+  размеров. `makeBodyReference(shape, "Peg")` строит такую ссылку (грань тела с наименьшим
+  именем). Тело с одной гранью у узла тел, которому нужно ≥ 2 тела, — ошибка узла.
+* Сохранение: имена тел — поле `bodies` записи кэша; запись без него пересчитывается.
+
+## Условная резьба
+
+`ThreadedHole` кладёт атрибуты `thread.*` (`FEATURES.md`, раздел 11) в запись стенки
+отверстия; атрибуты переходят по истории к изменённым и расщеплённым образам грани и
+сохраняются в кэше (`attributes` записи элемента). `threadsOf(NamedShape)` — грани с резьбой:
+индекс, имя, тело, `ThreadSpec` — вход для изображения резьбы на чертеже (ГОСТ 2.311).
 
 ## Отмена и повтор
 
@@ -304,9 +349,13 @@ JSON, `"format": "bendcore-part"`, `"version": 3` (`PartDocument::kFormatVersion
   {"id": "Round", "type": "Fillet", ..., "references": {"edges": [{"name": "G[Body](Profile:V1_4)",
      "kind": "edge", "signature": {...}}]}}],
  "cache": {"Body": {"hash": "…", "state": "ok", "brep": "<base64>", "tool": "<base64>",
-           "toolMode": "boss", "elements": {...}, "deletions": {...}, ...}}}
+           "toolMode": "Boss", "elements": {...}, "deletions": {...}, "bodies": ["Body"], ...}}}
 ```
 
+- Режим инструмента в кэше — `Boss`/`Cut`/`NewBody` (`featureModeFromString`; раньше чтение
+  сравнивало с `"cut"`, и закэшированный вырез читался как бобышка — массив из кэша
+  объединял бы копии вместо вычитания). Записи элементов могут иметь `attributes` (пары
+  ключ–значение), запись кэша — `bodies` (имена тел).
 - Результаты при загрузке пересчитываются (`fromJson` вызывает `rebuild()`); кэш
   (`SaveOptions::includeCache`) хранит BRep тела и инструмента, карту элементов, журнал
   удалений, состояние, сообщения, отчёты ссылок узлов с телом. Эскизы и вспомогательная
@@ -330,8 +379,10 @@ JSON, `"format": "bendcore-part"`, `"version": 3` (`PartDocument::kFormatVersion
 
 ## Ограничения
 
-- Дерево линейное: операция работает с последним валидным телом (одно тело или компаунд);
-  многотельные детали — фаза 2.
+- Дерево линейное: операция работает с последним валидным телом (одно тело или составное из
+  тел многотельной детали); операции Boss/Cut выбирают задетые тела по габариту.
+- Узлы тел ссылаются на тела через грани; удаление и пересоздание узла, создавшего тело,
+  меняет имя тела (ссылки разрешаются по сигнатуре грани).
 - Возможности эскиза — `docs/modeling/SKETCH.md` (касательность, размеры по осям, эллипсы и
   сплайны поддерживаются); проекция ребра модели в эскиз даёт отрезок, окружность или дугу.
 - Имена от эскиза устойчивы к размерам, но не к удалению и пересозданию сущностей (новые
@@ -350,7 +401,7 @@ cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBENDCORE_W
   -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install
 cmake --build build-occt --target test_modeling_document_naming test_modeling_document_tree \
   test_modeling_document_io test_modeling_document_survival test_modeling_document_sketch \
-  test_modeling_document_reference_parts
+  test_modeling_document_reference_parts test_modeling_document_advanced test_modeling_document_multibody
 ctest --test-dir build-occt -R modeling_document --output-on-failure
 ```
 
@@ -376,5 +427,16 @@ ctest --test-dir build-occt -R modeling_document --output-on-failure
 - `test_modeling_document_survival` — модель с 6 ссылками (карман и отверстие — эскизы на
   гранях с вырезами, скругления, фаска), 25 сценариев + исходное + возврат:
   `[naming survival] scenarios: 27, references checked: 162, survived: 162, rate: 100.0 %`.
-- `test_modeling_document_reference_parts` — 11 эталонных деталей (`REFERENCE_PARTS.md`):
-  `[reference parts] parts: 11, scenarios: 98, references checked: 338, survived: 338, rate: 100.0 %`.
+- `test_modeling_document_reference_parts` — 13 эталонных деталей (`REFERENCE_PARTS.md`):
+  `[reference parts] parts: 13, scenarios: 118, references checked: 388, survived: 388, rate: 100.0 %`.
+- `test_modeling_document_advanced` — кинематика по эскизу (отрезок + дуга) с резьбовым
+  отверстием на торце: объём πR²(L + π/2·Rb) − отверстие; по сечениям с резьбовым отверстием на
+  верхней грани; ребро жёсткости уголка с отверстием в его боковой грани; 13 сценариев
+  размеров: `[advanced survival] scenarios: 13, references checked: 13, survived: 13, rate:
+  100.0 %`; сохранение/загрузка атрибутов резьбы (с кэшем и без); ошибки (ветвящаяся и
+  пересекающаяся траектория, одно сечение, номинал вне ISO 261).
+- `test_modeling_document_multibody` — плита + шип (`newBody`), вычитание с сохранением шипа,
+  массив шипа, зеркало плиты с объединением, удаление копии; объёмы по именам тел в 5
+  сценариях (`[multibody survival] … references checked: 20, survived: 20, rate: 100.0 %`),
+  сохранение/загрузка; пересечение и объединение тел; кинематика по рёбрам модели как новое
+  тело; ошибки узлов тел.

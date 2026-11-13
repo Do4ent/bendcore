@@ -102,6 +102,18 @@ std::optional<SketchEntityId> id = profile.value().entityOf(someEdge);
 - `makeFaces`: ошибка при пустом выборе, индексе вне диапазона, повторе; `makeFacesAt`: точка
   вне всех областей или на границе. Одна область — `TopoDS_Face`, несколько — `TopoDS_Compound`.
 
+### Траектория (`buildSketchPath`)
+
+`buildSketchPath(placement, curves, options)` → `SketchPath{wire, edges, entities, closed}`:
+профильные кривые (вспомогательные пропускаются), соединённые концами в одну цепочку,
+открытую или замкнутую. Обход начинается со свободного конца сущности с наименьшим
+идентификатором (у замкнутой — с наименьшей сущности), рёбра ориентированы по ходу. Ошибки
+(`InvalidInput`): нет кривых; любая проблема `checkSketchCurves`, кроме свободного конца
+(ветвление, пересечение, перекрытие, вырожденная кривая); несколько отдельных цепочек.
+Используется узлом `Sketch` с `contour = open` (проверка) и операциями `Sweep` и `Rib`
+(`docs/modeling/PART_DOCUMENT.md`). Тесты — `test_modeling_sketch_profile`
+(`ModelingSketchPath.*`).
+
 ### Диагностика
 
 `checkSketchCurves(curves, options)` → `vector<ProfileIssue>{kind, entities, location, detail}`;

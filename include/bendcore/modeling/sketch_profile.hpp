@@ -249,6 +249,24 @@ private:
 };
 
 // ---------------------------------------------------------------------------------------------
+// Path: one chain of curves (sweep trajectory, rib contour)
+// ---------------------------------------------------------------------------------------------
+
+// Profile curves of a sketch joined end to end into one chain, open or closed
+// (docs/modeling/SKETCH_PROFILE.md, "Траектория").
+struct SketchPath {
+    TopoDS_Wire wire;                      // edges in traversal order (from a free end, if any)
+    std::vector<TopoDS_Edge> edges;        // the same edges, oriented along the traversal
+    std::vector<SketchEntityId> entities;  // entity of each edge
+    bool closed = false;
+};
+
+// Errors (InvalidInput): no profile curves, any profile issue other than an open end
+// (branching, crossing, overlap, degenerate curve), several separate chains.
+Result<SketchPath> buildSketchPath(const SketchPlacement& placement, const std::vector<SketchCurve>& curves,
+                                   const ProfileOptions& options = {});
+
+// ---------------------------------------------------------------------------------------------
 // Binding to the PlaneGCS sketch (src/sketch2d.cpp)
 // ---------------------------------------------------------------------------------------------
 

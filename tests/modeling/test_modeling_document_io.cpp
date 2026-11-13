@@ -168,7 +168,7 @@ TEST(ModelingDocumentIo, RejectsBadInput) {
     EXPECT_EQ(newer.error().code, ErrorCode::Unsupported);
     EXPECT_NE(newer.error().message.find("newer"), std::string::npos);
     auto unknown = PartDocument::fromJson(
-        R"json({"format": "bendcore-part", "version": 2, "variables": [], "features": [{"id": "S", "type": "Sweep"}]})json", reg);
+        R"json({"format": "bendcore-part", "version": 2, "variables": [], "features": [{"id": "S", "type": "Helix"}]})json", reg);
     EXPECT_EQ(unknown.error().code, ErrorCode::Unsupported);
     auto missing = PartDocument::fromJson(R"json({"format": "bendcore-part", "version": 2})json", reg);
     EXPECT_EQ(missing.error().code, ErrorCode::ParseError);

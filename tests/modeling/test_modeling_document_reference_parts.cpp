@@ -441,15 +441,98 @@ ReferencePart draftedBoss() {
     return p;
 }
 
+// Phase 2. Plate L × W × T with a swept grip: circle r on the top face at (gx, W/2), path in
+// the plane y = W/2 — up by Hg, then a quarter arc Rb that ends horizontally; tapped hole M8
+// through the plate at (hx, W/2).
+ReferencePart sweptGrip() {
+    ReferencePart p;
+    p.name = "plate with swept grip";
+    p.base = {{"L", 80}, {"W", 40}, {"T", 10}, {"r", 4}, {"gx", 20}, {"Hg", 25}, {"Rb", 20}, {"hx", 60}};
+    p.volume = [](const Values& v) {
+        const double drill = 6.75;  // M8: D − P
+        return v.at("L") * v.at("W") * v.at("T") + kPi * v.at("r") * v.at("r") * (v.at("Hg") + kPi / 2 * v.at("Rb")) -
+               kPi * drill * drill / 4 * v.at("T");
+    };
+    p.build = [](PartDocument& doc) {
+        add(doc, {"Box", "Plate", "", {{"length", "L"}, {"width", "W"}, {"height", "T"}}, {}, {}, false});
+        SketchBuilder c;
+        c.fixedCircle("gx", "W/2", "r");
+        FeatureSpec prof = sketchSpec("GripProfile", "XY", c.build());
+        prof.parameters = {{"offset", "T"}};
+        add(doc, prof);
+        SketchBuilder path;  // XZ: (u, v) -> (u, -offset, v); offset -W/2 puts it at y = W/2
+        const int a = path.point("gx", "T", true), b = path.point("gx", "T + Hg", true),
+                  c0 = path.point("gx + Rb", "T + Hg", true), e = path.point("gx + Rb", "T + Hg + Rb", true);
+        path.line(a, b);
+        path.arc(c0, b, e, false);
+        FeatureSpec ps = sketchSpec("GripPath", "XZ", path.build());
+        ps.options["contour"] = "open";
+        ps.parameters = {{"offset", "-W/2"}};
+        add(doc, ps);
+        add(doc, {"Sweep", "Grip", "", {}, {}, {}, false, {{"sketch", "GripProfile"}, {"pathSketch", "GripPath"}}});
+        NamedShape s = built(doc);
+        add(doc, {"ThreadedHole", "Tap", "", {{"nominal", "8"}, {"x", "hx"}, {"y", "W/2"}, {"z", "T"}},
+                  {{"face", {refTo(s, planarFace(s.shape(), gp::DZ(), 10))}}}, {{"end", "through"}}, false});
+    };
+    p.scenarios = {{"thicker profile", {{"r", 5}}},     {"taller grip", {{"Hg", 35}}}, {"wider bend", {{"Rb", 28}}},
+                   {"grip moved", {{"gx", 15}}},        {"hole moved", {{"hx", 55}}}, {"thicker plate", {{"T", 14}}},
+                   {"longer plate", {{"L", 100}}},      {"wider plate", {{"W", 50}}}};
+    return p;
+}
+
+// Phase 2. Angle bracket (base 40 × 20 × T, wall T × 20 × 40) with a rib in the middle plane
+// from the wall (z = Hr) to the base (x = Lr), a lofted boss a × a → b × b of height hb on the
+// base at x = bx, and a tapped hole M6 (length 8, drill depth 10) in the top of the boss.
+ReferencePart ribbedBracket() {
+    ReferencePart p;
+    p.name = "ribbed bracket with lofted boss";
+    p.base = {{"T", 5}, {"Lr", 22}, {"Hr", 25}, {"t", 2}, {"a", 10}, {"b", 7}, {"hb", 8}, {"bx", 32}};
+    p.volume = [](const Values& v) {
+        const double T = v.at("T"), a = v.at("a"), b = v.at("b"), hb = v.at("hb");
+        return 40 * 20 * T + T * 20 * (40 - T) + (v.at("Lr") - T) * (v.at("Hr") - T) / 2 * v.at("t") +
+               hb / 3 * (a * a + b * b + a * b) - kPi * 2.5 * 2.5 * 10;
+    };
+    p.build = [](PartDocument& doc) {
+        add(doc, {"Box", "Base", "", {{"length", "40"}, {"width", "20"}, {"height", "T"}}, {}, {}, false});
+        add(doc, {"Box", "Wall", "", {{"length", "T"}, {"width", "20"}, {"height", "40"}}, {}, {}, false});
+        SketchBuilder line;
+        line.line(line.point("T", "Hr", true), line.point("Lr", "T", true));
+        FeatureSpec rs = sketchSpec("RibLine", "XZ", line.build());
+        rs.options["contour"] = "open";
+        rs.parameters = {{"offset", "-10"}};
+        add(doc, rs);
+        add(doc, {"Rib", "Rib", "", {{"thickness", "t"}}, {}, {}, false, {{"sketch", "RibLine"}}});
+        SketchBuilder s1, s2;
+        s1.fixedPolygon({{"bx - a/2", "10 - a/2"}, {"bx + a/2", "10 - a/2"}, {"bx + a/2", "10 + a/2"}, {"bx - a/2", "10 + a/2"}});
+        s2.fixedPolygon({{"bx - b/2", "10 - b/2"}, {"bx + b/2", "10 - b/2"}, {"bx + b/2", "10 + b/2"}, {"bx - b/2", "10 + b/2"}});
+        FeatureSpec f1 = sketchSpec("FootBottom", "XY", s1.build());
+        f1.parameters = {{"offset", "T"}};
+        FeatureSpec f2 = sketchSpec("FootTop", "XY", s2.build());
+        f2.parameters = {{"offset", "T + hb"}};
+        add(doc, f1);
+        add(doc, f2);
+        add(doc, {"Loft", "Boss", "", {}, {}, {{"surface", "ruled"}}, false, {{"section1", "FootBottom"}, {"section2", "FootTop"}}});
+        NamedShape s = built(doc);
+        add(doc, {"ThreadedHole", "Tap", "", {{"nominal", "6"}, {"threadLength", "8"}, {"drillDepth", "10"},
+                                              {"x", "bx"}, {"y", "10"}, {"z", "T + hb"}},
+                  {{"face", {refTo(s, planarFace(s.shape(), gp::DZ(), 13))}}}, {{"drillPoint", "false"}}, false});
+    };
+    p.scenarios = {{"longer rib", {{"Lr", 26}}},  {"taller rib", {{"Hr", 30}}},  {"thicker rib", {{"t", 3}}},
+                   {"wider boss", {{"a", 12}}},   {"taller boss", {{"hb", 12}}}, {"boss moved", {{"bx", 30}}},
+                   {"thicker walls", {{"T", 6}}}, {"all rib", {{"Lr", 20}, {"Hr", 22}, {"t", 2.5}}}};
+    return p;
+}
+
 std::vector<ReferencePart> allParts() {
     return {bracket(), shaft(), flange(), cover(), housing(), counterboredPlate(),
-            pulley(), bushing(), support(), gridPlate(), draftedBoss()};
+            pulley(), bushing(), support(), gridPlate(), draftedBoss(), sweptGrip(), ribbedBracket()};
 }
 
 // ------------------------------------------------------------------ checks
 
 const std::set<std::string> kWatched{"Fillet", "Chamfer", "Hole", "LinearPattern", "CircularPattern",
-                                     "Mirror", "Shell", "Draft", "Sketch", "DatumPlane"};
+                                     "Mirror", "Shell", "Draft", "Sketch", "DatumPlane",
+                                     "ThreadedHole", "Sweep", "Loft", "Rib"};
 
 struct Tally {
     int total = 0;

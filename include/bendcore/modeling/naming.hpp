@@ -74,12 +74,19 @@ enum class NameOrigin {
 const char* toString(NameOrigin origin) noexcept;
 std::optional<NameOrigin> nameOriginFromString(std::string_view text) noexcept;
 
+// Attributes of an element (key -> value), e.g. the cosmetic thread of a hole wall
+// ("thread.designation", "thread.pitch", ...; features.hpp threadAttributes). They pass to the
+// images of the element that keep its identity (unchanged, modified, split), not to elements
+// generated from it.
+using ElementAttributes = std::vector<std::pair<std::string, std::string>>;
+
 struct ElementRecord {
     std::string name;
     NameOrigin origin = NameOrigin::Derived;
     std::string feature;               // feature whose result first carried this name
     std::vector<std::string> aliases;  // other names that reached this element through history
     GeometricSignature signature;
+    ElementAttributes attributes;
 };
 
 // Input element that disappeared without a same-kind image.
@@ -100,9 +107,12 @@ public:
 
     // Rebuilds a NamedShape from stored records (BRep cache). Fails when the record count
     // of a kind differs from the number of sub-shapes of that kind.
+    // bodyNames: names of the solids in TopExp::MapShapes order; empty — "Body<i>" (1-based).
+    // Fails when a non-empty list does not match the number of solids.
     static Result<NamedShape> fromRecords(TopoDS_Shape shape,
                                           std::array<std::vector<ElementRecord>, 3> records,
-                                          std::map<std::string, DeletionRecord> deletions);
+                                          std::map<std::string, DeletionRecord> deletions,
+                                          std::vector<std::string> bodyNames = {});
 
     bool isNull() const noexcept { return shape_.IsNull(); }
     const TopoDS_Shape& shape() const noexcept { return shape_; }
@@ -119,6 +129,18 @@ public:
 
     const std::map<std::string, DeletionRecord>& deletions() const noexcept { return deletions_; }
 
+    // Bodies (solids, TopExp::MapShapes order) of a multibody part and their names. A body keeps
+    // the name of the input body it descends from (same solid, Modified solid or faces passed on
+    // through history); a new body is named after the feature that created it ("<feature>",
+    // several: "<feature>;B<i>" in geometric order); pieces of a split body: "<name>;S<i>".
+    std::size_t bodyCount() const noexcept { return bodyNames_.size(); }
+    const TopoDS_Shape& body(std::size_t index) const;
+    const std::string& bodyName(std::size_t index) const { return bodyNames_.at(index); }
+    const std::vector<std::string>& bodyNames() const noexcept { return bodyNames_; }
+    std::optional<std::size_t> findBody(std::string_view name) const;
+    // Body that contains a face, edge or vertex of the shape (the first one for shared elements).
+    std::optional<std::size_t> bodyOf(const TopoDS_Shape& element) const;
+
     // Bounding-box diagonal (mm), normalisation for signatureDistance; 1 for empty shapes.
     double scale() const noexcept { return scale_; }
 
@@ -132,6 +154,8 @@ private:
     std::array<std::vector<ElementRecord>, 3> records_;
     std::array<std::unordered_map<std::string, std::size_t>, 3> byName_;
     std::map<std::string, DeletionRecord> deletions_;
+    kernel::ShapeIndexMap solids_;
+    std::vector<std::string> bodyNames_;
     double scale_ = 1.0;
 };
 
@@ -139,6 +163,7 @@ private:
 struct ElementRole {
     TopoDS_Shape element;
     std::string role;
+    ElementAttributes attributes;  // attributes of the named element (thread of a hole wall)
 };
 
 struct NamingRequest {
@@ -147,6 +172,7 @@ struct NamingRequest {
     // History from the elements of `inputs` and `roles` to the elements of `result`;
     // may be null when the result contains no input element (primitive without input).
     opencascade::handle<BRepTools_History> history;
+    // inputs[0] is the body the feature worked on: body names are inherited from it only.
     std::vector<const NamedShape*> inputs;
     std::vector<ElementRole> roles;
 };

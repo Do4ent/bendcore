@@ -19,6 +19,8 @@
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <TopoDS_Wire.hxx>
+#include <TopoDS_Compound.hxx>
+#include <BRep_Builder.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -33,8 +35,35 @@ const char* toString(FeatureMode mode) noexcept {
     switch (mode) {
         case FeatureMode::Boss: return "Boss";
         case FeatureMode::Cut: return "Cut";
+        case FeatureMode::NewBody: return "NewBody";
     }
     return "Unknown";
+}
+
+std::optional<FeatureMode> featureModeFromString(const std::string& text) noexcept {
+    if (text == "Boss" || text == "boss") return FeatureMode::Boss;
+    if (text == "Cut" || text == "cut") return FeatureMode::Cut;
+    if (text == "NewBody" || text == "newBody") return FeatureMode::NewBody;
+    return std::nullopt;
+}
+
+std::vector<TopoDS_Shape> solidsOf(const TopoDS_Shape& shape) {
+    std::vector<TopoDS_Shape> out;
+    if (shape.IsNull()) return out;
+    NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> m;
+    TopExp::MapShapes(shape, TopAbs_SOLID, m);
+    for (int i = 1; i <= m.Extent(); ++i) out.push_back(m(i));
+    return out;
+}
+
+TopoDS_Shape makeCompound(const std::vector<TopoDS_Shape>& shapes) {
+    if (shapes.size() == 1) return shapes.front();
+    TopoDS_Compound c;
+    BRep_Builder b;
+    b.MakeCompound(c);
+    for (const auto& s : shapes)
+        if (!s.IsNull()) b.Add(c, s);
+    return c;
 }
 
 const char* toString(ExtentType type) noexcept {
@@ -120,6 +149,7 @@ void rememberFacts(const TopoDS_Shape& shape, const ShapeFacts& facts) {
         merged.valid = merged.valid || it->second.valid;
         merged.booleanReady = merged.booleanReady || it->second.booleanReady;
         if (!merged.volume) merged.volume = it->second.volume;
+        if (!merged.mass) merged.mass = it->second.mass;
         c.entries.erase(it);
         break;
     }
@@ -327,11 +357,28 @@ Result<BooleanStep> booleanWithHistory(kernel::BooleanType type, const std::vect
     }
     kernel::BooleanOptions options;
     options.checkInputs = false;
+    // Объём и площадь входов, уже известные по кэшу фактов (результат предыдущей булевой
+    // операции, BooleanResult::mass), ядро не пересчитывает.
+    auto knownMass = [](const std::vector<TopoDS_Shape>& shapes) {
+        std::vector<std::optional<kernel::BooleanInputMass>> out;
+        bool any = false;
+        for (const auto& s : shapes) {
+            auto f = knownFacts(s);
+            out.push_back(f ? f->mass : std::nullopt);
+            any = any || out.back().has_value();
+        }
+        if (!any) out.clear();
+        return out;
+    };
+    options.argumentMass = knownMass(arguments);
+    options.toolMass = knownMass(tools);
     auto res = kernel::booleanOp(type, arguments, tools, options);
     if (!res) return res.error();
     // kernel::booleanOp принимает результат только после BRepCheck_Analyzer и вычисляет его объём.
-    if (TopExp_Explorer(res.value().shape, TopAbs_SOLID).More())
-        rememberFacts(res.value().shape, ShapeFacts{true, res.value().fuzzyValue == 0.0, res.value().volume});
+    if (TopExp_Explorer(res.value().shape, TopAbs_SOLID).More()) {
+        ShapeFacts facts{true, res.value().fuzzyValue == 0.0, res.value().volume, res.value().mass};
+        rememberFacts(res.value().shape, facts);
+    }
     BooleanStep step;
     step.shape = res.value().shape;
     step.warnings = res.value().warnings;
@@ -425,6 +472,133 @@ void addCopyGenerations(History& history, const std::vector<std::pair<TopoDS_Sha
     }
 }
 
+std::vector<TopoDS_Shape> bodiesNear(const std::vector<TopoDS_Shape>& bodies, const TopoDS_Shape& tool,
+                                     double tolerance) {
+    Bnd_Box toolBox;
+    BRepBndLib::Add(tool, toolBox);
+    toolBox.Enlarge(tolerance);
+    std::vector<TopoDS_Shape> out;
+    for (const auto& b : bodies) {
+        Bnd_Box box;
+        BRepBndLib::Add(b, box);
+        if (!box.IsOut(toolBox)) out.push_back(b);
+    }
+    return out;
+}
+
+History combineHistories(const std::vector<TopoDS_Shape>& inputs, const std::vector<History>& steps,
+                         const TopoDS_Shape& result) {
+    History h = newHistory();
+    ShapeMap resMap;
+    TopExp::MapShapes(result, resMap);
+    ShapeMap all;
+    for (const auto& s : inputs) TopExp::MapShapes(s, all);
+    for (int i = 1; i <= all.Extent(); ++i) {
+        const TopoDS_Shape& s = all(i);
+        if (!BRepTools_History::IsSupportedType(s)) continue;
+        ShapeMap modified, generated;
+        bool removed = false;
+        for (const History& st : steps) {
+            if (st.IsNull()) continue;
+            for (const TopoDS_Shape& m : st->Modified(s))
+                if (resMap.Contains(m)) modified.Add(m);
+            for (const TopoDS_Shape& g : st->Generated(s))
+                if (resMap.Contains(g)) generated.Add(g);
+            removed = removed || st->IsRemoved(s);
+        }
+        for (int k = 1; k <= modified.Extent(); ++k) h->AddModified(s, modified(k));
+        for (int k = 1; k <= generated.Extent(); ++k) h->AddGenerated(s, generated(k));
+        if (modified.IsEmpty() && !resMap.Contains(s) && removed) h->Remove(s);
+    }
+    return h;
+}
+
+namespace {
+
+// Новое тело: составное из тел цели и тел инструмента; элементы цели не меняются.
+Result<FeatureResult> addNewBody(const TopoDS_Shape& target, FeatureResult out) {
+    std::vector<TopoDS_Shape> parts = solidsOf(target);
+    const std::vector<TopoDS_Shape> toolSolids = solidsOf(out.tool);
+    parts.insert(parts.end(), toolSolids.begin(), toolSolids.end());
+    TopoDS_Compound c;
+    BRep_Builder b;
+    b.MakeCompound(c);
+    for (const auto& s : parts) b.Add(c, s);
+    out.shape = c;
+    // Тела не взаимодействуют: объём — сумма, валидность — валидность частей.
+    rememberFacts(out.shape, ShapeFacts{true, false, volumeOf(target) + volumeOf(out.tool), std::nullopt});
+    if (std::string p = checkSolidResult(out.shape); !p.empty()) return Error{ErrorCode::OperationFailed, p};
+    return out;
+}
+
+// Многотельная цель: инструмент применяется только к телам, габарит которых он задевает;
+// Boss объединяет инструмент со всеми задетыми телами одной операцией, Cut вычитает его из
+// каждого задетого тела отдельно (тела не сливаются друг с другом). Прочие тела переходят без
+// изменений.
+Result<FeatureResult> applyToBodies(FeatureMode mode, const TopoDS_Shape& target, FeatureResult out) {
+    const std::vector<TopoDS_Shape> bodies = solidsOf(target);
+    const double tol = 1e-6 * std::max(1.0, boundingDiagonal({target, out.tool}));
+    const std::vector<TopoDS_Shape> near = bodiesNear(bodies, out.tool, tol);
+    std::vector<TopoDS_Shape> kept;
+    for (const auto& b : bodies)
+        if (std::none_of(near.begin(), near.end(), [&](const TopoDS_Shape& n) { return n.IsSame(b); }))
+            kept.push_back(b);
+    std::vector<TopoDS_Shape> parts = kept;
+    std::vector<History> steps;
+    double volume = 0.0;
+    for (const auto& k : kept) volume += volumeOf(k);
+    auto take = [&](BooleanStep& st) {
+        // Тела результата булевой операции с нулевым допуском готовы к следующей (ShapeFacts).
+        for (const auto& s : solidsOf(st.shape)) {
+            parts.push_back(s);
+            rememberFacts(s, ShapeFacts{true, st.fuzzyValue == 0.0, std::nullopt, std::nullopt});
+        }
+        volume += volumeOf(st.shape);
+        steps.push_back(st.history);
+        out.warnings.insert(out.warnings.end(), st.warnings.begin(), st.warnings.end());
+    };
+    if (mode == FeatureMode::Boss) {
+        if (near.empty()) {
+            for (const auto& s : solidsOf(out.tool)) parts.push_back(s);
+            volume += volumeOf(out.tool);
+            out.warnings.push_back("tool touches no body of the part: it forms a separate solid");
+        } else {
+            auto step = booleanWithHistory(kernel::BooleanType::Fuse, near, {out.tool}, true, true);
+            if (!step) return step.error();
+            take(step.value());
+        }
+    } else {
+        if (near.empty()) return Error{ErrorCode::OperationFailed, "cut tool does not intersect the target body"};
+        double before = 0.0, after = 0.0;
+        for (const auto& b : near) {
+            auto step = booleanWithHistory(kernel::BooleanType::Cut, {b}, {out.tool}, true, true);
+            if (!step) return step.error();
+            before += volumeOf(b);
+            after += volumeOf(step.value().shape);
+            take(step.value());
+        }
+        if (std::abs(before - after) <= 1e-9 * std::max(1.0, before))
+            return Error{ErrorCode::OperationFailed, "cut tool does not intersect the target body"};
+    }
+    if (parts.empty()) return Error{ErrorCode::OperationFailed, "cut removes every body of the part"};
+    TopoDS_Compound c;
+    BRep_Builder b;
+    b.MakeCompound(c);
+    for (const auto& s : parts) b.Add(c, s);
+    out.shape = c;
+    rememberFacts(out.shape, ShapeFacts{true, false, volume, std::nullopt});
+    if (std::string p = checkSolidResult(out.shape); !p.empty()) return Error{ErrorCode::OperationFailed, p};
+    std::vector<TopoDS_Shape> inputs = near;
+    inputs.push_back(out.tool);
+    mergeInto(out.history, combineHistories(inputs, steps, out.shape));
+    const int solids = countSolids(out.shape), before = static_cast<int>(bodies.size());
+    if (mode == FeatureMode::Cut && solids > before)
+        out.warnings.push_back("cut splits a body: the part has " + std::to_string(solids) + " solids");
+    return out;
+}
+
+}  // namespace
+
 Result<FeatureResult> applyTool(FeatureMode mode, const TopoDS_Shape& target, const TopoDS_Shape& tool,
                                 const History& toolHistory, std::vector<std::string> warnings) {
     if (std::string p = checkSolidResult(tool); !p.empty())
@@ -439,6 +613,8 @@ Result<FeatureResult> applyTool(FeatureMode mode, const TopoDS_Shape& target, co
         return out;
     }
     if (std::string p = checkSolidInput(target, "target body"); !p.empty()) return Error{ErrorCode::InvalidInput, p};
+    if (mode == FeatureMode::NewBody) return addNewBody(target, std::move(out));
+    if (countSolids(target) > 1) return applyToBodies(mode, target, std::move(out));
     const kernel::BooleanType type = mode == FeatureMode::Boss ? kernel::BooleanType::Fuse : kernel::BooleanType::Cut;
     auto step = booleanWithHistory(type, {target}, {tool}, true, true);
     if (!step) return step.error();

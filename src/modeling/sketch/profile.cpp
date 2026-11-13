@@ -567,4 +567,91 @@ Result<TopoDS_Shape> SketchProfile::makeMaterialFaces() const {
     return makeFaces(materialRegions());
 }
 
+Result<SketchPath> buildSketchPath(const SketchPlacement& placement, const std::vector<SketchCurve>& curves,
+                                   const ProfileOptions& options) {
+    using R = Result<SketchPath>;
+    if (!(options.tolerance > 0.0)) return R::failure(ErrorCode::InvalidInput, "profile tolerance must be positive");
+    try {
+        Analysis analysis = analyse(curves, options);
+        std::vector<ProfileIssue> blocking;
+        for (const auto& issue : analysis.issues)
+            if (issue.kind != ProfileIssueKind::OpenContour) blocking.push_back(issue);
+        if (!blocking.empty()) return R::failure(ErrorCode::InvalidInput, issuesText(blocking));
+        if (analysis.curves.empty()) return R::failure(ErrorCode::InvalidInput, "the sketch has no path curves");
+        const gp_Pln plane = placement.plane();
+        BRep_Builder builder;
+        std::vector<TopoDS_Vertex> vertices(analysis.nodes.size());
+        for (std::size_t n = 0; n < analysis.nodes.size(); ++n) {
+            const double vertexTol = std::max(Precision::Confusion(), 1.01 * analysis.nodes[n].spread);
+            builder.MakeVertex(vertices[n], placement.toWorld(toPoint2(analysis.nodes[n].point)), vertexTol);
+        }
+        std::vector<TopoDS_Edge> edges(analysis.curves.size());
+        for (std::size_t i = 0; i < analysis.curves.size(); ++i) {
+            const Prepared& p = analysis.curves[i];
+            const occ::handle<Geom_Curve> c3d = GeomAPI::To3d(p.segment.basis, plane);
+            BRepBuilderAPI_MakeEdge make =
+                p.segment.closed
+                    ? BRepBuilderAPI_MakeEdge(c3d, p.segment.first, p.segment.last)
+                    : BRepBuilderAPI_MakeEdge(c3d, vertices[static_cast<std::size_t>(p.node[0])],
+                                              vertices[static_cast<std::size_t>(p.node[1])], p.segment.first,
+                                              p.segment.last);
+            if (!make.IsDone()) {
+                return R::failure(ErrorCode::OperationFailed,
+                                  "cannot make an edge for sketch entity " + std::to_string(p.id));
+            }
+            edges[i] = make.Edge();
+        }
+        // Start: a free end (node with one incidence) of the smallest entity, else the smallest entity.
+        std::size_t start = 0;
+        int startEnd = 0;
+        bool foundFree = false;
+        for (std::size_t i = 0; i < analysis.curves.size(); ++i) {
+            const Prepared& p = analysis.curves[i];
+            if (p.segment.closed) continue;
+            for (int e = 0; e < 2; ++e) {
+                const Node& node = analysis.nodes[static_cast<std::size_t>(p.node[e])];
+                if (node.incidences.size() != 1) continue;
+                if (!foundFree || p.id < analysis.curves[start].id) {
+                    start = i;
+                    startEnd = e;
+                    foundFree = true;
+                }
+            }
+        }
+        if (!foundFree) {
+            for (std::size_t i = 1; i < analysis.curves.size(); ++i)
+                if (analysis.curves[i].id < analysis.curves[start].id) start = i;
+        }
+        SketchPath path;
+        BRepBuilderAPI_MakeWire wire;
+        std::vector<bool> used(analysis.curves.size(), false);
+        std::size_t current = start;
+        bool forward = startEnd == 0;
+        while (true) {
+            used[current] = true;
+            const Prepared& p = analysis.curves[current];
+            const TopoDS_Edge e = forward ? edges[current] : TopoDS::Edge(edges[current].Reversed());
+            wire.Add(e);
+            path.edges.push_back(e);
+            path.entities.push_back(p.id);
+            if (p.segment.closed) break;
+            const Node& node = analysis.nodes[static_cast<std::size_t>(p.node[forward ? 1 : 0])];
+            std::optional<Incidence> next;
+            for (const Incidence& inc : node.incidences)
+                if (!(inc.curve == current && inc.end == (forward ? 1 : 0))) next = inc;
+            if (!next || used[next->curve]) break;
+            current = next->curve;
+            forward = next->end == 0;
+        }
+        if (std::find(used.begin(), used.end(), false) != used.end())
+            return R::failure(ErrorCode::InvalidInput, "the sketch path consists of several separate chains");
+        if (!wire.IsDone()) return R::failure(ErrorCode::OperationFailed, "cannot join the sketch path into a wire");
+        path.wire = wire.Wire();
+        path.closed = !foundFree;
+        return path;
+    } catch (const Standard_Failure& failure) {
+        return R::failure(ErrorCode::OperationFailed, "sketch path: " + detail::failureText(failure));
+    }
+}
+
 }  // namespace bendcore::modeling

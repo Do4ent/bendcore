@@ -635,6 +635,50 @@ NamedShape PartDocument::finalShape() const {
     return NamedShape{};
 }
 
+std::vector<BodyInfo> PartDocument::bodies() const {
+    const NamedShape s = finalShape();
+    std::vector<BodyInfo> out;
+    for (std::size_t i = 0; i < s.bodyCount(); ++i) {
+        BodyInfo b;
+        b.name = s.bodyName(i);
+        b.volume = fc::volumeOf(s.body(i));
+        for (TopExp_Explorer ex(s.body(i), TopAbs_FACE); ex.More(); ex.Next()) ++b.faces;
+        out.push_back(std::move(b));
+    }
+    return out;
+}
+
+std::vector<ThreadInfo> threadsOf(const NamedShape& shape) {
+    std::vector<ThreadInfo> out;
+    for (std::size_t i = 0; i < shape.count(ElementKind::Face); ++i) {
+        const ElementRecord& r = shape.record(ElementKind::Face, i);
+        if (std::none_of(r.attributes.begin(), r.attributes.end(),
+                         [](const auto& kv) { return kv.first.rfind("thread.", 0) == 0; }))
+            continue;
+        auto spec = threadFromAttributes(r.attributes);
+        if (!spec) continue;
+        ThreadInfo t;
+        t.face = i;
+        t.name = r.name;
+        if (auto b = shape.bodyOf(shape.element(ElementKind::Face, i))) t.body = shape.bodyName(*b);
+        t.thread = std::move(spec).value();
+        out.push_back(std::move(t));
+    }
+    return out;
+}
+
+Result<TopoReference> makeBodyReference(const NamedShape& shape, std::string_view bodyName) {
+    auto b = shape.findBody(bodyName);
+    if (!b) return Result<TopoReference>::failure(ErrorCode::InvalidInput, "no body named '" + std::string(bodyName) + "'");
+    std::optional<std::size_t> best;
+    for (TopExp_Explorer ex(shape.body(*b), TopAbs_FACE); ex.More(); ex.Next()) {
+        auto i = shape.indexOf(ElementKind::Face, ex.Current());
+        if (i && (!best || shape.record(ElementKind::Face, *i).name < shape.record(ElementKind::Face, *best).name)) best = i;
+    }
+    if (!best) return Result<TopoReference>::failure(ErrorCode::InvalidInput, "body '" + std::string(bodyName) + "' has no faces");
+    return makeReference(shape, shape.element(ElementKind::Face, *best));
+}
+
 // ---------------------------------------------------------------- tool naming
 
 Result<NamedShape> nameTool(const std::string& featureId, const TopoDS_Shape& tool) {

@@ -206,6 +206,28 @@ struct FeatureInfo {
     TopoDS_Shape tool;
 };
 
+// Body of a multibody part (NamedShape::bodyNames).
+struct BodyInfo {
+    std::string name;
+    double volume = 0.0;      // mm^3
+    std::size_t faces = 0;
+};
+
+// Face with a cosmetic thread (attributes "thread.*" in the element map).
+struct ThreadInfo {
+    std::size_t face = 0;      // face index in the NamedShape
+    std::string name;          // element name of the face
+    std::string body;          // name of the body that holds it
+    ThreadSpec thread;
+};
+
+// Cosmetic threads of a shape: every face whose record carries thread attributes.
+std::vector<ThreadInfo> threadsOf(const NamedShape& shape);
+
+// Reference to a body: a face reference to the face of the body with the smallest element name
+// (body nodes take any face of a body). Error: no body with this name.
+Result<TopoReference> makeBodyReference(const NamedShape& shape, std::string_view bodyName);
+
 struct RebuildReport {
     std::vector<std::string> recomputed;  // executed in this rebuild
     std::vector<std::string> reused;      // inputs unchanged, previous result kept
@@ -284,6 +306,8 @@ public:
     Result<NamedShape> inputOf(const std::string& id) const;
     // Last valid shape of the active part of the tree.
     NamedShape finalShape() const;
+    // Bodies of the final shape (multibody part): name, volume, number of faces.
+    std::vector<BodyInfo> bodies() const;
 
     // ---- persistence (format "bendcore-part", version kFormatVersion)
     static constexpr int kFormatVersion = 3;

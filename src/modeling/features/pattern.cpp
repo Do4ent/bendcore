@@ -33,6 +33,18 @@ Result<FeatureResult> applyCopies(const TopoDS_Shape& target, const TopoDS_Shape
             bb.Add(compound, c.value().shape);
             pairs.insert(pairs.end(), c.value().pairs.begin(), c.value().pairs.end());
         }
+        if (mode == FeatureMode::NewBody || countSolids(target) > 1) {
+            // Копии — новые тела или многотельная цель: applyTool (тела не сливаются между собой).
+            auto applied = applyTool(mode, target, compound, History(), {});
+            if (!applied) {
+                if (mode == FeatureMode::Cut && applied.error().message.find("does not intersect") != std::string::npos)
+                    return Error{ErrorCode::OperationFailed, "pattern instances do not intersect the target body"};
+                return applied.error();
+            }
+            FeatureResult out = std::move(applied).value();
+            addCopyGenerations(out.history, pairs, out.shape, out.history);
+            return out;
+        }
         const kernel::BooleanType type = mode == FeatureMode::Boss ? kernel::BooleanType::Fuse : kernel::BooleanType::Cut;
         auto step = booleanWithHistory(type, {target}, copies, true, true);
         if (!step) return step.error();

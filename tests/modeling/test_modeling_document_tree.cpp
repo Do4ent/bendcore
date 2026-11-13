@@ -319,7 +319,7 @@ TEST(ModelingDocumentTree, ReplacedBaseFeatureResolvesBySignatureWithWarning) {
 
 TEST(ModelingDocumentTree, EditingErrors) {
     PartDocument doc(partRegistry());
-    EXPECT_EQ(doc.addFeature({"Sweep", "", "", {}, {}, {}, false}).error().code, ErrorCode::Unsupported);
+    EXPECT_EQ(doc.addFeature({"Helix", "", "", {}, {}, {}, false}).error().code, ErrorCode::Unsupported);
     EXPECT_FALSE(doc.addFeature({"Box", "", "", {{"depth", "1"}}, {}, {}, false}).ok());
     EXPECT_FALSE(doc.addFeature({"Extrude", "", "", {}, {}, {{"extent", "hexagon"}}, false}).ok());
     std::string id = add(doc, {"Box", "", "", {}, {}, {}, false});

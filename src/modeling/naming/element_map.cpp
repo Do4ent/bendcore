@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <map>
 #include <set>
 #include <stdexcept>
 
@@ -70,6 +71,7 @@ struct Candidate {
     NameOrigin origin = NameOrigin::Modified;
     std::string feature;
     std::vector<std::string> inherited;
+    const ElementAttributes* attributes = nullptr;  // passed on (not for generated names)
 };
 
 struct Source {
@@ -79,6 +81,7 @@ struct Source {
     std::string feature;
     NameOrigin origin;
     std::vector<std::string> aliases;
+    const ElementAttributes* attributes = nullptr;
 };
 
 std::string joinSorted(std::set<std::string> parts) {
@@ -163,6 +166,8 @@ void NamedShape::indexShape() {
         maps_[ki(kind)].Clear();
         if (!shape_.IsNull()) TopExp::MapShapes(shape_, topAbs(kind), maps_[ki(kind)]);
     }
+    solids_.Clear();
+    if (!shape_.IsNull()) TopExp::MapShapes(shape_, TopAbs_SOLID, solids_);
     scale_ = 1.0;
     if (!shape_.IsNull()) {
         Bnd_Box box;
@@ -185,7 +190,8 @@ void NamedShape::rebuildNameIndex() {
 
 Result<NamedShape> NamedShape::fromRecords(TopoDS_Shape shape,
                                            std::array<std::vector<ElementRecord>, 3> records,
-                                           std::map<std::string, DeletionRecord> deletions) {
+                                           std::map<std::string, DeletionRecord> deletions,
+                                           std::vector<std::string> bodyNames) {
     NamedShape out;
     out.shape_ = std::move(shape);
     try {
@@ -202,10 +208,40 @@ Result<NamedShape> NamedShape::fromRecords(TopoDS_Shape shape,
                     toString(kind) + " records, the shape has " + std::to_string(n));
         }
     }
+    const std::size_t solids = static_cast<std::size_t>(out.solids_.Extent());
+    if (bodyNames.empty()) {
+        for (std::size_t i = 0; i < solids; ++i) bodyNames.push_back("Body" + std::to_string(i + 1));
+    } else if (bodyNames.size() != solids) {
+        return Result<NamedShape>::failure(ErrorCode::InvalidInput,
+                                           "element map has " + std::to_string(bodyNames.size()) +
+                                               " body names, the shape has " + std::to_string(solids) + " solids");
+    }
     out.records_ = std::move(records);
     out.deletions_ = std::move(deletions);
+    out.bodyNames_ = std::move(bodyNames);
     out.rebuildNameIndex();
     return out;
+}
+
+const TopoDS_Shape& NamedShape::body(std::size_t index) const {
+    if (index >= bodyNames_.size()) throw std::out_of_range("NamedShape::body: index out of range");
+    return solids_.FindKey(static_cast<int>(index) + 1);
+}
+
+std::optional<std::size_t> NamedShape::findBody(std::string_view name) const {
+    for (std::size_t i = 0; i < bodyNames_.size(); ++i)
+        if (bodyNames_[i] == name) return i;
+    return std::nullopt;
+}
+
+std::optional<std::size_t> NamedShape::bodyOf(const TopoDS_Shape& element) const {
+    if (element.IsNull()) return std::nullopt;
+    for (int i = 1; i <= solids_.Extent(); ++i) {
+        kernel::ShapeIndexMap m;
+        TopExp::MapShapes(solids_(i), element.ShapeType(), m);
+        if (m.Contains(element)) return static_cast<std::size_t>(i - 1);
+    }
+    return std::nullopt;
 }
 
 std::size_t NamedShape::count(ElementKind kind) const noexcept { return records_[ki(kind)].size(); }
@@ -237,6 +273,112 @@ std::optional<std::size_t> NamedShape::find(ElementKind kind, std::string_view n
 }
 
 // ---------------------------------------------------------------- building
+
+namespace {
+
+// Body names (NamedShape::bodyNames): inherited from the bodies of inputs[0] through the same
+// solid, its Modified images or the images of its faces; new solids are named after the feature.
+void nameBodies(const NamingRequest& request, const kernel::ShapeIndexMap& solids, std::vector<std::string>& names) {
+    const std::size_t n = static_cast<std::size_t>(solids.Extent());
+    names.assign(n, std::string());
+    if (n == 0) return;
+    std::vector<std::map<std::string, int>> votes(n);
+    const NamedShape* input = request.inputs.empty() ? nullptr : request.inputs.front();
+    const auto& history = request.history;
+    auto solidIndex = [&](const TopoDS_Shape& s) -> std::optional<std::size_t> {
+        const int i = solids.FindIndex(s);
+        if (i <= 0) return std::nullopt;
+        return static_cast<std::size_t>(i - 1);
+    };
+    if (input && input->bodyCount() > 0) {
+        NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher> faceSolids;
+        bool faceMapBuilt = false;
+        constexpr int kSolidVote = 1 << 20;
+        for (std::size_t b = 0; b < input->bodyCount(); ++b) {
+            const TopoDS_Shape& s = input->body(b);
+            const std::string& name = input->bodyName(b);
+            bool direct = false;
+            if (auto i = solidIndex(s)) {
+                votes[*i][name] += kSolidVote;
+                direct = true;
+            }
+            if (!history.IsNull()) {
+                for (const TopoDS_Shape& m : history->Modified(s))
+                    if (auto i = solidIndex(m)) {
+                        votes[*i][name] += kSolidVote;
+                        direct = true;
+                    }
+            }
+            // One body in, one solid out: the solid itself (or its image) decides.
+            if (direct && n == 1 && input->bodyCount() == 1) continue;
+            // Faces of the input body and their images vote for the result solids that hold them.
+            if (!faceMapBuilt) {
+                for (int i = 1; i <= solids.Extent(); ++i) {
+                    for (TopExp_Explorer ex(solids(i), TopAbs_FACE); ex.More(); ex.Next()) {
+                        const int k = faceSolids.FindIndex(ex.Current());
+                        if (k == 0) {
+                            NCollection_List<TopoDS_Shape> l;
+                            l.Append(solids(i));
+                            faceSolids.Add(ex.Current(), l);
+                        } else {
+                            faceSolids.ChangeFromIndex(k).Append(solids(i));
+                        }
+                    }
+                }
+                faceMapBuilt = true;
+            }
+            auto vote = [&](const TopoDS_Shape& f) {
+                const int k = faceSolids.FindIndex(f);
+                if (k == 0) return;
+                for (NCollection_List<TopoDS_Shape>::Iterator it(faceSolids.FindFromIndex(k)); it.More(); it.Next())
+                    if (auto i = solidIndex(it.Value())) ++votes[*i][name];
+            };
+            for (TopExp_Explorer ex(s, TopAbs_FACE); ex.More(); ex.Next()) {
+                vote(ex.Current());
+                if (!history.IsNull())
+                    for (const TopoDS_Shape& m : history->Modified(ex.Current())) vote(m);
+            }
+        }
+    }
+    std::vector<std::array<double, 3>> centers(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        Bnd_Box box;
+        BRepBndLib::Add(solids(static_cast<int>(i) + 1), box);
+        double x0 = 0, y0 = 0, z0 = 0, x1 = 0, y1 = 0, z1 = 0;
+        if (!box.IsVoid()) box.Get(x0, y0, z0, x1, y1, z1);
+        centers[i] = {(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2};
+    }
+    auto geometric = [&](std::size_t a, std::size_t b) {
+        for (int k = 0; k < 3; ++k)
+            if (std::abs(centers[a][k] - centers[b][k]) > 1e-7) return centers[a][k] < centers[b][k];
+        return a < b;
+    };
+    // Primary: the smallest inherited name (stable when bodies merge); its weight orders the
+    // pieces of a split body (the piece with most of the body's faces keeps the name).
+    std::map<std::string, std::vector<std::pair<int, std::size_t>>> byName;
+    std::vector<std::size_t> fresh;
+    for (std::size_t i = 0; i < n; ++i) {
+        if (votes[i].empty()) {
+            fresh.push_back(i);
+            continue;
+        }
+        const auto& best = *votes[i].begin();
+        byName[best.first].emplace_back(best.second, i);
+    }
+    for (auto& [name, members] : byName) {
+        std::sort(members.begin(), members.end(), [&](const auto& a, const auto& b) {
+            return a.first != b.first ? a.first > b.first : geometric(a.second, b.second);
+        });
+        for (std::size_t k = 0; k < members.size(); ++k)
+            names[members[k].second] = k == 0 ? name : name + ";S" + std::to_string(k + 1);
+    }
+    std::sort(fresh.begin(), fresh.end(), geometric);
+    for (std::size_t k = 0; k < fresh.size(); ++k)
+        names[fresh[k]] = fresh.size() == 1 ? request.featureId : request.featureId + ";B" + std::to_string(k + 1);
+}
+
+}  // namespace
+
 
 Result<NamedShape> buildNamedShape(const NamingRequest& request) {
     if (request.result.IsNull()) {
@@ -286,7 +428,8 @@ Result<NamedShape> buildNamedShape(const NamingRequest& request) {
             for (ElementKind kind : kKinds) {
                 for (std::size_t i = 0; i < input->count(kind); ++i) {
                     const ElementRecord& r = input->record(kind, i);
-                    sources.push_back({input->element(kind, i), kind, r.name, r.feature, r.origin, r.aliases});
+                    sources.push_back({input->element(kind, i), kind, r.name, r.feature, r.origin, r.aliases,
+                                       r.attributes.empty() ? nullptr : &r.attributes});
                 }
             }
         }
@@ -296,8 +439,8 @@ Result<NamedShape> buildNamedShape(const NamingRequest& request) {
                 return Result<NamedShape>::failure(ErrorCode::InvalidInput,
                                                    "naming: role '" + role.role + "' is not a face, edge or vertex");
             }
-            sources.push_back({role.element, *kind, request.featureId + ":" + role.role,
-                               request.featureId, NameOrigin::Role, {}});
+            sources.push_back({role.element, *kind, request.featureId + ":" + role.role, request.featureId,
+                               NameOrigin::Role, {}, role.attributes.empty() ? nullptr : &role.attributes});
         }
 
         std::array<std::vector<std::vector<Candidate>>, 3> candidates;
@@ -326,18 +469,19 @@ Result<NamedShape> buildNamedShape(const NamingRequest& request) {
                                               : NameOrigin::Unchanged;
             if (auto i = out.indexOf(src.kind, src.element)) {
                 candidates[ki(src.kind)][*i].push_back(
-                    {src.name, 0, keepOrigin, src.feature, src.aliases});
+                    {src.name, 0, keepOrigin, src.feature, src.aliases, src.attributes});
             }
             if (request.history.IsNull()) continue;
             const auto mods = sortedImages(src.kind, request.history->Modified(src.element));
             if (mods.size() == 1) {
                 candidates[ki(src.kind)][mods[0]].push_back(
                     {src.name, 0, keepOrigin == NameOrigin::Role ? NameOrigin::Role : NameOrigin::Modified,
-                     src.feature, src.aliases});
+                     src.feature, src.aliases, src.attributes});
             } else {
                 for (std::size_t k = 0; k < mods.size(); ++k) {
-                    candidates[ki(src.kind)][mods[k]].push_back(
-                        {src.name + ";S" + std::to_string(k + 1), 1, NameOrigin::Split, request.featureId, {}});
+                    candidates[ki(src.kind)][mods[k]].push_back({src.name + ";S" + std::to_string(k + 1), 1,
+                                                                 NameOrigin::Split, request.featureId, {},
+                                                                 src.attributes});
                 }
             }
             const auto& generated = request.history->Generated(src.element);
@@ -379,6 +523,15 @@ Result<NamedShape> buildNamedShape(const NamingRequest& request) {
                     }
                 }
                 recs[i].aliases.assign(aliases.begin(), aliases.end());
+                // Attributes of every source that keeps its identity here (first value per key).
+                for (const auto& c : cands) {
+                    if (!c.attributes) continue;
+                    for (const auto& kv : *c.attributes) {
+                        auto& attrs = recs[i].attributes;
+                        if (std::none_of(attrs.begin(), attrs.end(), [&](const auto& a) { return a.first == kv.first; }))
+                            attrs.push_back(kv);
+                    }
+                }
                 named[ki(kind)][i] = true;
             }
         }
@@ -485,6 +638,7 @@ Result<NamedShape> buildNamedShape(const NamingRequest& request) {
                 ++it;
             }
         }
+        nameBodies(request, out.solids_, out.bodyNames_);
         return out;
     } catch (const Standard_Failure& failure) {
         return Result<NamedShape>::failure(ErrorCode::OperationFailed,
