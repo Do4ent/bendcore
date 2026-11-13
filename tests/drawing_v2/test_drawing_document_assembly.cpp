@@ -240,3 +240,74 @@ TEST(DrawingDocumentAssembly, AssemblyDrawingWithPositionsAndSpecification) {
     std::printf("[drawing document] assembly: %zu balloons, mass %s kg, specification %d sheet(s)\n", cs.balloons.size(),
                 cs.title.mass.c_str(), kit.value().specificationPages);
 }
+
+// Ручная позиция (BalloonItem) на ребре вала: номер — позиция вала в спецификации, точка выноски
+// на линии ребра, полка в заданной точке; автоматическая позиция вала уступает ручной; позиция
+// сохраняется в файле; после подавления вала она висячая и не мешает обновлению.
+TEST(DrawingDocumentAssembly, ManualPositionFollowsTheSpecification) {
+    Unit u = buildUnit();
+    auto snap = snapshotAssembly(u.doc);
+    ASSERT_TRUE(snap.ok()) << snap.error().message;
+    SpecificationDocument spec;
+    spec.model().kind = ModelKind::Assembly;
+    ASSERT_TRUE(spec.update(snap.value()).ok());
+    const int shaftPosition = *spec.specification()->positionOf(u.shaft);
+
+    DrawingDocument d = assemblyDrawing();
+    views::ViewCache cache(32, 4);
+    ASSERT_TRUE(d.update(snap.value(), cache, spec.specification()).ok());
+    // A visible edge of the shaft in the front view, by the owner table of the snapshot.
+    const ComputedView& front = d.computedSheets()[0].views[0];
+    std::optional<std::uint32_t> edge;
+    for (const auto& e : front.sheetView.view.edges)
+        if (e.visibility == views::Visibility::Visible && e.edgeIndex && snap.value().edgeOwner[*e.edgeIndex] == u.shaft) {
+            edge = *e.edgeIndex;
+            break;
+        }
+    ASSERT_TRUE(edge.has_value());
+    BalloonItem item;
+    item.id = "P1";
+    item.view = "F";
+    item.edge = elementReference(snap.value(), bendcore::modeling::ElementKind::Edge, *edge).value();
+    item.at = Point2{350.0, 250.0};
+    d.sheets()[0].balloons.push_back(item);
+    auto rep = d.update(snap.value(), cache, spec.specification());
+    ASSERT_TRUE(rep.ok()) << rep.error().message;
+    const ComputedSheet& cs = d.computedSheets()[0];
+    ASSERT_EQ(cs.manualBalloons.size(), 1u);
+    ASSERT_TRUE(cs.manualBalloons[0].has_value());
+    EXPECT_EQ(cs.manualBalloons[0]->definition, u.shaft);
+    EXPECT_EQ(cs.manualBalloons[0]->text, std::to_string(shaftPosition));
+    EXPECT_NEAR(cs.manualBalloons[0]->at.x, 350.0, 1e-12);
+    EXPECT_NEAR(cs.manualBalloons[0]->at.y, 250.0, 1e-12);
+    // The leader point is on the sheet image of the front view.
+    const auto vb = front.sheetView.sheetBounds();
+    EXPECT_GE(cs.manualBalloons[0]->target.x, vb.minX - 1e-6);
+    EXPECT_LE(cs.manualBalloons[0]->target.x, vb.maxX + 1e-6);
+    EXPECT_GE(cs.manualBalloons[0]->target.y, vb.minY - 1e-6);
+    EXPECT_LE(cs.manualBalloons[0]->target.y, vb.maxY + 1e-6);
+    EXPECT_EQ(cs.balloons.size(), 4u);
+    for (const auto& b : cs.balloons) EXPECT_NE(b.definition, u.shaft);
+    EXPECT_TRUE(rep.value().dangling.empty());
+
+    // Saved and read back.
+    auto text = d.toJson();
+    ASSERT_TRUE(text.ok());
+    auto back = DrawingDocument::fromJson(text.value());
+    ASSERT_TRUE(back.ok()) << back.error().message;
+    ASSERT_EQ(back.value().sheets()[0].balloons.size(), 1u);
+    EXPECT_EQ(back.value().sheets()[0].balloons[0].id, "P1");
+    EXPECT_NEAR(back.value().sheets()[0].balloons[0].at->x, 350.0, 1e-12);
+    EXPECT_EQ(back.value().toJson().value(), text.value());
+
+    // The shaft suppressed: the position is dangling, the others are renumbered automatically.
+    ASSERT_TRUE(u.doc->setOccurrenceSuppressed(u.shaftOcc, true).ok());
+    auto snap2 = snapshotAssembly(u.doc);
+    ASSERT_TRUE(snap2.ok());
+    ASSERT_TRUE(spec.update(snap2.value()).ok());
+    auto rep2 = d.update(snap2.value(), cache, spec.specification());
+    ASSERT_TRUE(rep2.ok()) << rep2.error().message;
+    EXPECT_FALSE(d.computedSheets()[0].manualBalloons[0].has_value());
+    ASSERT_EQ(rep2.value().dangling.size(), 1u);
+    EXPECT_EQ(rep2.value().dangling[0].rfind("S1/P1: ", 0), 0u) << rep2.value().dangling[0];
+}

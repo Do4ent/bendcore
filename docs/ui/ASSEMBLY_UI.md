@@ -23,7 +23,7 @@ BOM, разнесённый вид, библиотеку крепежа и ма�
 | `src/ui/assembly/AssemblyViewport.tsx` | вьюпорт: все вхождения, выбор граней/рёбер, перетаскивание, подсветка |
 | `src/ui/assembly/AssemblyTree.tsx` | дерево: компоненты со степенями свободы, сопряжения с состоянием, массивы |
 | `src/ui/assembly/AssemblyPanels.tsx` | панели: сопряжение, крепёж, пересечения, BOM, разнесённый вид, массив, свойства |
-| `src/ui/assembly/mateRules.ts`, `assemblyMath.ts`, `labels.ts` | допустимые типы сопряжений, плоскость перетаскивания, направление установки крепежа, подписи (Jest: `src/ui/assembly/__tests__`) |
+| `src/ui/assembly/mateRules.ts`, `assemblyMath.ts`, `labels.ts` | допустимые типы сопряжений, плоскость перетаскивания, направление установки крепежа, числовые тексты `dofText` (RU/EN); подписи — словарь `src/ui/app/messages/assembly.ts` (Jest: `src/ui/assembly/__tests__`) |
 | `web/assembly/` | webpack-конфигурация страницы, шаблон, конфигурация Playwright |
 | `tests/e2e-assembly/assembly.spec.ts` | сквозной тест Playwright |
 

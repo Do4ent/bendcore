@@ -22,7 +22,7 @@ SolidWorks/КОМПАС: рисование мышью с привязками �
 | `src/ui/modeling/sketch/snap.ts` | привязки |
 | `src/ui/modeling/sketch/drawTools.ts` | инструменты рисования: щелчки → точки, кривые и автоматические ограничения |
 | `src/ui/modeling/sketch/sketchModel.ts` | добавление и удаление с перенумерацией, применимые ограничения, подсветка конфликтов |
-| `src/ui/modeling/sketch/dimensionLayout.ts`, `sketchLabels.ts` | оформление размеров, выбор типа размера по месту текста, подписи |
+| `src/ui/modeling/sketch/dimensionLayout.ts`, `sketchLabels.ts` | оформление размеров, выбор типа размера по месту текста, описание ограничений (`describeConstraint`); подписи инструментов, ограничений, привязок и ошибок построения — словарь `src/ui/app/messages/sketch.ts` (RU/EN) |
 | `tests/wasm/sketch_editor.test.mjs` | node: новые поля API на эталонных эскизах |
 | `src/ui/modeling/sketch/__tests__/sketchEditorLogic.test.ts` | Jest: привязки, инструменты, выбор, удаление, размеры |
 | `tests/e2e-modeling/sketch_editor.spec.ts` | Playwright: сценарий пользователя |
