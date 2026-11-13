@@ -68,9 +68,15 @@ Result<std::vector<ThreadImage>> threadImages(const std::vector<modeling::Thread
 
 // Вывод резьб вида: линии наружного диаметра и дуга — сплошная тонкая (слой THIN), граница
 // резьбы — сплошная основная (VISIBLE); невидимая резьба — штриховые (HIDDEN) (ГОСТ 2.311,
-// пп. 2.3–2.6; ГОСТ 2.303, табл. 1).
+// разд. 2; ГОСТ 2.303, табл. 1). Сплошная тонкая проводится не ближе minThinGap (0,8 мм листа)
+// к основной линии отверстия (thread.drill): при мелком масштабе линии наружного диаметра,
+// дуга и граница отодвигаются до этого расстояния (ГОСТ 2.311: «не менее 0,8 мм и не более
+// шага резьбы»).
 Status renderThreads(Drawing& drawing, const views::SheetView& view, const std::vector<ThreadImage>& threads,
-                     const views::RenderOptions& options = {});
+                     const views::RenderOptions& options = {}, double minThinGap = 0.8);
+
+// Радиус линии наружного диаметра на листе с учётом minThinGap (мм листа).
+double threadSheetRadius(const ThreadImage& image, double scale, double minThinGap = 0.8);
 
 // Обозначение метрической резьбы для чертежа (ГОСТ 8724, ГОСТ 16093, ГОСТ 2.311, п. 5):
 // «M10» (крупный шаг не пишется), «M10×1,25» (мелкий), «LH» для левой, «-6H» — поле допуска.

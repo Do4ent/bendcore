@@ -200,35 +200,43 @@ Result<std::vector<ThreadImage>> threadImages(const std::vector<modeling::Thread
     return out;
 }
 
+double threadSheetRadius(const ThreadImage& image, double scale, double minThinGap) {
+    return std::max(image.thread.nominal / 2.0 * scale, image.thread.drill / 2.0 * scale + minThinGap);
+}
+
 Status renderThreads(Drawing& drawing, const views::SheetView& view, const std::vector<ThreadImage>& threads,
-                     const views::RenderOptions& o) {
+                     const views::RenderOptions& o, double minThinGap) {
     if (auto st = views::ensureViewLayers(drawing, o); !st) return st;
     if (!(view.scale > 0) || !std::isfinite(view.scale)) {
         return Status::failure(ErrorCode::InvalidInput, "render threads: scale must be positive");
     }
-    auto addLine = [&](const LineSeg& l, LineType type, const std::string& layer) {
-        return drawing.add(Entity{LineSeg{view.toSheet(l.a), view.toSheet(l.b)}, layer, type});
-    };
+    if (!(minThinGap >= 0) || !std::isfinite(minThinGap)) {
+        return Status::failure(ErrorCode::InvalidInput, "render threads: minThinGap must be >= 0");
+    }
     for (const ThreadImage& t : threads) {
         const bool hidden = t.visibility == Visibility::Hidden;
         if (hidden && !o.hidden) continue;
         const LineType thin = hidden ? LineType::Dashed : LineType::SolidThin;
         const std::string& thinLayer = hidden ? o.hiddenLayer : o.thinLayer;
+        const double r = threadSheetRadius(t, view.scale, minThinGap);
+        const Point2 c = view.toSheet(t.entry);
         if (t.aspect == ThreadAspect::Side) {
-            for (const LineSeg& l : t.majorLines) {
-                if (auto st = addLine(l, thin, thinLayer); !st) return st;
+            const Point2 n{-t.axis.y, t.axis.x};
+            const Point2 end = add(c, mul(t.thread.length * view.scale, t.axis));
+            for (double side : {1.0, -1.0}) {
+                const LineSeg l{add(c, mul(side * r, n)), add(end, mul(side * r, n))};
+                if (auto st = drawing.add(Entity{l, thinLayer, thin}); !st) return st;
             }
             if (t.boundary) {
-                if (auto st = addLine(*t.boundary, hidden ? LineType::Dashed : LineType::SolidThick,
-                                      hidden ? o.hiddenLayer : o.visibleLayer);
+                const LineSeg b{add(end, mul(r, n)), sub(end, mul(r, n))};
+                if (auto st = drawing.add(Entity{b, hidden ? o.hiddenLayer : o.visibleLayer,
+                                                 hidden ? LineType::Dashed : LineType::SolidThick});
                     !st)
                     return st;
             }
         } else {
             const Arc& a = t.majorArc;
-            Status st = drawing.add(Entity{Arc{view.toSheet(a.center), a.radius * view.scale, a.startDeg, a.endDeg},
-                                           thinLayer, thin});
-            if (!st) return st;
+            if (auto st = drawing.add(Entity{Arc{c, r, a.startDeg, a.endDeg}, thinLayer, thin}); !st) return st;
         }
     }
     return okStatus();
@@ -243,12 +251,16 @@ Result<DimensionResult> threadDimension(const ThreadImage& image, const views::S
     if (image.aspect == ThreadAspect::Side) {
         const Point2 a = view.toSheet(image.majorLines[0].a), b = view.toSheet(image.majorLines[1].a);
         res.value = norm(sub(b, a)) / view.scale;
+        // Выносные линии — от линий, как они выведены на лист (renderThreads, зазор 0,8 мм).
+        const double r = threadSheetRadius(image, view.scale);
+        const Point2 c = view.toSheet(image.entry), n{-image.axis.y, image.axis.x};
+        const Point2 a2 = add(c, mul(r, n)), b2 = sub(c, mul(r, n));
         // Размерная линия — со стороны входа, против направления резьбы (вне материала).
         const Point2 side = mul(-1.0, image.axis);
-        res.geometry = labelledLinearGeometry(a, b, side, def.offset, res.text, def.textShift, style);
+        res.geometry = labelledLinearGeometry(a2, b2, side, def.offset, res.text, def.textShift, style);
     } else {
         res.value = 2.0 * image.majorArc.radius;
-        res.geometry = labelledDiameterGeometry(view.toSheet(image.majorArc.center), image.majorArc.radius * view.scale,
+        res.geometry = labelledDiameterGeometry(view.toSheet(image.majorArc.center), threadSheetRadius(image, view.scale),
                                                 def.leaderAngleDeg, res.text, style);
     }
     return res;

@@ -462,3 +462,31 @@ TEST(DrawingThreads, DocumentDrawsThreadsAndExportsDxfPdf) {
     EXPECT_EQ(rep2.value().dangling.size(), 2u);
     for (const ComputedView& cv : doc.computedSheets()[0].views) EXPECT_EQ(cv.threads.size(), 1u) << cv.id;
 }
+
+// ГОСТ 2.311: сплошная тонкая — не ближе 0,8 мм к основной линии. M10×1,25 при 1:1: (D − сверло)/2
+// = 0,625 мм < 0,8 → линия на 4,375 + 0,8 мм от оси; при 2:1 — 1,25 мм ≥ 0,8, точно по D.
+TEST(DrawingThreads, ThinLineKeepsMinimumGapAtSmallScale) {
+    ThreadPart part;
+    const Model md = modelOf(part.doc);
+    const auto fv = projectShape(md.binding.shape(), defaultFrontFrame()).value();
+    std::vector<ThreadImage> m10;
+    for (const auto& t : imagesOn(md, fv))
+        if (std::abs(t.thread.nominal - 10) < 1e-9) m10.push_back(t);
+    ASSERT_EQ(m10.size(), 1u);
+    for (double scale : {1.0, 2.0}) {
+        Drawing d = Drawing::create(gostSheet(GostFormat::A3, 1, Orientation::Landscape).value()).value();
+        const SheetView sv{fv, scale, {100, 100}};
+        ASSERT_TRUE(renderThreads(d, sv, m10).ok());
+        const double expected = scale == 1.0 ? 4.375 + 0.8 : 5.0 * scale;
+        std::vector<double> xs;
+        for (const auto& e : d.entities()) {
+            const auto& l = std::get<LineSeg>(e.geometry);
+            if (std::abs(l.a.x - l.b.x) < 1e-12) xs.push_back(l.a.x);
+            else EXPECT_NEAR(std::abs(l.b.x - l.a.x), 2 * expected, 1e-9);  // граница до линий
+        }
+        ASSERT_EQ(xs.size(), 2u);
+        std::sort(xs.begin(), xs.end());
+        EXPECT_NEAR(xs[0], 100 + scale * 20 - expected, 1e-9) << scale;
+        EXPECT_NEAR(xs[1], 100 + scale * 20 + expected, 1e-9) << scale;
+    }
+}
