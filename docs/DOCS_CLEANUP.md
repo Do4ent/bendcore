@@ -262,3 +262,9 @@
 | `docs/audits/BendCore_Latest_Audit_2026-10-30.md` | аудиты и планы октября 2026 (Windows-сборка, «ZERO DEFECTS», шаблоны отчётов) по коду, который с тех пор удалён; выводы учтены в `docs/ROADMAP_GENERAL_CAD.md`, раздел 1 |
 | `docs/bendcore_analysis.md` | сверка «90 % реализовано» прежнего трубного кода со спецификацией октября 2026; не отражает текущий код |
 | `docs/bendcore_detailed_verification.md` | сверка «90 % реализовано» прежнего трубного кода со спецификацией октября 2026; не отражает текущий код |
+
+## Дополнение при приёмке
+
+| Файл | Причина |
+|---|---|
+| `scripts/check-stage2-readiness.sh` | Проверял наличие удалённых отчётов (`IMPLEMENTATION_STATUS.md`, `WORK_COMPLETED.md`, `docs/STAGE_2_3_ROADMAP.md`); не вызывался ни CI, ни другими скриптами |
