@@ -264,15 +264,6 @@ public:
     );
 
     /**
-     * @brief Generate BOM from assembly registry
-     * Integrates with bendcore::assembly::Registry for hierarchy support
-     */
-    std::shared_ptr<BOM> generateFromAssembly(
-        const std::string& projectName,
-        const std::string& assemblyData  // Serialized assembly structure
-    );
-
-    /**
      * @brief Export BOM to specified format
      */
     std::string exportBOM(

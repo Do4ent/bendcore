@@ -254,21 +254,8 @@ set(BENDCORE_SOURCES
   src/dwg_export.cpp
   src/drawing_editor.cpp
   src/geometry_analyzer.cpp
-  # Идентификатор сущности (используют src/features, src/editing) и система операций
+  # Идентификатор сущности (используют src/analysis/mass_properties и src/simulation)
   src/entity_id.cpp
-  src/feature_system.cpp
-
-
-  # M2 Phase: Advanced Sketcher (GAP-002, GAP-003, GAP-004)
-  src/sketch/constraint_diagnostics.cpp
-  src/sketch/primitives.cpp
-  src/sketch/edit_tools.cpp
-
-  # M5 Phase: Advanced Feature Operations (GAP-020) - Loft, Sweep, Revolve
-  src/features/loft.cpp
-  src/features/sweep.cpp
-  src/features/revolve.cpp
-  src/features/feature_system.cpp
 
   src/instances.cpp
 
@@ -278,20 +265,12 @@ set(BENDCORE_SOURCES
   # M3 Phase: Mass Properties Analysis (GAP-015)
   src/analysis/mass_properties.cpp
 
-  # M5 Phase: Direct Editing (GAP-022)
-  src/editing/direct_editing_manager.cpp
-
-
-
   # M6 Phase: Simulation Engine (GAP-024)
   src/simulation/cfd_solver.cpp
   src/simulation/structural_solver.cpp
   src/simulation/thermal_solver.cpp
   src/simulation/simulation_manager.cpp
   src/simulation/result_visualization.cpp
-
-
-
 
   # M7 Phase: Real-time Solver (GAP-030)
   src/solver/real_time_solver.cpp
@@ -508,11 +487,6 @@ if(GTest_FOUND)
   target_link_libraries(test_offset_performance PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(offset_performance test_offset_performance)
 
-  # M2 Phase: Advanced Sketcher (GAP-002, GAP-003, GAP-004)
-  add_executable(test_sketch_m2 tests/sketch/sketch_m2_tests.cpp)
-  target_link_libraries(test_sketch_m2 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(sketch_m2 test_sketch_m2)
-
 endif()
 
 # PlaneGCS (LGPL-2.1-or-later, извлечён из FreeCAD Sketcher, см. third_party/planegcs/NOTICE.md) — 2D-эскизы.
@@ -702,41 +676,6 @@ if(BENDCORE_WITH_OCCT)
   endif()
 endif()
 
-# M5 Phase: Advanced Feature Operations (GAP-020) - Loft, Sweep, Revolve
-add_executable(test_advanced_features_m5 tests/features/test_advanced_features_m5.cpp)
-target_link_libraries(test_advanced_features_m5 PRIVATE bendcore_core)
-bendcore_add_test(advanced_features_m5 test_advanced_features_m5)
-
-# Comprehensive Test Suite for Phase 4 (90%+ coverage target)
-add_executable(test_dwfx_parser_comprehensive tests/test_dwfx_parser_comprehensive.cpp)
-target_link_libraries(test_dwfx_parser_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(dwfx_parser_comprehensive test_dwfx_parser_comprehensive)
-
-add_executable(test_formula_comprehensive tests/test_formula_comprehensive.cpp)
-target_link_libraries(test_formula_comprehensive PRIVATE bendcore_formula)
-bendcore_add_test(formula_comprehensive test_formula_comprehensive)
-
-add_executable(test_analysis_comprehensive tests/test_analysis_comprehensive.cpp)
-target_link_libraries(test_analysis_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(analysis_comprehensive test_analysis_comprehensive)
-
-add_executable(test_geometry_analyzer_comprehensive tests/test_geometry_analyzer_comprehensive.cpp)
-target_link_libraries(test_geometry_analyzer_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(geometry_analyzer_comprehensive test_geometry_analyzer_comprehensive)
-
-# ============================================================================
-# Phase I: Integration Testing (CAD-CORE-033 to CAD-CORE-036)
-# ============================================================================
-
-# CAD-CORE-033 through CAD-CORE-036: Phase I Integration Testing
-add_executable(test_phase_i_main tests/integration/test_phase_i_main.cpp)
-bendcore_add_test(phase_i_main test_phase_i_main)
-
-# ============================================================================
-# M6 Phase: FEA Integration (GAP-025)
-# ============================================================================
-
-
 # ============================================================================
 # BOM, массовые свойства, расчётные модули
 # ============================================================================
@@ -762,11 +701,6 @@ if(GTest_FOUND)
   add_executable(test_bom tests/bom.test.cpp)
   target_link_libraries(test_bom PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(bom test_bom)
-
-  # M5 Phase: Direct Editing (GAP-022)
-  add_executable(test_direct_editing_manager tests/editing/direct_editing_manager.test.cpp)
-  target_link_libraries(test_direct_editing_manager PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(direct_editing_manager test_direct_editing_manager)
 
 endif()
 
