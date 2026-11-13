@@ -24,40 +24,13 @@ struct Material {
 
 class MaterialTextureSupport {
 public:
-    void addMaterial(const Material& mat) {
-        materials_[mat.name] = mat;
-    }
-
-    Material* getMaterial(const std::string& name) {
-        auto it = materials_.find(name);
-        if (it != materials_.end()) return &it->second;
-        return nullptr;
-    }
-
-    void addTexture(const std::string& material, const Texture& tex) {
-        auto* mat = getMaterial(material);
-        if (mat) mat->textures[tex.type] = tex;
-    }
-
-    bool hasTexture(const std::string& material, TextureType type) {
-        auto* mat = getMaterial(material);
-        if (!mat) return false;
-        return mat->textures.find(type) != mat->textures.end();
-    }
-
-    size_t getMaterialCount() const { return materials_.size(); }
-
-    double calculateSpecular(const std::string& material) {
-        auto* mat = getMaterial(material);
-        if (!mat) return 0;
-        return (1.0 - mat->roughness) * (mat->metallic + 0.5 * (1.0 - mat->metallic));
-    }
-
-    bool isPBRComplete(const std::string& material) {
-        auto* mat = getMaterial(material);
-        if (!mat) return false;
-        return mat->textures.size() >= 4;
-    }
+    void addMaterial(const Material& mat);
+    Material* getMaterial(const std::string& name);
+    void addTexture(const std::string& material, const Texture& tex);
+    bool hasTexture(const std::string& material, TextureType type);
+    size_t getMaterialCount() const;
+    double calculateSpecular(const std::string& material);
+    bool isPBRComplete(const std::string& material);
 
 private:
     std::map<std::string, Material> materials_;
