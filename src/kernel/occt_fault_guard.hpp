@@ -23,9 +23,13 @@
 // an out-of-bounds access is a trap (JS RuntimeError) that leaves the module unusable. There,
 // isolation is the Web Worker that runs the import (docs/kernel/OCCT_BUILD.md, раздел 6).
 
+#include <bendcore/kernel/result.hpp>
+
 #include <functional>
 #include <optional>
 #include <utility>
+
+class Standard_Failure;
 
 namespace bendcore::kernel::detail {
 
@@ -36,6 +40,18 @@ bool faultConversionAvailable();
 // OSD_SIGBUS / Standard_NumericError (all derive from Standard_Failure). Exceptions of fn()
 // propagate unchanged. Re-entrant.
 void runConvertingFaults(const std::function<void()>& fn);
+
+// True when `failure` is the exception the guard made from a hardware fault on this thread (the
+// most recent one): its type is OSD_SIGSEGV / OSD_SIGBUS / Standard_NumericError and its message
+// is the one the signal handler wrote (it names the faulting address). An ordinary OCCT
+// exception, even of the same type, is not a converted fault. Always false in WASM.
+bool isConvertedFault(const Standard_Failure& failure);
+
+// ErrorCode::Fault for a converted fault, `otherwise` for any other OCCT exception. Readers use it
+// in their catch (Standard_Failure) so that callers and the UI tell a fault by its code.
+inline ErrorCode faultOr(const Standard_Failure& failure, ErrorCode otherwise) {
+    return isConvertedFault(failure) ? ErrorCode::Fault : otherwise;
+}
 
 // The same for a callable that returns a value (for example Result<T>).
 template <typename R, typename Fn>

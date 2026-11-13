@@ -13,6 +13,7 @@
 #endif
 
 #include <Standard_ErrorHandler.hxx>
+#include <Standard_Failure.hxx>
 
 #if BENDCORE_KERNEL_CONVERT_FAULTS
 #include <OSD_SIGBUS.hxx>
@@ -21,6 +22,7 @@
 
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 
 #include <signal.h>
@@ -34,6 +36,10 @@ namespace {
 
 // Nesting depth of runConvertingFaults() on this thread; the handler converts only when > 0.
 thread_local int t_guardDepth = 0;
+// Message of the last fault converted on this thread (written by the handler, no allocation):
+// isConvertedFault() compares the caught exception with it.
+thread_local char t_lastFault[128] = {};
+thread_local bool t_hasFault = false;
 
 constexpr int kSignals[] = {SIGSEGV, SIGBUS, SIGFPE};
 struct sigaction g_previous[3];
@@ -79,19 +85,20 @@ void onFault(int sig, siginfo_t* info, void* context) {
     sigemptyset(&set);
     sigaddset(&set, sig);
     sigprocmask(SIG_UNBLOCK, &set, nullptr);
-    char message[128];
+    char* message = t_lastFault;
+    t_hasFault = true;
     void* address = info != nullptr ? info->si_addr : nullptr;
     switch (sig) {
         case SIGSEGV:
-            std::snprintf(message, sizeof(message), "SIGSEGV (invalid memory access at %p) inside OCCT", address);
+            std::snprintf(message, sizeof(t_lastFault), "SIGSEGV (invalid memory access at %p) inside OCCT", address);
             Standard_ErrorHandler::Abort(OSD_SIGSEGV(message));
             break;
         case SIGBUS:
-            std::snprintf(message, sizeof(message), "SIGBUS (bus error at %p) inside OCCT", address);
+            std::snprintf(message, sizeof(t_lastFault), "SIGBUS (bus error at %p) inside OCCT", address);
             Standard_ErrorHandler::Abort(OSD_SIGBUS(message));
             break;
         default:
-            std::snprintf(message, sizeof(message), "SIGFPE (arithmetic fault at %p) inside OCCT", address);
+            std::snprintf(message, sizeof(t_lastFault), "SIGFPE (arithmetic fault at %p) inside OCCT", address);
             Standard_ErrorHandler::Abort(Standard_NumericError(message));
             break;
     }
@@ -119,6 +126,17 @@ struct DepthScope {
 
 bool faultConversionAvailable() { return true; }
 
+bool isConvertedFault(const Standard_Failure& failure) {
+    if (!t_hasFault) return false;
+    const Handle(Standard_Type) type = failure.DynamicType();
+    if (type != STANDARD_TYPE(OSD_SIGSEGV) && type != STANDARD_TYPE(OSD_SIGBUS) &&
+        type != STANDARD_TYPE(Standard_NumericError)) {
+        return false;
+    }
+    const char* text = failure.GetMessageString();
+    return text != nullptr && std::strcmp(text, t_lastFault) == 0;
+}
+
 void runConvertingFaults(const std::function<void()>& fn) {
     std::call_once(g_installed, install);
     DepthScope depth;
@@ -130,6 +148,8 @@ void runConvertingFaults(const std::function<void()>& fn) {
 #else
 
 bool faultConversionAvailable() { return false; }
+
+bool isConvertedFault(const Standard_Failure&) { return false; }
 
 void runConvertingFaults(const std::function<void()>& fn) { fn(); }
 

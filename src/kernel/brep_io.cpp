@@ -34,7 +34,7 @@ Result<Shape> readFromMemory(const char* data, std::size_t size, const char* for
         detail::throwOnFailedExtraction(in);
         TopoDS_Shape result;
         // Corrupted input can still fault inside OCCT where no check exists (null handles):
-        // the fault becomes OSD_SIGSEGV (Standard_Failure) and a ParseError below.
+        // the fault becomes OSD_SIGSEGV (Standard_Failure) and ErrorCode::Fault below.
         detail::runConvertingFaults([&] { read(result, in); });
         if (result.IsNull()) {
             return R::failure(ErrorCode::ParseError, prefix + " holds no shape");
@@ -44,7 +44,7 @@ Result<Shape> readFromMemory(const char* data, std::size_t size, const char* for
         return R::failure(ErrorCode::ParseError, prefix + " is truncated or malformed: reading stopped at "
                                                      "a value that could not be extracted");
     } catch (const Standard_Failure& failure) {
-        return R::failure(ErrorCode::ParseError, prefix + " is malformed: " + failureText(failure));
+        return R::failure(detail::faultOr(failure, ErrorCode::ParseError), prefix + " is malformed: " + failureText(failure));
     } catch (const std::exception& e) {
         return R::failure(ErrorCode::ParseError, prefix + " is malformed: " + e.what());
     }

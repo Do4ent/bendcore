@@ -656,6 +656,9 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
                 Node* n = part.node(id);
                 if (!n) continue;
                 auto named = namedShapeFromJson(entry.at("brep").get<std::string>(), entry);
+                // A hardware fault in the BRep reader (ErrorCode::Fault) fails the load: the
+                // process state is suspect (docs/kernel/KERNEL_CORE.md, "Повреждённые файлы").
+                if (!named && named.error().code == ErrorCode::Fault) return R::failure(ErrorCode::Fault, named.error().message);
                 if (!named) continue;  // unusable cache entry: the feature is recomputed
                 auto state = featureStateFromString(entry.at("state").get<std::string>());
                 if (!state) continue;
@@ -670,6 +673,9 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
                     auto toolBytes = base64Decode(entry.at("tool").get<std::string>());
                     if (!toolBytes) continue;
                     auto tool = kernel::readBrepBinary(*toolBytes);
+                    if (!tool && tool.error().code == ErrorCode::Fault) {
+                        return R::failure(ErrorCode::Fault, "cache: " + tool.error().message);
+                    }
                     if (!tool) continue;
                     auto toolNamed = nameTool(n->id, tool.value().occt());
                     if (!toolNamed) continue;

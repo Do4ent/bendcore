@@ -812,7 +812,7 @@ Result<AssemblyDocument> readStepAssembly(std::string_view data) {
             return out;
         });
     } catch (const Standard_Failure& failure) {
-        return R::failure(ErrorCode::ParseError, "STEP input is malformed: " + failureText(failure));
+        return R::failure(detail::faultOr(failure, ErrorCode::ParseError), "STEP input is malformed: " + failureText(failure));
     } catch (const std::exception& e) {
         return R::failure(ErrorCode::ParseError, std::string("STEP input is malformed: ") + e.what());
     }

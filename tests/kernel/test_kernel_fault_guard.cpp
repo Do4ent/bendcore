@@ -17,7 +17,10 @@
 
 namespace {
 
+using bendcore::kernel::ErrorCode;
 using bendcore::kernel::detail::callConvertingFaults;
+using bendcore::kernel::detail::faultOr;
+using bendcore::kernel::detail::isConvertedFault;
 using bendcore::kernel::detail::faultConversionAvailable;
 using bendcore::kernel::detail::runConvertingFaults;
 
@@ -84,6 +87,35 @@ TEST(KernelFaultGuard, ExceptionsAndValuesPassThroughUnchanged) {
     EXPECT_THROW(runConvertingFaults([] { throw std::runtime_error("plain"); }), std::runtime_error);
     EXPECT_THROW(runConvertingFaults([] { throw Standard_OutOfRange("index"); }), Standard_OutOfRange);
     EXPECT_EQ(callConvertingFaults<int>([] { return 7 * 6; }), 42);
+}
+
+// The code readers give a caught exception: Fault only for the exception the handler made.
+ErrorCode codeOf(const std::function<void()>& fn) {
+    try {
+        runConvertingFaults(fn);
+    } catch (const Standard_Failure& failure) {
+        return faultOr(failure, ErrorCode::ParseError);
+    }
+    return ErrorCode::InvalidInput;  // no exception
+}
+
+TEST(KernelFaultGuard, ConvertedFaultsAreToldApartByCode) {
+    EXPECT_EQ(codeOf([] { (void)readNull(); }), ErrorCode::Fault);
+    EXPECT_EQ(codeOf([] { (void)divideByZero(); }), ErrorCode::Fault);
+    // Ordinary OCCT exceptions keep the reader's code, even of a type the handler also uses and
+    // right after a converted fault on this thread.
+    EXPECT_EQ(codeOf([] { throw Standard_OutOfRange("index"); }), ErrorCode::ParseError);
+    EXPECT_EQ(codeOf([] { throw Standard_NumericError("SIGFPE written by hand"); }), ErrorCode::ParseError);
+    EXPECT_EQ(codeOf([] { throw OSD_SIGSEGV("not from the handler"); }), ErrorCode::ParseError);
+    // The rethrown copy of a converted fault is still recognised (the message is the handler's).
+    try {
+        runConvertingFaults([] { (void)readNull(); });
+        FAIL() << "no exception";
+    } catch (const Standard_Failure& failure) {
+        EXPECT_TRUE(isConvertedFault(failure));
+        EXPECT_NE(std::string(failure.what()).find("inside OCCT"), std::string::npos);
+    }
+    EXPECT_EQ(bendcore::kernel::toString(ErrorCode::Fault), std::string("Fault"));
 }
 
 TEST(KernelFaultGuard, FaultOutsideTheGuardStillKillsTheProcess) {

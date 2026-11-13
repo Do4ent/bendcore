@@ -35,12 +35,18 @@ constexpr double kSignatureTolerance = 1e-6;
 // Относительный допуск отпечатка геометрии детали.
 constexpr double kFingerprintTolerance = 1e-6;
 
-// Ошибка разбора внутри загрузчика; на границе превращается в ParseError.
+// Ошибка разбора внутри загрузчика; на границе превращается в ParseError, а аппаратный сбой
+// читателя ядра (ErrorCode::Fault, docs/kernel/KERNEL_CORE.md) — в Fault: код не теряется.
 struct FormatError : std::runtime_error {
-    using std::runtime_error::runtime_error;
+    explicit FormatError(const std::string& message, ErrorCode errorCode = ErrorCode::ParseError)
+        : std::runtime_error(message), code(errorCode) {}
+    ErrorCode code;
 };
 
 [[noreturn]] void bad(const std::string& message) { throw FormatError(message); }
+[[noreturn]] void bad(ErrorCode code, const std::string& message) {
+    throw FormatError(message, code == ErrorCode::Fault ? ErrorCode::Fault : ErrorCode::ParseError);
+}
 
 // ---------------------------------------------------------------- base64
 
@@ -675,7 +681,7 @@ public:
             finish();
             return out;
         } catch (const FormatError& e) {
-            return Error{ErrorCode::ParseError, std::string("assembly document: ") + e.what()};
+            return Error{e.code, std::string("assembly document: ") + e.what()};
         } catch (const json::exception& e) {
             return Error{ErrorCode::ParseError, std::string("assembly document: ") + e.what()};
         } catch (const Standard_Failure& e) {
@@ -698,7 +704,7 @@ private:
         if (d.contains("brep")) {
             const auto bytes = base64Decode(text(d, "brep"));
             auto shape = kernel::readBrepBinary(bytes);
-            if (!shape) bad("part '" + def.name + "': embedded BRep: " + shape.error().message);
+            if (!shape) bad(shape.error().code, "part '" + def.name + "': embedded BRep: " + shape.error().message);
             embedded = shape.value().occt();
             if (d.contains("elementMap")) {
                 auto map = elementMapFrom(d.at("elementMap"), embedded);
@@ -726,6 +732,11 @@ private:
                 diag.message = changed ? "geometry of '" + def.source + "' changed since the document was saved: " + diff
                                        : "loaded";
             } else {
+                // A hardware fault while reading the source leaves the process state suspect:
+                // the whole load fails with Fault instead of falling back to embedded geometry.
+                if (!data && data.error().code == ErrorCode::Fault) {
+                    bad(ErrorCode::Fault, "part '" + def.name + "': source '" + def.source + "': " + data.error().message);
+                }
                 sourceError = data ? "the source has no shape" : data.error().message;
             }
         }
