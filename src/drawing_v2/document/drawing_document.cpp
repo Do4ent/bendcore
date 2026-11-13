@@ -5,6 +5,7 @@
 #include <bendcore/drawing_v2/drawing_document.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <future>
 #include <set>
@@ -274,6 +275,17 @@ Status DrawingDocument::validate() const {
             if (d.edge.kind != modeling::ElementKind::Edge) return invalid("drawing: datum '" + d.id + "' must reference an edge");
             if (d.letter.empty()) return invalid("drawing: datum '" + d.id + "' has no letter");
         }
+        for (const ThreadNoteItem& t : s.threadNotes) {
+            if (t.id.empty() || !annIds.insert(t.id).second) return invalid("drawing: empty or duplicate annotation id '" + t.id + "'");
+            if (!seen.count(t.view)) return invalid("drawing: thread '" + t.id + "' refers to unknown view '" + t.view + "'");
+            if (t.face.kind != modeling::ElementKind::Face) return invalid("drawing: thread '" + t.id + "' must reference a face");
+            if (!std::isfinite(t.def.offset) || !std::isfinite(t.def.leaderAngleDeg) || !std::isfinite(t.def.textShift))
+                return invalid("drawing: thread '" + t.id + "' has a non-finite placement");
+            for (char c : t.def.toleranceField) {
+                if (!std::isalnum(static_cast<unsigned char>(c)))
+                    return invalid("drawing: thread '" + t.id + "': tolerance field '" + t.def.toleranceField + "' must be letters and digits (6H, 6g)");
+            }
+        }
         for (const BalloonItem& b : s.balloons) {
             if (b.id.empty() || !annIds.insert(b.id).second) return invalid("drawing: empty or duplicate annotation id '" + b.id + "'");
             if (!seen.count(b.view)) return invalid("drawing: position '" + b.id + "' refers to unknown view '" + b.view + "'");
@@ -329,6 +341,9 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
     auto bindingR = model.historyNames ? ModelBinding::fromNamedShape(*model.named) : ModelBinding::fromShape(model.shape);
     if (!bindingR) return bindingR.error();
     const ModelBinding& binding = bindingR.value();
+
+    // Условная резьба модели (атрибуты «thread.*» граней, docs/modeling/FEATURES.md).
+    const std::vector<modeling::ThreadInfo> threadInfos = modeling::threadsOf(*model.named);
 
     // Спецификация для позиций сборочного чертежа.
     std::optional<annotations::Specification> ownSpec;
@@ -600,6 +615,12 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 if (!cg) return Error{cg.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + cg.error().message};
                 cv.centers = std::move(cg).value();
             }
+            // Условная резьба модели (ГОСТ 2.311): на ортогональных видах и разрезах.
+            if (v.threads && !threadInfos.empty() && v.kind != ViewKind::Axonometric && v.kind != ViewKind::Detail) {
+                auto ti = annotations::threadImages(threadInfos, binding.topology(), cv.sheetView.view);
+                if (!ti) return Error{ti.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + ti.error().message};
+                cv.threads = std::move(ti).value();
+            }
             cs.views.push_back(std::move(cv));
         }
         // Секущая плоскость должна быть видна на виде обозначения следом.
@@ -856,6 +877,38 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             manualDefinitions.insert(*owner);
             cs.manualBalloons.emplace_back(std::move(b));
         }
+        // Размеры резьбы: грань по ссылке → резьба на виде → размер с обозначением (ГОСТ 2.311, п. 5).
+        cs.threadNotes.clear();
+        for (ThreadNoteItem& tn : sd.threadNotes) {
+            const ComputedView& cv = cs.views[indexOf.at(tn.view)];
+            ModelRef ref;
+            ref.kind = annotations::RefKind::Face;
+            ref.persistent = tn.face;
+            auto rb = annotations::rebindRef(ref, binding);
+            const annotations::ThreadImage* image = nullptr;
+            if (rb.ok) {
+                for (const annotations::ThreadImage& t : cv.threads) {
+                    if (std::find(t.faces.begin(), t.faces.end(), ref.index) != t.faces.end()) image = &t;
+                }
+            }
+            DimensionResult res;
+            if (!image) {
+                res.state = DimensionState::Dangling;
+                const bool isThread = rb.ok && std::any_of(threadInfos.begin(), threadInfos.end(),
+                                                           [&](const modeling::ThreadInfo& t) { return t.face == ref.index; });
+                res.reason = !rb.ok      ? "reference is broken: " + rb.detail
+                             : !isThread ? "the face carries no thread"
+                                         : "the thread is not shown in view '" + tn.view + "'";
+                report.dangling.push_back(sd.id + "/" + tn.id + ": " + res.reason);
+            } else {
+                auto r = annotations::threadDimension(*image, cv.sheetView, tn.def, style);
+                if (!r) return Error{r.error().code, "sheet '" + sd.id + "', thread '" + tn.id + "': " + r.error().message};
+                res = std::move(r).value();
+                tn.face = ref.persistent;
+            }
+            cs.threadNotes.push_back(std::move(res));
+        }
+
         // Затем автоматические — на видимые линии составных частей, у которых нет ручной позиции.
         for (const ComputedView& cv : cs.views) {
             if (!cv.def.autoBalloons) continue;
@@ -983,6 +1036,9 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
             if (!cv.centers.marks.empty() || !cv.centers.axes.empty()) {
                 if (auto st = renderCenterLines(d, cv.sheetView, cv.centers, ro); !st) return fail(st.error());
             }
+            if (!cv.threads.empty()) {
+                if (auto st = annotations::renderThreads(d, cv.sheetView, cv.threads, ro); !st) return fail(st.error());
+            }
             if (!cv.label.empty()) {
                 if (auto st = renderViewLabel(d, cv.sheetView, cv.label, ro); !st) return fail(st.error());
             }
@@ -1003,6 +1059,11 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
             if (cs.dimensions[di].state != DimensionState::Ok) continue;
             if (auto st = annotations::renderDimension(d, cs.dimensions[di], style); !st)
                 return Error{st.error().code, "sheet '" + cs.id + "', dimension '" + sd.dimensions[di].id + "': " + st.error().message};
+        }
+        for (std::size_t ti = 0; ti < cs.threadNotes.size(); ++ti) {
+            if (cs.threadNotes[ti].state != DimensionState::Ok) continue;
+            if (auto st = annotations::renderDimension(d, cs.threadNotes[ti], style); !st)
+                return Error{st.error().code, "sheet '" + cs.id + "', thread '" + sd.threadNotes[ti].id + "': " + st.error().message};
         }
         for (const auto* list : {&cs.roughness, &cs.tolerances, &cs.datums}) {
             for (const auto& g : *list) {
