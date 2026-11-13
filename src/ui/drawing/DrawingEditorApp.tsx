@@ -31,19 +31,13 @@ import type {
 } from '../../wasm/bendcore_drawing_api.mjs';
 import SheetCanvas, { SheetCanvasHandle } from './SheetCanvas';
 import { defaultDrawingBaseUrl, loadDrawingFrom } from './drawingLoader';
-import {
-  CHARACTERISTICS,
-  DIMENSION_TYPE_LABELS,
-  SCALES,
-  SHEET_SIDES,
-  STANDARD_VIEW_LABELS,
-  VIEW_KIND_LABELS,
-} from './labels';
+import { CHARACTERISTICS, SCALES, SHEET_SIDES, STANDARD_VIEWS } from './labels';
 import {
   EdgePick,
   PickState,
   Tool,
   addPick,
+  balloonShelf,
   canDimensionSingle,
   downloadName,
   emptyPicks,
@@ -56,6 +50,7 @@ import { waitIdle } from '../worker/idle';
 import BusyIndicator from '../app/BusyIndicator';
 import { useHotkeys } from '../app/hotkeys';
 import { useI18n } from '../app/i18n';
+import type { MessageKey } from '../app/i18n';
 import type { DocumentFile, EditorHostProps } from '../app/editorHost';
 import { useFaultReport } from '../app/faultReport';
 import { DRAWING_FILE_EXTENSION, drawingFileName, packDrawingFile, readDrawingFiles, unpackDrawingFile } from './drawingFile';
@@ -107,6 +102,10 @@ function errorOf(e: unknown): { code: string; message: string } {
 
 const STANDARD_PROJECTED: StandardView[] = ['top', 'left', 'right', 'bottom', 'rear'];
 
+const TOOLS: Tool[] = ['select', 'dimension', 'roughness', 'tolerance', 'datum', 'balloon', 'section', 'detail'];
+
+const SPEC_COLUMNS = ['format', 'zone', 'position', 'designation', 'name', 'quantity', 'note'] as const;
+
 type Drawing = Remote<DrawingHandle>;
 type DrawingModule = Remote<DrawingKernel>;
 
@@ -151,7 +150,7 @@ export default function DrawingEditorApp({
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<DrawingEditorState['status']>('loading');
   const [error, setError] = useState<DrawingEditorState['error']>(null);
-  const [message, setMessage] = useState('Загрузка ядра чертежей…');
+  const [message, setMessage] = useState(() => t('drawing.loading'));
   const drawingRef = useRef<Drawing | null>(null);
   const [desc, setDesc] = useState<DrawingDescription | null>(null);
   const [picture, setPicture] = useState<SheetPicture | null>(null);
@@ -174,9 +173,9 @@ export default function DrawingEditorApp({
   const [tol, setTol] = useState<{ characteristic: GeometricCharacteristic; tolerance: string; datums: string }>({
     characteristic: 'parallelism',
     tolerance: '0,02',
-    datums: 'А',
+    datums: t('drawing.datumDefault'),
   });
-  const [datumLetter, setDatumLetter] = useState('А');
+  const [datumLetter, setDatumLetter] = useState(() => t('drawing.datumDefault'));
   const [detailRadius, setDetailRadius] = useState('10');
   const [sectionSide, setSectionSide] = useState('leftOf');
 
@@ -192,14 +191,14 @@ export default function DrawingEditorApp({
         }
         setKernel(k);
         setStatus('ready');
-        setMessage('Откройте документ детали или сборки (JSON)');
+        setMessage(t('drawing.ready'));
         if (initial) void openInitial(k.root, initial);
       })
       .catch((e) => {
         if (cancelled) return;
         setStatus('failed');
         setError(errorOf(e));
-        setMessage('Ядро чертежей не загрузилось');
+        setMessage(t('drawing.loadFailed'));
       });
     return () => {
       cancelled = true;
@@ -272,7 +271,7 @@ export default function DrawingEditorApp({
         } catch (e) {
           if (isCancelled(e) || drawingRef.current !== d) return false;
           setError(errorOf(e));
-          setMessage(`${label}: не выполнено`);
+          setMessage(t('drawing.failedAction', { action: label }));
           ok = false;
         }
         if (!keepPicks) setPickState(emptyPicks);
@@ -315,13 +314,13 @@ export default function DrawingEditorApp({
       setPickState(emptyPicks);
       setTool('select');
       setError(null);
-      setMessage(`Открыто: ${name}`);
-      await run(`Открыто: ${name}`, () => undefined);
+      setMessage(t('drawing.opened', { name }));
+      await run(t('drawing.opened', { name }), () => undefined);
       return true;
     } catch (e) {
       if (isCancelled(e)) return false;
       setError(errorOf(e));
-      setMessage(`Не удалось открыть ${name}`);
+      setMessage(t('drawing.openFailed', { name }));
       return false;
     }
   };
@@ -427,7 +426,7 @@ export default function DrawingEditorApp({
   const cancelOperation = async () => {
     const old = kernelRef.current;
     if (!old) return;
-    old.cancel('прервано пользователем');
+    old.cancel(t('drawing.cancelledByUser'));
     setKernel(null);
     setStatus('loading');
     queueRef.current = Promise.resolve();
@@ -463,11 +462,11 @@ export default function DrawingEditorApp({
         download(bytes, downloadName(designation, `_${sheet.id}`, format), format === 'dxf' ? 'application/dxf' : 'image/svg+xml');
       }
       setError(null);
-      setMessage(`Экспорт ${format.toUpperCase()} выполнен`);
+      setMessage(t('drawing.exported', { format: format.toUpperCase() }));
     } catch (e) {
       if (isCancelled(e)) return;
       setError(errorOf(e));
-      setMessage(`Экспорт ${format.toUpperCase()}: не выполнен`);
+      setMessage(t('drawing.exportFailed', { format: format.toUpperCase() }));
     }
   };
 
@@ -479,26 +478,26 @@ export default function DrawingEditorApp({
       const view = state.picks[0].view;
       const indices = state.picks.map((p) => p.index);
       if (tool === 'dimension') {
-        run('Размер добавлен', (d) => d.addDimension(sheetId, view, indices, { offset: Number(dimOffset) || 10 }));
+        run(t('drawing.done.dimension'), (d) => d.addDimension(sheetId, view, indices, { offset: Number(dimOffset) || 10 }));
       } else if (tool === 'roughness') {
-        run('Шероховатость добавлена', (d) =>
+        run(t('drawing.done.roughness'), (d) =>
           d.addRoughness(sheetId, view, indices[0], { method: rough.method as 'materialRemoval', parameter: rough.parameter, value: rough.value }),
         );
       } else if (tool === 'tolerance') {
         const datums = tol.datums.split(/[\s,;]+/).filter(Boolean);
-        run('Допуск добавлен', (d) =>
+        run(t('drawing.done.tolerance'), (d) =>
           d.addTolerance(sheetId, view, indices[0], { characteristic: tol.characteristic, tolerance: tol.tolerance, datums }),
         );
       } else if (tool === 'datum') {
-        run('База добавлена', (d) => d.addDatum(sheetId, view, indices[0], datumLetter));
+        run(t('drawing.done.datum'), (d) => d.addDatum(sheetId, view, indices[0], datumLetter));
       }
     },
-    [sheetId, tool, run, dimOffset, rough, tol, datumLetter],
+    [sheetId, tool, run, dimOffset, rough, tol, datumLetter, t],
   );
 
   const onEdgeClick = (pick: EdgePick) => {
     const next = addPick(pickState, tool, pick);
-    if (next.message) setMessage(next.message);
+    if (next.message) setMessage(t(next.message));
     if (next.ready) {
       createFromPicks(next);
     } else {
@@ -522,30 +521,40 @@ export default function DrawingEditorApp({
 
   const onSheetClick = (p: Point, view: PictureView | null) => {
     if (!sheetId) return;
+    if (tool === 'balloon') {
+      // The shelf of a manual position: anywhere on the sheet, after the leader edge.
+      const b = balloonShelf(pickState, p);
+      if (!b) {
+        setMessage(t('drawing.help.balloon'));
+        return;
+      }
+      run(t('drawing.done.balloon'), (d) => d.addBalloon(sheetId, b.view, b.index, { at: b.at }));
+      return;
+    }
     if (!view) {
-      setMessage('Щёлкните по виду');
+      setMessage(t('drawing.pick.clickView'));
       return;
     }
     const vp = sheetToViewPoint(view, p);
     if (tool === 'detail') {
-      run('Выносной элемент добавлен', (d) =>
+      run(t('drawing.done.detail'), (d) =>
         d.addView(sheetId, { kind: 'detail', parent: view.id, detailCenter: vp, detailRadius: Number(detailRadius) || 10 }),
       );
     } else if (tool === 'section') {
       const spec: ViewSpec = { kind: 'section', parent: view.id, planePoint: viewPointToModel(view, vp), markView: view.id };
       if (sectionSide !== 'none') spec.side = sectionSide as ViewSpec['side'];
-      run('Разрез добавлен', (d) => d.addView(sheetId, spec));
+      run(t('drawing.done.section'), (d) => d.addView(sheetId, spec));
     }
   };
 
-  const switchTool = (t: Tool) => {
-    setTool(t);
+  const switchTool = (next: Tool) => {
+    setTool(next);
     setPickState(emptyPicks);
   };
 
   const onUpdate = () => {
     let r: UpdateReport | null = null;
-    void run('Обновление по модели', async (d) => {
+    void run(t('drawing.done.update'), async (d) => {
       r = await d.updateFromModel();
       setReport(r);
     }).then((ok) => {
@@ -553,8 +562,8 @@ export default function DrawingEditorApp({
       if (!ok || !rep) return;
       setMessage(
         rep.modelChanged
-          ? `Чертёж обновлён: ревизия ${rep.revision}, изменено размеров ${rep.stale.length}, висячих ${rep.dangling.length}`
-          : 'Модель не изменилась',
+          ? t('drawing.done.updated', { revision: rep.revision, stale: rep.stale.length, dangling: rep.dangling.length })
+          : t('drawing.done.modelSame'),
       );
     });
   };
@@ -571,7 +580,7 @@ export default function DrawingEditorApp({
       const id = selectedView;
       const sid = sheetIdRef.current;
       if (!id || !sid) return;
-      void run('Вид удалён', async (d) => {
+      void run(t('drawing.done.viewRemoved'), async (d) => {
         await d.removeView(sid, id);
         setSelectedView(null);
       });
@@ -601,15 +610,19 @@ export default function DrawingEditorApp({
   }, [status, error, message, sheetId, tool, desc, staleness, report, pickState]);
 
   const hasBase = !!sheet?.views.some((v) => v.kind === 'base');
+  // Positions of the specification and the balloons that show them on this sheet.
+  const specPositions = (spec.table?.sections ?? []).flatMap((s) => s.items.filter((i) => i.position > 0).map((i) => i.position));
+  const balloonCount = (position: number) => (sheet?.balloons ?? []).filter((b) => b.text === String(position)).length;
+  const missingPositions = specPositions.filter((p) => balloonCount(p) === 0);
   const selected = sheet?.views.find((v) => v.id === selectedView) ?? null;
   const drawing = drawingRef.current;
 
   return (
     <div className="dr-root">
       <header className="dr-toolbar">
-        <strong className="dr-title">bendcore · чертёж</strong>
+        <strong className="dr-title">{t('drawing.title')}</strong>
         <label className="dr-file">
-          Открыть модель…
+          {t('drawing.openModel')}
           <input type="file" accept=".json,application/json" data-testid="open-model" onChange={(e) => void onOpenModel(e.target.files)} disabled={!kernel} />
         </label>
         <label className="dr-file" title={t('drawing.file.openHint')}>
@@ -620,55 +633,52 @@ export default function DrawingEditorApp({
           {t('drawing.file.replaceModel')}
           <input type="file" accept=".json,application/json" data-testid="replace-model" onChange={(e) => void onReplaceModel(e.target.files)} disabled={!drawing} />
         </label>
-        <button onClick={() => void onSave()} disabled={!drawing} data-testid="drawing-save" title="Ctrl+S">Сохранить</button>
+        <button onClick={() => void onSave()} disabled={!drawing} data-testid="drawing-save" title="Ctrl+S">{t('drawing.save')}</button>
         <span className="dr-sep" />
         <button onClick={() => void onExport('pdf')} disabled={!drawing} data-testid="export-pdf">PDF</button>
         <button onClick={() => void onExport('dxf')} disabled={!drawing} data-testid="export-dxf">DXF</button>
         <button onClick={() => void onExport('svg')} disabled={!drawing} data-testid="export-svg">SVG</button>
         <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
         <span className="dr-sep" />
-        {(
-          [
-            ['select', 'Выбор'],
-            ['dimension', 'Размер'],
-            ['roughness', 'Шероховатость'],
-            ['tolerance', 'Допуск формы'],
-            ['datum', 'База'],
-            ['section', 'Разрез'],
-            ['detail', 'Выносной элемент'],
-          ] as [Tool, string][]
-        ).map(([t, l]) => (
-          <button key={t} className={tool === t ? 'dr-active' : ''} onClick={() => switchTool(t)} disabled={!drawing} data-testid={`tool-${t}`}>
-            {l}
+        {TOOLS.map((k) => (
+          <button
+            key={k}
+            className={tool === k ? 'dr-active' : ''}
+            onClick={() => switchTool(k)}
+            disabled={!drawing || (k === 'balloon' && desc?.model.kind !== 'assembly')}
+            title={k === 'balloon' && desc?.model.kind !== 'assembly' ? t('drawing.help.balloonPart') : undefined}
+            data-testid={`tool-${k}`}
+          >
+            {t(`drawing.tool.${k}`)}
           </button>
         ))}
         <span className="dr-sep" />
-        <button onClick={() => canvas.current?.fit()} disabled={!picture}>Вписать</button>
+        <button onClick={() => canvas.current?.fit()} disabled={!picture}>{t('drawing.fit')}</button>
       </header>
 
       <div className="dr-main">
         <aside className="dr-left">
           {sheet && desc && drawing && (
             <>
-              <h2>Листы</h2>
+              <h2>{t('drawing.sheets')}</h2>
               <div className="dr-sheet-tabs">
                 {desc.sheets.map((s) => (
                   <button key={s.id} className={s.id === sheetId ? 'dr-active' : ''} onClick={() => refresh(s.id)}>
                     {s.id} · {s.name}
                   </button>
                 ))}
-                <button onClick={() => run('Лист добавлен', async (d) => ({ switchTo: await d.addSheet({}) }))} title="Добавить лист А3" data-testid="add-sheet">+</button>
+                <button onClick={() => run(t('drawing.done.sheetAdded'), async (d) => ({ switchTo: await d.addSheet({}) }))} title={t('drawing.addSheet')} data-testid="add-sheet">+</button>
               </div>
               <div className="dr-row">
                 <label>
-                  Формат
+                  {t('drawing.format')}
                   <select
                     value={sheet.format}
                     data-testid="sheet-format"
-                    onChange={(e) => run('Формат листа изменён', (d) => d.setSheet(sheet.id, { format: e.target.value as SheetInfo['format'] }))}
+                    onChange={(e) => run(t('drawing.done.format'), (d) => d.setSheet(sheet.id, { format: e.target.value as SheetInfo['format'] }))}
                   >
                     {['A0', 'A1', 'A2', 'A3', 'A4'].map((f) => (
-                      <option key={f} value={f}>{f.replace('A', 'А')}</option>
+                      <option key={f} value={f}>{t(`drawing.sheetFormat.${f}` as MessageKey)}</option>
                     ))}
                   </select>
                 </label>
@@ -676,24 +686,24 @@ export default function DrawingEditorApp({
                   <select
                     value={sheet.orientation}
                     data-testid="sheet-orientation"
-                    onChange={(e) => run('Ориентация изменена', (d) => d.setSheet(sheet.id, { orientation: e.target.value as SheetInfo['orientation'] }))}
+                    onChange={(e) => run(t('drawing.done.orientation'), (d) => d.setSheet(sheet.id, { orientation: e.target.value as SheetInfo['orientation'] }))}
                   >
-                    <option value="landscape">альбомная</option>
-                    <option value="portrait">книжная</option>
+                    <option value="landscape">{t('drawing.landscape')}</option>
+                    <option value="portrait">{t('drawing.portrait')}</option>
                   </select>
                 </label>
                 <label>
-                  Масштаб
+                  {t('drawing.scale')}
                   <select
                     value={sheet.scale ? sheet.scale.ratio.join(':') : ''}
                     data-testid="sheet-scale"
                     onChange={(e) =>
-                      run('Масштаб листа изменён', (d) =>
+                      run(t('drawing.done.sheetScale'), (d) =>
                         d.setSheet(sheet.id, { scale: e.target.value ? (e.target.value.split(':').map(Number) as [number, number]) : null }),
                       )
                     }
                   >
-                    <option value="">авто ({sheet.computedScale?.label})</option>
+                    <option value="">{t('drawing.scaleAuto', { scale: sheet.computedScale?.label ?? '' })}</option>
                     {SCALES.map((s) => (
                       <option key={s.join(':')} value={s.join(':')}>{scaleText(s)}</option>
                     ))}
@@ -701,41 +711,41 @@ export default function DrawingEditorApp({
                 </label>
               </div>
               {desc.sheets.length > 1 && (
-                <button onClick={() => run('Лист удалён', (d) => d.removeSheet(sheet.id))}>Удалить лист {sheet.id}</button>
+                <button onClick={() => run(t('drawing.done.sheetRemoved'), (d) => d.removeSheet(sheet.id))}>{t('drawing.removeSheet', { id: sheet.id })}</button>
               )}
 
-              <h2>Виды</h2>
+              <h2>{t('drawing.views')}</h2>
               {!hasBase && (
                 <div className="dr-row">
                   <select value={baseStandard} onChange={(e) => setBaseStandard(e.target.value as StandardView)}>
-                    {(Object.keys(STANDARD_VIEW_LABELS) as StandardView[]).map((s) => (
-                      <option key={s} value={s}>вид {STANDARD_VIEW_LABELS[s]}</option>
+                    {STANDARD_VIEWS.map((s) => (
+                      <option key={s} value={s}>{t('drawing.viewOf', { side: t(`drawing.side.${s}`) })}</option>
                     ))}
                   </select>
-                  <button data-testid="add-base" onClick={() => run('Главный вид добавлен', (d) => d.addView(sheet.id, { kind: 'base', standard: baseStandard }))}>
-                    Главный вид
+                  <button data-testid="add-base" onClick={() => run(t('drawing.done.baseView'), (d) => d.addView(sheet.id, { kind: 'base', standard: baseStandard }))}>
+                    {t('drawing.baseView')}
                   </button>
                 </div>
               )}
               {hasBase && (
                 <div className="dr-buttons">
                   {STANDARD_PROJECTED.map((s) => (
-                    <button key={s} data-testid={`add-${s}`} onClick={() => run(`Вид ${STANDARD_VIEW_LABELS[s]} добавлен`, (d) => d.addView(sheet.id, { kind: 'projected', standard: s }))}>
-                      Вид {STANDARD_VIEW_LABELS[s]}
+                    <button key={s} data-testid={`add-${s}`} onClick={() => run(t('drawing.done.projected', { side: t(`drawing.side.${s}`) }), (d) => d.addView(sheet.id, { kind: 'projected', standard: s }))}>
+                      {t('drawing.projectedView', { side: t(`drawing.side.${s}`) })}
                     </button>
                   ))}
-                  <button data-testid="add-isometric" onClick={() => run('Изометрия добавлена', (d) => d.addView(sheet.id, { kind: 'axonometric', axonometry: 'isometric' }))}>
-                    Изометрия
+                  <button data-testid="add-isometric" onClick={() => run(t('drawing.done.isometric'), (d) => d.addView(sheet.id, { kind: 'axonometric', axonometry: 'isometric' }))}>
+                    {t('drawing.isometric')}
                   </button>
-                  <button data-testid="add-dimetric" onClick={() => run('Диметрия добавлена', (d) => d.addView(sheet.id, { kind: 'axonometric', axonometry: 'dimetric' }))}>
-                    Диметрия
+                  <button data-testid="add-dimetric" onClick={() => run(t('drawing.done.dimetric'), (d) => d.addView(sheet.id, { kind: 'axonometric', axonometry: 'dimetric' }))}>
+                    {t('drawing.dimetric')}
                   </button>
                 </div>
               )}
               <ul className="dr-list" data-testid="view-list">
                 {sheet.views.map((v) => (
                   <li key={v.id} className={v.id === selectedView ? 'dr-selected' : ''} onClick={() => setSelectedView(v.id)}>
-                    <span>{v.id}</span> {VIEW_KIND_LABELS[v.kind]}
+                    <span>{v.id}</span> {t(`drawing.viewKind.${v.kind}`)}
                     {v.label ? ` ${v.label}` : ''} <span className="dr-muted">{v.computedScale?.label}</span>
                   </li>
                 ))}
@@ -743,21 +753,21 @@ export default function DrawingEditorApp({
               {selected && (
                 <div className="dr-box" data-testid="view-properties">
                   <div>
-                    {selected.id}: {VIEW_KIND_LABELS[selected.kind]}
-                    {selected.inGroup ? ' (в проекционной связи)' : ''}
+                    {selected.id}: {t(`drawing.viewKind.${selected.kind}`)}
+                    {selected.inGroup ? t('drawing.inGroup') : ''}
                   </div>
                   {!selected.inGroup && (
                     <label>
-                      Масштаб вида
+                      {t('drawing.viewScale')}
                       <select
                         value={selected.scale ? selected.scale.ratio.join(':') : ''}
                         onChange={(e) =>
-                          run('Масштаб вида изменён', (d) =>
+                          run(t('drawing.done.viewScale'), (d) =>
                             d.setView(sheet.id, selected.id, { scale: e.target.value ? (e.target.value.split(':').map(Number) as [number, number]) : null }),
                           )
                         }
                       >
-                        <option value="">авто ({selected.computedScale?.label})</option>
+                        <option value="">{t('drawing.scaleAuto', { scale: selected.computedScale?.label ?? '' })}</option>
                         {SCALES.map((s) => (
                           <option key={s.join(':')} value={s.join(':')}>{scaleText(s)}</option>
                         ))}
@@ -765,134 +775,164 @@ export default function DrawingEditorApp({
                     </label>
                   )}
                   <label className="dr-check">
-                    <input type="checkbox" checked={selected.hidden} onChange={(e) => run('Невидимые линии', (d) => d.setView(sheet.id, selected.id, { hidden: e.target.checked }))} />
-                    невидимые линии
+                    <input type="checkbox" checked={selected.hidden} onChange={(e) => run(t('drawing.done.hidden'), (d) => d.setView(sheet.id, selected.id, { hidden: e.target.checked }))} />
+                    {t('drawing.hiddenLines')}
                   </label>
+                  {desc.model.kind === 'assembly' && (
+                    <label className="dr-check" title={t('drawing.autoBalloonsHint')}>
+                      <input
+                        type="checkbox"
+                        checked={selected.autoBalloons}
+                        data-testid="view-auto-balloons"
+                        onChange={(e) => run(t('drawing.done.autoBalloons'), (d) => d.setView(sheet.id, selected.id, { autoBalloons: e.target.checked }))}
+                      />
+                      {t('drawing.autoBalloons')}
+                    </label>
+                  )}
                   {selected.position && (
-                    <button onClick={() => run('Положение — автоматически', (d) => d.setView(sheet.id, selected.id, { position: null }))}>Автоматическое положение</button>
+                    <button onClick={() => run(t('drawing.done.autoPosition'), (d) => d.setView(sheet.id, selected.id, { position: null }))}>{t('drawing.autoPosition')}</button>
                   )}
                   <button
                     onClick={() =>
-                      run('Вид удалён', async (d) => {
+                      run(t('drawing.done.viewRemoved'), async (d) => {
                         await d.removeView(sheet.id, selected.id);
                         setSelectedView(null);
                       })
                     }
                   >
-                    Удалить вид
+                    {t('drawing.removeView')}
                   </button>
                 </div>
               )}
 
-              <h2>Инструмент</h2>
+              <h2>{t('drawing.tool')}</h2>
               <div className="dr-box" data-testid="tool-options">
-                {tool === 'select' && <p className="dr-muted">Щелчок — выбор вида, перетаскивание — перемещение (вид в проекционной связи двигает всю группу), колесо — масштаб, средняя кнопка или перетаскивание листа — панорама.</p>}
+                {tool === 'select' && <p className="dr-muted">{t('drawing.help.select')}</p>}
                 {tool === 'dimension' && (
                   <>
-                    <p className="dr-muted">Два ребра вида: расстояние (вертикальные — горизонтальный размер, горизонтальные — вертикальный) или угол; окружность/дуга — выберите и нажмите «Размер» (Enter).</p>
+                    <p className="dr-muted">{t('drawing.help.dimension')}</p>
                     <label>
-                      Отступ, мм <input value={dimOffset} onChange={(e) => setDimOffset(e.target.value)} size={4} />
+                      {t('drawing.offset')} <input value={dimOffset} onChange={(e) => setDimOffset(e.target.value)} size={4} />
                     </label>
-                    <button disabled={!canDimensionSingle(pickState)} onClick={() => createFromPicks(pickState)}>Размер</button>
-                    <div className="dr-muted" data-testid="picks">Выбрано рёбер: {pickState.picks.length}</div>
+                    <button disabled={!canDimensionSingle(pickState)} onClick={() => createFromPicks(pickState)}>{t('drawing.tool.dimension')}</button>
+                    <div className="dr-muted" data-testid="picks">{t('drawing.picks', { count: pickState.picks.length })}</div>
                   </>
                 )}
                 {tool === 'roughness' && (
                   <>
                     <select value={rough.method} onChange={(e) => setRough({ ...rough, method: e.target.value })}>
-                      <option value="materialRemoval">с удалением материала</option>
-                      <option value="noMaterialRemoval">без удаления материала</option>
-                      <option value="unspecified">вид обработки не устанавливается</option>
+                      <option value="materialRemoval">{t('drawing.rough.materialRemoval')}</option>
+                      <option value="noMaterialRemoval">{t('drawing.rough.noMaterialRemoval')}</option>
+                      <option value="unspecified">{t('drawing.rough.unspecified')}</option>
                     </select>
                     <div className="dr-row">
                       <input value={rough.parameter} onChange={(e) => setRough({ ...rough, parameter: e.target.value })} size={4} />
                       <input value={rough.value} onChange={(e) => setRough({ ...rough, value: e.target.value })} size={6} />
                     </div>
-                    <p className="dr-muted">Щёлкните по прямолинейному ребру.</p>
+                    <p className="dr-muted">{t('drawing.help.straight')}</p>
                   </>
                 )}
                 {tool === 'tolerance' && (
                   <>
                     <select value={tol.characteristic} onChange={(e) => setTol({ ...tol, characteristic: e.target.value as GeometricCharacteristic })}>
-                      {CHARACTERISTICS.map(([c, l]) => (
-                        <option key={c} value={c}>{l}</option>
+                      {CHARACTERISTICS.map(([c]) => (
+                        <option key={c} value={c}>{t(`drawing.char.${c}`)}</option>
                       ))}
                     </select>
                     <label>
-                      Допуск <input value={tol.tolerance} onChange={(e) => setTol({ ...tol, tolerance: e.target.value })} size={6} />
+                      {t('drawing.toleranceValue')} <input value={tol.tolerance} onChange={(e) => setTol({ ...tol, tolerance: e.target.value })} size={6} />
                     </label>
                     <label>
-                      Базы <input value={tol.datums} onChange={(e) => setTol({ ...tol, datums: e.target.value })} size={6} />
+                      {t('drawing.datums')} <input value={tol.datums} onChange={(e) => setTol({ ...tol, datums: e.target.value })} size={6} />
                     </label>
-                    <p className="dr-muted">Щёлкните по прямолинейному ребру.</p>
+                    <p className="dr-muted">{t('drawing.help.straight')}</p>
                   </>
                 )}
                 {tool === 'datum' && (
                   <label>
-                    Буква базы <input value={datumLetter} onChange={(e) => setDatumLetter(e.target.value)} size={3} />
+                    {t('drawing.datumLetter')} <input value={datumLetter} onChange={(e) => setDatumLetter(e.target.value)} size={3} />
                   </label>
+                )}
+                {tool === 'balloon' && (
+                  <>
+                    <p className="dr-muted">{t('drawing.help.balloon')}</p>
+                    <div className="dr-muted" data-testid="balloon-pick">
+                      {pickState.picks.length ? t('drawing.pick.shelf') : t('drawing.picks', { count: 0 })}
+                    </div>
+                  </>
                 )}
                 {tool === 'detail' && (
                   <label>
-                    Радиус, мм модели <input value={detailRadius} onChange={(e) => setDetailRadius(e.target.value)} size={4} />
-                    <span className="dr-muted"> — щёлкните центр на виде</span>
+                    {t('drawing.detailRadius')} <input value={detailRadius} onChange={(e) => setDetailRadius(e.target.value)} size={4} />
+                    <span className="dr-muted">{t('drawing.detailHint')}</span>
                   </label>
                 )}
                 {tool === 'section' && (
                   <label>
-                    Положение разреза
+                    {t('drawing.sectionSide')}
                     <select value={sectionSide} onChange={(e) => setSectionSide(e.target.value)}>
-                      {SHEET_SIDES.map(([s, l]) => (
-                        <option key={s} value={s}>{l}</option>
+                      {SHEET_SIDES.map((s) => (
+                        <option key={s} value={s}>{t(`drawing.sectionAt.${s}`)}</option>
                       ))}
-                      <option value="none">вне проекционной связи</option>
+                      <option value="none">{t('drawing.sectionFree')}</option>
                     </select>
-                    <span className="dr-muted"> — щёлкните точку секущей плоскости на виде</span>
+                    <span className="dr-muted">{t('drawing.sectionHint')}</span>
                   </label>
                 )}
               </div>
 
-              <h2>Аннотации</h2>
+              <h2>{t('drawing.annotations')}</h2>
               <ul className="dr-list" data-testid="annotation-list">
                 {sheet.dimensions.map((d) => (
                   <li key={d.id} className={d.state === 'dangling' ? 'dr-dangling' : ''} data-testid={`dimension-${d.id}`} data-value={d.value}>
-                    <span>{d.id}</span> {DIMENSION_TYPE_LABELS[d.type]} <strong>{d.text}</strong>
-                    {d.state === 'dangling' && <span className="dr-muted"> висячий: {d.reason}</span>}
+                    <span>{d.id}</span> {t(`drawing.dimType.${d.type}`)} <strong>{d.text}</strong>
+                    {d.state === 'dangling' && <span className="dr-muted">{t('drawing.dangling', { reason: d.reason ?? '' })}</span>}
                     <input
                       className="dr-tol"
-                      placeholder="поле"
+                      placeholder={t('drawing.tolerancePlaceholder')}
                       defaultValue={d.tolerance ?? ''}
-                      title="Поле допуска ISO 286 (H7, h6…)"
+                      title={t('drawing.toleranceHint')}
                       onBlur={(e) => {
-                        if ((e.target.value || null) !== d.tolerance) run('Допуск размера изменён', (h) => h.setDimension(sheet.id, d.id, { tolerance: e.target.value || null }));
+                        if ((e.target.value || null) !== d.tolerance) run(t('drawing.done.dimTolerance'), (h) => h.setDimension(sheet.id, d.id, { tolerance: e.target.value || null }));
                       }}
                     />
-                    <button title="Удалить" onClick={() => run('Размер удалён', (h) => h.removeAnnotation(sheet.id, d.id))}>×</button>
+                    <button title={t('drawing.remove')} onClick={() => run(t('drawing.done.dimRemoved'), (h) => h.removeAnnotation(sheet.id, d.id))}>×</button>
                   </li>
                 ))}
-                {[...sheet.roughness.map((r) => ({ ...r, label: `шероховатость ${r.spec.parameter ?? ''} ${r.spec.value ?? ''}` })),
-                  ...sheet.tolerances.map((t) => ({ ...t, label: `${CHARACTERISTICS.find((c) => c[0] === t.characteristic)?.[1]} ${t.tolerance} ${t.datums.join(' ')}` })),
-                  ...sheet.datums.map((b) => ({ ...b, label: `база ${b.letter}` }))].map((a) => (
+                {[...sheet.roughness.map((r) => ({ ...r, label: t('drawing.roughnessItem', { parameter: r.spec.parameter ?? '', value: r.spec.value ?? '' }) })),
+                  ...sheet.tolerances.map((x) => ({ ...x, label: `${t(`drawing.char.${x.characteristic}`)} ${x.tolerance} ${x.datums.join(' ')}` })),
+                  ...sheet.datums.map((b) => ({ ...b, label: t('drawing.datumItem', { letter: b.letter }) }))].map((a) => (
                   <li key={a.id} className={a.state === 'dangling' ? 'dr-dangling' : ''}>
                     <span>{a.id}</span> {a.label}
-                    <button title="Удалить" onClick={() => run('Знак удалён', (h) => h.removeAnnotation(sheet.id, a.id))}>×</button>
+                    <button title={t('drawing.remove')} onClick={() => run(t('drawing.done.symbolRemoved'), (h) => h.removeAnnotation(sheet.id, a.id))}>×</button>
+                  </li>
+                ))}
+                {(sheet.positions ?? []).map((p) => (
+                  <li key={p.id} className={p.state === 'dangling' ? 'dr-dangling' : ''} data-testid={`balloon-${p.id}`} data-number={p.text ?? ''} data-state={p.state ?? ''}>
+                    <span>{p.id}</span> {p.state === 'ok' ? t('drawing.balloonItem', { number: p.text ?? '' }) : t('drawing.balloonDangling')}
+                    {p.at && (
+                      <button title={t('drawing.balloonDefault')} onClick={() => run(t('drawing.done.balloonShelf'), (h) => h.setBalloon(sheet.id, p.id, { at: null }))}>
+                        ↺
+                      </button>
+                    )}
+                    <button title={t('drawing.remove')} onClick={() => run(t('drawing.done.balloonRemoved'), (h) => h.removeAnnotation(sheet.id, p.id))}>×</button>
                   </li>
                 ))}
               </ul>
               <TechnicalRequirements
                 key={`${sheet.id}-${sheet.technicalRequirements.join('|')}`}
                 items={sheet.technicalRequirements}
-                onApply={(items) => run('Технические требования', (d) => d.setSheet(sheet.id, { technicalRequirements: items }))}
+                onApply={(items) => run(t('drawing.done.requirements'), (d) => d.setSheet(sheet.id, { technicalRequirements: items }))}
               />
               <label className="dr-check">
                 <input
                   type="checkbox"
                   checked={!!sheet.roughnessRemainder}
                   onChange={(e) =>
-                    run('Знак «остальное»', (d) => d.setSheet(sheet.id, { roughnessRemainder: e.target.checked ? { value: rough.value, parameter: rough.parameter } : null }))
+                    run(t('drawing.done.remainder'), (d) => d.setSheet(sheet.id, { roughnessRemainder: e.target.checked ? { value: rough.value, parameter: rough.parameter } : null }))
                   }
                 />
-                шероховатость остальных поверхностей ({rough.parameter} {rough.value})
+                {t('drawing.remainder', { parameter: rough.parameter, value: rough.value })}
               </label>
             </>
           )}
@@ -900,11 +940,11 @@ export default function DrawingEditorApp({
 
         <section className="dr-center">
           <div className="dr-tabs">
-            <button className={tab === 'sheet' ? 'dr-active' : ''} onClick={() => setTab('sheet')}>Лист</button>
+            <button className={tab === 'sheet' ? 'dr-active' : ''} onClick={() => setTab('sheet')}>{t('drawing.tab.sheet')}</button>
             <button className={tab === 'specification' ? 'dr-active' : ''} onClick={() => setTab('specification')} data-testid="tab-specification">
-              Спецификация
+              {t('drawing.tab.specification')}
             </button>
-            {sheet && <span className="dr-muted">{sheet.name} · масштаб {sheet.computedScale?.label} · {modelName}</span>}
+            {sheet && <span className="dr-muted">{t('drawing.sheetInfo', { name: sheet.name ?? '', scale: sheet.computedScale?.label ?? '', model: modelName })}</span>}
           </div>
           {tab === 'sheet' && picture && (
             <SheetCanvas
@@ -916,35 +956,47 @@ export default function DrawingEditorApp({
               onSelectView={setSelectedView}
               onEdgeClick={onEdgeClick}
               onSheetClick={onSheetClick}
-              onMoveView={(view, x, y) => run('Вид перемещён', (d) => d.moveView(sheetId!, view, x, y))}
+              onMoveView={(view, x, y) => run(t('drawing.done.viewMoved'), (d) => d.moveView(sheetId!, view, x, y))}
             />
           )}
-          {tab === 'sheet' && !picture && <div className="dr-empty">{status === 'loading' ? 'Загрузка…' : 'Нет открытого чертежа'}</div>}
+          {tab === 'sheet' && !picture && <div className="dr-empty">{status === 'loading' ? t('drawing.loadingShort') : t('drawing.noDrawing')}</div>}
           {tab === 'specification' && (
             <div className="dr-spec" data-testid="specification">
               {spec.table ? (
                 <table>
                   <thead>
-                    <tr><th>Формат</th><th>Зона</th><th>Поз.</th><th>Обозначение</th><th>Наименование</th><th>Кол.</th><th>Примечание</th></tr>
+                    <tr>
+                      {SPEC_COLUMNS.map((c) => (
+                        <th key={c}>{t(`drawing.spec.${c}`)}</th>
+                      ))}
+                      <th>{t('drawing.spec.onSheet')}</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {spec.table.sections.flatMap((s) => [
-                      <tr key={`h-${s.section}`} className="dr-spec-section"><td colSpan={7}>{s.title}</td></tr>,
+                      <tr key={`h-${s.section}`} className="dr-spec-section"><td colSpan={8}>{s.title}</td></tr>,
                       ...s.items.map((it, i) => (
-                        <tr key={`${s.section}-${i}`}>
+                        <tr key={`${s.section}-${i}`} data-testid={it.position ? `spec-position-${it.position}` : undefined} data-balloons={it.position ? balloonCount(it.position) : undefined}>
                           <td>{it.format}</td><td>{it.zone}</td><td>{it.position || ''}</td><td>{it.designation}</td><td>{it.name}</td><td>{it.quantity ?? ''}</td><td>{it.note}</td>
+                          <td>{it.position ? balloonCount(it.position) : ''}</td>
                         </tr>
                       )),
                     ])}
                   </tbody>
                 </table>
               ) : (
-                <p className="dr-muted">{spec.reason ?? 'Нет открытого чертежа'}</p>
+                <p className="dr-muted">{spec.reason ?? t('drawing.noDrawing')}</p>
+              )}
+              {spec.table && sheet && (
+                <div className="dr-muted" data-testid="balloon-summary">
+                  {t('drawing.balloonsCount', { count: sheet.balloons.length, total: specPositions.length })}
+                  {missingPositions.length > 0 && <div data-testid="balloon-missing">{t('drawing.balloonsMissing', { list: missingPositions.join(', ') })}</div>}
+                </div>
               )}
               {desc?.model.kind === 'assembly' && sheet && (
                 <label className="dr-check">
-                  <input type="checkbox" checked={sheet.partsList} onChange={(e) => run('Перечень составных частей', (d) => d.setSheet(sheet.id, { partsList: e.target.checked }))} />
-                  перечень составных частей на листе
+                  <input type="checkbox" checked={sheet.partsList} onChange={(e) => run(t('drawing.done.partsList'), (d) => d.setSheet(sheet.id, { partsList: e.target.checked }))} />
+                  {t('drawing.partsList')}
                 </label>
               )}
             </div>
@@ -954,7 +1006,7 @@ export default function DrawingEditorApp({
         <aside className="dr-right">
           {sheet && desc && drawing && (
             <>
-              <h2>Модель</h2>
+              <h2>{t('drawing.model')}</h2>
               {variables.length > 0 && (
                 <table className="dr-vars" data-testid="variables">
                   <tbody>
@@ -970,7 +1022,7 @@ export default function DrawingEditorApp({
                               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             }}
                             onBlur={(e) => {
-                              if (e.target.value !== v.expression) run(`Параметр ${v.name} изменён`, (d) => d.setVariable(v.name, e.target.value));
+                              if (e.target.value !== v.expression) run(t('drawing.done.variable', { name: v.name }), (d) => d.setVariable(v.name, e.target.value));
                             }}
                           />
                         </td>
@@ -985,7 +1037,7 @@ export default function DrawingEditorApp({
                   key={JSON.stringify(desc.model.properties)}
                   properties={desc.model.properties}
                   onApply={(p) =>
-                    run('Свойства детали', async (d) => {
+                    run(t('drawing.done.properties'), async (d) => {
                       const r = await d.setModelProperties(p);
                       setReport(r);
                     })
@@ -993,26 +1045,26 @@ export default function DrawingEditorApp({
                 />
               )}
 
-              <h2>Обновление по модели</h2>
+              <h2>{t('drawing.update')}</h2>
               <div className={`dr-box ${staleness?.modelChanged ? 'dr-stale' : ''}`} data-testid="update-panel">
                 <div data-testid="model-state">
                   {staleness?.modelChanged
-                    ? `Модель изменилась: видов к пересчёту ${staleness.staleViews.length}, размеров ${staleness.dimensions.length}`
-                    : 'Чертёж соответствует модели'}
+                    ? t('drawing.modelChanged', { views: staleness.staleViews.length, dimensions: staleness.dimensions.length })
+                    : t('drawing.modelSame')}
                 </div>
-                <button data-testid="update-from-model" onClick={onUpdate}>Обновить по модели</button>
+                <button data-testid="update-from-model" onClick={onUpdate}>{t('drawing.updateButton')}</button>
                 {report && (
                   <div className="dr-report" data-testid="update-report">
                     <div>
-                      Ревизия {report.revision}; видов рассчитано {report.viewsComputed}, из кэша {report.viewsFromCache}
+                      {t('drawing.report.revision', { revision: report.revision, computed: report.viewsComputed, cached: report.viewsFromCache })}
                     </div>
-                    <div>Изменённые размеры ({report.stale.length}):</div>
+                    <div>{t('drawing.report.stale', { count: report.stale.length })}</div>
                     <ul data-testid="report-stale">
                       {report.stale.map((s) => (
                         <li key={s}>{s}</li>
                       ))}
                     </ul>
-                    <div>Висячие ({report.dangling.length}):</div>
+                    <div>{t('drawing.report.dangling', { count: report.dangling.length })}</div>
                     <ul data-testid="report-dangling">
                       {report.dangling.map((s) => (
                         <li key={s} className="dr-dangling">{s}</li>
@@ -1023,11 +1075,11 @@ export default function DrawingEditorApp({
                 )}
               </div>
 
-              <h2>Основная надпись</h2>
+              <h2>{t('drawing.titleBlock')}</h2>
               <TitleBlockForm
                 key={`${sheet.id}-${JSON.stringify(sheet.title)}`}
                 sheet={sheet}
-                onApply={(title) => run('Основная надпись изменена', (d) => d.setSheet(sheet.id, { title }))}
+                onApply={(title) => run(t('drawing.done.title'), (d) => d.setSheet(sheet.id, { title }))}
               />
             </>
           )}
@@ -1051,12 +1103,13 @@ export default function DrawingEditorApp({
 }
 
 function TechnicalRequirements(props: { items: string[]; onApply(items: string[]): void }) {
+  const { t } = useI18n();
   const [text, setText] = useState(props.items.join('\n'));
   return (
     <div className="dr-box">
-      <div>Технические требования (по пункту в строке)</div>
+      <div>{t('drawing.requirements')}</div>
       <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} data-testid="technical-requirements" />
-      <button onClick={() => props.onApply(text.split('\n').map((s) => s.trim()).filter(Boolean))}>Применить</button>
+      <button onClick={() => props.onApply(text.split('\n').map((s) => s.trim()).filter(Boolean))}>{t('drawing.apply')}</button>
     </div>
   );
 }
@@ -1065,58 +1118,60 @@ function ModelPropertiesForm(props: {
   properties: DrawingDescription['model']['properties'];
   onApply(p: Partial<DrawingDescription['model']['properties']>): void;
 }) {
+  const { t } = useI18n();
   const [p, setP] = useState({ ...props.properties, density: props.properties.density === null ? '' : String(props.properties.density) });
   return (
     <div className="dr-box dr-form">
-      <label>Обозначение <input value={p.designation} onChange={(e) => setP({ ...p, designation: e.target.value })} data-testid="model-designation" /></label>
-      <label>Наименование <input value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} /></label>
-      <label>Материал <input value={p.material} onChange={(e) => setP({ ...p, material: e.target.value })} /></label>
-      <label>Плотность, кг/м³ <input value={p.density} onChange={(e) => setP({ ...p, density: e.target.value })} size={6} /></label>
-      <button onClick={() => props.onApply({ ...p, density: p.density.trim() === '' ? null : Number(p.density) })}>Применить</button>
+      <label>{t('drawing.prop.designation')} <input value={p.designation} onChange={(e) => setP({ ...p, designation: e.target.value })} data-testid="model-designation" /></label>
+      <label>{t('drawing.prop.name')} <input value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} /></label>
+      <label>{t('drawing.prop.material')} <input value={p.material} onChange={(e) => setP({ ...p, material: e.target.value })} /></label>
+      <label>{t('drawing.prop.density')} <input value={p.density} onChange={(e) => setP({ ...p, density: e.target.value })} size={6} /></label>
+      <button onClick={() => props.onApply({ ...p, density: p.density.trim() === '' ? null : Number(p.density) })}>{t('drawing.apply')}</button>
     </div>
   );
 }
 
-const TITLE_ROWS: [keyof Pick<SheetInfo['title'], 'designation' | 'name' | 'material' | 'mass' | 'litera' | 'organization'>, string][] = [
-  ['designation', 'Обозначение'],
-  ['name', 'Наименование'],
-  ['material', 'Материал'],
-  ['mass', 'Масса'],
-  ['litera', 'Литера'],
-  ['organization', 'Организация'],
+const TITLE_ROWS: (keyof Pick<SheetInfo['title'], 'designation' | 'name' | 'material' | 'mass' | 'litera' | 'organization'>)[] = [
+  'designation',
+  'name',
+  'material',
+  'mass',
+  'litera',
+  'organization',
 ];
-const SIGNATURES: [keyof Pick<SheetInfo['title'], 'developer' | 'checker' | 'techControl' | 'normControl' | 'approver'>, string][] = [
-  ['developer', 'Разраб.'],
-  ['checker', 'Пров.'],
-  ['techControl', 'Т.контр.'],
-  ['normControl', 'Н.контр.'],
-  ['approver', 'Утв.'],
+const SIGNATURES: (keyof Pick<SheetInfo['title'], 'developer' | 'checker' | 'techControl' | 'normControl' | 'approver'>)[] = [
+  'developer',
+  'checker',
+  'techControl',
+  'normControl',
+  'approver',
 ];
 
 function TitleBlockForm(props: { sheet: SheetInfo; onApply(title: SheetInfo['title']): void }) {
-  const [t, setT] = useState(props.sheet.title);
+  const { t } = useI18n();
+  const [title, setTitle] = useState(props.sheet.title);
   const shown = props.sheet.titleShown;
   return (
     <div className="dr-box dr-form" data-testid="title-block">
-      {TITLE_ROWS.map(([k, l]) => (
+      {TITLE_ROWS.map((k) => (
         <label key={k}>
-          {l}
+          {t(`drawing.title.${k}`)}
           <input
-            value={t[k]}
+            value={title[k]}
             placeholder={shown && k in shown ? String((shown as Record<string, unknown>)[k] ?? '') : ''}
-            onChange={(e) => setT({ ...t, [k]: e.target.value })}
+            onChange={(e) => setTitle({ ...title, [k]: e.target.value })}
             data-testid={`title-${k}`}
           />
         </label>
       ))}
-      {SIGNATURES.map(([k, l]) => (
+      {SIGNATURES.map((k) => (
         <label key={k}>
-          {l}
-          <input value={t[k].surname} placeholder="фамилия" onChange={(e) => setT({ ...t, [k]: { ...t[k], surname: e.target.value } })} data-testid={`title-${k}`} />
-          <input value={t[k].date} placeholder="дата" size={5} onChange={(e) => setT({ ...t, [k]: { ...t[k], date: e.target.value } })} />
+          {t(`drawing.title.${k}`)}
+          <input value={title[k].surname} placeholder={t('drawing.title.surname')} onChange={(e) => setTitle({ ...title, [k]: { ...title[k], surname: e.target.value } })} data-testid={`title-${k}`} />
+          <input value={title[k].date} placeholder={t('drawing.title.date')} size={5} onChange={(e) => setTitle({ ...title, [k]: { ...title[k], date: e.target.value } })} />
         </label>
       ))}
-      <button onClick={() => props.onApply(t)} data-testid="title-apply">Применить</button>
+      <button onClick={() => props.onApply(title)} data-testid="title-apply">{t('drawing.apply')}</button>
     </div>
   );
 }
