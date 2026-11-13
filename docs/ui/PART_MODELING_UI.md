@@ -20,7 +20,7 @@
 | `src/ui/modeling/PartModelerApp.tsx` | страница: панель инструментов, дерево, вьюпорт, панель операции, свойства, переменные |
 | `src/ui/modeling/FeatureTree.tsx` | дерево построения с состояниями, маркером отката и контекстным меню |
 | `src/ui/modeling/FeaturePanel.tsx` | панель операции по описанию типа из каталога ядра |
-| `src/ui/modeling/featureForm.ts`, `sketchDimensions.ts`, `treeActions.ts`, `labels.ts` | логика форм, размеры эскиза, действия дерева, подписи (Jest: `src/ui/modeling/__tests__`) |
+| `src/ui/modeling/featureForm.ts`, `sketchDimensions.ts`, `treeActions.ts`, `labels.ts` | логика форм, размеры эскиза, действия дерева (меню — ключи `menu.*`), порядок панели инструментов `toolbarTypes`: известные типы по порядку, затем любые другие типы каталога ядра под их подписью или именем ядра (новая операция ядра появляется без правки интерфейса); подписи — словарь `src/ui/app/messages/part.ts` (RU/EN, `docs/ui/APP_SHELL.md`, «Локализация») (Jest: `src/ui/modeling/__tests__`) |
 | `src/ui/kernel/KernelViewport.tsx`, `edgePick.ts` | вьюпорт ядра, расширенный выбором рёбер, подсветкой нескольких элементов и наложением (Jest: `edgePick.test.ts`) |
 | `web/part-modeler/` | webpack-конфигурация страницы, шаблон, конфигурация Playwright |
 | `tests/e2e-modeling/part_modeling.spec.ts` | сквозной тест Playwright |

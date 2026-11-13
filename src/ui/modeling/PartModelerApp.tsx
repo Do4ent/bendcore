@@ -36,16 +36,17 @@ import {
   toFeatureSpec,
   togglePick,
 } from './featureForm';
-import { FEATURE_LABELS, TOOLBAR_TYPES, label } from './labels';
+import { toolbarTypes } from './labels';
 import { defaultModelingBaseUrl, loadModelingFrom } from './modelingLoader';
 import type { Remote, WasmClient } from '../worker/wasmClient';
 import { isCancelled } from '../worker/wasmClient';
 import { waitIdle } from '../worker/idle';
 import BusyIndicator from '../app/BusyIndicator';
 import { useHotkeys } from '../app/hotkeys';
-import { useI18n } from '../app/i18n';
+import { caption, useI18n } from '../app/i18n';
 import { downloadText } from '../app/editorHost';
 import type { DocumentFile, EditorHostProps } from '../app/editorHost';
+import { useFaultReport } from '../app/faultReport';
 import { applySketchDimensions, templateProfiles } from './sketchDimensions';
 import type { TreeAction } from './treeActions';
 import '../kernel/KernelViewer.css';
@@ -125,11 +126,11 @@ function shownTarget(panel: PanelState | null): string {
 
 type PartDoc = Remote<PartDocumentHandle>;
 
-const NEW_FILE_NAME = 'деталь.bcpart.json';
 
-const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = null, initialDirty = false, onChange, onFile, onCreateDrawing }) => {
+const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = null, initialDirty = false, onChange, onFile, onCreateDrawing, onFault }) => {
   const { t } = useI18n();
   const [kernel, setKernel] = useState<WasmClient<ModelingKernel> | null>(null);
+  useFaultReport(kernel as WasmClient<unknown> | null, onFault);
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<PartModelerState['status']>('loading');
   const [catalog, setCatalog] = useState<FeatureTypeSpec[]>([]);
@@ -142,7 +143,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const [error, setError] = useState<PartModelerState['error']>(null);
   const [density, setDensity] = useState('7850');
   const [frameKey, setFrameKey] = useState(0);
-  const [fileName, setFileName] = useState(initial?.name ?? NEW_FILE_NAME);
+  const [fileName, setFileName] = useState(() => initial?.name ?? t('part.newFile'));
   const [newVar, setNewVar] = useState({ name: '', expression: '' });
   const [sketchMode, setSketchMode] = useState<{ featureId: string; isNew: boolean; body: KernelMesh | null } | null>(null);
   const [sketchPlane, setSketchPlane] = useState('XY');
@@ -303,7 +304,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const cancelOperation = useCallback(async () => {
     const old = kernelRef.current;
     if (!old) return;
-    old.cancel('прервано пользователем');
+    old.cancel(t('part.cancelledByUser'));
     setKernel(null);
     setStatus('loading');
     const snapshot = snapshotRef.current;
@@ -335,7 +336,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     const form = newFeatureForm(spec, snapshot.features, position);
     const firstSlot = spec.references.find((r) => !r.optional && r.kind !== 'vertex');
     const p: PanelState = { mode: 'add', type, featureId: null, position, form, activeSlot: firstSlot?.name ?? null };
-    void run((d) => d.beginTransaction(`Добавить: ${label(FEATURE_LABELS, type)}`), p).then((ok) => ok && setPanel(p));
+    void run((d) => d.beginTransaction(t('part.tx.add', { feature: caption(t, 'part.feature.', type) })), p).then((ok) => ok && setPanel(p));
   };
 
   const openEdit = (feature: FeatureView) => {
@@ -349,7 +350,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
       form: existingFeatureForm(spec, feature),
       activeSlot: null,
     };
-    void run((d) => d.beginTransaction(`Изменить: ${feature.label}`), p).then((ok) => ok && setPanel(p));
+    void run((d) => d.beginTransaction(t('part.tx.edit', { feature: feature.label })), p).then((ok) => ok && setPanel(p));
   };
 
   /** Applies the form to the document (inside the panel's transaction) and rebuilds. */
@@ -359,7 +360,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     let next: PanelState | null = null;
     await run(async (d) => {
       let sketch;
-      if (p.form.template) sketch = await kernel.root.sketchTemplate(templateProfiles(p.form.template));
+      if (p.form.template) sketch = await kernel.root.sketchTemplate(templateProfiles(p.form.template, t));
       if (p.form.dimensions && p.featureId) {
         const current = (await d.feature(p.featureId)).sketch;
         if (current) sketch = applySketchDimensions(current, p.form.dimensions);
@@ -501,7 +502,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     setError(null);
     try {
       await replaceDocument(await kernel.root.createDocument(), null);
-      setFileName(NEW_FILE_NAME);
+      setFileName(t('part.newFile'));
     } catch (e) {
       if (!isCancelled(e)) setError(describeError(e));
     }
@@ -577,14 +578,14 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     const position = snapshot.doc?.rollback ?? snapshot.features.length;
     let id: string | null = null;
     await run(async (d) => {
-      await d.beginTransaction('Эскиз');
+      await d.beginTransaction(t('part.tx.sketch'));
       const spec: Parameters<PartDocumentHandle['addFeature']>[0] = {
         type: 'Sketch',
         options: { plane: sketchPlane },
         sketch: { points: [], geometry: [], constraints: [], regions: [] },
       };
       if (sketchPlane === 'face') {
-        if (selection?.kind !== 'face') throw new Error('выберите плоскую грань во вьюпорте');
+        if (selection?.kind !== 'face') throw new Error(t('part.pickPlanarFace'));
         spec.references = { face: [await d.makeReference('final', 'face', selection.index)] };
       }
       try {
@@ -602,7 +603,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
 
   const editSketch = async (f: FeatureView) => {
     if (panelRef.current || sketchMode) return;
-    if (await run((d) => d.beginTransaction(`Изменить эскиз: ${f.label}`), null)) await enterSketch(f.id, false);
+    if (await run((d) => d.beginTransaction(t('part.tx.editSketch', { feature: f.label })), null)) await enterSketch(f.id, false);
   };
 
   const exitSketch = (data: SketchData) => {
@@ -696,9 +697,9 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   return (
     <div className="kv-root pm-root">
       <header className="kv-toolbar pm-toolbar">
-        <span className="kv-title">bendcore · деталь</span>
+        <span className="kv-title">{t('part.title')}</span>
         <button type="button" onClick={() => void newDocument()} disabled={status !== 'ready' || busyPanel} data-testid="doc-new">
-          Новая
+          {t('part.new')}
         </button>
         <label className="kv-file">
           <input
@@ -713,10 +714,10 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
               e.target.value = '';
             }}
           />
-          Открыть…
+          {t('part.open')}
         </label>
         <button type="button" onClick={() => void saveFile()} disabled={status !== 'ready'} data-testid="doc-save" title="Ctrl+S">
-          Сохранить
+          {t('part.save')}
         </button>
         {onCreateDrawing && (
           <button type="button" onClick={() => void createDrawing()} disabled={status !== 'ready' || busyPanel} data-testid="doc-create-drawing">
@@ -729,52 +730,52 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
           onClick={undo}
           disabled={busyPanel || !docState?.canUndo}
           data-testid="undo"
-          title={docState?.undoHistory.at(-1)?.name ? `Отменить: ${docState.undoHistory.at(-1)!.name} (Ctrl+Z)` : 'Ctrl+Z'}
+          title={docState?.undoHistory.at(-1)?.name ? t('part.undoNamed', { name: docState.undoHistory.at(-1)!.name }) : 'Ctrl+Z'}
         >
-          Отменить
+          {t('part.undo')}
         </button>
         <button
           type="button"
           onClick={redo}
           disabled={busyPanel || !docState?.canRedo}
           data-testid="redo"
-          title={docState?.redoHistory.at(-1)?.name ? `Повторить: ${docState.redoHistory.at(-1)!.name} (Ctrl+Y)` : 'Ctrl+Y'}
+          title={docState?.redoHistory.at(-1)?.name ? t('part.redoNamed', { name: docState.redoHistory.at(-1)!.name }) : 'Ctrl+Y'}
         >
-          Повторить
+          {t('part.redo')}
         </button>
         <span className="pm-sep" />
         <select
           value={sketchPlane}
           data-testid="sketch-plane"
-          title="Плоскость нового эскиза"
+          title={t('part.sketchPlane')}
           disabled={status !== 'ready' || busyPanel}
           onChange={(e) => setSketchPlane(e.target.value)}
         >
           <option value="XY">XY</option>
           <option value="XZ">XZ</option>
           <option value="YZ">YZ</option>
-          <option value="face">выбранная грань</option>
+          <option value="face">{t('part.selectedFace')}</option>
         </select>
         <button type="button" data-testid="sketch-draw" disabled={status !== 'ready' || busyPanel} onClick={() => void newSketch()}>
-          Нарисовать эскиз
+          {t('part.drawSketch')}
         </button>
         <span className="pm-sep" />
-        {TOOLBAR_TYPES.filter((t) => specOf(t)).map((t) => (
+        {toolbarTypes(catalog.map((c) => c.type)).map((type) => (
           <button
             type="button"
-            key={t}
-            data-testid={`add-${t}`}
+            key={type}
+            data-testid={`add-${type}`}
             disabled={status !== 'ready' || busyPanel}
-            onClick={() => openAdd(t)}
+            onClick={() => openAdd(type)}
           >
-            {label(FEATURE_LABELS, t)}
+            {caption(t, 'part.feature.', type)}
           </button>
         ))}
         <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
         <span className="kv-status" data-testid="modeling-status">
-          {status === 'loading' && 'Загрузка ядра…'}
-          {status === 'ready' && 'Ядро готово'}
-          {status === 'failed' && 'Ядро не загружено'}
+          {status === 'loading' && t('part.loading')}
+          {status === 'ready' && t('part.ready')}
+          {status === 'failed' && t('part.failed')}
         </span>
       </header>
       {error && (
@@ -807,7 +808,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
             }
           />
           <section className="pm-variables">
-            <h2>Переменные</h2>
+            <h2>{t('part.variables')}</h2>
             <table>
               <tbody>
                 {snapshot.variables.map((v) => (
@@ -833,7 +834,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                     <td>
                       <button
                         type="button"
-                        aria-label={`удалить ${v.name}`}
+                        aria-label={t('part.removeVariable', { name: v.name })}
                         disabled={busyPanel}
                         onClick={() =>
                           void run(async (d) => {
@@ -850,7 +851,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                 <tr>
                   <td>
                     <input
-                      placeholder="имя"
+                      placeholder={t('part.variableName')}
                       value={newVar.name}
                       data-testid="var-new-name"
                       disabled={busyPanel}
@@ -859,7 +860,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                   </td>
                   <td>
                     <input
-                      placeholder="выражение"
+                      placeholder={t('part.variableExpression')}
                       value={newVar.expression}
                       data-testid="var-new-expression"
                       disabled={busyPanel}
@@ -931,16 +932,16 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                 onCancel={cancel}
               />
             ) : (
-              <p className="pm-hint">Выберите операцию на панели инструментов или узел дерева.</p>
+              <p className="pm-hint">{t('part.hint')}</p>
             )}
             <section>
-              <h2>Свойства</h2>
+              <h2>{t('part.properties')}</h2>
               <dl data-testid="properties">
-                <dt>Объём, мм³</dt>
+                <dt>{t('part.volume')}</dt>
                 <dd data-testid="prop-volume" data-value={props?.volume ?? ''}>
-                  {props?.volume === null || props?.volume === undefined ? 'нет тела' : fmt(props.volume)}
+                  {props?.volume === null || props?.volume === undefined ? t('part.noBody') : fmt(props.volume)}
                 </dd>
-                <dt>Плотность, кг/м³</dt>
+                <dt>{t('part.density')}</dt>
                 <dd>
                   <input
                     value={density}
@@ -949,21 +950,21 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                     onBlur={() => void refresh()}
                   />
                 </dd>
-                <dt>Масса, кг</dt>
+                <dt>{t('part.mass')}</dt>
                 <dd data-testid="prop-mass" data-value={props?.mass ?? ''}>
                   {fmt(props?.mass, 4)}
                 </dd>
-                <dt>Площадь, мм²</dt>
+                <dt>{t('part.area')}</dt>
                 <dd>{fmt(props?.area)}</dd>
-                <dt>Центр масс</dt>
+                <dt>{t('part.centerOfMass')}</dt>
                 <dd>{props?.centerOfMass ? fmtVec(props.centerOfMass) : '—'}</dd>
-                <dt>Габарит</dt>
+                <dt>{t('part.box')}</dt>
                 <dd>{props?.boundingBox ? `${fmtVec(props.boundingBox.min)} – ${fmtVec(props.boundingBox.max)}` : '—'}</dd>
-                <dt>Грани / рёбра</dt>
+                <dt>{t('part.facesEdges')}</dt>
                 <dd>{props ? `${props.counts.faces} / ${props.counts.edges}` : '—'}</dd>
                 {selection && (
                   <>
-                    <dt>{selection.kind === 'face' ? 'Грань' : 'Ребро'}</dt>
+                    <dt>{selection.kind === 'face' ? t('part.face') : t('part.edge')}</dt>
                     <dd data-testid="selection-name">
                       <code>{selection.name}</code>
                     </dd>

@@ -274,6 +274,13 @@ Status DrawingDocument::validate() const {
             if (d.edge.kind != modeling::ElementKind::Edge) return invalid("drawing: datum '" + d.id + "' must reference an edge");
             if (d.letter.empty()) return invalid("drawing: datum '" + d.id + "' has no letter");
         }
+        for (const BalloonItem& b : s.balloons) {
+            if (b.id.empty() || !annIds.insert(b.id).second) return invalid("drawing: empty or duplicate annotation id '" + b.id + "'");
+            if (!seen.count(b.view)) return invalid("drawing: position '" + b.id + "' refers to unknown view '" + b.view + "'");
+            if (b.edge.kind != modeling::ElementKind::Edge) return invalid("drawing: position '" + b.id + "' must reference an edge");
+            if (b.at && (!std::isfinite(b.at->x) || !std::isfinite(b.at->y)))
+                return invalid("drawing: position '" + b.id + "' has a non-finite shelf point");
+        }
     }
     return okStatus();
 }
@@ -807,7 +814,49 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             cs.datums.emplace_back(std::move(g).value());
         }
 
-        // 7. Позиции по спецификации (ГОСТ 2.109): выноски на видимые линии составных частей.
+        // 7. Позиции по спецификации (ГОСТ 2.109). Сначала ручные: точка выноски на видимой линии
+        // выбранного ребра, номер — позиция детали, которой принадлежит ребро.
+        std::set<assembly_v2::DefinitionId> manualDefinitions;
+        if (!sd.balloons.empty() && model.kind != ModelKind::Assembly)
+            return invalid("sheet '" + sd.id + "': positions need an assembly model");
+        for (BalloonItem& bi : sd.balloons) {
+            const ComputedView& cv = cs.views[indexOf.at(bi.view)];
+            ModelRef ref;
+            ref.kind = annotations::RefKind::Edge;
+            ref.persistent = bi.edge;
+            auto rb = annotations::rebindRef(ref, binding);
+            std::optional<std::pair<Point2, double>> best;
+            if (rb.ok) {
+                for (const ViewEdge& e : cv.sheetView.view.edges) {
+                    if (e.visibility != Visibility::Visible || !e.edgeIndex || *e.edgeIndex != ref.index) continue;
+                    auto p = pickPoint(e.curve);
+                    if (p && (!best || p->second > best->second)) best = p;
+                }
+            }
+            std::optional<int> position;
+            std::optional<assembly_v2::DefinitionId> owner;
+            if (rb.ok && ref.index < model.edgeOwner.size()) {
+                owner = model.edgeOwner[ref.index];
+                position = spec->positionOf(*owner);
+            }
+            if (!rb.ok || !best || !position) {
+                report.dangling.push_back(sd.id + "/" + bi.id + ": " +
+                                          (!rb.ok   ? "reference is broken: " + rb.detail
+                                           : !best ? "edge is not shown as a visible line in view '" + bi.view + "'"
+                                                   : "the part of the edge has no position in the specification"));
+                cs.manualBalloons.emplace_back(std::nullopt);
+                continue;
+            }
+            bi.edge = ref.persistent;
+            annotations::Balloon b;
+            b.definition = *owner;
+            b.target = cv.sheetView.toSheet(best->first);
+            b.at = bi.at ? *bi.at : Point2{b.target.x + 12.0, b.target.y + 8.0};
+            b.text = std::to_string(*position);
+            manualDefinitions.insert(*owner);
+            cs.manualBalloons.emplace_back(std::move(b));
+        }
+        // Затем автоматические — на видимые линии составных частей, у которых нет ручной позиции.
         for (const ComputedView& cv : cs.views) {
             if (!cv.def.autoBalloons) continue;
             if (model.kind != ModelKind::Assembly)
@@ -818,7 +867,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             std::vector<annotations::Balloon> balloons;
             for (const annotations::SpecSectionData& sec : spec->sections) {
                 for (const annotations::SpecItem& it : sec.items) {
-                    if (!it.definition || it.position <= 0) continue;
+                    if (!it.definition || it.position <= 0 || manualDefinitions.count(*it.definition)) continue;
                     std::optional<std::pair<Point2, double>> best;
                     for (const ViewEdge& e : cv.sheetView.view.edges) {
                         if (e.visibility != Visibility::Visible || !e.edgeIndex || *e.edgeIndex >= model.edgeOwner.size()) continue;
@@ -837,7 +886,9 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 }
             }
             if (balloons.empty()) {
-                report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': no assembly part is visible for positions");
+                // Silent when every part already has a manual position on this sheet.
+                if (manualDefinitions.empty() || !br.withoutBalloon.empty())
+                    report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': no assembly part is visible for positions");
             } else {
                 // Полки в колонну справа от вида (слева, если справа нет места), сверху вниз в
                 // порядке точек выносок, шаг не менее 10 мм.
@@ -967,6 +1018,12 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
         for (const annotations::Balloon& b : cs.balloons) {
             auto g = annotations::balloonGeometry(b, {}, style);
             if (!g) return g.error();
+            if (auto st = annotations::renderSymbol(d, g.value(), style); !st) return st.error();
+        }
+        for (std::size_t i = 0; i < cs.manualBalloons.size(); ++i) {
+            if (!cs.manualBalloons[i]) continue;
+            auto g = annotations::balloonGeometry(*cs.manualBalloons[i], {}, style);
+            if (!g) return Error{g.error().code, "sheet '" + cs.id + "', position '" + sd.balloons[i].id + "': " + g.error().message};
             if (auto st = annotations::renderSymbol(d, g.value(), style); !st) return st.error();
         }
         TitleBlockLayout above = lay.value();

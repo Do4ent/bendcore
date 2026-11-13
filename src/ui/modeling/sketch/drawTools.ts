@@ -7,6 +7,8 @@
 import type { SketchData } from '../../../wasm/bendcore_modeling_api.mjs';
 import { addConstraint, addGeometry, addPoint, cloneSketch, originPoint } from './sketchModel';
 import type { Snap } from './snap';
+import { translate } from '../../app/i18n';
+import type { MessageKey } from '../../app/i18n';
 
 export type DrawTool =
   | 'line'
@@ -21,19 +23,20 @@ export type DrawTool =
   | 'spline'
   | 'point';
 
-export const DRAW_TOOL_LABELS: Record<DrawTool, string> = {
-  line: 'Отрезок',
-  rectangle: 'Прямоугольник',
-  'rectangle-center': 'Прямоугольник от центра',
-  circle: 'Окружность',
-  'circle-3': 'Окружность по 3 точкам',
-  arc: 'Дуга: центр, концы',
-  'arc-3': 'Дуга по 3 точкам',
-  'arc-tangent': 'Касательная дуга',
-  ellipse: 'Эллипс',
-  spline: 'Сплайн',
-  point: 'Точка',
-};
+/** Drawing tools in toolbar order; captions are messages sketch.tool.<tool>. */
+export const DRAW_TOOLS: DrawTool[] = [
+  'line',
+  'rectangle',
+  'rectangle-center',
+  'circle',
+  'circle-3',
+  'arc',
+  'arc-3',
+  'arc-tangent',
+  'ellipse',
+  'spline',
+  'point',
+];
 
 /** Picks a tool needs; the spline takes any number >= 2 and is finished explicitly. */
 export const PICK_COUNT: Record<DrawTool, number> = {
@@ -50,19 +53,19 @@ export const PICK_COUNT: Record<DrawTool, number> = {
   point: 1,
 };
 
-/** Prompt for pick number `n` (0-based). */
-export const PICK_HINTS: Record<DrawTool, string[]> = {
-  line: ['начало отрезка', 'конец отрезка (Esc — закончить цепочку)'],
-  rectangle: ['первый угол', 'противоположный угол'],
-  'rectangle-center': ['центр', 'угол'],
-  circle: ['центр', 'точка на окружности'],
-  'circle-3': ['первая точка', 'вторая точка', 'третья точка'],
-  arc: ['центр', 'начало дуги', 'конец дуги'],
-  'arc-3': ['начало дуги', 'конец дуги', 'точка на дуге'],
-  'arc-tangent': ['конец отрезка или дуги', 'конец касательной дуги'],
-  ellipse: ['центр', 'конец большой оси', 'точка на эллипсе'],
-  spline: ['полюс', 'следующий полюс (Enter — завершить)'],
-  point: ['положение точки'],
+/** Prompt (message key) for pick number `n` (0-based); the last one repeats. */
+export const PICK_HINTS: Record<DrawTool, MessageKey[]> = {
+  line: ['sketch.pick.lineStart', 'sketch.pick.lineEnd'],
+  rectangle: ['sketch.pick.firstCorner', 'sketch.pick.oppositeCorner'],
+  'rectangle-center': ['sketch.pick.center', 'sketch.pick.corner'],
+  circle: ['sketch.pick.center', 'sketch.pick.onCircle'],
+  'circle-3': ['sketch.pick.first', 'sketch.pick.second', 'sketch.pick.third'],
+  arc: ['sketch.pick.center', 'sketch.pick.arcStart', 'sketch.pick.arcEnd'],
+  'arc-3': ['sketch.pick.arcStart', 'sketch.pick.arcEnd', 'sketch.pick.onArc'],
+  'arc-tangent': ['sketch.pick.tangentFrom', 'sketch.pick.tangentEnd'],
+  ellipse: ['sketch.pick.center', 'sketch.pick.majorAxis', 'sketch.pick.onEllipse'],
+  spline: ['sketch.pick.pole', 'sketch.pick.nextPole'],
+  point: ['sketch.pick.point'],
 };
 
 export interface DrawOptions {
@@ -79,7 +82,15 @@ export interface DrawResult {
   next?: Snap;
 }
 
-export class DrawError extends Error {}
+/** A shape that cannot be drawn from the picks: `key` is the message for the user. */
+export class DrawError extends Error {
+  constructor(
+    readonly key: MessageKey,
+    readonly params: Record<string, string | number> = {},
+  ) {
+    super(translate('ru', key, params));
+  }
+}
 
 type V = { x: number; y: number };
 const sub = (a: V, b: V): V => ({ x: a.x - b.x, y: a.y - b.y });
@@ -236,24 +247,24 @@ export function drawShape(
     created.push(id);
     return id;
   };
-  const distinct = (a: V, b: V, what: string) => {
-    if (len(sub(a, b)) <= 1e-9) throw new DrawError(`${what}: точки совпадают`);
+  const distinct = (a: V, b: V, what: MessageKey) => {
+    if (len(sub(a, b)) <= 1e-9) throw new DrawError(what);
   };
 
   switch (tool) {
     case 'point': {
       const before = data.points.length;
       pointForSnap(data, picks[0]);
-      if (data.points.length === before) throw new DrawError('здесь уже есть точка');
+      if (data.points.length === before) throw new DrawError('sketch.err.pointExists');
       return { data, created };
     }
     case 'line': {
       const [a, b] = picks;
-      distinct(a, b, 'отрезок');
+      distinct(a, b, 'sketch.err.sameLine');
       const reusedBoth = a.point !== undefined && b.point !== undefined;
       const pa = pointForSnap(data, a);
       const pb = pointForSnap(data, b);
-      if (pa === pb) throw new DrawError('отрезок: точки совпадают');
+      if (pa === pb) throw new DrawError('sketch.err.sameLine');
       geo({ type: 'line', start: pa, end: pb });
       if (!reusedBoth) {
         const limit = Math.tan(((options.axisAngle ?? 2) * Math.PI) / 180);
@@ -269,7 +280,7 @@ export function drawShape(
       const centered = tool === 'rectangle-center';
       const c = picks[1];
       const a: Snap = centered ? free({ x: 2 * picks[0].x - c.x, y: 2 * picks[0].y - c.y }) : picks[0];
-      if (Math.abs(c.x - a.x) <= 1e-9 || Math.abs(c.y - a.y) <= 1e-9) throw new DrawError('прямоугольник вырожден');
+      if (Math.abs(c.x - a.x) <= 1e-9 || Math.abs(c.y - a.y) <= 1e-9) throw new DrawError('sketch.err.rectangle');
       const p0 = pointForSnap(data, a);
       const p1 = addPoint(data, c.x, a.y);
       const p2 = pointForSnap(data, c);
@@ -287,7 +298,7 @@ export function drawShape(
     }
     case 'circle': {
       const [c, rim] = picks;
-      distinct(c, rim, 'окружность');
+      distinct(c, rim, 'sketch.err.sameCircle');
       const pc = pointForSnap(data, c);
       const id = geo({ type: 'circle', center: pc, radius: String(len(sub(rim, c))) });
       rimConstraint(data, rim, id);
@@ -295,7 +306,7 @@ export function drawShape(
     }
     case 'circle-3': {
       const center = circumcenter(picks[0], picks[1], picks[2]);
-      if (!center) throw new DrawError('окружность: точки на одной прямой');
+      if (!center) throw new DrawError('sketch.err.circleCollinear');
       const pc = addPoint(data, center.x, center.y);
       const id = geo({ type: 'circle', center: pc, radius: String(len(sub(picks[0], center))) });
       for (const p of picks) rimConstraint(data, p, id);
@@ -303,12 +314,12 @@ export function drawShape(
     }
     case 'arc': {
       const [c, s, e0] = picks;
-      distinct(c, s, 'дуга');
-      distinct(c, e0, 'дуга');
+      distinct(c, s, 'sketch.err.sameArc');
+      distinct(c, e0, 'sketch.err.sameArc');
       const r = len(sub(s, c));
       const d = sub(e0, c);
       const onCircle = { x: c.x + (d.x / len(d)) * r, y: c.y + (d.y / len(d)) * r };
-      distinct(s, onCircle, 'дуга');
+      distinct(s, onCircle, 'sketch.err.sameArc');
       const pc = pointForSnap(data, c);
       const ps = pointForSnap(data, s);
       // The end is put on the circle; a snapped end keeps its snap (the solver moves the arc).
@@ -319,7 +330,7 @@ export function drawShape(
     case 'arc-3': {
       const [s, e, mid] = picks;
       const center = circumcenter(s, mid, e);
-      if (!center) throw new DrawError('дуга: точки на одной прямой');
+      if (!center) throw new DrawError('sketch.err.arcCollinear');
       const ps = pointForSnap(data, s);
       const pe = pointForSnap(data, e);
       const pc = addPoint(data, center.x, center.y);
@@ -329,13 +340,13 @@ export function drawShape(
     }
     case 'arc-tangent': {
       const [s, e] = picks;
-      if (s.point === undefined) throw new DrawError('касательная дуга начинается в конце отрезка или дуги');
+      if (s.point === undefined) throw new DrawError('sketch.err.tangentStart');
       const from = endDirection(data, s.point, positions);
-      if (!from) throw new DrawError('касательная дуга начинается в конце отрезка или дуги');
+      if (!from) throw new DrawError('sketch.err.tangentStart');
       const start = positions[s.point];
-      distinct(start, e, 'дуга');
+      distinct(start, e, 'sketch.err.sameArc');
       const arc = tangentArc(start, from.dir, e);
-      if (!arc) throw new DrawError('дуга: конец лежит на касательной');
+      if (!arc) throw new DrawError('sketch.err.tangentEnd');
       const pe = pointForSnap(data, e);
       const pc = addPoint(data, arc.center.x, arc.center.y);
       const id = geo({ type: 'arc', center: pc, start: s.point, end: pe, counterClockwise: arc.counterClockwise });
@@ -344,19 +355,19 @@ export function drawShape(
     }
     case 'ellipse': {
       const el = ellipseFrom(picks[0], picks[1], picks[2]);
-      if (!el) throw new DrawError('эллипс вырожден (совпадающие точки или окружность)');
+      if (!el) throw new DrawError('sketch.err.ellipse');
       const pc = pointForSnap(data, picks[0]);
       const pf = addPoint(data, el.focus.x, el.focus.y);
       geo({ type: 'ellipse', center: pc, focus: pf, radius: String(el.minor) });
       return { data, created };
     }
     case 'spline': {
-      if (picks.length < 2) throw new DrawError('сплайну нужны хотя бы два полюса');
-      for (let i = 1; i < picks.length; ++i) distinct(picks[i - 1], picks[i], 'сплайн');
+      if (picks.length < 2) throw new DrawError('sketch.err.splinePoles');
+      for (let i = 1; i < picks.length; ++i) distinct(picks[i - 1], picks[i], 'sketch.err.sameSpline');
       const poles = picks.map((p) => pointForSnap(data, p));
       geo({ type: 'bspline', poles, ...clampedKnots(poles.length), weights: [], periodic: false });
       return { data, created };
     }
   }
-  throw new DrawError(`неизвестный инструмент ${String(tool)}`);
+  throw new DrawError('sketch.err.unknownTool', { tool: String(tool) });
 }

@@ -68,7 +68,31 @@ export function isRemoteRef(v: unknown): v is RemoteRef {
   return typeof v === 'object' && v !== null && typeof (v as RemoteRef).__bcRemote === 'number';
 }
 
+/**
+ * True for a WebAssembly trap or an Emscripten abort: WebAssembly.RuntimeError ("memory access
+ * out of bounds", "null function or function signature mismatch", "integer divide by zero",
+ * "unreachable", "Aborted(…)"). WASM has no signals, so this is where a native SIGSEGV / SIGBUS /
+ * SIGFPE of OCCT ends up (docs/kernel/KERNEL_CORE.md, occt_fault_guard); the module instance is
+ * not usable afterwards.
+ */
+export function isWasmTrap(e: unknown): boolean {
+  const runtimeError = (globalThis as { WebAssembly?: { RuntimeError?: new () => Error } }).WebAssembly?.RuntimeError;
+  if (runtimeError && e instanceof runtimeError) return true;
+  // Errors of another realm (a test sandbox) are not instances of this realm's classes.
+  return typeof e === 'object' && e !== null && (e as { name?: unknown }).name === 'RuntimeError' && typeof (e as { message?: unknown }).message === 'string';
+}
+
+/**
+ * Message of a native kernel error made from a hardware fault by occt_fault_guard
+ * ("SIGSEGV (invalid memory access at 0x…) inside OCCT", SIGBUS, "SIGFPE (arithmetic fault …)").
+ * In native there is no separate error code: the reader returns ParseError with this text.
+ */
+export const CONVERTED_SIGNAL = /\bSIG(SEGV|BUS|FPE)\b[^]*\binside OCCT\b/;
+
 export function serializeError(e: unknown): SerializedError {
+  if (isWasmTrap(e)) {
+    return { name: 'KernelError', code: 'ModuleFault', detail: `WebAssembly trap: ${(e as Error).message}` };
+  }
   if (e && typeof e === 'object' && 'code' in e && 'detail' in e) {
     const ke = e as { name?: string; code: unknown; detail: unknown };
     return { name: String(ke.name ?? 'KernelError'), code: String(ke.code), detail: String(ke.detail) };

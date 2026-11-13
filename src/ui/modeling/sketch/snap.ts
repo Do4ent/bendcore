@@ -43,20 +43,6 @@ export interface SnapOptions {
   excludeEntities?: ReadonlySet<number>;
 }
 
-export const SNAP_LABELS: Record<SnapKind, string> = {
-  endpoint: 'конец',
-  center: 'центр',
-  point: 'точка',
-  intersection: 'пересечение',
-  midpoint: 'середина',
-  origin: 'начало координат',
-  'on-curve': 'на кривой',
-  horizontal: 'горизонталь',
-  vertical: 'вертикаль',
-  grid: 'сетка',
-  free: '',
-};
-
 /** Role of every sketch point for snapping: curve end, centre, or other point. */
 export function pointRoles(data: SketchData): ('endpoint' | 'center' | 'point')[] {
   const roles: ('endpoint' | 'center' | 'point')[] = data.points.map(() => 'point');

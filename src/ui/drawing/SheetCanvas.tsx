@@ -122,7 +122,7 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
       setDrag({ kind: 'view', view: viewId, start: s, startSheet: p, moved: false, pointerId: e.pointerId });
       return;
     }
-    if (tool === 'detail' || tool === 'section') props.onSheetClick(p, viewAt(picture.views, p));
+    if (tool === 'detail' || tool === 'section' || tool === 'balloon') props.onSheetClick(p, viewAt(picture.views, p));
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -157,7 +157,7 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
     setDrag(null);
   };
 
-  const pickTool = tool === 'dimension' || tool === 'roughness' || tool === 'tolerance' || tool === 'datum';
+  const pickTool = tool === 'dimension' || tool === 'roughness' || tool === 'tolerance' || tool === 'datum' || tool === 'balloon';
   const isPicked = (view: string, index: number) => picks.some((p) => p.view === view && p.index === index);
 
   return (

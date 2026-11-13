@@ -11,6 +11,8 @@ import type {
   TopoReference,
 } from '../../wasm/bendcore_modeling_api.mjs';
 import { DEFAULT_TEMPLATE, SketchTemplateForm, sketchDimensions } from './sketchDimensions';
+import { translate } from '../app/i18n';
+import type { Translate } from '../app/i18n';
 
 /** A reference with the element index it was picked at in the shown target, if known. */
 export interface PickedReference {
@@ -133,16 +135,21 @@ export function toFeatureEdits(form: FeatureForm, sketch?: FeatureEdits['sketch'
 }
 
 /** Missing required inputs, as messages for the panel (empty when the form can be applied). */
-export function missingInputs(spec: FeatureTypeSpec, form: FeatureForm, slotLabel: (s: string) => string): string[] {
+export function missingInputs(
+  spec: FeatureTypeSpec,
+  form: FeatureForm,
+  slotLabel: (s: string) => string,
+  t: Translate = (key, params) => translate('ru', key, params),
+): string[] {
   const out: string[] = [];
   for (const l of spec.links) {
-    if (!l.optional && !form.links[l.name]) out.push(`не выбрано: ${slotLabel(l.name)}`);
+    if (!l.optional && !form.links[l.name]) out.push(t('part.panel.missingLink', { slot: slotLabel(l.name) }));
   }
   for (const r of spec.references) {
-    if (!r.optional && (form.references[r.name] ?? []).length === 0) out.push(`не выбрано: ${slotLabel(r.name)}`);
+    if (!r.optional && (form.references[r.name] ?? []).length === 0) out.push(t('part.panel.missingLink', { slot: slotLabel(r.name) }));
   }
   for (const [name, expr] of Object.entries(form.parameters)) {
-    if (!expr.trim()) out.push(`пустое выражение: ${name}`);
+    if (!expr.trim()) out.push(t('part.panel.emptyExpression', { name }));
   }
   return out;
 }

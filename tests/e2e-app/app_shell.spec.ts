@@ -149,6 +149,20 @@ test('part with a fillet, its drawing in PDF, an assembly of two parts', async (
   await pdf.saveAs(pdfFile);
   expect(fs.readFileSync(pdfFile).subarray(0, 5).toString('latin1')).toBe('%PDF-');
 
+  // The drawing saves as one .bcdrw.json with its model; the start page opens it in a new tab.
+  const [drw] = await Promise.all([page.waitForEvent('download'), Dr.getByTestId('drawing-save').click()]);
+  expect(drw.suggestedFilename()).toMatch(/\.bcdrw\.json$/);
+  const drwFile = path.join(out, drw.suggestedFilename());
+  await drw.saveAs(drwFile);
+  const drwJson = JSON.parse(fs.readFileSync(drwFile, 'utf8'));
+  expect(drwJson.format).toBe('bendcore-drawing-file');
+  expect(JSON.parse(drwJson.model).format).toBe('bendcore-part');
+  await page.getByTestId('tab-start').click();
+  await page.getByTestId('open-files').setInputFiles(drwFile);
+  await expect(page.getByTestId('doc-tab-drawing')).toHaveCount(2);
+  await expect(activePanel(page).getByTestId('view-list').locator('li')).toHaveCount(2);
+  await expect(activePanel(page).getByTestId('view-V1')).toHaveCount(1);
+
   // Second part, then an assembly of both from the shell's part library.
   const P2 = await buildBlock(page, 30, 30, 10);
   await expect(P2.getByTestId('doc-save')).toBeEnabled();
@@ -186,10 +200,14 @@ test('part with a fillet, its drawing in PDF, an assembly of two parts', async (
   await page.getByTestId('lang').selectOption('en');
   await expect(page.getByTestId('tab-start')).toHaveText('Start');
   await expect(page.getByTestId('app-status-doc')).toContainText('Part');
+  // ...and the panels of the editors.
+  await expect(opened.getByTestId('modeling-status')).toHaveText('Kernel ready');
+  await expect(opened.getByTestId('add-Extrude')).toHaveText('Extrude');
   await page.getByTestId('lang').selectOption('ru');
+  await expect(opened.getByTestId('add-Extrude')).toHaveText('Выдавливание');
 
   // Documentation screenshot of the shell with the drawing tab.
-  await page.getByTestId('doc-tab-drawing').click();
+  await page.getByTestId('doc-tab-drawing').first().click();
   await page.screenshot({ path: process.env.BENDCORE_DOC_SCREENSHOT || path.join(out, 'app_shell.png') });
 });
 
@@ -279,4 +297,75 @@ test('a long HLR does not block the page and can be cancelled', async ({ page })
   await expect(Dr.getByTestId('drawing-notice')).toBeVisible({ timeout: 120_000 });
   await expect(Dr.getByTestId('view-list').locator('li')).toHaveCount(1, { timeout: 120_000 });
   await expect(Dr.getByTestId('view-V1')).toHaveCount(1);
+});
+
+// Assembly document whose embedded binary BRep has one byte changed (offset 4384: 0 → 235),
+// found by mutating the BRep of tests/assembly-fixtures/block.json
+// (tests/regression/fuzz/wasm/README.md). Native OCCT rejects it with an error; in WASM the read
+// runs out of linear memory: a WebAssembly trap ("memory access out of bounds").
+const trapFile = path.join(root, 'tests/regression/fuzz/wasm/assembly_brep_trap.bcasm.json');
+const assemblyFixture = (name: string) => path.join(root, 'tests/assembly-fixtures', name);
+
+const draftsInStore = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<{ id: string; kind: string; savedAt: number }[]>((resolve, reject) => {
+        const req = indexedDB.open('bendcore-app');
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const all = req.result.transaction('drafts', 'readonly').objectStore('drafts').getAll();
+          all.onsuccess = () => {
+            resolve((all.result as { id: string; file: { kind: string }; savedAt: number }[]).map((d) => ({ id: d.id, kind: d.file.kind, savedAt: d.savedAt })));
+            req.result.close();
+          };
+          all.onerror = () => reject(all.error);
+        };
+      }),
+  );
+
+const occurrences = (page: Page) =>
+  page.evaluate(async () => {
+    await window.bendcoreApp!.idle();
+    return window.bendcoreAssembly!.getState().state?.occurrences.length ?? -1;
+  });
+
+test('a module fault saves a draft and the module restarts from it', async ({ page }) => {
+  await freshShell(page);
+  await page.getByTestId('new-assembly').click();
+  const A = activePanel(page);
+  await expect.poll(() => page.evaluate(() => window.bendcoreAssembly?.getState().status), { timeout: 120_000 }).toBe('ready');
+  await A.getByTestId('insert-part-input').setInputFiles(assemblyFixture('block.json'));
+  await expect.poll(() => occurrences(page)).toBe(1);
+  await expect(page.getByTestId('doc-tab-assembly').getByTestId('tab-dirty')).toHaveCount(1);
+
+  // The damaged file, opened in the same editor: the call traps inside the assembly module.
+  await A.getByTestId('open-input').setInputFiles(trapFile);
+  const card = A.getByTestId('fault-card');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute('data-code', 'ModuleFault');
+  await expect(card).toHaveAttribute('data-module', 'assembly');
+  await expect(card).toContainText('memory access out of bounds');
+  await expect(card).toContainText('может быть повреждено');
+  await expect(A.getByTestId('fault-draft')).toContainText('сохранено как черновик');
+  const s = await shell(page);
+  const tab = s.tabs.find((x) => x.kind === 'assembly')!;
+  expect(tab.fault).toMatchObject({ module: 'assembly', code: 'ModuleFault' });
+  // The draft is in IndexedDB: the assembly with one component, the last completed change.
+  const drafts = await draftsInStore(page);
+  expect(drafts.map((d) => [d.id, d.kind])).toEqual([[tab.id, 'assembly']]);
+  // The failed module refuses further calls: no kernel call is left pending.
+  await page.evaluate(() => window.bendcoreApp!.idle());
+
+  // Restart: a new worker, the document restored from the draft, still unsaved.
+  await A.getByTestId('fault-restart').click();
+  await expect(A.getByTestId('fault-card')).toHaveCount(0);
+  await expect.poll(() => occurrences(page)).toBe(1);
+  await expect(A.getByTestId('assembly-tree').locator('[data-testid^="component-"]')).toHaveCount(1);
+  const after = (await shell(page)).tabs.find((x) => x.id === tab.id)!;
+  expect(after.fault).toBeNull();
+  expect(after.generation).toBe(1);
+  await expect(page.getByTestId('doc-tab-assembly').getByTestId('tab-dirty')).toHaveCount(1);
+  // The restarted module works: a second part goes in.
+  await A.getByTestId('insert-part-input').setInputFiles(assemblyFixture('shaft.json'));
+  await expect.poll(() => occurrences(page)).toBe(2);
 });

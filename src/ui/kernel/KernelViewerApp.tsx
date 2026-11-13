@@ -21,6 +21,9 @@ import type { FacePick, KernelViewportHandle } from './KernelViewport';
 import { defaultKernelBaseUrl, loadKernelFrom } from './kernelLoader';
 import type { Remote, WasmClient } from '../worker/wasmClient';
 import { waitIdle } from '../worker/idle';
+import type { EditorHostProps } from '../app/editorHost';
+import { useFaultReport } from '../app/faultReport';
+import { caption, useI18n } from '../app/i18n';
 import './KernelViewer.css';
 
 interface ModelSummary {
@@ -71,23 +74,6 @@ function describeError(e: unknown): { code: string; message: string } {
 const fmt = (v: number, digits = 3) => (Number.isFinite(v) ? Number(v.toFixed(digits)).toString() : String(v));
 const fmtVec = (v: number[]) => `(${v.map((c) => fmt(c)).join(', ')})`;
 
-const PARAMETER_LABELS: Record<string, string> = {
-  origin: 'Точка плоскости',
-  normal: 'Нормаль (наружу)',
-  radius: 'Радиус, мм',
-  center: 'Центр',
-  referenceRadius: 'Радиус в опорной плоскости, мм',
-  semiAngle: 'Полуугол, °',
-  apex: 'Вершина',
-  majorRadius: 'Большой радиус, мм',
-  minorRadius: 'Малый радиус, мм',
-  axisOrigin: 'Точка оси',
-  axisDirection: 'Направление оси',
-  uDegree: 'Степень U',
-  vDegree: 'Степень V',
-  uPoles: 'Полюсов U',
-  vPoles: 'Полюсов V',
-};
 
 function parameterValue(key: string, value: unknown): string {
   if (Array.isArray(value)) return fmtVec(value as number[]);
@@ -95,8 +81,10 @@ function parameterValue(key: string, value: unknown): string {
   return String(value);
 }
 
-const KernelViewerApp: React.FC = () => {
+const KernelViewerApp: React.FC<Pick<EditorHostProps, 'onFault'>> = ({ onFault }) => {
+  const { t } = useI18n();
   const [kernel, setKernel] = useState<WasmClient<Kernel> | null>(null);
+  useFaultReport(kernel as WasmClient<unknown> | null, onFault);
   const [kernelStatus, setKernelStatus] = useState<KernelViewerState['kernelStatus']>('loading');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<KernelViewerState['error']>(null);
@@ -224,7 +212,7 @@ const KernelViewerApp: React.FC = () => {
   return (
     <div className="kv-root">
       <header className="kv-toolbar">
-        <span className="kv-title">bendcore · ядро</span>
+        <span className="kv-title">{t('viewer.title')}</span>
         <label className="kv-file">
           <input
             type="file"
@@ -237,23 +225,23 @@ const KernelViewerApp: React.FC = () => {
               e.target.value = '';
             }}
           />
-          Открыть STEP…
+          {t('viewer.open')}
         </label>
         <label className="kv-param">
-          Прогиб, мм
+          {t('viewer.deflection')}
           <input type="number" min="0" step="0.01" value={linearDeflection} onChange={(e) => setLinearDeflection(e.target.value)} />
         </label>
         <label className="kv-param">
-          Угол, рад
+          {t('viewer.angle')}
           <input type="number" min="0" step="0.05" value={angularDeflection} onChange={(e) => setAngularDeflection(e.target.value)} />
         </label>
         <button type="button" onClick={retessellate} disabled={!model || busy}>
-          Перестроить сетку
+          {t('viewer.retessellate')}
         </button>
         <span className="kv-status" data-testid="kernel-status">
-          {kernelStatus === 'loading' && 'Загрузка ядра…'}
-          {kernelStatus === 'ready' && (busy ? 'Чтение…' : 'Ядро готово')}
-          {kernelStatus === 'failed' && 'Ядро не загружено'}
+          {kernelStatus === 'loading' && t('viewer.loading')}
+          {kernelStatus === 'ready' && (busy ? t('viewer.reading') : t('viewer.ready'))}
+          {kernelStatus === 'failed' && t('viewer.failed')}
         </span>
       </header>
       {error && (
@@ -265,53 +253,53 @@ const KernelViewerApp: React.FC = () => {
         <KernelViewport mesh={mesh} selectedFace={selection?.face.index ?? null} onPick={onPick} onReady={onReady} />
         <aside className="kv-panel">
           <section>
-            <h2>Модель</h2>
+            <h2>{t('viewer.model')}</h2>
             {model ? (
               <dl data-testid="model-summary">
-                <dt>Файл</dt>
+                <dt>{t('viewer.file')}</dt>
                 <dd>{model.fileName}</dd>
-                <dt>Тела / грани / рёбра</dt>
+                <dt>{t('viewer.counts')}</dt>
                 <dd>
                   {model.counts.solids} / {model.counts.faces} / {model.counts.edges}
                 </dd>
-                <dt>Объём, мм³</dt>
-                <dd>{model.volume === null ? 'нет тел' : fmt(model.volume)}</dd>
-                <dt>Площадь, мм²</dt>
+                <dt>{t('viewer.volume')}</dt>
+                <dd>{model.volume === null ? t('viewer.noSolids') : fmt(model.volume)}</dd>
+                <dt>{t('viewer.area')}</dt>
                 <dd>{fmt(model.area)}</dd>
-                <dt>Габарит, мм</dt>
+                <dt>{t('viewer.box')}</dt>
                 <dd>
                   {fmtVec(model.boundingBox.min)} – {fmtVec(model.boundingBox.max)}
                 </dd>
-                <dt>Треугольников</dt>
+                <dt>{t('viewer.triangles')}</dt>
                 <dd>{model.triangles}</dd>
               </dl>
             ) : (
-              <p className="kv-hint">Откройте STEP-файл.</p>
+              <p className="kv-hint">{t('viewer.openHint')}</p>
             )}
           </section>
           <section>
-            <h2>Грань</h2>
+            <h2>{t('viewer.face')}</h2>
             {selection ? (
               <dl data-testid="face-panel">
-                <dt>Индекс</dt>
+                <dt>{t('viewer.index')}</dt>
                 <dd data-testid="face-index">{selection.face.index}</dd>
-                <dt>Поверхность</dt>
+                <dt>{t('viewer.surface')}</dt>
                 <dd data-testid="face-type">{selection.face.surfaceType}</dd>
-                <dt>Площадь, мм²</dt>
+                <dt>{t('viewer.area')}</dt>
                 <dd>{fmt(selection.face.area)}</dd>
-                <dt>Ориентация</dt>
+                <dt>{t('viewer.orientation')}</dt>
                 <dd>{selection.face.orientation}</dd>
                 {Object.entries(selection.face.parameters).map(([key, value]) => (
                   <React.Fragment key={key}>
-                    <dt>{PARAMETER_LABELS[key] ?? key}</dt>
+                    <dt>{caption(t, 'viewer.param.', key)}</dt>
                     <dd>{parameterValue(key, value)}</dd>
                   </React.Fragment>
                 ))}
-                <dt>Точка выбора</dt>
+                <dt>{t('viewer.pickPoint')}</dt>
                 <dd>{fmtVec(selection.point)}</dd>
               </dl>
             ) : (
-              <p className="kv-hint">{model ? 'Щёлкните по грани.' : '—'}</p>
+              <p className="kv-hint">{model ? t('viewer.pickHint') : '—'}</p>
             )}
           </section>
         </aside>

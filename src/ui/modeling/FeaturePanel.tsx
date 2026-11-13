@@ -9,15 +9,8 @@
 import React from 'react';
 import type { FeatureTypeSpec, FeatureView } from '../../wasm/bendcore_modeling_api.mjs';
 import { FeatureForm, eligibleLinks, missingInputs } from './featureForm';
-import {
-  FEATURE_LABELS,
-  OPTION_LABELS,
-  OPTION_VALUE_LABELS,
-  PARAMETER_LABELS,
-  SLOT_LABELS,
-  STATE_LABELS,
-  label,
-} from './labels';
+import { caption, useI18n } from '../app/i18n';
+import type { MessageKey } from '../app/i18n';
 import { SketchTemplateForm, sketchDimensions } from './sketchDimensions';
 
 export interface FeaturePanelProps {
@@ -39,24 +32,17 @@ export interface FeaturePanelProps {
 
 const fmt = (v: number) => (Number.isFinite(v) ? Number(v.toFixed(4)).toString() : String(v));
 
-const PROFILE_KINDS: { value: SketchTemplateForm['kind']; text: string }[] = [
-  { value: 'rectangle', text: 'Прямоугольник' },
-  { value: 'circle', text: 'Окружность' },
-  { value: 'polygon', text: 'Полилиния' },
-];
+const PROFILE_KINDS: SketchTemplateForm['kind'][] = ['rectangle', 'circle', 'polygon'];
 
-const TEMPLATE_FIELDS: Record<'rectangle' | 'circle', { key: keyof SketchTemplateForm; text: string }[]> = {
-  rectangle: [
-    { key: 'x', text: 'Угол X, мм' },
-    { key: 'y', text: 'Угол Y, мм' },
-    { key: 'width', text: 'Ширина (по X), мм' },
-    { key: 'height', text: 'Высота (по Y), мм' },
-  ],
-  circle: [
-    { key: 'cx', text: 'Центр X, мм' },
-    { key: 'cy', text: 'Центр Y, мм' },
-    { key: 'radius', text: 'Радиус, мм' },
-  ],
+const TEMPLATE_FIELDS: Record<'rectangle' | 'circle', (keyof SketchTemplateForm & ('x' | 'y' | 'width' | 'height' | 'cx' | 'cy' | 'radius'))[]> = {
+  rectangle: ['x', 'y', 'width', 'height'],
+  circle: ['cx', 'cy', 'radius'],
+};
+
+const KIND_KEYS: Record<string, MessageKey> = {
+  edge: 'part.panel.kind.edge',
+  face: 'part.panel.kind.face',
+  vertex: 'part.panel.kind.vertex',
 };
 
 const FeaturePanel: React.FC<FeaturePanelProps> = ({
@@ -73,22 +59,24 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
   onOk,
   onCancel,
 }) => {
-  const missing = missingInputs(spec, form, (s) => label(SLOT_LABELS, s));
+  const { t } = useI18n();
+  const slot = (s: string) => caption(t, 'part.slot.', s);
+  const missing = missingInputs(spec, form, slot, t);
   const setTemplate = (patch: Partial<SketchTemplateForm>) =>
     form.template && onChange({ ...form, template: { ...form.template, ...patch } });
-  const dims = view?.sketch && form.dimensions ? sketchDimensions(view.sketch) : [];
+  const dims = view?.sketch && form.dimensions ? sketchDimensions(view.sketch, t) : [];
 
   return (
     <section className="pm-panel" data-testid="feature-panel" data-type={spec.type}>
       <h2>
-        {mode === 'add' ? 'Новая операция' : 'Изменить'}: {label(FEATURE_LABELS, spec.type)}
+        {mode === 'add' ? t('part.panel.new') : t('part.panel.edit')}: {caption(t, 'part.feature.', spec.type)}
         {view ? ` (${view.id})` : ''}
       </h2>
       <label className="pm-field">
-        <span>Имя</span>
+        <span>{t('part.panel.name')}</span>
         <input
           value={form.label}
-          placeholder={view?.id ?? 'по умолчанию'}
+          placeholder={view?.id ?? t('part.panel.defaultName')}
           data-testid="panel-label"
           onChange={(e) => onChange({ ...form, label: e.target.value })}
         />
@@ -96,24 +84,24 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
 
       {form.template && (
         <fieldset className="pm-group">
-          <legend>Контур эскиза</legend>
+          <legend>{t('part.panel.profile')}</legend>
           <label className="pm-field">
-            <span>Форма</span>
+            <span>{t('part.panel.shape')}</span>
             <select
               value={form.template.kind}
               data-testid="sketch-kind"
               onChange={(e) => setTemplate({ kind: e.target.value as SketchTemplateForm['kind'] })}
             >
               {PROFILE_KINDS.map((k) => (
-                <option key={k.value} value={k.value}>
-                  {k.text}
+                <option key={k} value={k}>
+                  {t(`part.shape.${k}`)}
                 </option>
               ))}
             </select>
           </label>
           {form.template.kind === 'polygon' ? (
             <label className="pm-field pm-field-wide">
-              <span>Вершины «x; y», по одной в строке</span>
+              <span>{t('part.panel.vertices')}</span>
               <textarea
                 rows={5}
                 value={form.template.polygon}
@@ -123,12 +111,12 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
             </label>
           ) : (
             TEMPLATE_FIELDS[form.template.kind].map((f) => (
-              <label className="pm-field" key={f.key}>
-                <span>{f.text}</span>
+              <label className="pm-field" key={f}>
+                <span>{t(`part.shape.${f}`)}</span>
                 <input
-                  value={form.template![f.key]}
-                  data-testid={`sketch-${f.key}`}
-                  onChange={(e) => setTemplate({ [f.key]: e.target.value })}
+                  value={form.template![f]}
+                  data-testid={`sketch-${f}`}
+                  onChange={(e) => setTemplate({ [f]: e.target.value })}
                 />
               </label>
             ))
@@ -138,7 +126,7 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
 
       {dims.length > 0 && form.dimensions && (
         <fieldset className="pm-group">
-          <legend>Размеры эскиза</legend>
+          <legend>{t('part.panel.sketchDimensions')}</legend>
           {dims.map((d) => (
             <label className="pm-field" key={d.key}>
               <span>{d.label}</span>
@@ -154,10 +142,10 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
 
       {spec.parameters.length > 0 && (
         <fieldset className="pm-group">
-          <legend>Параметры (выражения)</legend>
+          <legend>{t('part.panel.parameters')}</legend>
           {spec.parameters.map((p) => (
             <label className="pm-field" key={p.name}>
-              <span>{label(PARAMETER_LABELS, p.name)}</span>
+              <span>{caption(t, 'part.param.', p.name)}</span>
               <input
                 value={form.parameters[p.name] ?? ''}
                 data-testid={`param-${p.name}`}
@@ -175,10 +163,10 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
 
       {spec.options.length > 0 && (
         <fieldset className="pm-group">
-          <legend>Настройки</legend>
+          <legend>{t('part.panel.options')}</legend>
           {spec.options.map((o) => (
             <label className="pm-field" key={o.name}>
-              <span>{label(OPTION_LABELS, o.name)}</span>
+              <span>{caption(t, 'part.option.', o.name)}</span>
               <select
                 value={form.options[o.name] ?? o.allowed[0]}
                 data-testid={`option-${o.name}`}
@@ -186,7 +174,7 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
               >
                 {o.allowed.map((v) => (
                   <option key={v} value={v}>
-                    {label(OPTION_VALUE_LABELS, v)}
+                    {caption(t, 'part.value.', v)}
                   </option>
                 ))}
               </select>
@@ -197,19 +185,19 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
 
       {spec.links.length > 0 && (
         <fieldset className="pm-group">
-          <legend>Связи</legend>
+          <legend>{t('part.panel.links')}</legend>
           {spec.links.map((l) => (
             <label className="pm-field" key={l.name}>
-              <span>{label(SLOT_LABELS, l.name)}</span>
+              <span>{slot(l.name)}</span>
               <select
                 value={form.links[l.name] ?? ''}
                 data-testid={`link-${l.name}`}
                 onChange={(e) => onChange({ ...form, links: { ...form.links, [l.name]: e.target.value } })}
               >
-                <option value="">{l.optional ? '— нет —' : '— выберите —'}</option>
+                <option value="">{l.optional ? t('part.panel.noLink') : t('part.panel.chooseLink')}</option>
                 {eligibleLinks(l, features, position).map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.label} ({label(FEATURE_LABELS, f.type)})
+                    {f.label} ({caption(t, 'part.feature.', f.type)})
                   </option>
                 ))}
               </select>
@@ -220,7 +208,7 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
 
       {spec.references.length > 0 && (
         <fieldset className="pm-group">
-          <legend>Элементы модели</legend>
+          <legend>{t('part.panel.references')}</legend>
           {spec.references.map((r) => {
             const picks = form.references[r.name] ?? [];
             const active = activeSlot === r.name;
@@ -228,9 +216,9 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
               <div className={`pm-slot${active ? ' pm-slot-active' : ''}`} key={r.name} data-testid={`slot-${r.name}`}>
                 <div className="pm-slot-head">
                   <span>
-                    {label(SLOT_LABELS, r.name)} ({r.kind === 'edge' ? 'рёбра' : r.kind === 'face' ? 'грани' : 'вершины'}
-                    {r.multiple ? ', несколько' : ''}
-                    {r.optional ? ', необязательно' : ''})
+                    {slot(r.name)} ({KIND_KEYS[r.kind] ? t(KIND_KEYS[r.kind]) : r.kind}
+                    {r.multiple ? t('part.panel.multiple') : ''}
+                    {r.optional ? t('part.panel.optional') : ''})
                   </span>
                   <button
                     type="button"
@@ -238,7 +226,7 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
                     disabled={r.kind === 'vertex'}
                     onClick={() => onActivateSlot(active ? null : r.name)}
                   >
-                    {active ? 'Готово' : 'Выбрать во вьюпорте'}
+                    {active ? t('part.panel.pickDone') : t('part.panel.pick')}
                   </button>
                 </div>
                 <ul className="pm-picks" data-testid={`picks-${r.name}`}>
@@ -247,7 +235,7 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
                       <code>{p.ref.name}</code>
                       <button
                         type="button"
-                        aria-label="убрать"
+                        aria-label={t('part.panel.unpick')}
                         onClick={() =>
                           onChange({
                             ...form,
@@ -260,7 +248,7 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
                     </li>
                   ))}
                 </ul>
-                {active && <p className="pm-hint">Щёлкните по {r.kind === 'edge' ? 'ребру' : 'грани'} модели; повторный щелчок убирает.</p>}
+                {active && <p className="pm-hint">{r.kind === 'edge' ? t('part.panel.pickEdgeHint') : t('part.panel.pickFaceHint')}</p>}
               </div>
             );
           })}
@@ -269,13 +257,13 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
 
       {view && (
         <div className={`pm-preview-state pm-state-${view.state}`} data-testid="panel-state" data-state={view.state}>
-          Состояние: {label(STATE_LABELS, view.state)}
+          {t('part.panel.state', { state: caption(t, 'part.state.', view.state) })}
           {view.messages.length > 0 && <div>{view.messages.join('; ')}</div>}
           {view.referenceReports
             .filter((r) => r.method !== 'exact')
             .map((r, i) => (
               <div key={i}>
-                ссылка {r.name}: {r.method} {r.detail}
+                {t('part.panel.reference', { name: r.name, method: r.method, detail: r.detail })}
               </div>
             ))}
         </div>
@@ -289,13 +277,13 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
       )}
       <div className="pm-panel-buttons">
         <button type="button" data-testid="panel-preview" onClick={onPreview}>
-          Предпросмотр
+          {t('part.panel.preview')}
         </button>
         <button type="button" className="pm-primary" data-testid="panel-ok" onClick={onOk}>
-          ОК
+          {t('part.panel.ok')}
         </button>
         <button type="button" data-testid="panel-cancel" onClick={onCancel}>
-          Отмена
+          {t('part.panel.cancel')}
         </button>
       </div>
     </section>

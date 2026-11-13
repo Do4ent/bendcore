@@ -2,18 +2,20 @@
 // Each action maps to one part document call; unavailable actions are not offered.
 
 import type { FeatureView } from '../../wasm/bendcore_modeling_api.mjs';
+import type { MessageKey } from '../app/i18n';
 
 export type TreeAction = 'edit' | 'editSketch' | 'suppress' | 'unsuppress' | 'remove' | 'moveUp' | 'moveDown' | 'rollbackHere';
 
-export const TREE_ACTION_LABELS: Record<TreeAction, string> = {
-  edit: 'Редактировать',
-  editSketch: 'Редактировать эскиз',
-  suppress: 'Подавить',
-  unsuppress: 'Включить',
-  remove: 'Удалить',
-  moveUp: 'Перенести выше',
-  moveDown: 'Перенести ниже',
-  rollbackHere: 'Откатить до этой операции',
+/** Captions of the context menu (src/ui/app/messages/part.ts). */
+export const TREE_ACTION_KEYS: Record<TreeAction, MessageKey> = {
+  edit: 'menu.edit',
+  editSketch: 'menu.editSketch',
+  suppress: 'menu.suppress',
+  unsuppress: 'menu.unsuppress',
+  remove: 'menu.remove',
+  moveUp: 'menu.moveUp',
+  moveDown: 'menu.moveDown',
+  rollbackHere: 'menu.rollbackHere',
 };
 
 /**

@@ -192,6 +192,19 @@ struct DatumItem {
     std::string letter;
 };
 
+// Номер позиции ГОСТ 2.109, поставленный вручную на изображение составной части сборки: точка
+// выноски — на видимой линии ребра edge (середина самого длинного прямого участка, середина
+// дуги), полка — в точке at листа (пусто — на 12 мм правее и 8 мм выше точки выноски). Номер —
+// позиция определения детали, которой принадлежит ребро, по спецификации (при каждом
+// обновлении). Автоматические позиции вида (ViewDef::autoBalloons) не ставятся для
+// определений, у которых на листе есть ручная позиция.
+struct BalloonItem {
+    std::string id;
+    std::string view;
+    modeling::TopoReference edge;
+    std::optional<Point2> at;
+};
+
 struct SheetDef {
     std::string id;
     SheetFormat format;
@@ -202,6 +215,7 @@ struct SheetDef {
     std::vector<RoughnessItem> roughness;
     std::vector<ToleranceItem> tolerances;
     std::vector<DatumItem> datums;
+    std::vector<BalloonItem> balloons;  // ручные позиции (сборка)
     std::optional<annotations::RoughnessSpec> roughnessRemainder;  // знак в правом верхнем углу
     std::vector<std::string> technicalRequirements;
     bool partsList = false;  // перечень составных частей ISO 7573 над основной надписью (сборка)
@@ -243,7 +257,10 @@ struct ComputedSheet {
     std::vector<std::optional<annotations::SymbolGeometry>> roughness;  // nullopt — висячий
     std::vector<std::optional<annotations::SymbolGeometry>> tolerances;  // по SheetDef::tolerances
     std::vector<std::optional<annotations::SymbolGeometry>> datums;      // по SheetDef::datums
-    std::vector<annotations::Balloon> balloons;
+    std::vector<annotations::Balloon> balloons;  // автоматические позиции видов
+    // По SheetDef::balloons: номер, точка выноски и полка; nullopt — висячая позиция (ребро не
+    // найдено или не видно, у его детали нет позиции в спецификации).
+    std::vector<std::optional<annotations::Balloon>> manualBalloons;
     std::optional<annotations::Specification> specification;  // для перечня ISO 7573
 };
 

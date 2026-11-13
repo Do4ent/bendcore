@@ -147,6 +147,8 @@ export function detectKind(text: string): { kind: DocKind } | { error: string } 
   }
   if (format === 'bendcore-part') return { kind: 'part' };
   if (format === 'bendcore-assembly') return { kind: 'assembly' };
-  if (format === 'bendcore-drawing') return { kind: 'drawing' };
+  // A drawing file (src/ui/drawing/drawingFile.ts), or the drawing document of the earlier
+  // two-file format (opened with its model file).
+  if (format === 'bendcore-drawing-file' || format === 'bendcore-drawing') return { kind: 'drawing' };
   return { error: `unknown format ${JSON.stringify(format ?? null)}` };
 }

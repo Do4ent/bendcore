@@ -15,7 +15,8 @@ import type { SketchPlacementInfo, SketchSolution, SketchSolvedCurve } from '../
 import { packEdgePolylines } from '../../kernel/edgeBuffers';
 import type { DimensionGraphic } from './dimensionLayout';
 import type { DefinitionState } from './sketchModel';
-import { gridStep, nearestPoint, SNAP_LABELS } from './snap';
+import { gridStep, nearestPoint } from './snap';
+import { caption, useI18n } from '../../app/i18n';
 import type { Snap } from './snap';
 
 export interface SketchPointerEvent {
@@ -105,6 +106,7 @@ function bounds(solution: SketchSolution | null): { minX: number; minY: number; 
 }
 
 const SketchCanvas = React.forwardRef<SketchCanvasHandle, SketchCanvasProps>((props, ref) => {
+  const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const glRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<BodyLayer | null>(null);
@@ -443,7 +445,7 @@ const SketchCanvas = React.forwardRef<SketchCanvasHandle, SketchCanvasProps>((pr
           <g className="sk-snap" data-testid="sketch-snap" data-kind={snap!.kind}>
             <rect x={snapAt.x - 5} y={snapAt.y - 5} width={10} height={10} />
             <text x={snapAt.x + 9} y={snapAt.y - 9}>
-              {SNAP_LABELS[snap!.kind]}
+              {snap!.kind === 'free' ? '' : caption(t, 'sketch.snap.', snap!.kind)}
             </text>
           </g>
         )}

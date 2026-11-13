@@ -433,6 +433,7 @@ std::string freshId(const dd::DrawingDocument& doc, const std::string& prefix) {
         for (const auto& r : s.roughness) used.insert(r.id);
         for (const auto& t : s.tolerances) used.insert(t.id);
         for (const auto& d : s.datums) used.insert(d.id);
+        for (const auto& b : s.balloons) used.insert(b.id);
     }
     for (int i = 1;; ++i) {
         std::string id = prefix + std::to_string(i);
@@ -535,10 +536,29 @@ json describe(Session& s) {
             datums.push_back({{"id", d.id}, {"view", d.view}, {"at", d.at}, {"letter", d.letter},
                               {"state", symbolState(cs ? &cs->datums : nullptr, i)}});
         }
+        // Every position shown on the sheet: automatic ones of the views (id null) and the manual
+        // ones (id of the BalloonItem), with the number from the specification.
         json balloons = json::array();
         if (cs)
             for (const an::Balloon& b : cs->balloons)
-                balloons.push_back({{"definition", b.definition}, {"text", b.text}, {"at", pointJson(b.at)}, {"target", pointJson(b.target)}});
+                balloons.push_back({{"id", nullptr}, {"definition", b.definition}, {"text", b.text}, {"at", pointJson(b.at)}, {"target", pointJson(b.target)}});
+        json positions = json::array();
+        for (std::size_t i = 0; i < sd.balloons.size(); ++i) {
+            const auto& b = sd.balloons[i];
+            json p = {{"id", b.id}, {"view", b.view}, {"at", b.at ? pointJson(*b.at) : json(nullptr)}, {"state", nullptr}};
+            if (cs && i < cs->manualBalloons.size()) {
+                const auto& c = cs->manualBalloons[i];
+                p["state"] = c ? "ok" : "dangling";
+                if (c) {
+                    p["definition"] = c->definition;
+                    p["text"] = c->text;
+                    p["target"] = pointJson(c->target);
+                    p["shelf"] = pointJson(c->at);
+                    balloons.push_back({{"id", b.id}, {"definition", c->definition}, {"text", c->text}, {"at", pointJson(c->at)}, {"target", pointJson(c->target)}});
+                }
+            }
+            positions.push_back(std::move(p));
+        }
         json sheet = {{"id", sd.id},
                       {"format", enumName(sd.format.base, kFormats)},
                       {"multiplier", sd.format.multiplier},
@@ -553,7 +573,8 @@ json describe(Session& s) {
                       {"roughnessRemainder", sd.roughnessRemainder ? roughJson(*sd.roughnessRemainder) : json(nullptr)},
                       {"technicalRequirements", sd.technicalRequirements},
                       {"partsList", sd.partsList},
-                      {"balloons", balloons}};
+                      {"balloons", balloons},
+                      {"positions", positions}};
         if (cs) {
             sheet["name"] = cs->sheet.name;
             sheet["width"] = cs->sheet.widthMm;
@@ -1267,6 +1288,48 @@ std::string addSymbol(std::uint32_t handle, std::string sheetId, std::string vie
     });
 }
 
+// Manual position (ГОСТ 2.109) on a picked model edge of an assembly view; spec: { id?, at?: [x, y]
+// sheet point of the shelf }. The number comes from the specification at every update.
+std::string addBalloon(std::uint32_t handle, std::string sheetId, std::string viewId, std::string pickText, std::string specText) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        const json pick = parseArg(pickText, "pick");
+        const json spec = specText.empty() ? json::object() : parseArg(specText, "position");
+        return transaction(s, [&]() -> json {
+            dd::SheetDef& sd = sheetOf(s, sheetId);
+            const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), viewId);
+            const vw::ViewEdge& e = pickedEdge(cv, pick);
+            if (!e.edgeIndex) throw InputError("the picked line is a silhouette: pick a model edge of a part");
+            dd::BalloonItem b;
+            b.id = strOr(spec, "id");
+            if (b.id.empty()) b.id = freshId(s.doc, "P");
+            b.view = viewId;
+            b.edge = take(dd::elementReference(*s.shown, m::ElementKind::Edge, *e.edgeIndex));
+            if (spec.contains("at") && !spec.at("at").is_null()) b.at = point2From(spec.at("at"), "at");
+            const std::string id = b.id;
+            sd.balloons.push_back(std::move(b));
+            return {{"id", id}};
+        });
+    });
+}
+
+// Moves the shelf of a manual position (at: [x, y]) or puts it back to the default place (null).
+std::string setBalloon(std::uint32_t handle, std::string sheetId, std::string id, std::string text) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        const json j = parseArg(text, "position");
+        return transaction(s, [&]() -> json {
+            dd::SheetDef& sd = sheetOf(s, sheetId);
+            for (auto& b : sd.balloons) {
+                if (b.id != id) continue;
+                if (j.contains("at")) b.at = j.at("at").is_null() ? std::nullopt : std::optional(point2From(j.at("at"), "at"));
+                return nullptr;
+            }
+            throw InputError("unknown position '" + id + "'");
+        });
+    });
+}
+
 std::string removeAnnotation(std::uint32_t handle, std::string sheetId, std::string id) {
     return guarded([&]() -> json {
         Session& s = session(handle);
@@ -1277,6 +1340,7 @@ std::string removeAnnotation(std::uint32_t handle, std::string sheetId, std::str
             n += std::erase_if(sd.roughness, [&](const auto& x) { return x.id == id; });
             n += std::erase_if(sd.tolerances, [&](const auto& x) { return x.id == id; });
             n += std::erase_if(sd.datums, [&](const auto& x) { return x.id == id; });
+            n += std::erase_if(sd.balloons, [&](const auto& x) { return x.id == id; });
             if (n == 0) throw InputError("unknown annotation '" + id + "'");
             return nullptr;
         });
@@ -1459,6 +1523,8 @@ EMSCRIPTEN_BINDINGS(bendcore_drawing) {
     emscripten::function("setDimension", &setDimension);
     emscripten::function("addSymbol", &addSymbol);
     emscripten::function("removeAnnotation", &removeAnnotation);
+    emscripten::function("addBalloon", &addBalloon);
+    emscripten::function("setBalloon", &setBalloon);
     emscripten::function("sheetPicture", &sheetPicture);
     emscripten::function("specification", &specification);
     emscripten::function("exportPdf", &exportPdf);

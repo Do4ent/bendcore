@@ -10,7 +10,7 @@
 import { MessageChannel } from 'worker_threads';
 import { KernelError } from '../../../wasm/bendcore_kernel_api.mjs';
 import { WorkerHost } from '../workerHost';
-import { WasmClient, isCancelled } from '../wasmClient';
+import { WasmClient, isCancelled, isModuleFault } from '../wasmClient';
 import type { WorkerLike } from '../wasmClient';
 import { encodeResult, serializeError } from '../protocol';
 import type { Request, Response } from '../protocol';
@@ -46,6 +46,16 @@ class Api {
   }
   loadDocument(size: number) {
     return { document: new Doc(size), report: { migrated: false } };
+  }
+  /** A real WebAssembly trap: an out-of-bounds load in a one-page module (fault test). */
+  trap() {
+    // (module (memory 1) (func (export "f") (result i32) (i32.load (i32.const 70000))))
+    const bytes = new Uint8Array([
+      0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 127, 3, 2, 1, 0, 5, 3, 1, 0, 1, 7, 5, 1, 1, 102, 0, 0, 10, 11, 1, 9, 0,
+      65, 240, 162, 4, 40, 2, 0, 11,
+    ]);
+    const instance = new WebAssembly.Instance(new WebAssembly.Module(bytes));
+    return (instance.exports.f as () => number)();
   }
   /** Never answers in time: the host is told to hold this call (cancel test). */
   slow() {
@@ -186,6 +196,33 @@ describe('worker protocol', () => {
     expect(r.client.pendingCalls()).toEqual([]);
   });
 
+  test('a trap in the module is a ModuleFault: the client closes and reports it once', async () => {
+    const faults: string[] = [];
+    r.client.onFault((e, module) => faults.push(`${module}:${e.code}`));
+    r.hold.add('slow');
+    const pending = r.client.call(0, 'slow', []);
+    const err = await r.client.call(0, 'trap', []).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(KernelError);
+    expect(err).toMatchObject({ code: 'ModuleFault' });
+    expect((err as KernelError).detail).toMatch(/^WebAssembly trap: .*out of bounds/);
+    expect(isModuleFault(err)).toBe(true);
+    // Calls in flight and later calls fail with the same error; listeners hear it once.
+    await expect(pending).rejects.toMatchObject({ code: 'ModuleFault' });
+    await expect(r.client.root.info()).rejects.toMatchObject({ code: 'ModuleFault' });
+    expect(r.client.terminated).toBe(true);
+    expect(r.client.fault?.code).toBe('ModuleFault');
+    expect(faults).toEqual(['modeling:ModuleFault']);
+    expect(WasmClient.live()).not.toContain(r.client);
+  });
+
+  test('cancel and dispose are not module faults', async () => {
+    const faults: string[] = [];
+    r.client.onFault((e) => faults.push(e.code));
+    r.client.cancel('stop');
+    expect(r.client.fault).toBeNull();
+    expect(faults).toEqual([]);
+  });
+
   test('cancel rejects pending calls with Cancelled and closes the client', async () => {
     r.hold.add('slow');
     const slow = r.client.call(0, 'slow', []);
@@ -210,6 +247,26 @@ describe('protocol helpers', () => {
     // The second occurrence of the same buffer is a copy with its own buffer.
     expect(transfer).toHaveLength(2);
     expect(new Set(transfer).size).toBe(2);
+  });
+
+  test('the host refuses every call after a trap', () => {
+    const posted: Response[] = [];
+    const host = new WorkerHost(new Api(), (m) => posted.push(m));
+    host.handle({ type: 'call', id: 1, target: 0, method: 'trap', args: [] });
+    host.handle({ type: 'call', id: 2, target: 0, method: 'info', args: [] });
+    expect(host.faulted).toBe(true);
+    expect(posted.map((p) => (p.type === 'error' ? p.error.code : p.type))).toEqual(['ModuleFault', 'ModuleFault']);
+    expect(posted[1].type === 'error' && posted[1].error.detail).toMatch(/earlier fault/);
+  });
+
+  test('module faults: trap, dead worker, native fault guard text; not ordinary errors', () => {
+    expect(isModuleFault(new KernelError('WorkerFailed', 'worker error'))).toBe(true);
+    // occt_fault_guard.cpp in native: the reader returns ParseError with the signal in the text.
+    expect(isModuleFault(new KernelError('ParseError', 'binary BRep input is malformed: SIGSEGV (invalid memory access at 0x8) inside OCCT'))).toBe(true);
+    expect(isModuleFault(new KernelError('ParseError', 'SIGFPE (arithmetic fault at 0x1) inside OCCT'))).toBe(true);
+    expect(isModuleFault(new KernelError('ParseError', 'binary BRep input holds no shape'))).toBe(false);
+    expect(isModuleFault(new KernelError('Cancelled', 'stop'))).toBe(false);
+    expect(isModuleFault(new Error('SIGSEGV inside OCCT'))).toBe(false);
   });
 
   test('serializeError keeps the kernel code and detail', () => {

@@ -42,6 +42,7 @@ import BusyIndicator from '../app/BusyIndicator';
 import { useHotkeys } from '../app/hotkeys';
 import { useI18n } from '../app/i18n';
 import type { DocumentFile, EditorHostProps, PartSource } from '../app/editorHost';
+import { useFaultReport } from '../app/faultReport';
 import { dofText } from './labels';
 import { nextMateSlots } from './mateRules';
 import type { PickedElement } from './mateRules';
@@ -53,15 +54,8 @@ const MESH_PARAMS = { linearDeflection: 0.05, angularDeflection: 0.25 };
 
 type PanelId = 'mate' | 'fasteners' | 'interference' | 'bom' | 'explode' | 'pattern' | 'properties';
 
-const PANELS: { id: PanelId; label: string }[] = [
-  { id: 'mate', label: 'Сопряжение' },
-  { id: 'fasteners', label: 'Крепёж' },
-  { id: 'interference', label: 'Пересечения' },
-  { id: 'bom', label: 'BOM' },
-  { id: 'explode', label: 'Разнесённый вид' },
-  { id: 'pattern', label: 'Массив' },
-  { id: 'properties', label: 'Свойства' },
-];
+/** Side panels in tab order; captions are messages assembly.panel.<id>. */
+const PANELS: PanelId[] = ['mate', 'fasteners', 'interference', 'bom', 'explode', 'pattern', 'properties'];
 
 export interface AssemblyPageState {
   status: 'loading' | 'ready' | 'failed';
@@ -128,10 +122,12 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   onChange,
   onFile,
   onOpenPart,
+  onFault,
   partLibrary,
 }) => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [kernel, setKernel] = useState<WasmClient<AssemblyKernel> | null>(null);
+  useFaultReport(kernel as WasmClient<unknown> | null, onFault);
   const kernelRef = useRef(kernel);
   kernelRef.current = kernel;
   const docRef = useRef<AssemblyDoc | null>(null);
@@ -276,7 +272,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
         doc = (await client.root.loadDocument(initial.text)).document;
         hostRef.current.onFile?.(initial);
       } else {
-        doc = await client.root.createDocument('Сборка');
+        doc = await client.root.createDocument(t('assembly.defaultName'));
       }
       if (cancelled) return;
       setKernel(client);
@@ -311,7 +307,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   const cancelOperation = async () => {
     const old = kernelRef.current;
     if (!old) return;
-    old.cancel('прервано пользователем');
+    old.cancel(t('assembly.cancelledByUser'));
     dragRunner.clear();
     setKernel(null);
     setStatus('loading');
@@ -321,7 +317,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     try {
       const client = await loadAssemblyFrom(defaultAssemblyBaseUrl());
       for (const p of partsRef.current) await client.root.registerSource(p.name, p.text);
-      const doc = snapshot ? (await client.root.loadDocument(snapshot)).document : await client.root.createDocument('Сборка');
+      const doc = snapshot ? (await client.root.loadDocument(snapshot)).document : await client.root.createDocument(t('assembly.defaultName'));
       setKernel(client);
       replaceDocument(doc, saved, false);
       snapshotRef.current = snapshot;
@@ -398,7 +394,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
       replaceDocument(doc, files[0].text);
       await run(() => undefined, { explode: { view: null, progress: 0 } });
       const missing = report.sources.filter((s) => s.status === 'Missing' || s.status === 'AssemblyMissing');
-      if (missing.length) setError({ code: 'Источник', message: missing.map((s) => `${s.source}: ${s.message}`).join('; ') });
+      if (missing.length) setError({ code: t('assembly.sourceError'), message: missing.map((s) => `${s.source}: ${s.message}`).join('; ') });
       else setError(null);
       hostRef.current.onFile?.({ kind: 'assembly', name: files[0].name, text: files[0].text });
     } catch (err) {
@@ -424,7 +420,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     if (!kernel) return;
     try {
       partsRef.current = [];
-      replaceDocument(await kernel.root.createDocument('Сборка'), null);
+      replaceDocument(await kernel.root.createDocument(t('assembly.defaultName')), null);
       setError(null);
       await run(() => undefined, { explode: { view: null, progress: 0 } });
     } catch (e) {
@@ -472,7 +468,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
           ref: { path: pick.path, kind: pick.kind, index: pick.index },
           geometry: info.geometry,
           entity: info.entity,
-          label: refLabel(state, { path: pick.path, kind: pick.kind, index: pick.index }),
+          label: refLabel(state, { path: pick.path, kind: pick.kind, index: pick.index }, t),
         };
       } catch (e) {
         if (!isCancelled(e)) fail(e);
@@ -659,33 +655,33 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   return (
     <div className="kv-root pm-root as-root" data-testid="assembly-page">
       <div className="kv-toolbar pm-toolbar">
-        <span className="kv-title">bendcore — сборка</span>
+        <span className="kv-title">{t('assembly.title')}</span>
         <button type="button" onClick={() => void onNew()} disabled={status !== 'ready'}>
-          Новая
+          {t('assembly.new')}
         </button>
         <label className="kv-file">
-          Открыть…
+          {t('assembly.open')}
           <input ref={openInputRef} type="file" accept=".json" multiple onChange={onOpen} data-testid="open-input" />
         </label>
         <button type="button" onClick={() => void onSave()} disabled={status !== 'ready'} data-testid="save" title="Ctrl+S">
-          Сохранить
+          {t('assembly.save')}
         </button>
         <label className="kv-file">
-          Импорт STEP…
+          {t('assembly.importStep')}
           <input type="file" accept=".step,.stp" onChange={onImportStep} data-testid="import-step-input" />
         </label>
         <button type="button" onClick={() => void onExportStep()} disabled={status !== 'ready'} data-testid="export-step">
-          Экспорт STEP
+          {t('assembly.exportStep')}
         </button>
         <span className="pm-sep" />
         <label className="kv-file">
-          Вставить деталь…
+          {t('assembly.insertPart')}
           <input type="file" accept=".json,.step,.stp" multiple onChange={onInsertParts} data-testid="insert-part-input" />
         </label>
         {partLibrary && partLibrary.length > 0 && (
           <span className="as-library">
             <select value={libraryChoice} onChange={(e) => setLibraryChoice(e.target.value)} data-testid="library-part">
-              <option value="">— деталь из открытых —</option>
+              <option value="">{t('assembly.libraryPart')}</option>
               {partLibrary.map((p, i) => (
                 <option key={`${p.name}:${i}`} value={String(i)}>
                   {p.name}
@@ -701,7 +697,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
                 if (p) void insertPart(p.name, p.text).then(() => setFrameKey((k) => k + 1));
               }}
             >
-              Вставить
+              {t('assembly.insert')}
             </button>
           </span>
         )}
@@ -711,56 +707,50 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
           </button>
         )}
         <label className="kv-file">
-          Вставить подсборку…
+          {t('assembly.insertSubassembly')}
           <input type="file" accept=".json" onChange={onInsertSubassembly} data-testid="insert-subassembly-input" />
         </label>
         <span className="pm-sep" />
         <button
           type="button"
           disabled={!history?.canUndo}
-          title={history?.undoLabel ? `Отменить: ${history.undoLabel}` : 'Отменить'}
+          title={history?.undoLabel ? t('assembly.undoNamed', { name: history.undoLabel }) : t('assembly.undo')}
           onClick={() => void run((d) => d.undo())}
           data-testid="undo"
         >
-          Отменить
+          {t('assembly.undo')}
         </button>
         <button
           type="button"
           disabled={!history?.canRedo}
-          title={history?.redoLabel ? `Повторить: ${history.redoLabel}` : 'Повторить'}
+          title={history?.redoLabel ? t('assembly.redoNamed', { name: history.redoLabel }) : t('assembly.redo')}
           onClick={() => void run((d) => d.redo())}
           data-testid="redo"
         >
-          Повторить
+          {t('assembly.redo')}
         </button>
         <button type="button" onClick={() => void run((d) => d.solve())} disabled={status !== 'ready'} data-testid="solve">
-          Решить
+          {t('assembly.solve')}
         </button>
         <span className="pm-sep" />
         <span className="as-modes" role="radiogroup">
-          {(
-            [
-              ['face', 'Грани'],
-              ['edge', 'Рёбра'],
-              ['drag', 'Перетаскивание'],
-            ] as [AssemblyPickMode, string][]
-          ).map(([m, l]) => (
+          {(['face', 'edge', 'drag'] as const).map((m) => (
             <label key={m}>
               <input type="radio" name="pick-mode" checked={pickMode === m} onChange={() => setPickMode(m)} data-testid={`mode-${m}`} />
-              {l}
+              {t(`assembly.mode.${m}`)}
             </label>
           ))}
         </span>
         <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
         <span className="kv-status" data-testid="status">
-          {status === 'loading' && 'загрузка модуля сборки…'}
-          {status === 'failed' && 'модуль не загружен'}
+          {status === 'loading' && t('assembly.loading')}
+          {status === 'failed' && t('assembly.failed')}
           {status === 'ready' && solve && (
             <>
-              <span data-testid="total-dof">{dofText(solve.totalDof)}</span>
+              <span data-testid="total-dof">{dofText(solve.totalDof, t, lang)}</span>
               {' · '}
               <span className={solve.success ? 'as-ok' : 'as-bad'} data-testid="solve-status">
-                {solve.success ? 'сопряжения выполнены' : 'есть противоречия'}
+                {solve.success ? t('assembly.solved') : t('assembly.conflicts')}
               </span>
             </>
           )}
@@ -826,13 +816,13 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
           <nav className="as-tabs">
             {PANELS.map((p) => (
               <button
-                key={p.id}
+                key={p}
                 type="button"
-                className={panel === p.id ? 'as-tab-active' : ''}
-                onClick={() => switchPanel(p.id)}
-                data-testid={`tab-${p.id}`}
+                className={panel === p ? 'as-tab-active' : ''}
+                onClick={() => switchPanel(p)}
+                data-testid={`tab-${p}`}
               >
-                {p.label}
+                {t(`assembly.panel.${p}`)}
               </button>
             ))}
           </nav>

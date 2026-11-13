@@ -274,3 +274,20 @@
   background: none;
   cursor: pointer;
 }
+
+/* Failure of a tab's kernel module (docs/ui/APP_SHELL.md, "Сбой модуля"). */
+.app-fault {
+  margin: 8px;
+  padding: 10px 14px;
+  border: 1px solid #b3261e;
+  border-radius: 6px;
+  background: #fdecea;
+  color: #3b0d0a;
+}
+.app-fault h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.app-fault p {
+  margin: 4px 0;
+}

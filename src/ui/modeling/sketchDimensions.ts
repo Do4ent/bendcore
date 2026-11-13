@@ -4,6 +4,11 @@
 // numbers), so names of the faces and edges built from the sketch stay the same.
 
 import type { SketchData } from '../../wasm/bendcore_modeling_api.mjs';
+import { translate } from '../app/i18n';
+import type { Translate } from '../app/i18n';
+
+/** Russian captions when the caller passes no translator (the reference dictionary). */
+const RU: Translate = (key, params) => translate('ru', key, params);
 
 export interface SketchDimension {
   /** p<i>.x, p<i>.y (point i) or c<i> (constraint i). */
@@ -16,23 +21,23 @@ function samePair(c: { a: number; b: number }, a: number, b: number): boolean {
   return (c.a === a && c.b === b) || (c.a === b && c.b === a);
 }
 
-export function sketchDimensions(data: SketchData): SketchDimension[] {
+export function sketchDimensions(data: SketchData, t: Translate = RU): SketchDimension[] {
   const out: SketchDimension[] = [];
   data.points.forEach((p, i) => {
     if (!p.fixed) return;
-    out.push({ key: `p${i}.x`, label: `Точка ${i + 1}: X`, expression: p.x });
-    out.push({ key: `p${i}.y`, label: `Точка ${i + 1}: Y`, expression: p.y });
+    out.push({ key: `p${i}.x`, label: t('part.dim.pointX', { n: i + 1 }), expression: p.x });
+    out.push({ key: `p${i}.y`, label: t('part.dim.pointY', { n: i + 1 }), expression: p.y });
   });
   data.constraints.forEach((c, i) => {
     if (c.type === 'distance') {
       const horizontal = data.constraints.some((o) => o.type === 'horizontal' && samePair(o, c.a, c.b));
       const vertical = data.constraints.some((o) => o.type === 'vertical' && samePair(o, c.a, c.b));
-      const what = horizontal ? 'Длина по X' : vertical ? 'Длина по Y' : 'Расстояние';
-      out.push({ key: `c${i}`, label: `${what} (т.${c.a + 1}–т.${c.b + 1})`, expression: c.value });
+      const what = horizontal ? 'part.dim.lengthX' : vertical ? 'part.dim.lengthY' : 'part.dim.distance';
+      out.push({ key: `c${i}`, label: t(what, { a: c.a + 1, b: c.b + 1 }), expression: c.value });
     } else if (c.type === 'radius') {
-      out.push({ key: `c${i}`, label: `Радиус (кривая ${c.a})`, expression: c.value });
+      out.push({ key: `c${i}`, label: t('part.dim.radius', { a: c.a }), expression: c.value });
     } else if (c.type === 'angle') {
-      out.push({ key: `c${i}`, label: `Угол, ° (кривые ${c.a} и ${c.b})`, expression: c.value });
+      out.push({ key: `c${i}`, label: t('part.dim.angle', { a: c.a, b: c.b }), expression: c.value });
     }
   });
   return out;
@@ -91,7 +96,7 @@ export type ProfileTemplate =
   | { kind: 'polygon'; points: [string, string][] };
 
 /** The template spec for ModelingKernel.sketchTemplate; polygon text errors name the line. */
-export function templateProfiles(form: SketchTemplateForm): { profiles: ProfileTemplate[] } {
+export function templateProfiles(form: SketchTemplateForm, t: Translate = RU): { profiles: ProfileTemplate[] } {
   if (form.kind === 'rectangle') {
     return { profiles: [{ kind: 'rectangle', x: form.x, y: form.y, width: form.width, height: form.height }] };
   }
@@ -106,10 +111,10 @@ export function templateProfiles(form: SketchTemplateForm): { profiles: ProfileT
       if (!line) return;
       const parts = line.split(';').map((p) => p.trim());
       if (parts.length !== 2 || !parts[0] || !parts[1]) {
-        throw new Error(`строка ${i + 1} полилинии: ожидается «x; y», получено «${line}»`);
+        throw new Error(t('part.dim.badVertex', { n: i + 1, line }));
       }
       points.push([parts[0], parts[1]]);
     });
-  if (points.length < 3) throw new Error('полилиния: нужно не меньше 3 вершин');
+  if (points.length < 3) throw new Error(t('part.dim.fewVertices'));
   return { profiles: [{ kind: 'polygon', points }] };
 }

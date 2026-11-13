@@ -5,16 +5,24 @@
  * to itself.
  */
 
-export type DocKind = 'part' | 'assembly' | 'drawing';
+import type { ModuleFaultInfo } from './faultReport';
+
+export type DocKind ='part' | 'assembly' | 'drawing';
 
 /** A document as text, the way it is saved, kept as a draft and passed between editors. */
 export interface DocumentFile {
   kind: DocKind;
   /** File name shown in the tab and used for downloads. */
   name: string;
-  /** Document JSON (bendcore-part, bendcore-assembly, bendcore-drawing). */
+  /**
+   * Document JSON: bendcore-part, bendcore-assembly, or the drawing file bendcore-drawing-file
+   * with the drawing and its model (src/ui/drawing/drawingFile.ts).
+   */
   text: string;
-  /** Drawing only: the model JSON the drawing is made from (DrawingHandle.saveModel). */
+  /**
+   * Drafts and recent files written by the earlier shell only: a drawing kept as the drawing
+   * document in `text` and its model here. migrateDrawingDocument() packs them into one file.
+   */
   model?: string;
   /**
    * Assembly only: part JSON of the definitions inserted from bendcore parts. The assembly file
@@ -49,6 +57,12 @@ export interface EditorHostProps {
   onCreateDrawing?: (part: DocumentFile) => void;
   /** Assembly editor: "open component part" of a component defined by a bendcore part. */
   onOpenPart?: (part: DocumentFile) => void;
+  /**
+   * The editor's kernel module failed (a trap in a call or the worker died: its state can no
+   * longer be trusted). The shell saves the last document reported by onChange as a draft and
+   * offers to restart the module with it (docs/ui/APP_SHELL.md, "Сбой модуля").
+   */
+  onFault?: (info: ModuleFaultInfo) => void;
 }
 
 export function downloadText(name: string, text: string | Uint8Array, type: string): void {
