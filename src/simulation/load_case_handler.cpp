@@ -343,7 +343,7 @@ int LoadCaseHandler::countRestrainedDOF() const noexcept {
 
 bool LoadCaseHandler::checkStaticEquilibrium(const std::vector<LoadComponent>& loads) const noexcept {
     double sum_fx = 0.0, sum_fy = 0.0, sum_fz = 0.0;
-    double sum_mx = 0.0, sum_my = 0.0, sum_mz = 0.0;
+    [[maybe_unused]] double sum_mx = 0.0, sum_my = 0.0, sum_mz = 0.0;
 
     for (const auto& load : loads) {
         if (!load.is_moment) {
