@@ -8,6 +8,8 @@ import React, { useEffect, useState } from 'react';
 import type { FeatureView } from '../../wasm/bendcore_modeling_api.mjs';
 import { TREE_ACTION_KEYS, TreeAction, treeActions } from './treeActions';
 import { caption, useI18n } from '../app/i18n';
+import { KernelMessageText } from '../app/KernelMessageText';
+import { kernelMessageLine, localizeKernelMessage } from '../app/kernelMessages';
 
 export interface FeatureTreeProps {
   features: FeatureView[];
@@ -61,7 +63,7 @@ const FeatureTree: React.FC<FeatureTreeProps> = ({
           e.preventDefault();
           if (!disabled) setMenuFor(f.id);
         }}
-        title={f.messages.join('\n')}
+        title={f.messages.map((m) => kernelMessageLine(localizeKernelMessage(t, 'message', m))).join('\n')}
       >
         <span className="pm-state-mark" aria-label={caption(t, 'part.state.', f.state)}>
           {STATE_MARK[f.state] ?? '?'}
@@ -100,7 +102,15 @@ const FeatureTree: React.FC<FeatureTreeProps> = ({
             ))}
           </ul>
         )}
-        {f.messages.length > 0 && f.state !== 'ok' && <div className="pm-tree-message">{f.messages.join('; ')}</div>}
+        {f.messages.length > 0 && f.state !== 'ok' && (
+          <div className="pm-tree-message">
+            {f.messages.map((m, i) => (
+              <div key={i}>
+                <KernelMessageText code="message" message={m} />
+              </div>
+            ))}
+          </div>
+        )}
       </li>,
     );
   });

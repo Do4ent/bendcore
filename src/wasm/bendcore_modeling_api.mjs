@@ -216,6 +216,17 @@ export class ModelingKernel {
     return unwrap(this.#module.sketchTemplate(spec));
   }
 
+  /**
+   * DXF file (Uint8Array or string) as sketch data (docs/ui/SKETCH_EDITOR.md, "Импорт DXF"):
+   * lines, arcs, circles and polylines with bulges of the chosen layers, in millimetres by
+   * $INSUNITS (or options.units), end points within options.tolerance (mm, default 0.001) merged.
+   * options: { layers?, units?, defaultUnits?, tolerance?, fixed?, paperSpace?, into? } - into: sketch data the
+   * imported geometry is appended to. Returns the sketch, the layers, counts and diagnostics.
+   */
+  dxfSketch(bytes, options = {}) {
+    return unwrap(this.#module.dxfSketch(bytes, options));
+  }
+
   createDocument() {
     return new PartDocumentHandle(this.#module, unwrap(this.#module.docCreate()));
   }

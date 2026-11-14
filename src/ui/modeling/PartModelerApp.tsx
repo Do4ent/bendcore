@@ -51,6 +51,7 @@ import { applySketchDimensions, pathSketch, templateProfiles } from './sketchDim
 import type { TreeAction } from './treeActions';
 import '../kernel/KernelViewer.css';
 import './PartModeler.css';
+import { KernelMessageText } from '../app/KernelMessageText';
 
 const MESH_PARAMS = { linearDeflection: 0.05, angularDeflection: 0.25 };
 
@@ -785,7 +786,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
       </header>
       {error && (
         <div className="kv-error" role="alert" data-testid="modeling-error">
-          {error.code}: {error.message}
+          <KernelMessageText code={error.code} message={error.message} />
         </div>
       )}
       {notice && (
@@ -893,9 +894,10 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
             </table>
           </section>
         </aside>
-        {sketchMode && docRef.current ? (
+        {sketchMode && docRef.current && kernel ? (
           <SketchEditor
             doc={docRef.current}
+            kernel={kernel.root}
             featureId={sketchMode.featureId}
             body={sketchMode.body}
             onExit={exitSketch}

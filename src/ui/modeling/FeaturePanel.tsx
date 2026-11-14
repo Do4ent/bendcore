@@ -12,6 +12,7 @@ import { FeatureForm, eligibleLinks, missingInputs, withTemplateKind } from './f
 import { caption, useI18n } from '../app/i18n';
 import type { MessageKey } from '../app/i18n';
 import { SketchTemplateForm, sketchDimensions } from './sketchDimensions';
+import { KernelMessageText } from '../app/KernelMessageText';
 
 export interface FeaturePanelProps {
   mode: 'add' | 'edit';
@@ -268,7 +269,15 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
       {view && (
         <div className={`pm-preview-state pm-state-${view.state}`} data-testid="panel-state" data-state={view.state}>
           {t('part.panel.state', { state: caption(t, 'part.state.', view.state) })}
-          {view.messages.length > 0 && <div>{view.messages.join('; ')}</div>}
+          {view.messages.length > 0 && (
+            <div>
+              {view.messages.map((m, i) => (
+                <div key={i}>
+                  <KernelMessageText code="message" message={m} />
+                </div>
+              ))}
+            </div>
+          )}
           {view.referenceReports
             .filter((r) => r.method !== 'exact')
             .map((r, i) => (

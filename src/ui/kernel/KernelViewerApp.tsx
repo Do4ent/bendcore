@@ -34,6 +34,7 @@ import type { MassResult } from '../exchange/MassSection';
 import { IMPORT_ACCEPT, importFormatOf, parseDensity } from '../exchange/exchange';
 import type { ImportFormat } from '../exchange/exchange';
 import './KernelViewer.css';
+import { KernelMessageText } from '../app/KernelMessageText';
 
 interface ModelSummary {
   fileName: string;
@@ -319,7 +320,7 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
       </header>
       {error && (
         <div className="kv-error" role="alert" data-testid="kernel-error">
-          {error.code}: {error.message}
+          <KernelMessageText code={error.code} message={error.message} />
         </div>
       )}
       {notice && (

@@ -17,6 +17,7 @@ import {
 } from './exchange';
 import type { ExportForm, ExportFormat, ExportOptions } from './exchange';
 import './Exchange.css';
+import { kernelMessageLine, localizeKernelError } from '../app/kernelMessages';
 
 export interface ExportDialogProps {
   /** Document name; the file is named after it with the extension of the format. */
@@ -67,7 +68,7 @@ const ExportDialog: React.FC<ExportDialogProps> = ({ name, onExport, onClose, on
       onClose();
     } catch (e) {
       const ke = e as { code?: string; detail?: string; message?: string };
-      setError(ke.code ? `${ke.code}: ${ke.detail ?? ke.message}` : String(ke.message ?? e));
+      setError(ke.code ? `${kernelMessageLine(localizeKernelError(t, ke))} (${ke.code})` : String(ke.message ?? e));
     } finally {
       setBusy(false);
     }
