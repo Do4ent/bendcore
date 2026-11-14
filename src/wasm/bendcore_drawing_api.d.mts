@@ -182,9 +182,20 @@ export interface SheetInfo {
   /** Title block as printed: fields from the model where the sheet leaves them empty. */
   titleShown?: { designation: string; name: string; material: string; mass: string; scale: string; sheet: number; sheets: number };
 }
+export type TextFont = 'gost2304' | 'truetype';
+
+export interface DrawingSettingsChanges {
+  textFont?: TextFont;
+  dissolvedAssemblies?: string[];
+}
+
 export interface DrawingDescription {
   model: { kind: 'part' | 'assembly'; path: string; resultHash: string; revision: number; properties: ModelProperties };
   projection: 'firstAngle' | 'thirdAngle';
+  /** Text font of the sheets: single-stroke GOST 2.304 type B or the TrueType font of setFont. */
+  textFont: TextFont;
+  /** Sub-assemblies listed by their parts in the specification and positions (assembly only). */
+  dissolvedAssemblies: string[];
   sheets: SheetInfo[];
   history: HistoryInfo;
 }
@@ -323,6 +334,7 @@ export class DrawingHandle {
   updateFromModel(): UpdateReport;
   addSheet(options?: SheetOptions): string;
   removeSheet(sheet: string): EditResult;
+  setSettings(changes: DrawingSettingsChanges): UpdateReport;
   setSheet(sheet: string, changes: SheetChanges): EditResult;
   addView(sheet: string, spec: ViewSpec): string;
   removeView(sheet: string, view: string): string[];

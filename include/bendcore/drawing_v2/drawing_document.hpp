@@ -195,8 +195,8 @@ struct ViewDef {
     std::optional<Point2> position;
     bool hidden = true;       // невидимые линии
     bool centerLines = true;  // осевые и центровые
-    // Условная резьба модели по ГОСТ 2.311 (annotations::threadImages): на видах, где ось резьбы
-    // параллельна или перпендикулярна плоскости вида (кроме выносных элементов и аксонометрии).
+    // Условная резьба модели по ГОСТ 2.311 (annotations::threadImages): виды сбоку и вдоль оси,
+    // аксонометрия (эллипс у входа), выносной элемент (отсечение окружностью элемента).
     bool threads = true;
     bool autoBalloons = false;  // позиции ГОСТ 2.109 по составу сборки на этом виде
     views::HlrMethod method = views::HlrMethod::Exact;

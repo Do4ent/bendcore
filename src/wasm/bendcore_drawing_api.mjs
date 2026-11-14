@@ -118,6 +118,15 @@ export class DrawingHandle {
     return this.#call('removeSheet', sheet);
   }
 
+  /**
+   * Document settings: textFont 'gost2304' (single-stroke GOST 2.304 type B, default) or 'truetype'
+   * (the font given to setFont); dissolvedAssemblies - component keys (designation or name) of
+   * sub-assemblies whose parts are listed and numbered instead of them (GOST 2.106).
+   */
+  setSettings(changes) {
+    return this.#call('setSettings', text(changes));
+  }
+
   /** Format, orientation, scale, title fields, technical requirements, roughness remainder, parts list. */
   setSheet(sheet, changes) {
     return this.#call('setSheet', sheet, text(changes));

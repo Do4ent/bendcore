@@ -130,6 +130,16 @@ describe('bendcore_drawing_wasm', () => {
       assert.equal(desc.sheets[0].views.length, 0);
       assert.equal(desc.sheets[0].titleShown.designation, PROPS.designation);
       assert.ok(drawing.sheetPicture('S1').svg.includes('Кронштейн'), 'title block text in the SVG');
+      // Text font: GOST 2.304 single-stroke by default (paths + transparent text), TrueType on request, undoable.
+      assert.equal(desc.textFont, 'gost2304');
+      assert.ok(drawing.sheetPicture('S1').svg.includes('<g class="text" data-text="Кронштейн">'), 'GOST stroke text');
+      drawing.setSettings({ textFont: 'truetype' });
+      assert.equal(drawing.describe().textFont, 'truetype');
+      const ttSvg = drawing.sheetPicture('S1').svg;
+      assert.ok(!ttSvg.includes('class="text"') && ttSvg.includes('>Кронштейн</text>'), 'TrueType text');
+      drawing.undo();
+      assert.equal(drawing.describe().textFont, 'gost2304');
+      expectKernelError(() => drawing.setSettings({ textFont: 'comic' }), 'InvalidInput', 'unknown font');
 
       // Front, top, left (GOST 2.305, first angle) and isometric.
       const F = drawing.addView('S1', { kind: 'base', standard: 'front' });
