@@ -635,3 +635,37 @@ describe('local section, undo/redo, chain and baseline, drag', () => {
     }
   });
 });
+
+// Thread dimension (ГОСТ 2.311) from the API the editor uses: the block with M10×1,25LH
+// (tests/wasm/fixtures/threaded_block.part.json, make_threaded_block_part.mjs).
+describe('thread dimension', () => {
+  test('nearest thread to the click, tolerance class, undo', () => {
+    const json = fs.readFileSync(path.join(here, 'fixtures/threaded_block.part.json'), 'utf8');
+    const drawing = kernel.createFromPart(json, { properties: PROPS });
+    try {
+      const F = drawing.addView('S1', { kind: 'base', standard: 'front' });
+      const v = view(drawing.sheetPicture('S1'), F);
+      // Front view (x, z): the thread at x = 20 from the top z = 20 down to z = 8.
+      const at = [v.anchor[0] + v.factor * 25, v.anchor[1] + v.factor * 15];
+      const r = drawing.addThreadNote('S1', F, { at, toleranceField: '6H' });
+      assert.equal(r.thread, 'M10×1,25LH');
+      let note = drawing.describe().sheets[0].threadNotes.find((n) => n.id === r.id);
+      assert.equal(note.state, 'ok');
+      assert.equal(note.text, 'M10×1,25LH-6H');
+      assert.ok(drawing.sheetPicture('S1').svg.includes('M10×1,25LH-6H'));
+      drawing.setThreadNote('S1', r.id, { toleranceField: '7H' });
+      note = drawing.describe().sheets[0].threadNotes[0];
+      assert.equal(note.text, 'M10×1,25LH-7H');
+      expectKernelError(() => drawing.setThreadNote('S1', r.id, { toleranceField: '6 H' }), 'InvalidInput', 'bad class');
+      drawing.undo();
+      assert.equal(drawing.describe().sheets[0].threadNotes[0].text, 'M10×1,25LH-6H');
+      drawing.removeAnnotation('S1', r.id);
+      assert.equal(drawing.describe().sheets[0].threadNotes.length, 0);
+      // A view without a thread: the isometric does not show threads.
+      const I = drawing.addView('S1', { kind: 'axonometric', axonometry: 'isometric' });
+      expectKernelError(() => drawing.addThreadNote('S1', I, { at }), 'InvalidInput', 'no thread on the view');
+    } finally {
+      drawing.dispose();
+    }
+  });
+});
