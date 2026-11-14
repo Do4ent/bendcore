@@ -70,6 +70,13 @@
   длины, знак — снаружи (сторона от центра габарита вида). Если параметр знака читался бы
   «вверх ногами» (линия обращена наружу вниз), знак ставится на полке линии-выноски со
   стрелкой на поверхности (ГОСТ 2.309, ГОСТ 2.316).
+- Резьба (ГОСТ 2.311, `ANNOTATIONS.md`, «Резьба»): `ViewDef::threads` (по умолчанию `true`) —
+  условная резьба модели (`modeling::threadsOf`) на основных, проекционных видах и разрезах
+  (`ComputedView::threads`); `ThreadNoteItem {id, view, face, def}` — размер резьбы с
+  обозначением «M10×1,25LH-6H» (`def.toleranceField`, `offset`, `leaderAngleDeg`, `textShift`),
+  ссылка `face` — грань резьбы (имя + сигнатура, следует за элементом); грань не найдена, не
+  резьба или резьба не на виде — висячий размер в `UpdateReport::dangling`
+  (`ComputedSheet::threadNotes`).
 - `roughnessRemainder` — знак в правом верхнем углу (ГОСТ 2.309, изм. 2002);
   `technicalRequirements` — над основной надписью (ГОСТ 2.316, пункты нумеруются).
 
@@ -161,6 +168,8 @@ JSON, `"format": "bendcore-drawing"`, `"version": 2` (`DrawingDocument::kFormatV
      "anchors": [{"anchor": "point", "ref": {"name": "V(…)", "kind": "vertex", "signature": {…}}}, …],
      "tolerance": null, "lastValue": 80}],
    "roughness": [{"id": "Ra1", "view": "F", "edge": {…}, "at": 0.8, "spec": {"method": "materialRemoval", "value": "3,2"}}],
+   "threadNotes": [{"id": "TH1", "view": "S", "face": {"name": "Tap:Wall", "kind": "face", "signature": {…}},
+     "offset": 10, "toleranceField": "6H", "leaderAngleDeg": 45, "textShift": 0}],
    "roughnessRemainder": {"method": "materialRemoval", "value": "6,3"},
    "technicalRequirements": ["Острые кромки притупить."], "partsList": false}]}
 ```
@@ -237,6 +246,8 @@ ctest --test-dir build-occt -R drawing_document --output-on-failure
   ≥ 10; масса = Σ объём · плотность; комплект — PDF 2 страницы (`pdfinfo`: А3 и А4), 5 файлов,
   тексты (`pdftotext`, DXF, ezdxf); вал подавлен → спецификация и позиции перенумерованы (4
   выноски).
+- `threads` (`test_drawing_threads.cpp`) — резьба ГОСТ 2.311 на видах, разрезе, размеры резьбы,
+  DXF/PDF, сохранение (`ANNOTATIONS.md`, «Как тестировать»).
 - `io` — сохранение → загрузка → тот же текст; загрузка модели по пути (`fileModelLoader`) —
   тот же хэш, ссылки по имени (`Exact`); изменённый файл детали → «S1/A: 60 → 75», ревизия 2;
   миграция v1 (строки формата и модели, масштаб числом, ссылки только именами → разрешение и

@@ -15,7 +15,7 @@
 
 import { KernelError } from '../../wasm/bendcore_kernel_api.mjs';
 import type { KernelErrorCode } from '../../wasm/bendcore_kernel_api.mjs';
-import { CONVERTED_SIGNAL, LONG_OPERATIONS, ModuleKind, Request, Response, isRemoteRef } from './protocol';
+import { LONG_OPERATIONS, MODULE_FAULT_CODES, ModuleKind, Request, Response, isRemoteRef } from './protocol';
 
 /** The part of Worker the client uses (a real Worker, or an in-process one in tests). */
 export interface WorkerLike {
@@ -148,9 +148,10 @@ export class WasmClient<Root> {
     else {
       const error = new KernelError(m.error.code as KernelErrorCode, m.error.detail);
       w.reject(error);
-      // A trap in the module: its state is unknown, the client closes (every pending and later
-      // call rejects with this error) and the owner is told through onFault().
-      if (error.code === 'ModuleFault') this.close(error);
+      // A trap in the module or a native fault the kernel caught (code Fault): its state is
+      // unknown, the client closes (every pending and later call rejects with this error) and
+      // the owner is told through onFault().
+      if (MODULE_FAULT_CODES.includes(error.code)) this.close(error);
     }
     this.emit();
   }
@@ -193,8 +194,8 @@ export class WasmClient<Root> {
   }
 
   /**
-   * Called once when the module fails: a trap in a call (ModuleFault) or the worker died
-   * (WorkerFailed). Not called for cancel() and dispose(). Returns the unsubscribe function.
+   * Called once when the module fails: a trap in a call (ModuleFault), a native fault caught by
+   * the kernel (Fault) or the worker died (WorkerFailed). Not called for cancel() and dispose(). Returns the unsubscribe function.
    */
   onFault(listener: FaultListener): () => void {
     this.faultListeners.add(listener);
@@ -230,12 +231,12 @@ export class WasmClient<Root> {
 /**
  * True when `e` says the module itself failed, so its state can no longer be trusted
  * (docs/ui/APP_SHELL.md, "Сбой модуля"): ModuleFault (a WebAssembly trap in a call, protocol.ts
- * isWasmTrap), WorkerFailed (the worker died), or a native kernel error made from a hardware
- * fault by occt_fault_guard (ParseError whose text names SIGSEGV / SIGBUS / SIGFPE inside OCCT).
+ * isWasmTrap), Fault (kernel ErrorCode::Fault: a native SIGSEGV / SIGBUS / SIGFPE inside OCCT
+ * caught by occt_fault_guard) or WorkerFailed (the worker died). Told by the code only.
  */
 export function isModuleFault(e: unknown): boolean {
   if (!(e instanceof KernelError)) return false;
-  return e.code === 'ModuleFault' || e.code === 'WorkerFailed' || CONVERTED_SIGNAL.test(e.detail);
+  return MODULE_FAULT_CODES.includes(e.code) || e.code === 'WorkerFailed';
 }
 
 export function isCancelled(e: unknown): boolean {

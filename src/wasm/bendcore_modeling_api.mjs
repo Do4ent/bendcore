@@ -16,7 +16,7 @@
 //
 // Every failure is thrown as KernelError { code, detail } (bendcore_kernel_api.mjs); code is the
 // kernel ErrorCode (InvalidInput, InvalidShape, OperationFailed, ParseError, IoError,
-// Unsupported) or "Disposed" for a call on a disposed document.
+// Unsupported, Fault) or "Disposed" for a call on a disposed document.
 
 import { KernelError, faceOfTriangle } from './bendcore_kernel_api.mjs';
 

@@ -15,7 +15,7 @@
 //
 // The module exchanges JSON text; this wrapper parses it. Every failure is thrown as
 // KernelError { code, detail } (bendcore_kernel_api.mjs): code is the kernel ErrorCode
-// (InvalidInput, InvalidShape, OperationFailed, ParseError, IoError, Unsupported) or "Disposed"
+// (InvalidInput, InvalidShape, OperationFailed, ParseError, IoError, Unsupported, Fault) or "Disposed"
 // for a call on a disposed drawing.
 
 import { KernelError } from './bendcore_kernel_api.mjs';

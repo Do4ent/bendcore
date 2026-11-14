@@ -14,6 +14,7 @@
 #include <bendcore/drawing_v2/annotations.hpp>
 #include <bendcore/drawing_v2/dimensions.hpp>
 #include <bendcore/drawing_v2/specification.hpp>
+#include <bendcore/drawing_v2/threads.hpp>
 #include <bendcore/drawing_v2/title_block.hpp>
 #include <bendcore/drawing_v2/view_cache.hpp>
 #include <bendcore/drawing_v2/view_sheet.hpp>
@@ -149,6 +150,9 @@ struct ViewDef {
     std::optional<Point2> position;
     bool hidden = true;       // невидимые линии
     bool centerLines = true;  // осевые и центровые
+    // Условная резьба модели по ГОСТ 2.311 (annotations::threadImages): на видах, где ось резьбы
+    // параллельна или перпендикулярна плоскости вида (кроме выносных элементов и аксонометрии).
+    bool threads = true;
     bool autoBalloons = false;  // позиции ГОСТ 2.109 по составу сборки на этом виде
     views::HlrMethod method = views::HlrMethod::Exact;
     bool autoMethod = false;  // выбор алгоритма HLR по геометрии (views::chooseHlrMethod)
@@ -205,6 +209,15 @@ struct BalloonItem {
     std::optional<Point2> at;
 };
 
+// Размер резьбы с обозначением (ГОСТ 2.311, п. 5) на виде: ссылка — грань резьбы (стенка
+// резьбового отверстия, ThreadInfo::name); надпись — threadDesignationText с полем допуска.
+struct ThreadNoteItem {
+    std::string id;
+    std::string view;
+    modeling::TopoReference face;
+    annotations::ThreadDimensionDef def;
+};
+
 struct SheetDef {
     std::string id;
     SheetFormat format;
@@ -216,6 +229,7 @@ struct SheetDef {
     std::vector<ToleranceItem> tolerances;
     std::vector<DatumItem> datums;
     std::vector<BalloonItem> balloons;  // ручные позиции (сборка)
+    std::vector<ThreadNoteItem> threadNotes;  // размеры резьбы
     std::optional<annotations::RoughnessSpec> roughnessRemainder;  // знак в правом верхнем углу
     std::vector<std::string> technicalRequirements;
     bool partsList = false;  // перечень составных частей ISO 7573 над основной надписью (сборка)
@@ -242,6 +256,7 @@ struct ComputedView {
     std::string label;  // «А–А», «Б (4:1)»; пусто — без надписи
     std::string letter;
     views::CenterGeometry centers;
+    std::vector<annotations::ThreadImage> threads;  // резьбы ГОСТ 2.311 на виде
     bool fromCache = false;
 };
 
@@ -261,6 +276,8 @@ struct ComputedSheet {
     // По SheetDef::balloons: номер, точка выноски и полка; nullopt — висячая позиция (ребро не
     // найдено или не видно, у его детали нет позиции в спецификации).
     std::vector<std::optional<annotations::Balloon>> manualBalloons;
+    // По SheetDef::threadNotes; Dangling — грань не найдена, не резьба или резьба не на виде.
+    std::vector<annotations::DimensionResult> threadNotes;
     std::optional<annotations::Specification> specification;  // для перечня ISO 7573
 };
 

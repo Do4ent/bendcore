@@ -536,6 +536,19 @@ Result<NamedShape> buildNamedShape(const NamingRequest& request) {
             }
         }
 
+        // Attributes the feature attaches directly (copies of a threaded wall).
+        for (const auto& [element, attrs] : request.attributes) {
+            auto kind = elementKindOf(element);
+            if (!kind) continue;
+            auto i = out.indexOf(*kind, element);
+            if (!i) continue;
+            auto& rec = out.records_[ki(*kind)][*i].attributes;
+            for (const auto& kv : attrs) {
+                if (std::none_of(rec.begin(), rec.end(), [&](const auto& a) { return a.first == kv.first; }))
+                    rec.push_back(kv);
+            }
+        }
+
         // Adjacency for derived names.
         NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher> edgeFaces;
         NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher> vertexFaces;

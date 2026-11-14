@@ -175,6 +175,10 @@ struct NamingRequest {
     // inputs[0] is the body the feature worked on: body names are inherited from it only.
     std::vector<const NamedShape*> inputs;
     std::vector<ElementRole> roles;
+    // Attributes of result elements that no history carries, merged into their records after
+    // naming (first value per key wins over inherited ones): the copies of a threaded wall made
+    // by a pattern or a mirror (features.hpp threadCopies). Elements not in the result are ignored.
+    std::vector<std::pair<TopoDS_Shape, ElementAttributes>> attributes;
 };
 
 // Builds the element map of `result`. Errors: InvalidInput (null result, empty feature id).

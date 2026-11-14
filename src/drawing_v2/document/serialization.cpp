@@ -363,6 +363,7 @@ Result<std::string> DrawingDocument::toJson() const {
                     {"position", v.position ? pt(*v.position) : json(nullptr)},
                     {"hidden", v.hidden},
                     {"centerLines", v.centerLines},
+                    {"threads", v.threads},
                     {"autoBalloons", v.autoBalloons},
                     {"method", enumName(v.method, kHlr)},
                     {"autoMethod", v.autoMethod}};
@@ -410,6 +411,14 @@ Result<std::string> DrawingDocument::toJson() const {
                 bs.push_back({{"id", b.id}, {"view", b.view}, {"edge", refJson(b.edge)},
                               {"at", b.at ? pt(*b.at) : json(nullptr)}});
             js["balloons"] = std::move(bs);
+        }
+        if (!s.threadNotes.empty()) {
+            json tn = json::array();
+            for (const ThreadNoteItem& t : s.threadNotes)
+                tn.push_back({{"id", t.id}, {"view", t.view}, {"face", refJson(t.face)}, {"offset", t.def.offset},
+                              {"toleranceField", t.def.toleranceField}, {"leaderAngleDeg", t.def.leaderAngleDeg},
+                              {"textShift", t.def.textShift}});
+            js["threadNotes"] = std::move(tn);
         }
         js["roughnessRemainder"] = s.roughnessRemainder ? roughJson(*s.roughnessRemainder) : json(nullptr);
         js["technicalRequirements"] = s.technicalRequirements;
@@ -494,6 +503,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                 if (jv.contains("position") && !jv.at("position").is_null()) v.position = ptFrom(jv.at("position"));
                 v.hidden = flag(jv, "hidden", true);
                 v.centerLines = flag(jv, "centerLines", true);
+                v.threads = flag(jv, "threads", true);
                 v.autoBalloons = flag(jv, "autoBalloons", false);
                 if (jv.contains("method")) v.method = enumValue(jv.at("method"), kHlr, "HLR method");
                 v.autoMethod = flag(jv, "autoMethod", false);
@@ -577,6 +587,19 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                     b.edge = refFrom(field(jb, "edge"));
                     if (jb.contains("at") && !jb.at("at").is_null()) b.at = ptFrom(jb.at("at"));
                     s.balloons.push_back(std::move(b));
+                }
+            }
+            if (js.contains("threadNotes")) {
+                for (const json& jt : js.at("threadNotes")) {
+                    ThreadNoteItem t;
+                    t.id = str(jt, "id");
+                    t.view = str(jt, "view");
+                    t.face = refFrom(field(jt, "face"));
+                    t.def.offset = num(jt, "offset", 10.0);
+                    if (jt.contains("toleranceField")) t.def.toleranceField = str(jt, "toleranceField");
+                    t.def.leaderAngleDeg = num(jt, "leaderAngleDeg", 45.0);
+                    t.def.textShift = num(jt, "textShift", 0.0);
+                    s.threadNotes.push_back(std::move(t));
                 }
             }
             if (js.contains("roughnessRemainder") && !js.at("roughnessRemainder").is_null())

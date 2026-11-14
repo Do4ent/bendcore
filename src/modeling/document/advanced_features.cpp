@@ -16,6 +16,7 @@
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 
+#include <algorithm>
 #include <cmath>
 #include <set>
 
@@ -418,7 +419,22 @@ Result<FeatureOutput> copies(const FeatureContext& ctx, const std::vector<gp_Trs
     if (!bodies) return bodies.error();
     auto res = copyBodies(ctx.input().shape(), bodies.value(), transforms, ctx.option("merge") == "true");
     if (!res) return res.error();
-    return outputOf(std::move(res).value(), std::nullopt);
+    // Copies of the threaded walls of the selected bodies get the thread attributes.
+    std::vector<ThreadSpec> seeds;
+    for (const ThreadInfo& t : threadsOf(ctx.input())) {
+        const TopoDS_Shape& face = ctx.input().element(ElementKind::Face, t.face);
+        const bool selected = std::any_of(bodies.value().begin(), bodies.value().end(), [&](const TopoDS_Shape& b) {
+            for (TopExp_Explorer ex(b, TopAbs_FACE); ex.More(); ex.Next()) {
+                if (ex.Current().IsSame(face)) return true;
+            }
+            return false;
+        });
+        if (selected) seeds.push_back(t.thread);
+    }
+    auto threads = threadCopies(seeds, transforms, res.value().shape);
+    FeatureOutput out = outputOf(std::move(res).value(), std::nullopt);
+    out.attributes = std::move(threads);
+    return out;
 }
 
 class BodyLinearPatternFeature final : public Feature {

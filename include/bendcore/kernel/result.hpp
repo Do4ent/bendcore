@@ -13,6 +13,12 @@ enum class ErrorCode {
     ParseError,
     IoError,
     Unsupported,
+    // A hardware fault (SIGSEGV, SIGBUS, SIGFPE) inside OCCT, caught by the kernel's fault guard
+    // (src/kernel/occt_fault_guard.*, docs/kernel/KERNEL_CORE.md, "Повреждённые файлы"). The
+    // call was aborted by longjmp: objects of the aborted call leaked and a lock held at the
+    // fault may stay held, so the process state is no longer fully trusted. Callers pass the
+    // code on unchanged; the UI treats it as a module fault (docs/ui/APP_SHELL.md, "Сбой модуля").
+    Fault,
 };
 
 const char* toString(ErrorCode code) noexcept;
@@ -54,6 +60,7 @@ inline const char* toString(ErrorCode code) noexcept {
         case ErrorCode::ParseError: return "ParseError";
         case ErrorCode::IoError: return "IoError";
         case ErrorCode::Unsupported: return "Unsupported";
+        case ErrorCode::Fault: return "Fault";
     }
     return "Unknown";
 }

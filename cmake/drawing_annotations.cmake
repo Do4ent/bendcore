@@ -16,6 +16,7 @@ add_library(bendcore_drawing_annotations STATIC
   src/drawing_v2/annotations/tolerances.cpp
   src/drawing_v2/annotations/dimensions.cpp
   src/drawing_v2/annotations/symbols.cpp
+  src/drawing_v2/annotations/threads.cpp
   src/drawing_v2/annotations/specification.cpp
   src/drawing_v2/annotations/view_cache.cpp
 )

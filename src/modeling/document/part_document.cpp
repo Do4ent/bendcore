@@ -1065,6 +1065,7 @@ RebuildReport PartDocument::rebuild() {
                             if (extra) req.inputs.push_back(extra.get());
                         }
                         req.roles = out.value().roles;
+                        req.attributes = out.value().attributes;
                         auto named = buildNamedShape(req);
                         if (!named) {
                             markError(named.error().message);

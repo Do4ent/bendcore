@@ -13,12 +13,15 @@
 #endif
 
 #include <Standard_ErrorHandler.hxx>
-
-#if BENDCORE_KERNEL_CONVERT_FAULTS
+#include <Standard_Failure.hxx>
 #include <OSD_SIGBUS.hxx>
 #include <OSD_SIGSEGV.hxx>
 #include <Standard_NumericError.hxx>
 
+#include <cstring>
+#include <typeinfo>
+
+#if BENDCORE_KERNEL_CONVERT_FAULTS
 #include <csignal>
 #include <cstdio>
 #include <mutex>
@@ -27,6 +30,24 @@
 #endif
 
 namespace bendcore::kernel::detail {
+
+namespace {
+// Message of the last fault converted on this thread (written by the signal handler, no
+// allocation): isConvertedFault() compares the caught exception with it. Never set in builds
+// without fault conversion (WASM, Windows).
+thread_local char t_lastFault[128] = {};
+thread_local bool t_hasFault = false;
+}  // namespace
+
+bool isConvertedFault(const Standard_Failure& failure) {
+    if (!t_hasFault) return false;
+    const std::type_info& type = typeid(failure);
+    if (type != typeid(OSD_SIGSEGV) && type != typeid(OSD_SIGBUS) && type != typeid(Standard_NumericError)) {
+        return false;
+    }
+    const char* text = failure.GetMessageString();
+    return text != nullptr && std::strcmp(text, t_lastFault) == 0;
+}
 
 #if BENDCORE_KERNEL_CONVERT_FAULTS
 
@@ -79,19 +100,20 @@ void onFault(int sig, siginfo_t* info, void* context) {
     sigemptyset(&set);
     sigaddset(&set, sig);
     sigprocmask(SIG_UNBLOCK, &set, nullptr);
-    char message[128];
+    char* message = t_lastFault;
+    t_hasFault = true;
     void* address = info != nullptr ? info->si_addr : nullptr;
     switch (sig) {
         case SIGSEGV:
-            std::snprintf(message, sizeof(message), "SIGSEGV (invalid memory access at %p) inside OCCT", address);
+            std::snprintf(message, sizeof(t_lastFault), "SIGSEGV (invalid memory access at %p) inside OCCT", address);
             Standard_ErrorHandler::Abort(OSD_SIGSEGV(message));
             break;
         case SIGBUS:
-            std::snprintf(message, sizeof(message), "SIGBUS (bus error at %p) inside OCCT", address);
+            std::snprintf(message, sizeof(t_lastFault), "SIGBUS (bus error at %p) inside OCCT", address);
             Standard_ErrorHandler::Abort(OSD_SIGBUS(message));
             break;
         default:
-            std::snprintf(message, sizeof(message), "SIGFPE (arithmetic fault at %p) inside OCCT", address);
+            std::snprintf(message, sizeof(t_lastFault), "SIGFPE (arithmetic fault at %p) inside OCCT", address);
             Standard_ErrorHandler::Abort(Standard_NumericError(message));
             break;
     }

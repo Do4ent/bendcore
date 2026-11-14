@@ -68,6 +68,9 @@ struct FeatureOutput {
     TopoDS_Shape shape;
     opencascade::handle<BRepTools_History> history;
     std::vector<ElementRole> roles;
+    // Attributes of result elements without a history source (NamingRequest::attributes): the
+    // thread of the copies made by patterns and mirrors.
+    std::vector<std::pair<TopoDS_Shape, ElementAttributes>> attributes;
     std::vector<std::string> warnings;
     // Further named inputs of the history besides the input body (the sketch profile faces,
     // the tool of a pattern source): their element names become history sources.
