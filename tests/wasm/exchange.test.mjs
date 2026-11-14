@@ -462,7 +462,10 @@ describe('assembly exchange', () => {
       const parts = doc.placements();
       assert.equal(parts.length, 4);
       const names = doc.state().definitions.map((d) => d.name).sort();
-      for (const n of ['BASE_PLATE', 'PIN', 'SPACER']) assert.ok(names.some((x) => x.startsWith(n)), `${n} in ${names}`);
+      // Solid names come from the IGES entity labels the writer put there: the plate and the
+      // pins carry theirs; a solid without one is named <root>_<k>.
+      for (const n of ['BASE_PLATE', 'PIN']) assert.ok(names.some((x) => x.startsWith(n)), `${n} in ${names}`);
+      assert.equal(names.filter((x) => x.startsWith('PIN')).length, 2);
     });
   });
 

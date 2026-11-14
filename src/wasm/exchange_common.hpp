@@ -178,9 +178,8 @@ inline std::string bytesFromJs(const val& v, const char* what) {
     const auto n = v["length"].as<std::size_t>();
     std::string out(n, '\0');
     if (n > 0) {
-        val view = val::global("Uint8Array")
-                       .new_(emscripten::typed_memory_view(n, reinterpret_cast<unsigned char*>(out.data())));
-        view.call<void>("set", v);
+        // The memory view aliases `out`; set() copies the JS bytes into it.
+        val(emscripten::typed_memory_view(n, reinterpret_cast<unsigned char*>(out.data()))).call<void>("set", v);
     }
     return out;
 }
