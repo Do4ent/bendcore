@@ -154,6 +154,16 @@ export function missingInputs(
   return out;
 }
 
+/**
+ * Changes the profile kind of a new sketch. The path kind is an open chain (sweep path, rib
+ * contour): the sketch's `contour` option follows — `open` for a path, `closed` otherwise.
+ */
+export function withTemplateKind(form: FeatureForm, kind: SketchTemplateForm['kind']): FeatureForm {
+  if (!form.template) return form;
+  const options = 'contour' in form.options ? { ...form.options, contour: kind === 'path' ? 'open' : 'closed' } : form.options;
+  return { ...form, options, template: { ...form.template, kind } };
+}
+
 /** Adds a pick to a slot (a single slot is replaced); a pick of an already chosen element removes it. */
 export function togglePick(
   current: readonly PickedReference[],

@@ -1,18 +1,29 @@
 # Эталонные детали фаз 1 и 2
 
+Критерий готовности фазы 2 (`docs/ROADMAP_GENERAL_CAD.md`): эталонный набор расширен до 25
+деталей, включая литой корпус с уклонами и оболочкой; масса совпадает с эталонной CAD в пределах
+0,1 %; экспорт STEP открывается в двух сторонних системах. Набор — **26 деталей** (13 фазы 1 и
+13 фазы 2, таблица ниже). Масса проверяется против формулы; сверку со сторонней CAD и открытие
+STEP в сторонних системах в среде разработки выполнить нельзя (сторонней CAD нет) — это
+остаётся за человеком, файлы для неё приложены (раздел «STEP для сверки»).
+
 Критерий готовности фазы 1 (`docs/ROADMAP_GENERAL_CAD.md`): эталонные детали строятся с нуля
 через документ детали, изменение любого размера эскиза перестраивает модель без потери
 скруглений и отверстий в ≥ 95 % сценариев, файл сохраняется и открывается без расхождений.
 
-Тест: `tests/modeling/test_modeling_document_reference_parts.cpp`
-(`ctest --test-dir build-occt -R modeling_document_reference_parts --output-on-failure`).
+Тест: `tests/modeling/test_modeling_document_reference_parts.cpp` (детали 1–13 и проверки),
+`tests/modeling/reference_parts_phase2.cpp` (детали 14–26), общее описание детали —
+`tests/modeling/reference_parts.hpp`
+(`ctest --test-dir build-occt -R modeling_document_reference_parts --output-on-failure`, ~18 с).
 Документ, операции и именование — `docs/modeling/PART_DOCUMENT.md`.
 
 ## Что проверяется для каждой детали
 
 1. Деталь строится в `PartDocument` из эскизов (`Sketch`, размеры — выражения переменных
    документа) и операций; все узлы — `Ok`.
-2. Объём — против аналитической формулы (относительная погрешность ≤ 1e-6).
+2. Объём — против аналитической формулы, выписанной в тесте из размеров (относительная
+   погрешность ≤ 1e-6); масса (`kernel::computeMassProperties` при плотности материала детали)
+   — против `V_формулы · 1e-9 · ρ` (кг, ≤ 1e-6); число тел итоговой формы — против ожидаемого.
 3. Сценарии: переменные меняются (размеры эскиза и параметры операций), документ
    перестраивается; каждая ссылка «наблюдаемых» операций (скругление, фаска, отверстие,
    массив, зеркало, оболочка, уклон, эскиз на грани, вспомогательная плоскость) считается
@@ -21,7 +32,10 @@
    После сценариев — возврат к исходным размерам (объём совпадает бит в бит: пул результатов).
 4. Сохранение → загрузка без кэша и с кэшем BRep: те же состояния, имена ссылок, объёмы
    (≤ 1e-9 отн.), имена всех граней и рёбер; загруженный документ остаётся параметрическим.
-5. Отмена/повтор: транзакция с изменением размеров — `undo()` возвращает исходный объём
+5. STEP: итоговая форма записывается (`kernel::writeStep`, AP214) и читается обратно — объём
+   по формуле (≤ 1e-6) и то же число тел; закоммиченные файлы проверяет второй тест
+   (`CommittedStepFilesMatchFormulas`).
+6. Отмена/повтор: транзакция с изменением размеров — `undo()` возвращает исходный объём
    точно (без пересчёта, `recomputed` пуст), `redo()` — изменённый; удаление последней
    операции и его отмена.
 
@@ -29,7 +43,10 @@
 
 Обозначения: `π` — пи; `fillet(r, L) = (1 − π/4)r²L`; `chamfer(d, L) = d²L/2`;
 `ring(r, ρ) = (1 − π/4)r²·2π(ρ + r(10 − 3π)/(3(4 − π)))` — скругление вдоль окружности
-радиуса ρ (Папп); `rc(d, R, ±) = πd²(R ∓ d/3)` — фаска 45° на наружной/внутренней кромке.
+радиуса ρ (Папп); `rc(d, R, ±) = πd²(R ∓ d/3)` — фаска 45° на наружной/внутренней кромке;
+`fr(r1, r2, h) = πh/3·(r1² + r1r2 + r2²)` — усечённый конус; `tb(a, b, k, z0, z1) =
+∫(a − 2kz)(b − 2kz)dz = ab·Δz − k(a + b)(z1² − z0²) + 4k²(z1³ − z0³)/3` — блок с уклоном
+(сечение на высоте z); `dr(M) = D − P` — сверло резьбы крупного шага (M5 — 4,2).
 
 | # | Деталь | Построение | Объём | Сценарии |
 |---|---|---|---|---|
@@ -46,35 +63,75 @@
 | 11 | Литая бобышка с уклоном | квадрат → выдавливание; уклон 4 боковых граней от нижней (нейтральной) грани | `h/3·(a² + a'² + a·a')`, `a' = a − 2h·tg α` | a, h, α = 5° → 3°, 8° |
 | 12 | Плита с изогнутой ручкой (фаза 2) | `Box` L×W×T; эскиз круга `r` на плоскости `z = T`; эскиз траектории в плоскости `y = W/2` (`contour = open`: отрезок `Hg` вверх + четверть дуги `Rb`); `Sweep` (бобышка); `ThreadedHole` M8 насквозь в плите | `LWT + πr²(Hg + π/2·Rb) − π·6,75²/4·T` | r, Hg, Rb, положение ручки и отверстия, T, L, W |
 | 13 | Уголок с ребром и бобышкой по сечениям (фаза 2) | `Box` основания и стенки; эскиз-отрезок в средней плоскости (`contour = open`); `Rib` толщиной t; квадраты a и b на `z = T` и `z = T + hb`; `Loft` (линейчатый); `ThreadedHole` M6 (длина 8, сверление 10) в верхней грани бобышки | `40·20·T + T·20·(40−T) + (Lr−T)(Hr−T)/2·t + hb/3(a² + b² + ab) − π·2,5²·10` | Lr, Hr, t, a, hb, положение бобышки, T, все размеры ребра |
+| 14 | Литой корпус с уклонами и оболочкой (алюминий, 2700) | прямоугольник L×W → выдавливание H; `Draft` 4 боковых граней на α от нижней грани; `Shell` t внутрь без верхней грани; сквозное отверстие d в дне | `tb(L, W, k, 0, H) − tb(L − w, W − w, k, t, H) − πd²/4·t`, `k = tg α`, `w = 2t/cos α` (плоскости стенок полости смещены на t по нормали: `x = kz + t/cos α`) | L, W, H, α = 3° → 1,5°, 5°, t, d, положение отверстия, всё вместе |
+| 15 | Кронштейн с рёбрами жёсткости | `Box` основания A×W×T и стенки T×W×B; два эскиза-отрезка в плоскостях y = e и y = W − e → два `Rib` толщиной t; сквозное отверстие d | `AWT + TW(B − T) + 2·(Lr − T)(Hr − T)/2·t − πd²/4·T` | Lr, Hr, t, e (плоскости рёбер следуют), A, B, T, W, d, положение отверстия |
+| 16 | Изогнутая трубка на фланце (медь, 8900) | `Cylinder` фланца Rf×hf; кольцо R/r на XY; траектория в XZ (`contour = open`): L1 вверх, дуга Rb 90°, L2 горизонтально; `Sweep` (кольцевой профиль); глухое отверстие 2r глубиной hf снизу | `πRf²hf + π(R² − r²)(L1 + π/2·Rb + L2) − πr²hf` (Папп) | R, r, L1, Rb, L2, Rf, hf |
+| 17 | Переходник по сечениям | диск Rf×hf; окружности R1, R2, R3 на z = hf, hf + h1, hf + h1 + h2; `Loft` через 3 сечения (линейчатый); сквозное отверстие d по оси с верхнего торца | `πRf²hf + fr(R1, R2, h1) + fr(R2, R3, h2) − πd²/4·(hf + h1 + h2)` | R1, R2, R3, h1, h2, Rf, hf, d |
+| 18 | Корпус с резьбовыми отверстиями (алюминий) | `Box` L×W×H; `Shell` t без нижней грани; эскиз из 4 точек на z = H; `ThreadedHole` M5 насквозь (центры — точки эскиза, длина резьбы — вся стенка) | `LWH − (L − 2t)(W − 2t)(H − t) − 4·π·dr(5)²/4·t` | L, W, H, t, отступ e отверстий, L+W+H |
+| 19 | Многотельная пластина с булевыми между телами | пластина L×W×T; стойка r высотой T + h (`newBody`); блок (c + 5)²×(T + 4) у угла (`newBody`); `BodyBoolean` объединение пластины и стойки; `BodyBoolean` вычитание блока с сохранением инструмента — 2 тела | `LWT + πr²h − c²T + (c + 5)²(T + 4)` | L, W, T, r, h, положение стойки, c |
+| 20 | Плита с каналом охлаждения (алюминий) | `Box` L×W×T; окружность r на YZ (x = −5); траектория на z = T/2: вдоль +X, дуга Rc, вдоль +Y за грань y = W; `Sweep` вырезом | `LWT − πr²(L1 + π/2·Rc + W − y0 − Rc)` | r, y0, L1, Rc, T (эскизы на T/2 следуют), L, W |
+| 21 | Тонкостенный лоток | `Box` основания L×W×T; прямоугольник L×W на z = T → выдавливание `thin = inside` (стенка t, высота h); скругление 4 наружных вертикальных рёбер (длина T + h после слияния граней) | `LWT + (LW − (L − 2t)(W − 2t))h − 4·fillet(r, T + h)` | L, W, T, t, h, r |
+| 22 | Плита с литой стойкой (чугун, 7200) | `Box` L×W×T; окружность R → выдавливание h с уклоном α внутрь (`draftAngle`); сквозное отверстие d с торца стойки; фаска c передней верхней кромки | `LWT + fr(R, R − h·tg α, h) − πd²/4·(T + h) − chamfer(c, L)` | R, h, α, d, L, T, c |
+| 23 | Колпак вращения с оболочкой | эскиз XZ: юбка R×Hs и четверть окружности R → `Revolve` вокруг Z; `Shell` t без нижней грани; кольцо R − t…R + wf → выдавливание hfl | `π(R² − (R − t)²)Hs + 2π/3·(R³ − (R − t)³) + π((R + wf)² − R²)hfl` | R, Hs, t, wf, hfl |
+| 24 | Вилка с зеркальным зубом | `Box` L×W×T (по центру x = 0); зуб pw×(W − 10)×hp на x = g/2 (`newBody`); `BodyMirror` относительно YZ (новое тело); `BodyBoolean` объединение пластины с двумя зубьями; сквозное отверстие d в центре | `LWT + 2·pw(W − 10)hp − πd²/4·T` | L, W, T, g, pw, hp, d |
+| 25 | Бункер с карманом по сечениям | `Box` L×W×H; прямоугольники a1×b1 на z = H и a2×b2 на z = H − dp; `Loft` вырезом (линейчатый); сквозное отверстие d из дна кармана | `LWH − dp/6·(a1b1 + (a1 + a2)(b1 + b2) + a2b2) − πd²/4·(H − dp)` (призматоид) | a1, b1, a2, dp, H, L, d |
+| 26 | Ступица со штифтами | `Cylinder` R0×h; штифт rp×hp на радиусе Rp (`newBody`); `BodyCircularPattern` 6 копий вокруг Z; `BodyBoolean` объединение диска с 6 штифтами; сквозное отверстие d | `πR0²h + 6πrp²hp − πd²/4·h` | R0, h, Rp, rp, hp, d |
 
 ## Результаты
 
-Вывод теста (RelWithDebInfo, OCCT 8.0.1):
+Вывод теста (RelWithDebInfo, OCCT 8.0.1; масса — при плотности материала детали, по
+умолчанию сталь 7850 кг/м³):
 
 ```
-[reference part] bracket                        volume 24180.885022 mm3, 5 features, 10 scenarios
-[reference part] shaft with keyway              volume 54106.335008 mm3, 6 features, 11 scenarios
-[reference part] flange with bolt circle        volume 153438.919493 mm3, 8 features, 11 scenarios
-[reference part] cover with rounded corners     volume 69983.575132 mm3, 6 features, 9 scenarios
-[reference part] housing with shell             volume 39292.380551 mm3, 5 features, 8 scenarios
-[reference part] plate with counterbores        volume 187179.557911 mm3, 5 features, 10 scenarios
-[reference part] pulley with groove             volume 191548.454087 mm3, 5 features, 8 scenarios
-[reference part] bushing with chamfers          volume 49850.137729 mm3, 4 features, 7 scenarios
-[reference part] support with mirrored boss     volume 58098.654235 mm3, 6 features, 9 scenarios
-[reference part] grid plate with slot pattern   volume 100725.000000 mm3, 6 features, 9 scenarios
-[reference part] cast boss with draft           volume 29282.008274 mm3, 3 features, 6 scenarios
-[reference part] plate with swept grip          volume 34477.926727 mm3, 5 features, 10 scenarios
-[reference part] ribbed bracket with lofted boss volume 8227.650459 mm3, 8 features, 10 scenarios
-[reference parts] parts: 13, scenarios: 118, references checked: 388, survived: 388, rate: 100.0 %
+[reference part] bracket                            volume 24180.885022 mm3, mass 0.189820 kg (steel), 5 features, 10 scenarios
+[reference part] shaft with keyway                  volume 54106.335008 mm3, mass 0.424735 kg (steel), 6 features, 11 scenarios
+[reference part] flange with bolt circle            volume 153438.919493 mm3, mass 1.204496 kg (steel), 8 features, 11 scenarios
+[reference part] cover with rounded corners         volume 69983.575132 mm3, mass 0.549371 kg (steel), 6 features, 9 scenarios
+[reference part] housing with shell                 volume 39292.380551 mm3, mass 0.308445 kg (steel), 5 features, 8 scenarios
+[reference part] plate with counterbores            volume 187179.557911 mm3, mass 1.469360 kg (steel), 5 features, 10 scenarios
+[reference part] pulley with groove                 volume 191548.454087 mm3, mass 1.503655 kg (steel), 5 features, 8 scenarios
+[reference part] bushing with chamfers              volume 49850.137729 mm3, mass 0.391324 kg (steel), 4 features, 7 scenarios
+[reference part] support with mirrored boss         volume 58098.654235 mm3, mass 0.456074 kg (steel), 6 features, 9 scenarios
+[reference part] grid plate with slot pattern       volume 100725.000000 mm3, mass 0.790691 kg (steel), 6 features, 9 scenarios
+[reference part] cast boss with draft               volume 29282.008274 mm3, mass 0.229864 kg (steel), 3 features, 6 scenarios
+[reference part] plate with swept grip              volume 34477.926727 mm3, mass 0.270652 kg (steel), 5 features, 10 scenarios
+[reference part] ribbed bracket with lofted boss    volume 8227.650459 mm3, mass 0.064587 kg (steel), 8 features, 10 scenarios
+[reference part] cast housing with drafts and shell volume 50644.810333 mm3, mass 0.136741 kg (aluminium), 5 features, 11 scenarios
+[reference part] bracket with stiffening ribs       volume 27362.296493 mm3, mass 0.214794 kg (steel), 7 features, 12 scenarios
+[reference part] bent tube on flange                volume 10148.595138 mm3, mass 0.090322 kg (copper), 5 features, 9 scenarios
+[reference part] lofted reducer                     volume 43134.067134 mm3, mass 0.338602 kg (steel), 7 features, 10 scenarios
+[reference part] housing with tapped holes          volume 61722.911528 mm3, mass 0.166652 kg (aluminium), 4 features, 8 scenarios
+[reference part] multibody plate with body booleans volume 37261.946711 mm3, mass 0.292506 kg (steel), 8 features, 9 scenarios
+[reference part] plate with swept cooling channel   volume 106399.624699 mm3, mass 0.287279 kg (aluminium), 4 features, 9 scenarios
+[reference part] thin-walled tray                   volume 35584.955592 mm3, mass 0.279342 kg (steel), 4 features, 8 scenarios
+[reference part] plate with drafted post            volume 64207.684750 mm3, mass 0.462295 kg (cast iron), 5 features, 10 scenarios
+[reference part] revolved cap with shell            volume 25113.891673 mm3, mass 0.197144 kg (steel), 5 features, 7 scenarios
+[reference part] fork with mirrored prong           volume 30171.681469 mm3, mass 0.236848 kg (steel), 6 features, 9 scenarios
+[reference part] hopper block with lofted pocket    volume 166112.684430 mm3, mass 1.303985 kg (steel), 5 features, 9 scenarios
+[reference part] hub with patterned pins            volume 52778.756580 mm3, mass 0.414313 kg (steel), 6 features, 8 scenarios
+[reference parts] parts: 26, scenarios: 237, references checked: 794, survived: 794, rate: 100.0 %
 ```
 
-Все объёмы совпали с формулами во всех 118 состояниях; доля выживших ссылок — 100 %
-(порог плана — 95 %). Вместе с тестом `survival` (162 ссылки, 100 %) это 550 проверок ссылок.
-Наблюдаемые операции фазы 2 — `ThreadedHole`, `Sweep`, `Loft`, `Rib` (их ссылки и связи).
+Все объёмы совпали с формулами во всех 237 состояниях; доля выживших ссылок — 100 %
+(794 из 794; порог плана — 95 %). Вместе с тестом `survival` (162 ссылки, 100 %) это 956
+проверок ссылок. Наблюдаемые операции фазы 2 — `ThreadedHole`, `Sweep`, `Loft`, `Rib` и узлы
+тел `BodyBoolean`, `BodyMirror`, `BodyCircularPattern` (их ссылки и связи; узел без ссылок
+считается одной ссылкой).
+
+## STEP для сверки со сторонней CAD
+
+`tests/corpus/reference_parts/` — STEP (AP214, мм) каждой из 26 деталей в исходных размерах и
+`manifest.json` (материал, плотность, объём и масса по формуле, число тел, значения
+переменных); всего ~1,1 МБ. Файлы пишет этот же тест при `BENDCORE_WRITE_REFERENCE_STEP=1`,
+тест `CommittedStepFilesMatchFormulas` читает закоммиченные и сверяет объём, массу и число тел
+с формулами. Сверку массы в сторонней CAD (критерий плана, допуск 0,1 %) и открытие файлов в
+двух сторонних системах **выполняет человек**: в среде разработки сторонней CAD нет.
 
 ## Ограничения набора
 
 - Сценарии меняют размеры и параметры, но не топологию эскиза (добавление/удаление
   сущностей): такие правки дают новые идентификаторы сущностей, ссылки на их грани
   разрешаются по сигнатуре (см. `PART_DOCUMENT.md`, «Ограничения»).
-- Сравнение с объёмами сторонней CAD не проводилось; эталон — аналитика.
+- Сравнение с массами сторонней CAD не проводилось; эталон — аналитика (см. «STEP для сверки»).
+- Детали фазы 2 не меняют число копий в массиве тел (ссылки узла объединения указывают на
+  конкретные тела; новые копии в него не попали бы) и не используют направляющие кинематики.

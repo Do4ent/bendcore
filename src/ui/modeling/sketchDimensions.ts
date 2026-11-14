@@ -3,7 +3,7 @@
 // Distance, Radius and Angle constraints. Editing keeps the structure (point and entity
 // numbers), so names of the faces and edges built from the sketch stay the same.
 
-import type { SketchData } from '../../wasm/bendcore_modeling_api.mjs';
+import type { SketchData, SketchGeometryDef } from '../../wasm/bendcore_modeling_api.mjs';
 import { translate } from '../app/i18n';
 import type { Translate } from '../app/i18n';
 
@@ -66,7 +66,8 @@ export function applySketchDimensions(data: SketchData, values: Record<string, s
 
 /** Profile template of the "new sketch" panel. */
 export interface SketchTemplateForm {
-  kind: 'rectangle' | 'circle' | 'polygon';
+  /** path: an open chain of lines and arcs (sweep path, rib contour); the sketch gets contour = open. */
+  kind: 'rectangle' | 'circle' | 'polygon' | 'path';
   x: string;
   y: string;
   width: string;
@@ -76,6 +77,9 @@ export interface SketchTemplateForm {
   radius: string;
   /** One corner per line: "x; y" (expressions may contain commas). */
   polygon: string;
+  /** Open chain, one vertex per line: "x; y" — a line from the previous vertex; "x; y; cx; cy"
+   * (optionally "; cw" or "; ccw", default ccw) — an arc around (cx, cy) from the previous vertex. */
+  path: string;
 }
 
 export const DEFAULT_TEMPLATE: SketchTemplateForm = {
@@ -88,6 +92,7 @@ export const DEFAULT_TEMPLATE: SketchTemplateForm = {
   cy: '0',
   radius: '20',
   polygon: '0; 0\n60; 0\n60; 20\n0; 40',
+  path: '0; 0\n0; 30\n20; 50; 20; 30; cw',
 };
 
 export type ProfileTemplate =
@@ -97,6 +102,7 @@ export type ProfileTemplate =
 
 /** The template spec for ModelingKernel.sketchTemplate; polygon text errors name the line. */
 export function templateProfiles(form: SketchTemplateForm, t: Translate = RU): { profiles: ProfileTemplate[] } {
+  if (form.kind === 'path') throw new Error('an open path is not a profile template: build it with pathSketch');
   if (form.kind === 'rectangle') {
     return { profiles: [{ kind: 'rectangle', x: form.x, y: form.y, width: form.width, height: form.height }] };
   }
@@ -117,4 +123,53 @@ export function templateProfiles(form: SketchTemplateForm, t: Translate = RU): {
     });
   if (points.length < 3) throw new Error(t('part.dim.fewVertices'));
   return { profiles: [{ kind: 'polygon', points }] };
+}
+
+/**
+ * Sketch data of an open chain ("path" template): every vertex is a fixed point (a dimension of
+ * the sketch), lines and arcs join consecutive vertices; an arc's centre is a fixed point too.
+ * Errors name the line of the text.
+ */
+export function pathSketch(text: string, t: Translate = RU): SketchData {
+  const data: SketchData = { points: [], geometry: [], constraints: [], regions: [] };
+  const point = (x: string, y: string) => {
+    data.points.push({ x, y, fixed: true });
+    return data.points.length - 1;
+  };
+  const curve = (g: Partial<SketchGeometryDef> & Pick<SketchGeometryDef, 'type'>) =>
+    data.geometry.push({
+      start: -1,
+      end: -1,
+      center: -1,
+      radius: '0',
+      counterClockwise: true,
+      construction: false,
+      projection: -1,
+      ...g,
+    });
+  let previous = -1;
+  text
+    .split('\n')
+    .map((l) => l.trim())
+    .forEach((line, i) => {
+      if (!line) return;
+      const parts = line.split(';').map((p) => p.trim());
+      const direction = parts.length === 5 ? parts[4].toLowerCase() : 'ccw';
+      const valid =
+        (parts.length === 2 || parts.length === 4 || parts.length === 5) &&
+        parts.slice(0, 4).every((p) => p.length > 0) &&
+        (direction === 'cw' || direction === 'ccw') &&
+        (parts.length === 2 || previous >= 0);
+      if (!valid) throw new Error(t('part.dim.badPathVertex', { n: i + 1, line }));
+      const vertex = point(parts[0], parts[1]);
+      if (parts.length === 2) {
+        if (previous >= 0) curve({ type: 'line', start: previous, end: vertex });
+      } else {
+        const center = point(parts[2], parts[3]);
+        curve({ type: 'arc', center, start: previous, end: vertex, counterClockwise: direction === 'ccw' });
+      }
+      previous = vertex;
+    });
+  if (data.geometry.length === 0) throw new Error(t('part.dim.fewPathVertices'));
+  return data;
 }
