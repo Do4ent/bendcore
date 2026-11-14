@@ -3,7 +3,9 @@
  * from a part or assembly document — sheets with the title block, views (base, projected,
  * axonometric, section, detail), dimensions by picked 2D edges, roughness, form tolerances,
  * datums, technical requirements, update from the model with a report of changed and dangling
- * dimensions, the specification of an assembly, export to PDF/DXF/SVG and save/open.
+ * dimensions, the specification of an assembly, export to PDF/DXF/SVG and save/open; local and
+ * stepped sections, chain/baseline and thread dimensions, dragging of dimensions and position
+ * shelves, undo/redo of the drawing edits (Ctrl+Z / Ctrl+Y) and printing at 1:1.
  *
  * Every action is a call of the drawing kernel, executed in the WASM worker (docs/ui/APP_SHELL.md):
  * long ones (views with HLR, update from the model, PDF) show the progress indicator and can be
@@ -29,19 +31,25 @@ import type {
   UpdateReport,
   ViewSpec,
 } from '../../wasm/bendcore_drawing_api.mjs';
-import SheetCanvas, { SheetCanvasHandle } from './SheetCanvas';
-import { defaultDrawingBaseUrl, loadDrawingFrom } from './drawingLoader';
+import SheetCanvas, { Handle, SheetCanvasHandle } from './SheetCanvas';
+import { FONT_FAMILY, FONT_FILE, defaultDrawingBaseUrl, loadDrawingFrom } from './drawingLoader';
+import { printDocument, printHtml } from './printSheet';
 import { CHARACTERISTICS, SCALES, SHEET_SIDES, STANDARD_VIEWS } from './labels';
 import {
   EdgePick,
+  Outline,
   PickState,
   Tool,
+  addOutlinePoint,
   addPick,
   balloonShelf,
+  canDimensionGroup,
   canDimensionSingle,
+  emptyOutline,
   downloadName,
   emptyPicks,
   sheetToViewPoint,
+  viewAt,
   viewPointToModel,
 } from './sheetGeometry';
 import type { Remote, WasmClient } from '../worker/wasmClient';
@@ -105,7 +113,20 @@ function errorOf(e: unknown): { code: string; message: string } {
 
 const STANDARD_PROJECTED: StandardView[] = ['top', 'left', 'right', 'bottom', 'rear'];
 
-const TOOLS: Tool[] = ['select', 'dimension', 'roughness', 'tolerance', 'datum', 'balloon', 'section', 'detail'];
+const TOOLS: Tool[] = [
+  'select',
+  'dimension',
+  'chain',
+  'baseline',
+  'roughness',
+  'tolerance',
+  'datum',
+  'balloon',
+  'thread',
+  'section',
+  'localSection',
+  'detail',
+];
 
 const SPEC_COLUMNS = ['format', 'zone', 'position', 'designation', 'name', 'quantity', 'note'] as const;
 
@@ -181,6 +202,12 @@ export default function DrawingEditorApp({
   const [datumLetter, setDatumLetter] = useState(() => t('drawing.datumDefault'));
   const [detailRadius, setDetailRadius] = useState('10');
   const [sectionSide, setSectionSide] = useState('leftOf');
+  const [sectionMode, setSectionMode] = useState<'simple' | 'stepped'>('simple');
+  const [outline, setOutline] = useState<Outline>(emptyOutline);
+  const [localDepth, setLocalDepth] = useState('10');
+  const [localSpline, setLocalSpline] = useState(false);
+  const [groupSpacing, setGroupSpacing] = useState('7');
+  const [threadTol, setThreadTol] = useState('6H');
 
   useEffect(() => {
     let cancelled = false;
@@ -475,6 +502,21 @@ export default function DrawingEditorApp({
     }
   };
 
+  /** The current sheet alone as a 1:1 PDF (page = sheet format) for printing. */
+  const onExportSheetPdf = async () => {
+    const d = drawingRef.current;
+    if (!d || !sheet) return;
+    try {
+      await queueRef.current;
+      download(await d.exportSheet(sheet.id, 'pdf'), downloadName(sheet.titleShown?.designation ?? '', `_${sheet.id}`, 'pdf'), 'application/pdf');
+      setError(null);
+      setMessage(t('drawing.exported', { format: 'PDF' }));
+    } catch (e) {
+      if (isCancelled(e)) return;
+      setError(errorOf(e));
+    }
+  };
+
   // ---- picks of the edge tools
 
   const createFromPicks = useCallback(
@@ -484,6 +526,10 @@ export default function DrawingEditorApp({
       const indices = state.picks.map((p) => p.index);
       if (tool === 'dimension') {
         run(t('drawing.done.dimension'), (d) => d.addDimension(sheetId, view, indices, { offset: Number(dimOffset) || 10 }));
+      } else if (tool === 'chain' || tool === 'baseline') {
+        run(t(tool === 'chain' ? 'drawing.done.chain' : 'drawing.done.baseline'), (d) =>
+          d.addDimensionGroup(sheetId, view, indices, { mode: tool, offset: Number(dimOffset) || 10, spacing: Number(groupSpacing) || 7 }),
+        );
       } else if (tool === 'roughness') {
         run(t('drawing.done.roughness'), (d) =>
           d.addRoughness(sheetId, view, indices[0], { method: rough.method as 'materialRemoval', parameter: rough.parameter, value: rough.value }),
@@ -497,7 +543,40 @@ export default function DrawingEditorApp({
         run(t('drawing.done.datum'), (d) => d.addDatum(sheetId, view, indices[0], datumLetter));
       }
     },
-    [sheetId, tool, run, dimOffset, rough, tol, datumLetter, t],
+    [sheetId, tool, run, dimOffset, groupSpacing, rough, tol, datumLetter, t],
+  );
+
+  /** Local section from the drawn outline, or a stepped section from the picked plane points. */
+  const finishOutline = useCallback(
+    (o: Outline) => {
+      if (!sheetId || !picture || o.points.length === 0) return;
+      const view = viewAt(picture.views, o.points[0]);
+      if (!view) {
+        setMessage(t('drawing.pick.clickView'));
+        return;
+      }
+      if (tool === 'localSection') {
+        if (o.points.length < 3) {
+          setMessage(t('drawing.help.localSection'));
+          return;
+        }
+        setOutline(emptyOutline);
+        run(t('drawing.done.localSection'), (d) =>
+          d.addLocalSection(sheetId, view.id, { points: o.points, spline: localSpline, depth: Number(localDepth) || 10 }),
+        );
+      } else if (tool === 'section') {
+        if (o.points.length < 2) {
+          setMessage(t('drawing.sectionSteppedHint'));
+          return;
+        }
+        const planes = o.points.map((q) => viewPointToModel(view, sheetToViewPoint(view, q)));
+        const spec: ViewSpec = { kind: 'section', parent: view.id, planePoint: planes[0], stepPoints: planes.slice(1), markView: view.id };
+        if (sectionSide !== 'none') spec.side = sectionSide as ViewSpec['side'];
+        setOutline(emptyOutline);
+        run(t('drawing.done.stepped'), (d) => d.addView(sheetId, spec));
+      }
+    },
+    [sheetId, picture, tool, run, localSpline, localDepth, sectionSide, t],
   );
 
   const onEdgeClick = (pick: EdgePick) => {
@@ -518,11 +597,15 @@ export default function DrawingEditorApp({
         setTool('select');
       } else if (e.key === 'Enter' && tool === 'dimension' && canDimensionSingle(pickState)) {
         createFromPicks(pickState);
+      } else if (e.key === 'Enter' && (tool === 'chain' || tool === 'baseline') && canDimensionGroup(pickState)) {
+        createFromPicks(pickState);
+      } else if (e.key === 'Enter' && (tool === 'localSection' || (tool === 'section' && sectionMode === 'stepped'))) {
+        finishOutline(outline);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [tool, pickState, createFromPicks]);
+  }, [tool, pickState, createFromPicks, outline, finishOutline, sectionMode]);
 
   const onSheetClick = (p: Point, view: PictureView | null) => {
     if (!sheetId) return;
@@ -536,8 +619,22 @@ export default function DrawingEditorApp({
       run(t('drawing.done.balloon'), (d) => d.addBalloon(sheetId, b.view, b.index, { at: b.at }));
       return;
     }
+    if (tool === 'localSection') {
+      const next = addOutlinePoint(outline, p);
+      if (next.closed) finishOutline(next);
+      else setOutline(next);
+      return;
+    }
+    if (tool === 'section' && sectionMode === 'stepped') {
+      setOutline({ points: [...outline.points, p], closed: false });
+      return;
+    }
     if (!view) {
       setMessage(t('drawing.pick.clickView'));
+      return;
+    }
+    if (tool === 'thread') {
+      run(t('drawing.done.thread'), (d) => d.addThreadNote(sheetId, view.id, { at: p, toleranceField: threadTol.trim() }));
       return;
     }
     const vp = sheetToViewPoint(view, p);
@@ -555,6 +652,44 @@ export default function DrawingEditorApp({
   const switchTool = (next: Tool) => {
     setTool(next);
     setPickState(emptyPicks);
+    setOutline(emptyOutline);
+  };
+
+  const onUndoRedo = (undo: boolean) => {
+    if (!drawingRef.current) return;
+    const history = desc?.history;
+    if (undo ? !history?.canUndo : !history?.canRedo) return;
+    let label = '';
+    void run(t(undo ? 'drawing.done.undo' : 'drawing.done.redo', { label: '' }), async (d) => {
+      const r = undo ? await d.undo() : await d.redo();
+      label = r.label;
+      return r;
+    }).then((ok) => {
+      if (ok) setMessage(t(undo ? 'drawing.done.undo' : 'drawing.done.redo', { label }));
+    });
+  };
+
+  /** Prints the current sheet at 1:1: the kernel's SVG in a document with @page = sheet format. */
+  const onPrint = async () => {
+    const d = drawingRef.current;
+    if (!d || !sheet) return;
+    try {
+      await queueRef.current;
+      const bytes = await d.exportSheet(sheet.id, 'svg');
+      const svg = new TextDecoder().decode(bytes);
+      const w = sheet.width ?? picture?.width ?? 0;
+      const h = sheet.height ?? picture?.height ?? 0;
+      const html = printDocument(svg, w, h, sheet.titleShown?.designation || 'bendcore', {
+        family: FONT_FAMILY,
+        url: new URL(FONT_FILE, defaultDrawingBaseUrl()).href,
+      });
+      printHtml(html);
+      setError(null);
+      setMessage(t('drawing.done.printed', { sheet: sheet.id, width: w, height: h }));
+    } catch (e) {
+      if (isCancelled(e)) return;
+      setError(errorOf(e));
+    }
   };
 
   const onUpdate = () => {
@@ -574,11 +709,14 @@ export default function DrawingEditorApp({
   };
 
   useHotkeys(active, {
+    undo: () => onUndoRedo(true),
+    redo: () => onUndoRedo(false),
     save: () => void onSave(),
     open: () => openDrawingInput.current?.click(),
     escape: () => {
       setTool('select');
       setPickState(emptyPicks);
+      setOutline(emptyOutline);
       setSelectedView(null);
     },
     delete: () => {
@@ -621,6 +759,18 @@ export default function DrawingEditorApp({
   const missingPositions = specPositions.filter((p) => balloonCount(p) === 0);
   const selected = sheet?.views.find((v) => v.id === selectedView) ?? null;
   const drawing = drawingRef.current;
+  // Draggable points: dimension texts and the shelves of manual positions.
+  const handles: Handle[] = [
+    ...(sheet?.dimensions ?? []).filter((d) => d.state === 'ok' && d.labelPosition).map((d) => ({ kind: 'dimension' as const, id: d.id, at: d.labelPosition! })),
+    ...(sheet?.positions ?? []).filter((b) => b.state === 'ok' && b.shelf).map((b) => ({ kind: 'balloon' as const, id: b.id, at: b.shelf! })),
+  ];
+  const onMoveHandle = (h: Handle, x: number, y: number) => {
+    const sid = sheetIdRef.current;
+    if (!sid) return;
+    if (h.kind === 'dimension') run(t('drawing.done.dimMoved'), (d) => d.moveDimension(sid, h.id, x, y));
+    else run(t('drawing.done.balloonShelf'), (d) => d.setBalloon(sid, h.id, { at: [x, y] }));
+  };
+  const history = desc?.history;
 
   return (
     <div className="dr-root">
@@ -639,10 +789,18 @@ export default function DrawingEditorApp({
           <input type="file" accept=".json,application/json" data-testid="replace-model" onChange={(e) => void onReplaceModel(e.target.files)} disabled={!drawing} />
         </label>
         <button onClick={() => void onSave()} disabled={!drawing} data-testid="drawing-save" title="Ctrl+S">{t('drawing.save')}</button>
+        <button onClick={() => onUndoRedo(true)} disabled={!drawing || !history?.canUndo} data-testid="drawing-undo" title={t('drawing.undoHint', { label: history?.undoLabel ?? '' })}>
+          {t('drawing.undo')}
+        </button>
+        <button onClick={() => onUndoRedo(false)} disabled={!drawing || !history?.canRedo} data-testid="drawing-redo" title={t('drawing.redoHint', { label: history?.redoLabel ?? '' })}>
+          {t('drawing.redo')}
+        </button>
         <span className="dr-sep" />
         <button onClick={() => void onExport('pdf')} disabled={!drawing} data-testid="export-pdf">PDF</button>
         <button onClick={() => void onExport('dxf')} disabled={!drawing} data-testid="export-dxf">DXF</button>
         <button onClick={() => void onExport('svg')} disabled={!drawing} data-testid="export-svg">SVG</button>
+        <button onClick={() => void onExportSheetPdf()} disabled={!drawing} data-testid="export-sheet-pdf" title={t('drawing.pdfSheetHint')}>{t('drawing.pdfSheet')}</button>
+        <button onClick={() => void onPrint()} disabled={!drawing} data-testid="drawing-print" title={t('drawing.printHint')}>{t('drawing.print')}</button>
         <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
         <span className="dr-sep" />
         {TOOLS.map((k) => (
@@ -798,6 +956,12 @@ export default function DrawingEditorApp({
                       {t('drawing.autoBalloons')}
                     </label>
                   )}
+                  {(selected.localSections ?? []).map((ls, i) => (
+                    <div key={i} className="dr-row" data-testid={`local-section-${selected.id}-${i}`}>
+                      {t('drawing.localItem', { index: i + 1, depth: ls.depth })}
+                      <button title={t('drawing.remove')} onClick={() => run(t('drawing.done.localSectionRemoved'), (d) => d.removeLocalSection(sheet.id, selected.id, i))}>×</button>
+                    </div>
+                  ))}
                   {selected.position && (
                     <button onClick={() => run(t('drawing.done.autoPosition'), (d) => d.setView(sheet.id, selected.id, { position: null }))}>{t('drawing.autoPosition')}</button>
                   )}
@@ -816,7 +980,7 @@ export default function DrawingEditorApp({
 
               <h2>{t('drawing.tool')}</h2>
               <div className="dr-box" data-testid="tool-options">
-                {tool === 'select' && <p className="dr-muted">{t('drawing.help.select')}</p>}
+                {tool === 'select' && <p className="dr-muted">{t('drawing.help.select')} {t('drawing.help.drag')}</p>}
                 {tool === 'dimension' && (
                   <>
                     <p className="dr-muted">{t('drawing.help.dimension')}</p>
@@ -825,6 +989,43 @@ export default function DrawingEditorApp({
                     </label>
                     <button disabled={!canDimensionSingle(pickState)} onClick={() => createFromPicks(pickState)}>{t('drawing.tool.dimension')}</button>
                     <div className="dr-muted" data-testid="picks">{t('drawing.picks', { count: pickState.picks.length })}</div>
+                  </>
+                )}
+                {(tool === 'chain' || tool === 'baseline') && (
+                  <>
+                    <p className="dr-muted">{t('drawing.help.group')}</p>
+                    <label>
+                      {t('drawing.offset')} <input value={dimOffset} onChange={(e) => setDimOffset(e.target.value)} size={4} />
+                    </label>
+                    {tool === 'baseline' && (
+                      <label>
+                        {t('drawing.groupSpacing')} <input value={groupSpacing} onChange={(e) => setGroupSpacing(e.target.value)} size={4} />
+                      </label>
+                    )}
+                    <button data-testid="group-create" disabled={!canDimensionGroup(pickState)} onClick={() => createFromPicks(pickState)}>{t('drawing.groupCreate')}</button>
+                    <div className="dr-muted" data-testid="picks">{t('drawing.picks', { count: pickState.picks.length })}</div>
+                  </>
+                )}
+                {tool === 'localSection' && (
+                  <>
+                    <p className="dr-muted">{t('drawing.help.localSection')}</p>
+                    <label>
+                      {t('drawing.localDepth')} <input value={localDepth} onChange={(e) => setLocalDepth(e.target.value)} size={4} data-testid="local-depth" />
+                    </label>
+                    <label className="dr-check">
+                      <input type="checkbox" checked={localSpline} onChange={(e) => setLocalSpline(e.target.checked)} data-testid="local-spline" />
+                      {t('drawing.localSpline')}
+                    </label>
+                    <button data-testid="local-done" disabled={outline.points.length < 3} onClick={() => finishOutline(outline)}>{t('drawing.localDone')}</button>
+                    <div className="dr-muted">{t('drawing.localPoints', { count: outline.points.length })}</div>
+                  </>
+                )}
+                {tool === 'thread' && (
+                  <>
+                    <p className="dr-muted">{t('drawing.help.thread')}</p>
+                    <label>
+                      {t('drawing.threadTolerance')} <input value={threadTol} onChange={(e) => setThreadTol(e.target.value)} size={4} data-testid="thread-tolerance" />
+                    </label>
                   </>
                 )}
                 {tool === 'roughness' && (
@@ -878,6 +1079,28 @@ export default function DrawingEditorApp({
                 )}
                 {tool === 'section' && (
                   <label>
+                    {t('drawing.sectionMode')}
+                    <select
+                      value={sectionMode}
+                      data-testid="section-mode"
+                      onChange={(e) => {
+                        setSectionMode(e.target.value as 'simple' | 'stepped');
+                        setOutline(emptyOutline);
+                      }}
+                    >
+                      <option value="simple">{t('drawing.sectionSimple')}</option>
+                      <option value="stepped">{t('drawing.sectionStepped')}</option>
+                    </select>
+                    {sectionMode === 'stepped' && (
+                      <>
+                        <span className="dr-muted">{t('drawing.sectionSteppedHint')}</span>
+                        <button data-testid="section-create" disabled={outline.points.length < 2} onClick={() => finishOutline(outline)}>{t('drawing.sectionCreate')}</button>
+                      </>
+                    )}
+                  </label>
+                )}
+                {tool === 'section' && (
+                  <label>
                     {t('drawing.sectionSide')}
                     <select value={sectionSide} onChange={(e) => setSectionSide(e.target.value)}>
                       {SHEET_SIDES.map((s) => (
@@ -914,6 +1137,26 @@ export default function DrawingEditorApp({
                   <li key={a.id} className={a.state === 'dangling' ? 'dr-dangling' : ''}>
                     <span>{a.id}</span> {a.label}
                     <button title={t('drawing.remove')} onClick={() => run(t('drawing.done.symbolRemoved'), (h) => h.removeAnnotation(sheet.id, a.id))}>×</button>
+                  </li>
+                ))}
+                {(sheet.threadNotes ?? []).map((n) => (
+                  <li key={n.id} className={n.state === 'dangling' ? 'dr-dangling' : ''} data-testid={`thread-${n.id}`} data-text={n.text ?? ''}>
+                    <span>{n.id}</span> {t('drawing.threadItem')} <strong>{n.text}</strong>
+                    {n.state === 'dangling' && <span className="dr-muted">{t('drawing.dangling', { reason: n.reason ?? '' })}</span>}
+                    <input
+                      className="dr-tol"
+                      placeholder={t('drawing.threadTolerance')}
+                      defaultValue={n.toleranceField}
+                      data-testid={`thread-tolerance-${n.id}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value.trim() !== n.toleranceField)
+                          run(t('drawing.done.threadChanged'), (h) => h.setThreadNote(sheet.id, n.id, { toleranceField: e.target.value.trim() }));
+                      }}
+                    />
+                    <button title={t('drawing.remove')} onClick={() => run(t('drawing.done.threadRemoved'), (h) => h.removeAnnotation(sheet.id, n.id))}>×</button>
                   </li>
                 ))}
                 {(sheet.positions ?? []).map((p) => (
@@ -966,6 +1209,9 @@ export default function DrawingEditorApp({
               onEdgeClick={onEdgeClick}
               onSheetClick={onSheetClick}
               onMoveView={(view, x, y) => run(t('drawing.done.viewMoved'), (d) => d.moveView(sheetId!, view, x, y))}
+              handles={handles}
+              onMoveHandle={onMoveHandle}
+              outline={tool === 'localSection' || (tool === 'section' && sectionMode === 'stepped') ? outline : null}
             />
           )}
           {tab === 'sheet' && !picture && <div className="dr-empty">{status === 'loading' ? t('drawing.loadingShort') : t('drawing.noDrawing')}</div>}
