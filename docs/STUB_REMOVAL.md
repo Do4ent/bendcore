@@ -171,7 +171,8 @@ TypeScript: `src/analytics.ts:294`, `src/features/enterprise/BOM.tsx:160`,
 | WASM, `cmake --preset wasm` без параметров | Eigen = заглушка: 8 объектов не компилируются, ctest 2/60 | Eigen 3.4.0 найден автоматически: сборка OK, ctest 59/59 |
 | WASM, `BENDCORE_EIGEN_DIR=/usr/include/eigen3` (`build_wasm.sh`, CI) | ctest 60/60 | то же, что строкой выше |
 
-Заявление «59 WASM-тестов проходят» (`BUILD_STATUS_2026-11-06.md`) с заглушкой получено
+Заявление «59 WASM-тестов проходят» (отчёт `BUILD_STATUS_2026-11-06.md`, удалён из репозитория
+в `c593c1f` как устаревший) с заглушкой получено
 быть не могло; оно соответствует `scripts/build_wasm.sh`, который передаёт настоящий Eigen.
 Точное число 59 на той версии не перепроверялось; на `f5583b3` таких тестов 60.
 
@@ -344,8 +345,8 @@ assembly,drawing,app}`, `web/app`, `src/wasm` не затрагивались.
 - `useTemplates` и `NewTubeDialog` читают `/data/templates.json`, `./data/bending_profiles.json`,
   которые `npm run build` не кладёт в `dist/web`.
 - `backend/` (Express): маршрут `analytics.ts` с зашитыми экспериментами; собирается в CI.
-- `docs/API_REFERENCE.md` (раздел «Optimization APIs») описывает несуществующий
-  `bendcore/optimization/performance_monitor.h`.
+- ~~`docs/API_REFERENCE.md` (раздел «Optimization APIs») описывал несуществующий
+  `bendcore/optimization/performance_monitor.h`~~ — документ удалён в `c593c1f`.
 - Зависимость `@growthbook/growthbook` в `package.json` больше не используется (lock-файл не
   менялся).
 - `.github/workflows/production-deploy.yml` вызывает `npm run test:e2e` (удалён вместе с
@@ -439,6 +440,5 @@ assembly,drawing,app}`, `web/app`, `src/wasm` не затрагивались.
 
 - `src/dwfx_parser.cpp` не входит ни в одну цель CMake, а его единственный тест (печать строк)
   удалён; нарушений правила в нём нет.
-- `docs/TESTING.md` и отчёты в корне упоминают удалённые тесты (`test_security`,
-  `test_performance`, `fea_m6` и др.) — зона технического писателя.
+- `docs/TESTING.md:13` упоминает удалённый `test_performance` — зона технического писателя.
 - `backend/`, `scripts/`, `examples/`, `sdk/` полной проверкой не охватываются (только `--diff`).
