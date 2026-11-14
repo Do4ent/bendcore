@@ -906,6 +906,13 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         // 7. Позиции по спецификации (ГОСТ 2.109). Сначала ручные: точка выноски на видимой линии
         // выбранного ребра, номер — позиция детали, которой принадлежит ребро.
         std::set<assembly_v2::DefinitionId> manualDefinitions;
+        // Определение с позицией для каждого ребра (0 — нет): деталь или подсборка-сборочная единица.
+        std::vector<assembly_v2::DefinitionId> edgePosition;
+        if (model.kind == ModelKind::Assembly && spec) {
+            edgePosition.assign(model.edgeOwner.size(), assembly_v2::DefinitionId(0));
+            for (std::uint32_t e = 0; e < edgePosition.size(); ++e)
+                if (auto o = positionOwner(model, e, *spec)) edgePosition[e] = *o;
+        }
         if (!sd.balloons.empty() && model.kind != ModelKind::Assembly)
             return invalid("sheet '" + sd.id + "': positions need an assembly model");
         for (BalloonItem& bi : sd.balloons) {
@@ -924,9 +931,9 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             }
             std::optional<int> position;
             std::optional<assembly_v2::DefinitionId> owner;
-            if (rb.ok && ref.index < model.edgeOwner.size()) {
-                owner = model.edgeOwner[ref.index];
-                position = spec->positionOf(*owner);
+            if (rb.ok) {
+                owner = positionOwner(model, ref.index, *spec);
+                if (owner) position = spec->positionOf(*owner);
             }
             if (!rb.ok || !best || !position) {
                 report.dangling.push_back(sd.id + "/" + bi.id + ": " +
@@ -991,8 +998,8 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                     if (!it.definition || it.position <= 0 || manualDefinitions.count(*it.definition)) continue;
                     std::optional<std::pair<Point2, double>> best;
                     for (const ViewEdge& e : cv.sheetView.view.edges) {
-                        if (e.visibility != Visibility::Visible || !e.edgeIndex || *e.edgeIndex >= model.edgeOwner.size()) continue;
-                        if (model.edgeOwner[*e.edgeIndex] != *it.definition) continue;
+                        if (e.visibility != Visibility::Visible || !e.edgeIndex || *e.edgeIndex >= edgePosition.size()) continue;
+                        if (edgePosition[*e.edgeIndex] != *it.definition) continue;
                         auto p = pickPoint(e.curve);
                         if (p && (!best || p->second > best->second)) best = p;
                     }

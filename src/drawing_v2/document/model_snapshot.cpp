@@ -71,13 +71,23 @@ Result<ModelSnapshot> snapshotAssembly(std::shared_ptr<const assembly_v2::Assemb
     TopoDS_Compound compound;
     builder.MakeCompound(compound);
     std::vector<assembly_v2::DefinitionId> childOwner;
+    std::vector<std::vector<assembly_v2::DefinitionId>> childChain;
     for (const assembly_v2::PlacedOccurrence& p : placed.value()) {
         if (p.shape.IsNull()) continue;
         builder.Add(compound, p.shape);
         childOwner.push_back(p.definition);
+        std::vector<assembly_v2::DefinitionId> chain;
+        for (assembly_v2::OccurrenceId id : p.path) {
+            const assembly_v2::Occurrence* o = document->findOccurrence(id);
+            if (!o) return invalid("drawing model: occurrence " + std::to_string(id) + " of a placed part is missing");
+            chain.push_back(o->definition);
+        }
+        if (chain.empty() || chain.back() != p.definition) chain.push_back(p.definition);
+        childChain.push_back(std::move(chain));
     }
     ModelSnapshot s;
     s.childOwner = std::move(childOwner);
+    s.childChain = std::move(childChain);
     s.kind = ModelKind::Assembly;
     s.shape = kernel::Shape(compound);
     s.assembly = document;
@@ -86,11 +96,17 @@ Result<ModelSnapshot> snapshotAssembly(std::shared_ptr<const assembly_v2::Assemb
     // Принадлежность рёбер: развёртка даёт форму каждой детали в мировой СК, рёбра компаунда —
     // те же подформы (TShape + положение).
     s.edgeOwner.assign(topo.value().edges().size(), assembly_v2::DefinitionId(0));
+    s.edgeChild.assign(topo.value().edges().size(), UINT32_MAX);
+    std::uint32_t child = 0;
     for (const assembly_v2::PlacedOccurrence& p : placed.value()) {
         if (p.shape.IsNull()) continue;
         for (TopExp_Explorer ex(p.shape, TopAbs_EDGE); ex.More(); ex.Next()) {
-            if (auto i = topo.value().edgeIndex(ex.Current())) s.edgeOwner[*i] = p.definition;
+            if (auto i = topo.value().edgeIndex(ex.Current())) {
+                s.edgeOwner[*i] = p.definition;
+                s.edgeChild[*i] = child;
+            }
         }
+        ++child;
     }
     modeling::NamingRequest req;
     req.featureId = "Model";
@@ -110,6 +126,18 @@ Result<ModelSnapshot> snapshotAssembly(std::shared_ptr<const assembly_v2::Assemb
     if (!hash) return hash.error();
     s.contentHash = hash.value();
     return s;
+}
+
+std::optional<assembly_v2::DefinitionId> positionOwner(const ModelSnapshot& model, std::uint32_t edge,
+                                                       const annotations::Specification& spec) {
+    if (edge < model.edgeChild.size() && model.edgeChild[edge] < model.childChain.size()) {
+        for (assembly_v2::DefinitionId d : model.childChain[model.edgeChild[edge]])
+            if (spec.positionOf(d)) return d;
+        return std::nullopt;
+    }
+    // Снимок без цепочек (собран вручную): владелец ребра — деталь.
+    if (edge < model.edgeOwner.size() && spec.positionOf(model.edgeOwner[edge])) return model.edgeOwner[edge];
+    return std::nullopt;
 }
 
 ModelLoader fileModelLoader(std::string baseDirectory) {

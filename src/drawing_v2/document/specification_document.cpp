@@ -49,6 +49,7 @@ Result<bool> SpecificationDocument::update(const ModelSnapshot& model) {
         if (auto it = settings_.formats.find(key); it != settings_.formats.end()) o.formats[d.id] = it->second;
         if (auto it = settings_.notes.find(key); it != settings_.notes.end()) o.notes[d.id] = it->second;
         if (auto it = settings_.sections.find(key); it != settings_.sections.end()) o.sectionOverride[d.id] = it->second;
+        if (d.kind == assembly_v2::DefinitionKind::Assembly && settings_.dissolved.count(key)) o.dissolve.insert(d.id);
     }
     o.documents = settings_.documents;
     o.addAssemblyDrawing = settings_.addAssemblyDrawing;

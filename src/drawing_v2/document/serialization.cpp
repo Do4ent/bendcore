@@ -694,6 +694,7 @@ Result<std::string> SpecificationDocument::toJson() const {
                      {"addAssemblyDrawing", settings_.addAssemblyDrawing},
                      {"assemblyDrawingFormat", settings_.assemblyDrawingFormat},
                      {"reservePositions", settings_.reservePositions},
+                     {"dissolvedAssemblies", settings_.dissolved},
                      {"textFont", toString(settings_.textFont)}};
     return j.dump(1);
 }
@@ -729,6 +730,7 @@ Result<SpecificationDocument> SpecificationDocument::fromJson(std::string_view t
         d.settings_.addAssemblyDrawing = flag(s, "addAssemblyDrawing", true);
         d.settings_.assemblyDrawingFormat = str(s, "assemblyDrawingFormat", "А3");
         d.settings_.reservePositions = integer(s, "reservePositions", 0);
+        d.settings_.dissolved = s.value("dissolvedAssemblies", std::set<std::string>{});
         if (s.contains("textFont")) d.settings_.textFont = textFontFrom(s.at("textFont"));
         return d;
     } catch (const ParseFailure& e) {

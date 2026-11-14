@@ -4,6 +4,7 @@
 #include <bendcore/drawing_v2/specification.hpp>
 
 #include <algorithm>
+#include <functional>
 #include <cctype>
 #include <cmath>
 #include <set>
@@ -149,8 +150,27 @@ Result<Specification> buildSpecification(const assembly_v2::AssemblyDocument& do
         if (d.position != 0) return invalid("specification: documents have no position numbers");
         buckets[SpecSection::Documentation].push_back(d);
     }
-    for (const auto& row : bom.value().rows) {
-        if (row.level != 0) continue;
+    // Составные части верхнего уровня; «разборные» подсборки заменяются своим составом.
+    std::vector<assembly_v2::BomRow> rows;
+    std::function<void(const assembly_v2::BomRow&, int)> addRow = [&](const assembly_v2::BomRow& r, int mult) {
+        if (r.kind == assembly_v2::DefinitionKind::Assembly && o.dissolve.count(r.definition)) {
+            for (const auto& c : r.children) addRow(c, mult * r.quantity);
+            return;
+        }
+        for (auto& x : rows)
+            if (x.definition == r.definition) {
+                x.quantity += r.quantity * mult;
+                return;
+            }
+        assembly_v2::BomRow copy = r;
+        copy.children.clear();
+        copy.level = 0;
+        copy.quantity = r.quantity * mult;
+        rows.push_back(std::move(copy));
+    };
+    for (const auto& row : bom.value().rows)
+        if (row.level == 0) addRow(row, 1);
+    for (const auto& row : rows) {
         SpecSection sec = row.kind == assembly_v2::DefinitionKind::Assembly ? SpecSection::AssemblyUnits
                           : row.designation.empty()                         ? SpecSection::StandardProducts
                                                                             : SpecSection::Parts;

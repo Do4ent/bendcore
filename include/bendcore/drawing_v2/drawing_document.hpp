@@ -26,6 +26,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -73,7 +74,19 @@ struct ModelSnapshot {
     // Для каждой дочерней формы компаунда (TopoDS_Iterator, порядок развёртки) — определение
     // детали (условности разрезов сборок, ГОСТ 2.305, разд. 9).
     std::vector<assembly_v2::DefinitionId> childOwner;
+    // Для каждой дочерней формы — определения вхождений её пути от верхнего уровня до детали
+    // (последнее = childOwner); для каждого ребра — индекс дочерней формы (UINT32_MAX — нет).
+    // Номер позиции ребра — у первого определения цепочки, которое есть в спецификации:
+    // подсборка-сборочная единица получает позицию по линиям своих деталей (ГОСТ 2.109).
+    std::vector<std::vector<assembly_v2::DefinitionId>> childChain;
+    std::vector<std::uint32_t> edgeChild;
 };
+
+// Определение, номер позиции которого ставится на ребре edge: первое определение цепочки
+// вхождений (от верхнего уровня), имеющее позицию в spec; nullopt — такого нет (деталь «разборной»
+// подсборки, которой нет и в спецификации, или ребро вне развёртки).
+std::optional<assembly_v2::DefinitionId> positionOwner(const ModelSnapshot& model, std::uint32_t edge,
+                                                       const annotations::Specification& spec);
 
 // Снимок документа детали: итоговая форма с картой имён; масса = объём · плотность.
 // Ошибки: InvalidInput — у документа нет тела.
@@ -472,6 +485,9 @@ struct SpecificationSettings {
     bool addAssemblyDrawing = true;
     std::string assemblyDrawingFormat = "А3";
     int reservePositions = 0;
+    // «Разборные» подсборки (ключи составных частей): в спецификацию и позиции сборочного
+    // чертежа входят их детали, а не сами подсборки (annotations::SpecificationOptions::dissolve).
+    std::set<std::string> dissolved;
     TextFont textFont = TextFont::Gost2304;  // шрифт текстов листов спецификации
 };
 
