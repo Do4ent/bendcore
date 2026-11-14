@@ -273,23 +273,6 @@ std::shared_ptr<BOM> BOMGenerator::generateFromTubes(
     return bom;
 }
 
-std::shared_ptr<BOM> BOMGenerator::generateFromAssembly(
-    const std::string& projectName,
-    const std::string& assemblyData) {
-
-    // This is a simplified implementation
-    // In a full implementation, this would parse the assemblyData
-    // and traverse the assembly tree from bendcore::assembly::Registry
-
-    auto bom = std::make_shared<BOM>();
-    bom->projectName = projectName;
-    bom->revision = "1.0";
-    bom->createdDate = getCurrentDate();
-    bom->createdBy = "BendCore CAD System";
-
-    return bom;
-}
-
 std::string BOMGenerator::exportBOM(
     const BOM& bom,
     BOMFormat format) const {

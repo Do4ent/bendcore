@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include <cmath>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include "bendcore/simulation/cfd_solver.hpp"
 #include "bendcore/simulation/structural_solver.hpp"
 #include "bendcore/simulation/thermal_solver.hpp"
@@ -111,6 +114,22 @@ TEST_F(CFDSolverTest, SetViscosity) {
 TEST_F(CFDSolverTest, SetTurbulenceModel) {
     solver.setTurbulenceModel(TurbulenceModel::K_EPSILON);
     // Verify turbulence is computed
+}
+
+TEST(CFDSolverModelTest, UnsupportedTurbulenceModelsAreRejected) {
+    for (auto model : {TurbulenceModel::SPALART_ALLMARAS, TurbulenceModel::K_OMEGA_SST}) {
+        CFDSolver s;
+        auto mesh = std::make_shared<CFDMesh>();
+        for (int i = 0; i < 3; ++i) {
+            MeshPoint p;
+            p.position = Vector3D(i, 0, 0);
+            mesh->addPoint(p);
+        }
+        s.setMesh(mesh);
+        s.setTurbulenceModel(model);
+        EXPECT_FALSE(s.solve());
+        EXPECT_FALSE(s.isConverged());
+    }
 }
 
 TEST_F(CFDSolverTest, SimpleSolve) {
@@ -298,7 +317,8 @@ TEST_F(StructuralSolverTest, AddConstraint) {
     // Verify through solve
 }
 
-TEST_F(StructuralSolverTest, SimpleSolve) {
+TEST_F(StructuralSolverTest, OnlyOneFixedNodeIsAMechanism) {
+    // Node 0 fixed, force at node 1: the tetrahedron can still rotate about node 0.
     Constraint constraint;
     constraint.type = ConstraintType::FIXED;
     constraint.node_id = 0;
@@ -310,26 +330,137 @@ TEST_F(StructuralSolverTest, SimpleSolve) {
     load.force = Vector3D(100, 0, 0);
     solver.addLoad(load);
 
-    bool success = solver.solve();
-    EXPECT_TRUE(success);
+    EXPECT_FALSE(solver.solve());
+    EXPECT_FALSE(solver.isConverged());
 }
 
-TEST_F(StructuralSolverTest, GetMaxStress) {
-    solver.solve();
-    double max_stress = solver.getMaxStress();
-    EXPECT_GE(max_stress, 0.0);
+TEST_F(StructuralSolverTest, UnsupportedLoadIsRejected) {
+    for (size_t node : {0u, 2u, 3u}) {
+        Constraint c;
+        c.type = ConstraintType::FIXED;
+        c.node_id = node;
+        solver.addConstraint(c);
+    }
+    Load load;
+    load.type = LoadType::PRESSURE;
+    load.node_id = 1;
+    load.pressure = 1e5;
+    solver.addLoad(load);
+    EXPECT_FALSE(solver.solve());
 }
 
-TEST_F(StructuralSolverTest, GetMaxDisplacement) {
-    solver.solve();
-    double max_disp = solver.getMaxDisplacement();
-    EXPECT_GE(max_disp, 0.0);
+namespace {
+
+// Unit cube [0,1]^3 split into 6 tetrahedra (Kuhn triangulation along the 000-111 diagonal).
+// Node index = x + 2y + 4z.
+void buildCube(StructuralSolver& s) {
+    s.setNumNodes(8);
+    for (int i = 0; i < 8; ++i) s.addNodeCoordinates(i, Vector3D(i & 1, (i >> 1) & 1, (i >> 2) & 1));
+    const int axis_bit[3] = {1, 2, 4};
+    const int perms[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+    s.setNumElements(6);
+    for (int e = 0; e < 6; ++e) {
+        const int a = axis_bit[perms[e][0]], b = axis_bit[perms[e][1]];
+        s.addElement(e, {0u, static_cast<size_t>(a), static_cast<size_t>(a + b), 7u});
+    }
 }
 
-TEST_F(StructuralSolverTest, GetMinSafetyFactor) {
-    solver.solve();
-    double min_sf = solver.getMinSafetyFactor();
-    EXPECT_GT(min_sf, 0.0);
+// x = 0 face: u_x = 0; origin fully fixed; (0,1,0) u_z = 0; (0,0,1) u_y = 0. Removes all
+// rigid-body modes without restraining the lateral (Poisson) contraction.
+void supportCube(StructuralSolver& s) {
+    for (size_t node : {0u, 2u, 4u, 6u}) {
+        Constraint c;
+        c.type = ConstraintType::FIXED_X;
+        c.node_id = node;
+        s.addConstraint(c);
+    }
+    Constraint origin;
+    origin.type = ConstraintType::FIXED;
+    origin.node_id = 0;
+    s.addConstraint(origin);
+    Constraint z;
+    z.type = ConstraintType::FIXED_Z;
+    z.node_id = 2;
+    s.addConstraint(z);
+    Constraint y;
+    y.type = ConstraintType::FIXED_Y;
+    y.node_id = 4;
+    s.addConstraint(y);
+}
+
+void expectUniaxial(const StructuralSolver& s, double sigma, double E, double nu) {
+    // Patch test: constant-strain tetrahedra reproduce uniform uniaxial stress exactly.
+    const double eps = sigma / E;
+    for (const auto& r : s.getElementResults()) {
+        EXPECT_NEAR(r.stress.xx(), sigma, 1e-6 * sigma);
+        for (int k = 1; k < 6; ++k) EXPECT_NEAR(r.stress.components[k], 0.0, 1e-6 * sigma);
+        EXPECT_NEAR(r.strain.xx(), eps, 1e-9 * eps + 1e-15);
+        EXPECT_NEAR(r.strain.yy(), -nu * eps, 1e-9 * eps + 1e-15);
+        EXPECT_NEAR(r.strain.zz(), -nu * eps, 1e-9 * eps + 1e-15);
+        EXPECT_NEAR(r.stress.vonMisesStress(), sigma, 1e-6 * sigma);
+        EXPECT_NEAR(r.stress.principalStress1(), sigma, 1e-6 * sigma);
+        EXPECT_NEAR(r.stress.principalStress3(), 0.0, 1e-6 * sigma);
+    }
+    for (int i = 0; i < 8; ++i) {
+        const Vector3D x(i & 1, (i >> 1) & 1, (i >> 2) & 1);
+        const Vector3D& u = s.getDisplacements()[i];
+        EXPECT_NEAR(u.x, eps * x.x, 1e-9 * eps);
+        EXPECT_NEAR(u.y, -nu * eps * x.y, 1e-9 * eps);
+        EXPECT_NEAR(u.z, -nu * eps * x.z, 1e-9 * eps);
+    }
+}
+
+}  // namespace
+
+TEST(StructuralPatchTest, PrescribedStretchGivesHookeStress) {
+    StructuralSolver s;
+    const double E = 2.1e11, nu = 0.3, delta = 1e-4;  // cube edge 1 m
+    buildCube(s);
+    supportCube(s);
+    for (size_t node : {1u, 3u, 5u, 7u}) {
+        Constraint c;
+        c.type = ConstraintType::FIXED_X;
+        c.node_id = node;
+        c.displacement = Vector3D(delta, 0, 0);
+        s.addConstraint(c);
+    }
+    ASSERT_TRUE(s.solve());
+    expectUniaxial(s, E * delta, E, nu);
+    EXPECT_NEAR(s.getMinSafetyFactor(), s.getMaterialProperties().yield_strength / (E * delta), 1e-6);
+}
+
+TEST(StructuralPatchTest, ConsistentFaceForcesGiveUniformTension) {
+    // Uniform traction sigma on the x = 1 face, split by the Kuhn triangulation into
+    // triangles (1,3,7) and (1,5,7): consistent loads area/3 per vertex -> nodes 1 and 7
+    // carry sigma/3, nodes 3 and 5 carry sigma/6.
+    StructuralSolver s;
+    const double sigma = 1.0e6;
+    buildCube(s);
+    supportCube(s);
+    const std::pair<size_t, double> loads[] = {{1, 1.0 / 3}, {7, 1.0 / 3}, {3, 1.0 / 6}, {5, 1.0 / 6}};
+    for (const auto& [node, share] : loads) {
+        Load l;
+        l.type = LoadType::FORCE;
+        l.node_id = node;
+        l.force = Vector3D(sigma * share, 0, 0);
+        s.addLoad(l);
+    }
+    ASSERT_TRUE(s.solve());
+    expectUniaxial(s, sigma, 2.1e11, 0.3);
+    EXPECT_NEAR(s.getMaxStress(), sigma, 1e-6 * sigma);
+}
+
+TEST_F(StructuralSolverTest, UnloadedSolveHasNoStress) {
+    for (size_t node : {0u, 2u, 3u}) {
+        Constraint c;
+        c.type = ConstraintType::FIXED;
+        c.node_id = node;
+        solver.addConstraint(c);
+    }
+    ASSERT_TRUE(solver.solve());
+    EXPECT_EQ(solver.getMaxStress(), 0.0);
+    EXPECT_EQ(solver.getMaxDisplacement(), 0.0);
+    EXPECT_TRUE(std::isinf(solver.getMinSafetyFactor()));
 }
 
 TEST_F(StructuralSolverTest, VonMisesStress) {
@@ -341,8 +472,14 @@ TEST_F(StructuralSolverTest, VonMisesStress) {
     stress.components[4] = 0;      // τyz
     stress.components[5] = 0;      // τxz
 
-    double vm = stress.vonMisesStress();
-    EXPECT_GT(vm, 0.0);
+    // sqrt(((100-50)^2 + (50-30)^2 + (30-100)^2) / 2) MPa = sqrt(3900) MPa
+    EXPECT_NEAR(stress.vonMisesStress(), std::sqrt(3900.0) * 1e6, 1.0);
+    // Pure shear tau: principal stresses +tau, 0, -tau.
+    StressTensor shear;
+    shear.components[3] = 40e6;
+    EXPECT_NEAR(shear.principalStress1(), 40e6, 1e-3);
+    EXPECT_NEAR(shear.principalStress2(), 0.0, 1e-3);
+    EXPECT_NEAR(shear.principalStress3(), -40e6, 1e-3);
 }
 
 TEST_F(StructuralSolverTest, EquivalentStrain) {
@@ -470,8 +607,65 @@ TEST_F(ThermalSolverTest, TransientSolve) {
     solver.setTotalTime(1.0);
     solver.setTransientMode(true);
 
-    bool success = solver.solve();
-    EXPECT_TRUE(success);
+    // Без граничных условий и источников поле остаётся равным начальному.
+    ASSERT_TRUE(solver.solve());
+    EXPECT_EQ(solver.getIterationCount(), 10u);
+    EXPECT_NEAR(solver.getElapsedTime(), 1.0, 1e-12);
+    for (const auto& r : solver.getTemperatureField()) {
+        EXPECT_NEAR(r.temperature, 293.15, 1e-9);
+    }
+}
+
+// Три узла с шагом h = 1, концы держат 400 K, середина стартует с 300 K, a = k/(rho c) = 1.
+// Для узла 1: dT/dt = 2a (400 - T) / h^2. Неявный Эйлер с шагом dt даёт точно
+// T_n = 400 - 100 (1 + 2a dt)^-n; при dt -> 0 — решение ОДУ 400 - 100 exp(-2 a t).
+TEST(ThermalTransientTest, BackwardEulerMatchesClosedForm) {
+    auto run = [](double dt, double total) {
+        ThermalSolver s;
+        ThermalMaterialProperties m;
+        m.name = "unit";
+        m.thermal_conductivity = 1.0;
+        m.density = 1.0;
+        m.specific_heat_capacity = 1.0;
+        s.setMaterialProperties(m);
+        s.setNumNodes(3);
+        for (int i = 0; i < 3; ++i) s.addNodeCoordinates(i, Vector3D(i, 0, 0));
+        s.setInitialTemperature(300.0);
+        ThermalBoundaryCondition ends;
+        ends.type = ThermalBCType::TEMPERATURE;
+        ends.temperature = 400.0;
+        ends.face_indices = {0, 2};
+        s.addBoundaryCondition(ends);
+        s.setTimeStep(dt);
+        s.setTotalTime(total);
+        s.setTransientMode(true);
+        EXPECT_TRUE(s.solve());
+        return s.getTemperatureField()[1].temperature;
+    };
+    EXPECT_NEAR(run(0.1, 1.0), 400.0 - 100.0 * std::pow(1.2, -10.0), 1e-9);
+    // Сходимость к решению ОДУ: ошибка неявного Эйлера O(dt).
+    const double exact = 400.0 - 100.0 * std::exp(-2.0 * 0.5);
+    EXPECT_NEAR(run(1e-3, 0.5), exact, 0.05);
+    EXPECT_LT(std::abs(run(1e-3, 0.5) - exact), std::abs(run(1e-2, 0.5) - exact));
+}
+
+// Тепловой поток q = -k dT/dx на линейном профиле (400 -> 300 K на 4 м): 25 k Вт/м^2 по +x.
+TEST_F(ThermalSolverTest, HeatFluxFollowsFourierLaw) {
+    ThermalBoundaryCondition hot;
+    hot.type = ThermalBCType::TEMPERATURE;
+    hot.temperature = 400.0;
+    hot.face_indices = {0};
+    ThermalBoundaryCondition cold = hot;
+    cold.temperature = 300.0;
+    cold.face_indices = {4};
+    solver.addBoundaryCondition(hot);
+    solver.addBoundaryCondition(cold);
+    ASSERT_TRUE(solver.solve());
+    const double k = solver.getMaterialProperties().thermal_conductivity;
+    for (const auto& r : solver.getTemperatureField()) {
+        EXPECT_NEAR(r.heat_flux.x, 25.0 * k, 1e-6);
+        EXPECT_NEAR(r.heat_flux.y, 0.0, 1e-9);
+    }
 }
 
 TEST_F(ThermalSolverTest, GetMaxTemperature) {
@@ -577,11 +771,6 @@ TEST_F(ResultVisualizationTest, GenerateScalarFieldColors) {
     EXPECT_GT(visualization.getScalarFieldColors().size(), 0);
 }
 
-TEST_F(ResultVisualizationTest, GenerateIsoSurface) {
-    visualization.generateIsoSurface("TestField", 3.0);
-    EXPECT_GT(visualization.getIsoSurfaces().size(), 0);
-}
-
 TEST_F(ResultVisualizationTest, GenerateVectorGlyphs) {
     auto field = std::make_shared<VisualizationField>("VectorField", FieldType::VECTOR);
 
@@ -628,8 +817,41 @@ TEST_F(ResultVisualizationTest, AddContourLevel) {
 }
 
 TEST_F(ResultVisualizationTest, ExportToVTK) {
-    bool success = visualization.exportToVTK("/tmp/test_visualization.vtk");
-    EXPECT_TRUE(success);
+    const std::string path = ::testing::TempDir() + "test_visualization.vtk";
+    ASSERT_TRUE(visualization.exportToVTK(path));
+    std::ifstream in(path);
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    EXPECT_NE(text.find("POINTS 5 double\n0 0 0\n1 0 0\n2 0 0\n3 0 0\n4 0 0\n"), std::string::npos);
+    EXPECT_NE(text.find("CELLS 5 10\n1 0\n1 1\n"), std::string::npos);
+    EXPECT_NE(text.find("POINT_DATA 5\nSCALARS TestField double 1\nLOOKUP_TABLE default\n1\n2\n3\n4\n5\n"),
+              std::string::npos);
+
+    // A field on other nodes cannot share the point list: export refuses.
+    auto other = std::make_shared<VisualizationField>("Other", FieldType::SCALAR);
+    other->setScalarData({1.0});
+    other->setNodePositions({Vector3D(9, 9, 9)});
+    visualization.addField(other);
+    EXPECT_FALSE(visualization.exportToVTK(path));
+}
+
+TEST(ColorMapTest, ViridisMatchesMatplotlibSamples) {
+    ColorMap colormap(ColorMapType::VIRIDIS);
+    colormap.setRange(0.0, 1.0);
+    const Color lo = colormap.getColor(0.0);
+    const Color mid = colormap.getColor(128.0 / 255.0);
+    const Color hi = colormap.getColor(1.0);
+    EXPECT_NEAR(lo.r, 0.267004, 1e-6);
+    EXPECT_NEAR(lo.b, 0.329415, 1e-6);
+    EXPECT_NEAR(mid.g, 0.566949, 1e-6);
+    EXPECT_NEAR(hi.r, 0.993248, 1e-6);
+    EXPECT_NEAR(hi.g, 0.906157, 1e-6);
+    // Green channel grows monotonically along viridis.
+    double prev = -1.0;
+    for (int i = 0; i <= 20; ++i) {
+        const double g = colormap.getColor(i / 20.0).g;
+        EXPECT_GT(g, prev);
+        prev = g;
+    }
 }
 
 TEST_F(ResultVisualizationTest, ExportColormap) {

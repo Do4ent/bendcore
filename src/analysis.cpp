@@ -735,49 +735,45 @@ std::vector<Issue> Analyzer::checkGaps(
 
     const auto& path = *model.path;
 
-    // For now, we'll generate sample gap violations for demonstration
-    // In a full implementation, this would:
-    // 1. Calculate the 3D position and extent of each bend segment
-    // 2. Measure the distance between adjacent bends
-    // 3. Flag violations based on minimum gap threshold
-
-    // Sample violation: Between bend 1 and bend 2
-    int bendIndex = 0;
-    for (size_t i = 0; i < path.size(); ++i) {
-        const auto& item = path[i];
-
-        // Check if this is a bend segment (check variant type)
-        if (std::holds_alternative<Bend>(item)) {
-            bendIndex++;
-
-            // Simulate gap calculation - generate test data
-            // In production, calculate actual geometric distance
-            double simulatedGap = 2.5 + (bendIndex * 0.8);  // Simulated gaps
-
-            if (simulatedGap < 2.0) {
-                // Critical error
+    // Зазор между соседними гибами — длина прямого участка оси между концом гиба k и
+    // началом гиба k+1 (сумма длин Straight между ними; гибы подряд — зазор 0). Это
+    // участок, на который ложится зажим/прижим при следующем гибе. Меньше половины
+    // minimumGap — ошибка (инструмент не помещается), меньше minimumGap — предупреждение.
+    // Прямые до первого и после последнего гиба зазорами не считаются.
+    int bendIndex = 0;          // номер последнего встреченного гиба (с 1)
+    double straightSince = 0.0; // длина прямых после него
+    for (const auto& item : path) {
+        if (std::holds_alternative<Straight>(item)) {
+            straightSince += std::get<Straight>(item).S;
+            continue;
+        }
+        if (!std::holds_alternative<Bend>(item)) continue;
+        if (bendIndex > 0) {
+            const double gap = straightSince;
+            if (gap < 0.5 * minimumGap) {
                 issues.push_back(createIssue(
                     IssueLevel::Error,
                     IssueType::InsufficientToolClearance,
                     "Критический зазор между гибами " + std::to_string(bendIndex) +
                     " и " + std::to_string(bendIndex + 1),
-                    static_cast<int>(bendIndex),
-                    simulatedGap,
+                    bendIndex,
+                    gap,
                     minimumGap
                 ));
-            } else if (simulatedGap < minimumGap) {
-                // Warning
+            } else if (gap < minimumGap) {
                 issues.push_back(createIssue(
                     IssueLevel::Warning,
                     IssueType::InsufficientToolClearance,
                     "Зазор между гибами " + std::to_string(bendIndex) +
                     " и " + std::to_string(bendIndex + 1) + " ниже рекомендуемого",
-                    static_cast<int>(bendIndex),
-                    simulatedGap,
+                    bendIndex,
+                    gap,
                     minimumGap
                 ));
             }
         }
+        ++bendIndex;
+        straightSince = 0.0;
     }
 
     return issues;

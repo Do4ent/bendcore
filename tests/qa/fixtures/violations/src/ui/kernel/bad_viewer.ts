@@ -24,3 +24,6 @@ export function tessellate(shape: number) { return []; }
 
 // Mock data instead of the kernel result
 export const meshVolume = (mesh: Float32Array) => 1000; // fake value
+
+// Placeholder: string table comes later
+// placeholder:

@@ -68,17 +68,23 @@ Color ColorMap::jetColor(double t) const {
 }
 
 Color ColorMap::viridisColor(double t) const {
-    // Perceptually uniform colormap
-    // Simplified implementation
-    if (t < 0.25) {
-        return Color(0.267, 0.004, 0.329);
-    } else if (t < 0.5) {
-        return Color(0.128, 0.565, 0.510);
-    } else if (t < 0.75) {
-        return Color(0.993, 0.906, 0.144);
-    } else {
-        return Color(0.993, 0.906, 0.144);
-    }
+    // matplotlib "viridis" (van der Walt, Smith, 2015): entries 0, 32, ..., 224 and 255 of
+    // the 256-entry table in matplotlib/_cm_listed.py, linear interpolation in between.
+    struct Sample { double t, r, g, b; };
+    static constexpr Sample kSamples[] = {
+        {0.0 / 255.0, 0.267004, 0.004874, 0.329415},   {32.0 / 255.0, 0.282623, 0.140926, 0.457517},
+        {64.0 / 255.0, 0.229739, 0.322361, 0.545706},  {96.0 / 255.0, 0.163625, 0.471133, 0.558148},
+        {128.0 / 255.0, 0.127568, 0.566949, 0.550556}, {160.0 / 255.0, 0.134692, 0.658636, 0.517649},
+        {192.0 / 255.0, 0.266941, 0.748751, 0.440573}, {224.0 / 255.0, 0.477504, 0.821444, 0.318195},
+        {255.0 / 255.0, 0.993248, 0.906157, 0.143936}};
+    constexpr size_t kCount = sizeof(kSamples) / sizeof(kSamples[0]);
+    t = std::clamp(t, 0.0, 1.0);
+    size_t k = 0;
+    while (k + 2 < kCount && t > kSamples[k + 1].t) ++k;
+    const Sample& a = kSamples[k];
+    const Sample& b = kSamples[k + 1];
+    const double f = (t - a.t) / (b.t - a.t);
+    return Color(a.r + f * (b.r - a.r), a.g + f * (b.g - a.g), a.b + f * (b.b - a.b));
 }
 
 Color ColorMap::hotColor(double t) const {
@@ -166,25 +172,6 @@ void ResultVisualization::generateScalarFieldColors(const std::string& field_nam
     }
 }
 
-void ResultVisualization::generateIsoSurface(const std::string& field_name, double iso_value) {
-    auto field = getField(field_name);
-    if (!field || field->getType() != FieldType::SCALAR) {
-        return;
-    }
-
-    IsoSurface surface;
-    surface.iso_value = iso_value;
-
-    // Simplified iso-surface extraction
-    extractIsoSurfaceTriangles(field_name, iso_value, surface);
-
-    // Color the iso-surface
-    ColorMap colormap(colormap_);
-    surface.color = colormap.getColor(iso_value);
-
-    iso_surfaces_.push_back(surface);
-}
-
 void ResultVisualization::generateVectorGlyphs(const std::string& field_name, size_t skip, double scale) {
     auto field = getField(field_name);
     if (!field || field->getType() != FieldType::VECTOR) {
@@ -225,48 +212,52 @@ void ResultVisualization::addContourLevel(const ContourLevel& level) {
 }
 
 bool ResultVisualization::exportToVTK(const std::string& filename) {
+    if (fields_.empty()) {
+        return false;
+    }
+    const auto& points = fields_.front()->getNodePositions();
+    const size_t n = points.size();
+    for (const auto& field : fields_) {
+        const auto& pos = field->getNodePositions();
+        if (pos.size() != n) return false;
+        for (size_t i = 0; i < n; ++i) {
+            if ((pos[i] - points[i]).magnitude() > 1e-12) return false;
+        }
+        const size_t values = field->getType() == FieldType::SCALAR ? field->getScalarData().size()
+                                                                  : field->getVectorData().size();
+        if (values != n) return false;
+    }
+
     std::ofstream file(filename);
     if (!file.is_open()) {
         return false;
     }
-
     file << "# vtk DataFile Version 3.0\n";
     file << "Simulation Results\n";
     file << "ASCII\n";
     file << "DATASET UNSTRUCTURED_GRID\n";
-
-    // Export points from all fields
-    std::vector<Vector3D> all_points;
-    for (const auto& field : fields_) {
-        const auto& positions = field->getNodePositions();
-        all_points.insert(all_points.end(), positions.begin(), positions.end());
-    }
-
-    file << "POINTS " << all_points.size() << " float\n";
-    for (const auto& pt : all_points) {
+    file << "POINTS " << n << " double\n";
+    for (const auto& pt : points) {
         file << pt.x << " " << pt.y << " " << pt.z << "\n";
     }
+    // One VTK_VERTEX (type 1) cell per node, so viewers draw the point cloud.
+    file << "CELLS " << n << " " << 2 * n << "\n";
+    for (size_t i = 0; i < n; ++i) file << "1 " << i << "\n";
+    file << "CELL_TYPES " << n << "\n";
+    for (size_t i = 0; i < n; ++i) file << "1\n";
 
-    // Empty cells for now
-    file << "CELLS 0 0\n";
-    file << "CELL_TYPES 0\n";
-
-    // Write point data
-    file << "POINT_DATA " << all_points.size() << "\n";
-
-    // Export scalar fields
+    file << "POINT_DATA " << n << "\n";
     for (const auto& field : fields_) {
-        if (field->getType() == FieldType::SCALAR && !field->getScalarData().empty()) {
-            file << "SCALARS " << field->getName() << " float\n";
+        if (field->getType() == FieldType::SCALAR) {
+            file << "SCALARS " << field->getName() << " double 1\n";
             file << "LOOKUP_TABLE default\n";
-            for (double val : field->getScalarData()) {
-                file << val << "\n";
-            }
+            for (double val : field->getScalarData()) file << val << "\n";
+        } else {
+            file << "VECTORS " << field->getName() << " double\n";
+            for (const auto& v : field->getVectorData()) file << v.x << " " << v.y << " " << v.z << "\n";
         }
     }
-
-    file.close();
-    return true;
+    return static_cast<bool>(file);
 }
 
 bool ResultVisualization::exportColormap(const std::string& filename) {
@@ -286,49 +277,6 @@ bool ResultVisualization::exportColormap(const std::string& filename) {
 
     file.close();
     return true;
-}
-
-void ResultVisualization::extractIsoSurfaceTriangles(const std::string& field_name, double iso_value, IsoSurface& surface) {
-    // Simplified marching cubes-like algorithm
-    // In a real implementation, this would use proper marching cubes
-
-    auto field = getField(field_name);
-    if (!field) {
-        return;
-    }
-
-    const auto& scalar_data = field->getScalarData();
-    const auto& positions = field->getNodePositions();
-
-    // Create vertices at iso-value crossings
-    for (size_t i = 0; i < scalar_data.size(); i++) {
-        if (std::abs(scalar_data[i] - iso_value) < 0.01) {
-            surface.vertices.push_back(positions[i]);
-        }
-    }
-
-    // Create simple triangulation
-    for (size_t i = 0; i + 2 < surface.vertices.size(); i += 3) {
-        surface.triangles.push_back({i, i + 1, i + 2});
-    }
-}
-
-void ResultVisualization::computeContourColors(const std::shared_ptr<VisualizationField>& field) {
-    if (!field || field->getType() != FieldType::SCALAR) {
-        return;
-    }
-
-    const auto& scalar_data = field->getScalarData();
-
-    for (const auto& level : contour_levels_) {
-        // Find points near this contour level
-        for (size_t i = 0; i < scalar_data.size(); i++) {
-            if (std::abs(scalar_data[i] - level.value) < 0.1) {
-                // Point is near this contour level
-                // (would update visualization accordingly)
-            }
-        }
-    }
 }
 
 }  // namespace BendCore::CadCore::Simulation

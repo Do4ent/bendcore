@@ -2,7 +2,7 @@
 # Проверка правила «никаких заглушек» (docs/PROJECT_PROCESS.md, раздел 2).
 #
 # Режимы:
-#   scripts/check_no_stubs.sh                  полная проверка каталогов нового кода
+#   scripts/check_no_stubs.sh                  полная проверка src, include, tests и web/<модуль>
 #   scripts/check_no_stubs.sh --diff <ref>     то же + только добавленные строки в файлах,
 #                                              изменённых относительно merge-base(<ref>, HEAD)
 #                                              (включая незакоммиченные изменения рабочей копии)
@@ -57,15 +57,11 @@ if ! command -v perl >/dev/null 2>&1; then
   echo "check_no_stubs: требуется perl" >&2; exit 2
 fi
 
-# Каталоги нового кода (docs/ROADMAP_GENERAL_CAD.md, фаза 0); отсутствующие пропускаются.
-# src/wasm — привязки ядра (kernel_bindings.cpp) и JS API; src/ui/kernel и web/kernel-viewer —
-# вьюпорт ядра (docs/ui/KERNEL_VIEWPORT.md); tests/wasm, tests/e2e-* — тесты модулей и страниц;
-# web/part-modeler, web/assembly, web/drawing — страницы модулей; tests/regression — нагрузка и fuzz.
+# Полная проверка: весь код в src, include, tests — новые модули и старый код (трубный модуль,
+# расчёты, сервер, CLI, Electron; docs/STUB_REMOVAL.md, раздел 9) — и страницы модулей
+# web/kernel-viewer, web/part-modeler, web/assembly, web/drawing; отсутствующие пропускаются.
 default_dirs=(
-  src/kernel src/modeling src/assembly_v2 src/drawing_v2 src/wasm src/ui/kernel
-  include/bendcore/kernel include/bendcore/modeling include/bendcore/assembly_v2 include/bendcore/drawing_v2
-  tests/kernel tests/modeling tests/assembly_v2 tests/drawing_v2 tests/corpus tests/wasm tests/e2e-kernel
-  tests/regression tests/e2e-modeling tests/e2e-assembly tests/e2e-drawing tests/assembly-fixtures
+  src include tests
   web/kernel-viewer web/part-modeler web/assembly web/drawing
 )
 [[ ${#paths[@]} -gt 0 ]] || paths=("${default_dirs[@]}")
@@ -147,7 +143,7 @@ my @line_rules = (
   ['todo', 'маркер незавершённой работы (TODO/FIXME/XXX/HACK)',
    qr/\b(?:TODO|FIXME|XXX|HACK)\b/, 'all'],
   ['placeholder', '«placeholder» — описание отсутствующей логики',
-   qr/(?<!::)\bplace[- ]?holders?\b(?!\s*=\s*["'{]|\s*:\s*["'`])/i, 'all'],
+   qr/(?<!::)(?<!\.)\bplace[- ]?holders?\b(?!\s*=\s*["'{]|\??\s*:\s*(?:["'`]|string\s*(?:[;,)}|]|$)))/i, 'all'],
   ['real-implementation', 'ссылка на «настоящую реализацию» вместо неё самой',
    qr/\bin\s+(?:a|the)\s+(?:real|full|production|complete|proper|final)\s+(?:implementation|version|system|code|solver)\b|\b(?:real|full|proper|production|complete)\s+implementation\s+(?:would|should|will|must|needs?)\b/i, 'all'],
   ['would', '«would ...» — описание того, что код должен был бы делать',

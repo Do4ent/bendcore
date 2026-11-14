@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <ctime>
 #include <sstream>
+#include <stdexcept>
 #include <iomanip>
 #include <cmath>
 
@@ -217,9 +218,6 @@ std::string ReportGenerator::exportReport(
                    << "</body>\n</html>\n";
             break;
         }
-        case ExportFormat::PDF:
-            output << "% PDF export stub for " << report.projectName << "\n";
-            break;
         case ExportFormat::CSV:
             output << "Report ID,Project,Cards,Status\n"
                    << report.reportId << ","
@@ -227,8 +225,14 @@ std::string ReportGenerator::exportReport(
                    << report.bendCards.size() << ","
                    << report.approvalStatus << "\n";
             break;
-        default:
-            output << "Export format not supported\n";
+        case ExportFormat::PDF:
+        case ExportFormat::DOCX:
+        case ExportFormat::DWG:
+        case ExportFormat::SVG:
+            // Отчёт целиком в этих форматах не формируется (карта гибки в SVG —
+            // exportBendCardToSVG); вместо фиктивного содержимого — явная ошибка.
+            throw std::invalid_argument(
+                "ReportGenerator::exportReport: format is not supported (JSON, HTML, CSV only)");
     }
 
     return output.str();

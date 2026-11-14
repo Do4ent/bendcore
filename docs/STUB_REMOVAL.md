@@ -171,7 +171,8 @@ TypeScript: `src/analytics.ts:294`, `src/features/enterprise/BOM.tsx:160`,
 | WASM, `cmake --preset wasm` без параметров | Eigen = заглушка: 8 объектов не компилируются, ctest 2/60 | Eigen 3.4.0 найден автоматически: сборка OK, ctest 59/59 |
 | WASM, `BENDCORE_EIGEN_DIR=/usr/include/eigen3` (`build_wasm.sh`, CI) | ctest 60/60 | то же, что строкой выше |
 
-Заявление «59 WASM-тестов проходят» (`BUILD_STATUS_2026-11-06.md`) с заглушкой получено
+Заявление «59 WASM-тестов проходят» (отчёт `BUILD_STATUS_2026-11-06.md`, удалён из репозитория
+в `c593c1f` как устаревший) с заглушкой получено
 быть не могло; оно соответствует `scripts/build_wasm.sh`, который передаёт настоящий Eigen.
 Точное число 59 на той версии не перепроверялось; на `f5583b3` таких тестов 60.
 
@@ -344,10 +345,100 @@ assembly,drawing,app}`, `web/app`, `src/wasm` не затрагивались.
 - `useTemplates` и `NewTubeDialog` читают `/data/templates.json`, `./data/bending_profiles.json`,
   которые `npm run build` не кладёт в `dist/web`.
 - `backend/` (Express): маршрут `analytics.ts` с зашитыми экспериментами; собирается в CI.
-- `docs/API_REFERENCE.md` (раздел «Optimization APIs») описывает несуществующий
-  `bendcore/optimization/performance_monitor.h`.
+- ~~`docs/API_REFERENCE.md` (раздел «Optimization APIs») описывал несуществующий
+  `bendcore/optimization/performance_monitor.h`~~ — документ удалён в `c593c1f`.
 - Зависимость `@growthbook/growthbook` в `package.json` больше не используется (lock-файл не
   менялся).
 - `.github/workflows/production-deploy.yml` вызывает `npm run test:e2e` (удалён вместе с
   корневым `playwright.config.ts`) и `test:integration`, `test:smoke`, `test:performance`
   (не существовали и раньше) — для инженера качества.
+
+## 9. Пятая очередь (2026-11-13): весь старый код, `check_no_stubs.sh` на `src include tests`
+
+Номера строк — по коммиту `1f6b1fd` (до изменений). `scripts/check_no_stubs.sh --paths src include tests`
+до: **674** нарушения в 134 файлах (433 `trivial-assert`, 95 `simplified`, 34 `placeholder`,
+27 `no-assertions`, 23 `real-implementation`, 20 `temporary`, 17 `stub`, 17 `would`, прочие —
+единицы); после: **0**. Каждое нарушение разобрано: настоящая заглушка → реализовано с тестом
+против независимого эталона или удалено с потребителями и объявлениями; описание реального
+поведения маркерным словом → текст исправлен. Подавлений `qa-allow` не понадобилось: два вида
+ложных срабатываний (`placeholder?: string`, `field.placeholder`) устранены в правиле.
+Потребители проверены по `#include` во всём `src`, `include`, `tests`, `python`, `examples`, `sdk`,
+`backend` и по целям CMake; замыкание включений `bendcore_cli`, `bendcore_server`,
+`bendcore_wasm`, `core_api` ни одного удалённого файла не содержит.
+
+Полная проверка скрипта теперь охватывает весь `src`, `include`, `tests` (раздел 1 `docs/qa/QA.md`),
+так что новое нарушение в старом коде роняет `qa_check_no_stubs_tree` и задачу CI `no-stubs`.
+
+### 9.1 Реализовано
+
+| Место | Было (доказательство) | Стало | Тест (эталон) |
+|---|---|---|---|
+| `analysis::Analyzer::checkGaps` (трубный модуль) | `src/analysis.cpp:738-752` — «generate sample gap violations for demonstration», зазор `2.5 + 0.8·k` | Зазор между соседними гибами = сумма прямых между ними; < `minimumGap/2` — ошибка, < `minimumGap` — предупреждение | `test_analysis`: путь S100 B S3 B S7 B B S40 B → предупреждение 3 мм (гибы 1–2), ошибка 0 мм (3–4) |
+| `MassPropertiesCalculator::calculatePrincipalMoments`, `diagonalizeInertia` | `mass_properties.cpp:196-215` — моменты = отсортированная диагональ; `:315-322` — оси всегда x, y, z; `principal_axes` не заполнялись | Циклический метод Якоби (Golub–Van Loan, 8.5), оси в `MassProperties::principal_axes` | `test_mass_properties`: тензор [[2,1,0],[1,2,0],[0,0,5]] → 1, 3, 5; две массы в (±1,±1,0) → 0, 4m, 4m, ось (1,1,0)/√2 |
+| `ThermalSolver` нестационарный | `thermal_solver.cpp:248-350` — явный шаг с множителем `0.01`, `dt` и `rho·c` не используются, «In a real solver, this would solve K*T = F» | Неявный Эйлер на том же операторе, что и стационарная задача; соседи — относительно шага узлов (точный 3/5/7-точечный Лаплас на регулярной сетке); поток — МНК-градиент | рекуррентность `400 − 100(1+2a·dt)^−n`, сходимость к `400 − 100·e^(−2at)`; поток `25k` на линейном профиле |
+| `StructuralSolver` | `structural_solver.cpp:140-216` — матрица жёсткости не собиралась, `u = F/(E·0.01)`; `:35-43` — «главные напряжения» `max|σ|`, `sqrt(σ1)` | Линейные тетраэдры (постоянная деформация), `K = ΣV·BᵀDB`, разреженный LU, заданные перемещения, отказ для неподдерживаемых нагрузок, `ROLLER` и механизмов; главные напряжения — собственные значения | patch-тест куба из 6 тетраэдров: заданное удлинение и согласованные силы на грани → однородное одноосное напряжение по закону Гука; чистый сдвиг → ±τ, 0 |
+| `CFDSolver`, модели турбулентности | `cfd_solver.hpp:134` — Spalart–Allmaras и k-ω SST молча считались как k-ε | `solve()` возвращает `false` | `UnsupportedTurbulenceModelsAreRejected` |
+| `ColorMap::viridisColor` | `result_visualization.cpp:72` — 4 ступени, верхние две одинаковы | Опорные значения таблицы matplotlib (индексы 0, 32, …, 255), линейная интерполяция | значения в 0, 128/255, 1; монотонность зелёного канала |
+| `ResultVisualization::exportToVTK` | `:250` — «Empty cells for now»; точки всех полей подряд при `POINT_DATA` одного поля (неверный файл при двух полях) | Ячейки `VTK_VERTEX`, все скалярные и векторные поля; поля на разных узлах — `false` | содержимое файла; отказ для поля на других узлах |
+| `ReportingUIManager::exportReport` | `reporting_ui.cpp:85-91` — цикл по форматам пуст, всегда `true`; `reporting.cpp:221` — «% PDF export stub» | Пишет `<id>.json/.html/.csv` через `ReportGenerator`; G-code, PDF, DWG — `false` до записи; `ReportGenerator::exportReport` для PDF/DOCX/DWG/SVG — `std::invalid_argument` | `test_reporting_ui`: файлы записаны и содержат id; запрос с PDF отклонён |
+| `drawing::make_sketch` | id `sketch_<секунды>` совпадал у эскизов одной секунды (найдено тестом `test_drawing_sketches`, который не собирался) | Счётчик в id | `test_drawing_sketches` |
+| Дуги эскиза листа (`src/ui/SketchEditor.tsx`) | `:139` — «Simplified arc hit test»: p0 принят за центр; отрисовка — вокруг p1 | `src/ui/sketchArc.ts`: переход от концов к центру по SVG 1.1 F.6.5 (как `make_sketch_arc`), попадание по дуге, а не окружности | `tests/sketchArc.test.ts`: центры и углы, посчитанные вручную |
+
+В сборку возвращены настоящие тесты, не входившие ни в одну цель: `test_manual_dimensions`
+(исправлена инициализация `Rect`), `test_drawing_sketches`.
+
+### 9.2 Удалено (потребителей вне собственных тестов нет)
+
+| Подсистема | Доказательство (файл:строка до удаления) |
+|---|---|
+| `src/solver` (GAP-030), `include/bendcore/solver`, `test_real_time_solver` | `real_time_solver.cpp:317` — ГУ обнуляют `F`, матрицу не меняют (решение с закреплениями неверно); `preconditioners.cpp:161` — ILU(k) = вызов ILU0 без сохранения, `:248` — AMG с попарной агрегацией по индексам; ILU0 дважды прибавляет `U(i,j)` (`add_value` накапливает); `performance_metrics.cpp:345` — ссылка на временный объект; `solver_scheduler.cpp:216` — `cancel_task` пуст; `:377` — оценка ошибки 0. Расчётный модуль использует Eigen |
+| Связки `SimulationManager::applyCFDToStructural/ThermalToStructural/CFDToThermal`, `setupCoupling`, `aggregateResults`, `CouplingMethod`, VTK-экспорт менеджера | `simulation_manager.cpp:219-262` — давление усредняется в одну нагрузку без узла; тепловая связка пуста; `:378` MONOLITHIC пуст; `exportToVTK` пишет `POINTS 0`. `MULTI_PHYSICS` теперь — независимый запуск решателей |
+| `ResultVisualization::generateIsoSurface` | `:292-310` — вершины «у изоуровня» по допуску 0,01 и треугольники из подряд идущих; связности ячеек у полей нет |
+| `src/simulation/{bend_radius_simulation,load_case_handler,stress_analysis_framework}` + тесты GAP-050/051/053 | не собирались; `bend_radius_simulation.cpp:61` — пружинение «0.1–0.3·угол» |
+| `src/fea`, `include/bendcore/fea`, `test_fea_m6`, заголовки `mesh_optimization` (без реализаций) | `fea_solver.cpp:407-409` — диагональная «жёсткость» `E·V/100`; `:526-533` — напряжения «simplified model» |
+| `src/generative`, `test_generative_m6` | `design_generator.cpp:193-263` — пустые `add/modify/remove/reorder_feature`, геометрия — куб объёма; `visualization.cpp:306, 386-396` — чувствительность 1.0, пустой экспорт |
+| `src/parametric_ai`, `test_parametric_ai_m6` | `classification_system.cpp:409` — уверенность 0.7; `design_learning.cpp:490` — «собственные значения» = диагональ |
+| `src/optimization` (нет даже тестов) | `memory_management.cpp:334, 343, 347` — фрагментация 10 %, пустые GC и раскладка; `parallel_executor.cpp:308` — эффективность 1.0; `computation_cache.cpp:294, 299`, `optimization_profiles.cpp:75, 79` — пустые загрузка/выгрузка |
+| `src/cloud`, тесты GAP-070, `test_cloud_storage`, `test_gap071…073` | `serialization.cpp:156` — «сжатие» дописывает маркер, `:176` — хеш, `:199` — схема; `cloud_storage_manager.cpp:30` — размер = длина пути; `analytics_monitoring.cpp:177` — активные пользователи = n/2 |
+| `src/hardening`, `src/production` (+ тесты GAP-088…093, `tests/hardening`, `tests/production`) | GAP-089…093 без единой проверки; `crash_recovery.cpp:80` — «Non-blocking stub», `production/crash_recovery.cpp:117` — восстановление имитируется |
+| `src/plugins` (+ GAP-065…069, `test_plugin_*`, `test_extension_points`) | `plugin_loader.cpp:25-26` — «Mock implementation», загрузка не выполняется |
+| `src/editing` (`test_direct_editing_manager`) | `direct_editing_manager.cpp:313, 381, 402, 625, 651, 662` — параметры не обновляются, коллизия = длина > 1000, проверка геометрии всегда `true`, перестроение не выполняется |
+| `src/features`, `src/{feature_system,loft,revolve,sweep}.cpp` (`test_advanced_features_m5`) | операции без ядра (замена — `src/modeling`); тест без проверок |
+| `src/sketch` M2 (`test_sketch_m2`) | `edit_tools.cpp:212, 245, 294`, `constraint_diagnostics.cpp:116, 217` — «simplified»/«placeholder»; замена — `sketch2d` (PlaneGCS) и `src/modeling/sketch` |
+| `src/ipc_bridge.cpp`, `src/constraint_system.cpp` | потребителей и тестов нет; `ipc_bridge.cpp:171-195` — «Would normally parse JSON», `:426-429` — пустой обработчик; `constraint_system.cpp:39, 48, 93, 104` — проверка и решатель «simplified» |
+| `src/performance.cpp`, `test_performance`, `examples/performance_demo.cpp` | `performance.cpp:123, 151` — формулы «(mock)», «параллельный» анализ последовательный; бенчмарк — `sleep(50 мс)` и доля попаданий 0.75 |
+| `src/security.cpp`, `test_security` | `security.cpp:402-416` — проверки стека и утечек пусты; `:423-433` — зашитый список зависимостей (CGAL, Taskflow, Protobuf не используются); `:438` — база CVE пуста |
+| `CollaborationUIStubs` (`reporting_ui`), `BOMGenerator::generateFromAssembly` | всегда пустые списки; `bom.cpp:280-291` — `assemblyData` не читается |
+| Несобираемые старые исходники: трубные `bend_calculator`, `tube_bending_sequence`, `tube_builder`, `tube_analyzer`, `tube_feature_node`, `geometry_ops`, `pipe_profile`; `geometry_engine`, `boolean_operations.h`, `format_exporters`, `formula_engine`, `performance_advanced`, `src/geometry`, `src/manufacturing/cnc_*`, `src/bendcore/{geometry_recognition,import_filter,shortcuts,sketch_solver}`, `src/mobile`; поиск OpenMP в CMake | ни в одной цели CMake; `tube_bending_sequence.cpp:82` — деформация `угол·0.1`, `:148` — пружинение; `bend_calculator.cpp:150-184` — сила гибки «simplified model»; `geometry_engine.cpp:118` — обратная матрица = единичная; `geometry_recognition.cpp:95-96` — ошибка 0.1, уверенность 85; `parallel_geometry.cpp:237` — `intersects = true`; `format_exporters.cpp:27` — «STEP» из строк; `formula_engine.cpp:508` — зашитая дата |
+| Тесты без проверок или проверяющие свои литералы, не входившие в сборку: GAP-054…064, `analytics_*.test.cpp`, `test_gap074…078`, `tests/mobile`, `tests/hardening`, `phase4_*`, `tests/acceptance` (+ `scripts/run_acceptance_tests.sh`), `test_import_csv_json`, `test_geometry_recognition`, `test_import_filter`, `test_tube_builder`, `test_formula_engine`, `test_plugin_marketplace`; собиравшиеся `test_{dwfx_parser,formula,analysis,geometry_analyzer}_comprehensive`, `test_phase_i_main`; Jest `tests/integration/comprehensive.test.ts` (исключён из Jest, не запускался) | `EXPECT_TRUE(true)` ×36 в файле; только печать строк; `assert(true)`; классы-двойники внутри теста |
+
+### 9.3 Исправлен текст (поведение реально, маркер был неверным описанием)
+
+`src/ui/index.tsx:86` (контекстное меню — всегда меню пустого места: у оболочки нет выбора),
+`src/declarations.d.ts:12` (объявления типов Three.js), класс CSS `expand-toggle-placeholder` →
+`expand-toggle-spacer`, `tests/ImportDialog.test.tsx:100`, `tests/NewTubeDialog.test.tsx:209`,
+`tests/integration/collaboration-engine.integration.test.ts:6`, двойник решателя в
+`tests/test_refs.cpp`; явные `return 1` в `main` двух тестов вместо тернарного оператора
+(правило `no-assertions`); `bom.hpp`, `reporting*.hpp` — описания форматов.
+Модель и ограничения расчётов — `docs/simulation/SIMULATION.md` вместо маркеров
+«simplified»/«TODO»/«In a real solver».
+
+### 9.4 Проверка
+
+| Конфигурация | До (`1f6b1fd`) | После (с `c593c1f`) |
+|---|---|---|
+| `build`, Release, без OCCT | ctest 59/59 | ctest 41/41 (−20 тестов удалённых подсистем и тестов без проверок, +`manual_dimensions`, +`drawing_sketches`) |
+| `build-occt`, Release, OCCT | ctest 136/136 | ctest 118/118 (те же −20 и +2) |
+| WASM `cmake --preset wasm`, `BENDCORE_EIGEN_DIR=/usr/include/eigen3` (трубный `bendcore_wasm`) | сборка OK, ctest 47/47 | сборка OK, ctest 34/34 (−15: тесты без GTest из списка выше, +2) |
+| Jest (полный) | наборов 22/22, тестов 374/374 | наборов 23/23, тестов 380/380 (+`sketchArc`) |
+| `npm run typecheck` | — | OK |
+| `check_no_stubs.sh --paths src include tests` | 674 | 0 |
+| `check_no_stubs.sh` (полная, теперь весь `src include tests`) | 0 (только каталоги нового кода) | 0 |
+| `tests/qa/test_check_no_stubs.sh` | OK (42 нарушения фикстур) | OK (44) |
+
+### 9.5 Найдено, не удалено
+
+- `src/dwfx_parser.cpp` не входит ни в одну цель CMake, а его единственный тест (печать строк)
+  удалён; нарушений правила в нём нет.
+- `docs/TESTING.md:13` упоминает удалённый `test_performance` — зона технического писателя.
+- `backend/`, `scripts/`, `examples/`, `sdk/` полной проверкой не охватываются (только `--diff`).

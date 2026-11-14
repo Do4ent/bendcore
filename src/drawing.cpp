@@ -1456,7 +1456,10 @@ bool sketch_remove_dimension(Sketch2D& sketch, const std::string& dim_id) {
 
 Sketch2D make_sketch(int sheet_number, const std::string& name, const std::string& author) {
     Sketch2D sketch;
-    sketch.id = "sketch_" + std::to_string(static_cast<int>(std::time(nullptr)));
+    // Время в секундах не различает эскизы, созданные в одну секунду; счётчик делает id уникальным.
+    static int sketch_counter = 0;
+    sketch.id = "sketch_" + std::to_string(static_cast<long long>(std::time(nullptr))) + "_" +
+                std::to_string(++sketch_counter);
     sketch.sheet_number = sheet_number;
     sketch.name = name;
     sketch.created_by = author;

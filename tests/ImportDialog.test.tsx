@@ -97,7 +97,7 @@ describe("ImportDialog", () => {
 
     // The geometry kernel cannot read IGES yet (see handleFileSelected), so the
     // dialog must not offer it and must explain why an IGES file is refused.
-    it("should explain that IGES files are not supported yet", () => {
+    it("should refuse IGES files and explain why", () => {
       const { container } = render(
         <ImportDialog onImport={jest.fn()} />
       );

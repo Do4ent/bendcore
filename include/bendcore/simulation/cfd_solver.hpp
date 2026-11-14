@@ -131,8 +131,8 @@ struct FlowField {
  *    BoundaryCondition::pressure is gauge).
  *  - Temperature: rho u.grad T = div((k/cp + mu_t/Pr_t) grad T) (air).
  *  - Turbulence: standard k-epsilon (Launder-Spalding constants), inlet
- *    intensity 5 %. SPALART_ALLMARAS and K_OMEGA_SST are not implemented
- *    and are solved with k-epsilon.
+ *    intensity 5 %. SPALART_ALLMARAS and K_OMEGA_SST have no transport
+ *    equations in this solver: solve() returns false for them.
  *
  * Neighbours come from tetrahedron edges when the mesh has elements,
  * otherwise from proximity (within 1.5x each node's nearest distance).

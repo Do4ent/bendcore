@@ -118,11 +118,6 @@ if(NOT LibDWG_FOUND)
   endif()
 endif()
 
-# OpenMP: только для parallel_geometry (вне ядра); необязателен.
-if(NOT EMSCRIPTEN)
-  find_package(OpenMP QUIET)
-endif()
-
 # OCCT (Open Cascade Technology) для импорта STEP файлов (Q3 2027, Task 1)
 # Find OCCT on all platforms (Windows, Linux, macOS)
 # Default install: the one with OCCT's Release checks (third_party/build_occt.sh and
@@ -246,8 +241,6 @@ set(BENDCORE_SOURCES
   src/compensation.cpp
   src/core_api.cpp
   src/drawing.cpp
-  src/ipc_bridge.cpp
-  src/performance.cpp
   src/ports.cpp
   src/refs.cpp
   src/reporting.cpp
@@ -261,24 +254,8 @@ set(BENDCORE_SOURCES
   src/dwg_export.cpp
   src/drawing_editor.cpp
   src/geometry_analyzer.cpp
-  # Идентификатор сущности (используют src/features, src/editing) и система операций
+  # Идентификатор сущности (используют src/analysis/mass_properties и src/simulation)
   src/entity_id.cpp
-  src/feature_system.cpp
-
-
-  # Constraint solver
-  src/constraint_system.cpp
-
-  # M2 Phase: Advanced Sketcher (GAP-002, GAP-003, GAP-004)
-  src/sketch/constraint_diagnostics.cpp
-  src/sketch/primitives.cpp
-  src/sketch/edit_tools.cpp
-
-  # M5 Phase: Advanced Feature Operations (GAP-020) - Loft, Sweep, Revolve
-  src/features/loft.cpp
-  src/features/sweep.cpp
-  src/features/revolve.cpp
-  src/features/feature_system.cpp
 
   src/instances.cpp
 
@@ -288,76 +265,15 @@ set(BENDCORE_SOURCES
   # M3 Phase: Mass Properties Analysis (GAP-015)
   src/analysis/mass_properties.cpp
 
-  # M5 Phase: Direct Editing (GAP-022)
-  src/editing/direct_editing_manager.cpp
-
-  # M5 Phase: Performance Optimization and Caching (GAP-023)
-  src/optimization/geometry_cache.cpp
-  src/optimization/computation_cache.cpp
-  src/optimization/parallel_executor.cpp
-  src/optimization/memory_management.cpp
-  src/optimization/optimization_profiles.cpp
-  src/optimization/memory_optimizer.cpp
-  src/optimization/performance_tuning.cpp
-
-  # M6 Phase: Parametric AI (GAP-027)
-  src/parametric_ai/design_learning.cpp
-  src/parametric_ai/regression_engine.cpp
-  src/parametric_ai/classification_system.cpp
-  src/parametric_ai/prediction_system.cpp
-  src/parametric_ai/learning_pipeline.cpp
-  src/parametric_ai/design_advice.cpp
-
-  # M6 Phase: Simulation Engine (GAP-024)
+  # CFD, теплопроводность, линейная упругость (модели и ограничения: docs/simulation/SIMULATION.md)
   src/simulation/cfd_solver.cpp
   src/simulation/structural_solver.cpp
   src/simulation/thermal_solver.cpp
   src/simulation/simulation_manager.cpp
   src/simulation/result_visualization.cpp
 
-  # M6 Phase: FEA Integration (GAP-025)
-  src/fea/mesh_generator.cpp
-  src/fea/element_library.cpp
-  src/fea/material_database.cpp
-  src/fea/boundary_conditions.cpp
-  src/fea/fea_solver.cpp
-  src/fea/result_processor.cpp
-
-  # M7 Phase: Mesh Optimization (GAP-028) - SKIPPED FOR NOW
-  # src/mesh_optimization/quality_analyzer.cpp
-  # src/mesh_optimization/adaptive_refinement.cpp
-  # src/mesh_optimization/mesh_smoothing.cpp
-  # src/mesh_optimization/mesh_optimization.cpp
-  # src/mesh_optimization/parallel_mesh_generation.cpp
-  # src/mesh_optimization/mesh_io.cpp
-
-  # M6 Phase: Generative Design (GAP-026)
-  src/generative/design_space.cpp
-  src/generative/genetic_algorithm.cpp
-  src/generative/particle_swarm.cpp
-  src/generative/constraint_handler.cpp
-  src/generative/design_generator.cpp
-  src/generative/optimization_manager.cpp
-  src/generative/visualization.cpp
-
-  # M7 Phase: Real-time Solver (GAP-030)
-  src/solver/real_time_solver.cpp
-  src/solver/iterative_solvers.cpp
-  src/solver/preconditioners.cpp
-  src/solver/reduced_order_model.cpp
-  src/solver/solver_scheduler.cpp
-  src/solver/adaptive_refinement.cpp
-  src/solver/performance_metrics.cpp
-
-  # M7 Phase: Cloud & Collaboration (GAP-031)
+  # Совместная работа над моделью трубы: изменения, версии, комментарии
   src/collaboration.cpp
-  src/cloud/cloud_storage_manager.cpp
-  src/cloud/realtime_collaboration.cpp
-  src/cloud/rest_api_handler.cpp
-  src/cloud/serialization.cpp
-  src/cloud/user_management.cpp
-  src/cloud/analytics_monitoring.cpp
-  src/cloud/cloud_manager.cpp
 
   # M8 Phase: Cost Analysis (GAP-035)
   src/cost_analysis.cpp
@@ -369,8 +285,6 @@ set(BENDCORE_SOURCES
   src/analytics/report_generator.cpp
   src/analytics/data_visualization.cpp
 
-  # P1-02: Security & Reliability
-  src/security.cpp
 )
 
 add_library(bendcore_core STATIC
@@ -429,6 +343,13 @@ bendcore_add_test(instances test_instances)
 add_executable(test_drawing tests/test_drawing.cpp)
 target_link_libraries(test_drawing PRIVATE bendcore_core)
 bendcore_add_test(drawing test_drawing)
+
+# Ручные размеры и 2D-эскизы на листе трубы (src/drawing.cpp): раньше не входили в сборку.
+foreach(t manual_dimensions drawing_sketches)
+  add_executable(test_${t} tests/test_${t}.cpp)
+  target_link_libraries(test_${t} PRIVATE bendcore_core)
+  bendcore_add_test(${t} test_${t})
+endforeach()
 
 add_executable(test_dwg_export tests/test_dwg_export.cpp)
 target_link_libraries(test_dwg_export PRIVATE bendcore_core)
@@ -489,11 +410,6 @@ add_executable(test_analysis tests/test_analysis.cpp)
 target_link_libraries(test_analysis PRIVATE bendcore_core)
 bendcore_add_test(analysis test_analysis)
 
-# M7 Phase: Real-time Solver (GAP-030)
-add_executable(test_real_time_solver tests/solver/test_real_time_solver.cpp)
-target_link_libraries(test_real_time_solver PRIVATE bendcore_core)
-bendcore_add_test(real_time_solver test_real_time_solver)
-
 add_executable(test_visualization tests/test_visualization.cpp)
 target_link_libraries(test_visualization PRIVATE bendcore_core)
 bendcore_add_test(visualization test_visualization)
@@ -545,13 +461,8 @@ if(GTest_FOUND)
   bendcore_add_test(templates test_templates)
 endif()
 
-# test_performance написан на GoogleTest: собирается, только если GTest установлен.
 find_package(GTest QUIET)
 if(GTest_FOUND)
-  add_executable(test_performance tests/test_performance.cpp)
-  target_link_libraries(test_performance PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(performance test_performance)
-
   # Offset modules performance benchmarks
   add_executable(test_offset_performance tests/test_offset_performance.cpp
     src/combined_3d_offset.cpp
@@ -562,15 +473,6 @@ if(GTest_FOUND)
   target_link_libraries(test_offset_performance PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(offset_performance test_offset_performance)
 
-  # M2 Phase: Advanced Sketcher (GAP-002, GAP-003, GAP-004)
-  add_executable(test_sketch_m2 tests/sketch/sketch_m2_tests.cpp)
-  target_link_libraries(test_sketch_m2 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(sketch_m2 test_sketch_m2)
-
-  # M6 Phase: Parametric AI (GAP-027)
-  add_executable(test_parametric_ai_m6 tests/parametric_ai/test_parametric_ai_m6.cpp)
-  target_link_libraries(test_parametric_ai_m6 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(parametric_ai_m6 test_parametric_ai_m6)
 endif()
 
 # PlaneGCS (LGPL-2.1-or-later, извлечён из FreeCAD Sketcher, см. third_party/planegcs/NOTICE.md) — 2D-эскизы.
@@ -760,45 +662,6 @@ if(BENDCORE_WITH_OCCT)
   endif()
 endif()
 
-# M5 Phase: Advanced Feature Operations (GAP-020) - Loft, Sweep, Revolve
-add_executable(test_advanced_features_m5 tests/features/test_advanced_features_m5.cpp)
-target_link_libraries(test_advanced_features_m5 PRIVATE bendcore_core)
-bendcore_add_test(advanced_features_m5 test_advanced_features_m5)
-
-# Comprehensive Test Suite for Phase 4 (90%+ coverage target)
-add_executable(test_dwfx_parser_comprehensive tests/test_dwfx_parser_comprehensive.cpp)
-target_link_libraries(test_dwfx_parser_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(dwfx_parser_comprehensive test_dwfx_parser_comprehensive)
-
-add_executable(test_formula_comprehensive tests/test_formula_comprehensive.cpp)
-target_link_libraries(test_formula_comprehensive PRIVATE bendcore_formula)
-bendcore_add_test(formula_comprehensive test_formula_comprehensive)
-
-add_executable(test_analysis_comprehensive tests/test_analysis_comprehensive.cpp)
-target_link_libraries(test_analysis_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(analysis_comprehensive test_analysis_comprehensive)
-
-add_executable(test_geometry_analyzer_comprehensive tests/test_geometry_analyzer_comprehensive.cpp)
-target_link_libraries(test_geometry_analyzer_comprehensive PRIVATE bendcore_core)
-bendcore_add_test(geometry_analyzer_comprehensive test_geometry_analyzer_comprehensive)
-
-# ============================================================================
-# Phase I: Integration Testing (CAD-CORE-033 to CAD-CORE-036)
-# ============================================================================
-
-# CAD-CORE-033 through CAD-CORE-036: Phase I Integration Testing
-add_executable(test_phase_i_main tests/integration/test_phase_i_main.cpp)
-bendcore_add_test(phase_i_main test_phase_i_main)
-
-# ============================================================================
-# M6 Phase: FEA Integration (GAP-025)
-# ============================================================================
-
-# M6 Phase: FEA Integration - 35+ unit tests
-add_executable(test_fea_m6 tests/fea/test_fea_m6.cpp)
-target_link_libraries(test_fea_m6 PRIVATE bendcore_core)
-bendcore_add_test(fea_m6 test_fea_m6)
-
 # ============================================================================
 # BOM, массовые свойства, расчётные модули
 # ============================================================================
@@ -813,7 +676,7 @@ add_executable(test_mass_properties tests/analysis/test_mass_properties.cpp)
 target_link_libraries(test_mass_properties PRIVATE bendcore_core)
 bendcore_add_test(mass_properties test_mass_properties)
 
-# M6 Phase: Simulation Engine (GAP-024) - 30+ unit tests
+# CFD, теплопроводность, упругость: проверки против аналитических решений
 find_package(GTest QUIET)
 if(GTest_FOUND)
   add_executable(test_simulation_m6 tests/simulation/test_simulation_m6.cpp)
@@ -825,67 +688,7 @@ if(GTest_FOUND)
   target_link_libraries(test_bom PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
   bendcore_add_test(bom test_bom)
 
-  # M5 Phase: Direct Editing (GAP-022)
-  add_executable(test_direct_editing_manager tests/editing/direct_editing_manager.test.cpp)
-  target_link_libraries(test_direct_editing_manager PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(direct_editing_manager test_direct_editing_manager)
-
-  # M6 Phase: Generative Design (GAP-026) - 32+ unit tests
-  add_executable(test_generative_m6 tests/generative/test_generative_m6.cpp)
-  target_link_libraries(test_generative_m6 PRIVATE bendcore_core GTest::gtest GTest::gtest_main)
-  bendcore_add_test(generative_m6 test_generative_m6)
 endif()
-
-# ============================================================================
-# M20: Production Hardening (GAP-088 to GAP-093) - 220 tests
-# ============================================================================
-
-# GAP-088: ErrorHandling (37 tests)
-add_executable(test_gap088_error_handling tests/GAP-088-ErrorHandling.test.cpp src/hardening/error_handling.cpp)
-target_link_libraries(test_gap088_error_handling PRIVATE bendcore_core)
-target_include_directories(test_gap088_error_handling PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap088_error_handling test_gap088_error_handling)
-
-# GAP-089: CrashRecovery (35 tests)
-add_executable(test_gap089_crash_recovery tests/GAP-089-CrashRecovery.test.cpp src/hardening/crash_recovery.cpp)
-target_link_libraries(test_gap089_crash_recovery PRIVATE bendcore_core)
-target_include_directories(test_gap089_crash_recovery PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap089_crash_recovery test_gap089_crash_recovery)
-
-# GAP-090: LoggingMonitoring (34 tests)
-add_executable(test_gap090_logging_monitoring tests/GAP-090-LoggingMonitoring.test.cpp src/hardening/logging_monitoring.cpp)
-target_link_libraries(test_gap090_logging_monitoring PRIVATE bendcore_core)
-target_include_directories(test_gap090_logging_monitoring PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap090_logging_monitoring test_gap090_logging_monitoring)
-
-# GAP-091: PerformanceTuning (36 tests)
-add_executable(test_gap091_performance_tuning tests/GAP-091-PerformanceTuning.test.cpp src/hardening/performance_tuning.cpp)
-target_link_libraries(test_gap091_performance_tuning PRIVATE bendcore_core)
-target_include_directories(test_gap091_performance_tuning PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap091_performance_tuning test_gap091_performance_tuning)
-
-# GAP-092: LoadTesting (38 tests)
-add_executable(test_gap092_load_testing tests/GAP-092-LoadTesting.test.cpp src/hardening/load_testing.cpp)
-target_link_libraries(test_gap092_load_testing PRIVATE bendcore_core)
-target_include_directories(test_gap092_load_testing PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap092_load_testing test_gap092_load_testing)
-
-# GAP-093: ProductionDeployment (40 tests)
-add_executable(test_gap093_production_deployment tests/GAP-093-ProductionDeployment.test.cpp src/hardening/production_deployment.cpp)
-target_link_libraries(test_gap093_production_deployment PRIVATE bendcore_core)
-target_include_directories(test_gap093_production_deployment PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(gap093_production_deployment test_gap093_production_deployment)
-
-# ============================================================================
-# P1-02: Security & Reliability (80+ tests)
-# ============================================================================
-# Comprehensive security hardening: input validation, serialization, memory safety,
-# network security, vulnerability assessment, secret management, crash recovery, fuzz testing
-
-add_executable(test_security tests/test_security.cpp)
-target_link_libraries(test_security PRIVATE bendcore_core)
-target_include_directories(test_security PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-bendcore_add_test(security test_security)
 
 # WebAssembly-мост для TypeScript-интерфейса (embind). Только для Emscripten.
 # Результат: web/bendcore.js + bendcore.wasm; страница для проверки в браузере — web/index.html.

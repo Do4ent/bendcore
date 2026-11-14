@@ -74,7 +74,7 @@ const FeatureTreeItem: React.FC<FeatureTreeItemProps> = ({
             ▶
           </button>
         )}
-        {!hasChildren && <div className="expand-toggle-placeholder" />}
+        {!hasChildren && <div className="expand-toggle-spacer" />}
 
         {/* Visibility Toggle */}
         <button
