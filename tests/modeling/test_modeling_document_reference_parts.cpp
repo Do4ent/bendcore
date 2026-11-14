@@ -690,8 +690,9 @@ TEST(ModelingReferenceParts, BuildChangeSaveLoadUndo) {
         ASSERT_TRUE(doc.undo().ok());
         EXPECT_EQ(volume(doc.finalShape().shape()), v0);
         EXPECT_FALSE(doc.canUndo());
-        std::printf("[reference part] %-30s volume %.6f mm3, %zu features, %zu scenarios\n", part.name.c_str(), v0,
-                    doc.size(), part.scenarios.size() + 2);
+        std::printf("[reference part] %-34s volume %.6f mm3, mass %.6f kg (%s), %zu features, %zu scenarios\n",
+                    part.name.c_str(), v0, v0 * 1e-9 * part.density, part.material.c_str(), doc.size(),
+                    part.scenarios.size() + 2);
     }
     const double rate = static_cast<double>(tally.survived) / tally.total;
     std::printf("[reference parts] parts: %zu, scenarios: %d, references checked: %d, survived: %d, rate: %.1f %%\n",
