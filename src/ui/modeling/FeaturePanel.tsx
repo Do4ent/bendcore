@@ -8,7 +8,7 @@
 
 import React from 'react';
 import type { FeatureTypeSpec, FeatureView } from '../../wasm/bendcore_modeling_api.mjs';
-import { FeatureForm, eligibleLinks, missingInputs } from './featureForm';
+import { FeatureForm, eligibleLinks, missingInputs, withTemplateKind } from './featureForm';
 import { caption, useI18n } from '../app/i18n';
 import type { MessageKey } from '../app/i18n';
 import { SketchTemplateForm, sketchDimensions } from './sketchDimensions';
@@ -32,7 +32,7 @@ export interface FeaturePanelProps {
 
 const fmt = (v: number) => (Number.isFinite(v) ? Number(v.toFixed(4)).toString() : String(v));
 
-const PROFILE_KINDS: SketchTemplateForm['kind'][] = ['rectangle', 'circle', 'polygon'];
+const PROFILE_KINDS: SketchTemplateForm['kind'][] = ['rectangle', 'circle', 'polygon', 'path'];
 
 const TEMPLATE_FIELDS: Record<'rectangle' | 'circle', (keyof SketchTemplateForm & ('x' | 'y' | 'width' | 'height' | 'cx' | 'cy' | 'radius'))[]> = {
   rectangle: ['x', 'y', 'width', 'height'],
@@ -90,7 +90,7 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
             <select
               value={form.template.kind}
               data-testid="sketch-kind"
-              onChange={(e) => setTemplate({ kind: e.target.value as SketchTemplateForm['kind'] })}
+              onChange={(e) => onChange(withTemplateKind(form, e.target.value as SketchTemplateForm['kind']))}
             >
               {PROFILE_KINDS.map((k) => (
                 <option key={k} value={k}>
@@ -99,7 +99,17 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
               ))}
             </select>
           </label>
-          {form.template.kind === 'polygon' ? (
+          {form.template.kind === 'path' ? (
+            <label className="pm-field pm-field-wide">
+              <span>{t('part.panel.pathVertices')}</span>
+              <textarea
+                rows={5}
+                value={form.template.path}
+                data-testid="sketch-path"
+                onChange={(e) => setTemplate({ path: e.target.value })}
+              />
+            </label>
+          ) : form.template.kind === 'polygon' ? (
             <label className="pm-field pm-field-wide">
               <span>{t('part.panel.vertices')}</span>
               <textarea

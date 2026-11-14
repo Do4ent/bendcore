@@ -7,8 +7,9 @@ import {
   toFeatureEdits,
   toFeatureSpec,
   togglePick,
+  withTemplateKind,
 } from '../featureForm';
-import { applySketchDimensions, sketchDimensions, templateProfiles, DEFAULT_TEMPLATE } from '../sketchDimensions';
+import { applySketchDimensions, pathSketch, sketchDimensions, templateProfiles, DEFAULT_TEMPLATE } from '../sketchDimensions';
 import { treeActions } from '../treeActions';
 
 // Rectangle as built by SketchBuilder::rectangle (fixed corner, H/V sides, two distances).
@@ -130,6 +131,37 @@ describe('sketch dimensions', () => {
     expect(poly.profiles[0]).toEqual({ kind: 'polygon', points: [['0', '0'], ['min(L, 50)', '0'], ['0', '30']] });
     expect(() => templateProfiles({ ...DEFAULT_TEMPLATE, kind: 'polygon', polygon: '0 0\n1;1\n2;2' })).toThrow(/строка 1/);
     expect(() => templateProfiles({ ...DEFAULT_TEMPLATE, kind: 'polygon', polygon: '0;0\n1;1' })).toThrow(/3 вершин/);
+    expect(() => templateProfiles({ ...DEFAULT_TEMPLATE, kind: 'path' })).toThrow(/pathSketch/);
+  });
+
+  it('builds an open path of lines and arcs from "x; y" and "x; y; cx; cy; cw|ccw" lines', () => {
+    // Up 30, a clockwise quarter arc R20 around (20, 30), then 15 along +X.
+    const data = pathSketch('0; 0\n0; L1\n20; L1 + 20; 20; L1; cw\n\n35; L1 + 20');
+    expect(data.points).toEqual([
+      { x: '0', y: '0', fixed: true },
+      { x: '0', y: 'L1', fixed: true },
+      { x: '20', y: 'L1 + 20', fixed: true },
+      { x: '20', y: 'L1', fixed: true },
+      { x: '35', y: 'L1 + 20', fixed: true },
+    ]);
+    expect(data.geometry.map((g) => [g.type, g.start, g.end, g.center, g.counterClockwise])).toEqual([
+      ['line', 0, 1, -1, true],
+      ['arc', 1, 2, 3, false],
+      ['line', 2, 4, -1, true],
+    ]);
+    expect(data.constraints).toEqual([]);
+    expect(data.regions).toEqual([]);
+    // Every vertex and centre is a fixed point, so all of them are editable dimensions.
+    expect(sketchDimensions(data).map((d) => d.key)).toEqual(
+      [0, 1, 2, 3, 4].flatMap((i) => [`p${i}.x`, `p${i}.y`]),
+    );
+    // The default direction of an arc is counter-clockwise; a single segment is a valid path.
+    expect(pathSketch('0; 0\n10; 10; 10; 0').geometry[0].counterClockwise).toBe(true);
+    expect(pathSketch('5; 25\n22; 5').geometry).toHaveLength(1);
+    expect(() => pathSketch('0; 0; 1; 1\n2; 2')).toThrow(/строка 1/);
+    expect(() => pathSketch('0; 0\n1; 1; 0; 1; up')).toThrow(/строка 2/);
+    expect(() => pathSketch('0; 0\n1')).toThrow(/строка 2/);
+    expect(() => pathSketch('0; 0')).toThrow(/2 вершин/);
   });
 });
 
@@ -167,6 +199,29 @@ describe('feature form', () => {
     expect(picks.map((p) => p.ref.name)).toEqual(['A', 'B']);
     expect(togglePick(picks, { ref: ref('A'), index: 1 }, true).map((p) => p.ref.name)).toEqual(['B']);
     expect(togglePick(picks, { ref: ref('C'), index: 5 }, false).map((p) => p.ref.name)).toEqual(['C']);
+  });
+
+  it('switches the sketch contour with the profile kind: open for a path, closed otherwise', () => {
+    const sketchSpec: FeatureTypeSpec = {
+      ...extrudeSpec,
+      type: 'Sketch',
+      links: [],
+      hasSketch: true,
+      references: [],
+      options: [
+        { name: 'plane', allowed: ['XY', 'XZ', 'YZ'] },
+        { name: 'contour', allowed: ['closed', 'open'] },
+      ],
+    };
+    const form = newFeatureForm(sketchSpec, tree, 4);
+    expect(form.options.contour).toBe('closed');
+    const path = withTemplateKind(form, 'path');
+    expect(path.options).toEqual({ plane: 'XY', contour: 'open' });
+    expect(path.template!.kind).toBe('path');
+    expect(withTemplateKind(path, 'circle').options.contour).toBe('closed');
+    // A form without a template (an existing feature) is left as is.
+    const plain = newFeatureForm(filletSpec, tree, 4);
+    expect(withTemplateKind(plain, 'path')).toBe(plain);
   });
 
   it('edit form of a sketch carries its dimensions', () => {

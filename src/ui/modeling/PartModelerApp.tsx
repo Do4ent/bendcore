@@ -47,7 +47,7 @@ import { caption, useI18n } from '../app/i18n';
 import { downloadText } from '../app/editorHost';
 import type { DocumentFile, EditorHostProps } from '../app/editorHost';
 import { useFaultReport } from '../app/faultReport';
-import { applySketchDimensions, templateProfiles } from './sketchDimensions';
+import { applySketchDimensions, pathSketch, templateProfiles } from './sketchDimensions';
 import type { TreeAction } from './treeActions';
 import '../kernel/KernelViewer.css';
 import './PartModeler.css';
@@ -360,7 +360,12 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     let next: PanelState | null = null;
     await run(async (d) => {
       let sketch;
-      if (p.form.template) sketch = await kernel.root.sketchTemplate(templateProfiles(p.form.template, t));
+      if (p.form.template) {
+        sketch =
+          p.form.template.kind === 'path'
+            ? pathSketch(p.form.template.path, t)
+            : await kernel.root.sketchTemplate(templateProfiles(p.form.template, t));
+      }
       if (p.form.dimensions && p.featureId) {
         const current = (await d.feature(p.featureId)).sketch;
         if (current) sketch = applySketchDimensions(current, p.form.dimensions);
