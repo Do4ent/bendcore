@@ -43,6 +43,11 @@ import { useHotkeys } from '../app/hotkeys';
 import { useI18n } from '../app/i18n';
 import type { DocumentFile, EditorHostProps, PartSource } from '../app/editorHost';
 import { useFaultReport } from '../app/faultReport';
+import ExportDialog from '../exchange/ExportDialog';
+import MassSection from '../exchange/MassSection';
+import type { MassResult } from '../exchange/MassSection';
+import { IMPORT_ACCEPT, importFormatOf } from '../exchange/exchange';
+import type { ImportFormat } from '../exchange/exchange';
 import { dofText } from './labels';
 import { nextMateSlots } from './mateRules';
 import type { PickedElement } from './mateRules';
@@ -113,7 +118,13 @@ function findOccurrence(list: OccurrenceInfo[], id: number): OccurrenceInfo | nu
 export interface AssemblyAppProps extends EditorHostProps {
   /** Parts the shell can insert without a file dialog (open part tabs, recent part files). */
   partLibrary?: PartSource[];
+  /** STEP/IGES assembly opened at start ("Import STEP/IGES" of the shell) instead of `initial`. */
+  importFile?: { name: string; format: ImportFormat; text: string } | null;
 }
+
+/** Imports a STEP or IGES text as a new assembly document (structure, names, colours). */
+const importAssembly = (kernel: Remote<AssemblyKernel>, format: ImportFormat, text: string) =>
+  format === 'iges' ? kernel.importIges(text) : kernel.importStep(text);
 
 const AssemblyApp: React.FC<AssemblyAppProps> = ({
   active = true,
@@ -124,6 +135,8 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   onOpenPart,
   onFault,
   partLibrary,
+  importFile = null,
+  exportRequest,
 }) => {
   const { t, lang } = useI18n();
   const [kernel, setKernel] = useState<WasmClient<AssemblyKernel> | null>(null);
@@ -268,7 +281,9 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
         return;
       }
       let doc: AssemblyDoc;
-      if (initial) {
+      if (importFile) {
+        doc = await importAssembly(client.root, importFile.format, importFile.text);
+      } else if (initial) {
         doc = (await client.root.loadDocument(initial.text)).document;
         hostRef.current.onFile?.(initial);
       } else {
@@ -346,11 +361,11 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   /** Inserts a part file (bendcore part JSON or STEP); the first part is fixed. */
   const insertPart = (fileName: string, text: string) =>
     run(async (doc) => {
-      const step = /\.(step|stp)$/i.test(fileName);
+      const exchange = importFormatOf(fileName);
       const first = (await doc.state()).occurrences.length === 0;
       const name = baseName(fileName.replace(/\.bcpart\.json$/i, '.json'));
-      const r = await doc.insertPart({ name, format: step ? 'step' : 'part-json', data: text, fixed: first, beside: !first });
-      if (!step) partsRef.current = [...partsRef.current.filter((p) => p.definition !== r.definition), { definition: r.definition, name: fileName, text }];
+      const r = await doc.insertPart({ name, format: exchange ?? 'part-json', data: text, fixed: first, beside: !first });
+      if (!exchange) partsRef.current = [...partsRef.current.filter((p) => p.definition !== r.definition), { definition: r.definition, name: fileName, text }];
     });
 
   /** "Open component part": the part JSON the selected component was inserted from. */
@@ -406,9 +421,14 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     const files = await readFiles(e.target.files);
     e.target.value = '';
     if (!kernel || files.length === 0) return;
+    const format = importFormatOf(files[0].name);
+    if (!format) {
+      setError({ code: 'InvalidInput', message: t('exchange.unknownFormat', { name: files[0].name }) });
+      return;
+    }
     try {
       partsRef.current = [];
-      replaceDocument(await kernel.root.importStep(files[0].text), null);
+      replaceDocument(await importAssembly(kernel.root, format, files[0].text), null);
       setError(null);
       await run(() => undefined, { explode: { view: null, progress: 0 } });
     } catch (err) {
@@ -445,15 +465,23 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     }
   };
 
-  const onExportStep = async () => {
+  // Export dialog (docs/ui/DATA_EXCHANGE.md); "Export…" of the shell opens it too.
+  const [exporting, setExporting] = useState(false);
+  const exportSeen = useRef(exportRequest ?? 0);
+  useEffect(() => {
+    if (exportRequest === undefined || exportRequest === exportSeen.current) return;
+    exportSeen.current = exportRequest;
+    setExporting(true);
+  }, [exportRequest]);
+
+  const loadMass = async (): Promise<MassResult> => {
     const doc = docRef.current;
-    if (!doc) return;
-    try {
-      const text = await doc.exportStep();
-      download(`${(await doc.state()).name || 'assembly'}.step`, text, 'model/step');
-    } catch (e) {
-      if (!isCancelled(e)) fail(e);
-    }
+    if (!doc) return { kind: 'empty', reason: 'noBody' };
+    await queueRef.current;
+    const r = await doc.massProperties();
+    if (r.parts === 0) return { kind: 'empty', reason: 'noBody' };
+    if (!r.mass) return { kind: 'empty', reason: 'none', volume: r.volume, missing: r.partsWithoutDensity };
+    return { kind: 'ok', props: r.mass, volume: r.volume, missing: r.partsWithoutDensity };
   };
 
   // ---------------------------------------------------------------- picking and drag
@@ -667,16 +695,16 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
           {t('assembly.save')}
         </button>
         <label className="kv-file">
-          {t('assembly.importStep')}
-          <input type="file" accept=".step,.stp" onChange={onImportStep} data-testid="import-step-input" />
+          {t('exchange.import')}
+          <input type="file" accept={IMPORT_ACCEPT} onChange={onImportStep} data-testid="import-step-input" />
         </label>
-        <button type="button" onClick={() => void onExportStep()} disabled={status !== 'ready'} data-testid="export-step">
-          {t('assembly.exportStep')}
+        <button type="button" onClick={() => setExporting(true)} disabled={status !== 'ready' || parts.length === 0} data-testid="export-open">
+          {t('exchange.export')}
         </button>
         <span className="pm-sep" />
         <label className="kv-file">
           {t('assembly.insertPart')}
-          <input type="file" accept=".json,.step,.stp" multiple onChange={onInsertParts} data-testid="insert-part-input" />
+          <input type="file" accept={`.json,${IMPORT_ACCEPT}`} multiple onChange={onInsertParts} data-testid="insert-part-input" />
         </label>
         {partLibrary && partLibrary.length > 0 && (
           <span className="as-library">
@@ -760,6 +788,14 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
         <div className="kv-error" role="alert" data-testid="error">
           {error.code}: {error.message}
         </div>
+      )}
+      {exporting && docRef.current && (
+        <ExportDialog
+          name={state?.name || t('assembly.defaultName')}
+          onExport={(format, options) => docRef.current!.exportFile(format, options)}
+          onSaved={(name, size) => setNotice(t('exchange.saved', { name, size }))}
+          onClose={() => setExporting(false)}
+        />
       )}
       {notice && (
         <div className="app-notice" role="status" data-testid="assembly-notice">
@@ -921,6 +957,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
               onProperties={(p) => selectedDefinition && void run((d) => d.setProperties(selectedDefinition.id, p))}
             />
           )}
+          {panel === 'properties' && state && <MassSection load={loadMass} version={state} />}
         </aside>
       </div>
     </div>

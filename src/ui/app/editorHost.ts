@@ -63,6 +63,11 @@ export interface EditorHostProps {
    * offers to restart the module with it (docs/ui/APP_SHELL.md, "Сбой модуля").
    */
   onFault?: (info: ModuleFaultInfo) => void;
+  /**
+   * "Export…" of the shell (docs/ui/DATA_EXCHANGE.md): the shell increments the number, the
+   * editor opens its export dialog when it changes.
+   */
+  exportRequest?: number;
 }
 
 export function downloadText(name: string, text: string | Uint8Array, type: string): void {

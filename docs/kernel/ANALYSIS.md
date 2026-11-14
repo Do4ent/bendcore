@@ -5,8 +5,9 @@
 `include/bendcore/kernel/{material,mass_properties,mesh_export,measure,section}.hpp`,
 пространство имён `bendcore::kernel`, сборка — `cmake/kernel_analysis.cmake` (подключается
 при `BENDCORE_WITH_OCCT=ON` после `kernel_core.cmake`). Зависимости: `bendcore_kernel`,
-OCCT 8.0.1, системный zlib (deflate и CRC-32 для 3MF), `third_party/nlohmann/json.hpp`
-(JSON материалов). Тест 3MF использует системный expat как независимый разборщик XML.
+OCCT 8.0.1, zlib — только в native-сборке (deflate записей 3MF; в WASM записи хранятся без
+сжатия, раздел «ZIP и zlib»), `third_party/nlohmann/json.hpp` (JSON материалов). Тест 3MF
+использует системный expat как независимый разборщик XML.
 
 Все функции возвращают `Result<T>`; исключения OCCT (`Standard_Failure`) перехватываются на
 границе модуля и превращаются в `ErrorCode::OperationFailed` с текстом исключения.
@@ -128,10 +129,39 @@ auto pkg = export3mf({{"Body", body, Rgb{200, 30, 40}}, {"Lid", lid, std::nullop
   числа `%.9g`.
 - 3MF: ZIP с `[Content_Types].xml`, `_rels/.rels`, `3D/3dmodel.model`; `unit="millimeter"`,
   по одному `<object type="model">` и `<item>` на входной объект; цвета — `<basematerials>`
-  с `displaycolor="#RRGGBBFF"` и `pid/pindex` объекта. Записи ZIP сжаты deflate (zlib),
-  CRC-32 — zlib; дата DOS 1980-01-01, чтобы одинаковая модель давала одинаковые байты.
+  с `displaycolor="#RRGGBBFF"` и `pid/pindex` объекта. Записи ZIP — `zipDefaultMethod()`:
+  deflate в native-сборке, без сжатия (stored) в WASM; CRC-32 — собственная реализация
+  (раздел «ZIP и zlib»); дата DOS 1980-01-01, чтобы одинаковая модель давала одинаковые байты.
 - `readStl` (двоичный/ASCII), `meshVolume`, `checkClosure`, `readZip` (stored/deflate, без
-  ZIP64 и шифрования, CRC проверяется) — для проверки результата.
+  ZIP64 и шифрования, CRC проверяется; deflate без zlib — `Unsupported`) — для проверки
+  результата.
+
+### ZIP и zlib (`zip_archive.cpp`)
+
+```cpp
+std::uint32_t c = crc32("123456789");                     // 0xCBF43926
+auto zip = writeZip({{"a.txt", "abc"}}, ZipMethod::Stored);
+bool deflate = zipDeflateAvailable();                      // true в native, false в WASM
+```
+
+Порт zlib для Emscripten (`-sUSE_ZLIB=1`) скачивает исходники zlib 1.3.2 из репозитория
+madler/zlib на GitHub при сборке; из рабочего окружения прокси на этот адрес отвечает 403
+(одна попытка 2026-11-14: `curl` архива тега `v1.3.2` → `403`, состояние прокси: «gateway
+answered 403 to CONNECT»); системного zlib при кросс-компиляции нет. Поэтому:
+
+- **CRC-32** считается собственной табличной реализацией во всех сборках: отражённый полином
+  0xEDB88320, начальное значение и финальный XOR 0xFFFFFFFF (ISO 3309 / ITU-T V.42 — тот же
+  CRC, что в ZIP и zlib). Таблица на 256 элементов строится `constexpr`. Тест сверяет с
+  опубликованным контрольным значением CRC-32/ISO-HDLC (`"123456789"` → `0xCBF43926`), с
+  известными значениями других строк и в native-сборке — с `crc32` из zlib на случайных данных.
+- **Сжатие** — за интерфейсом `ZipMethod`: в native-сборке (`BENDCORE_ANALYSIS_HAS_ZLIB=1`)
+  `writeZip(…, Deflate)` и чтение deflate-записей используют zlib (raw deflate, окно 15);
+  без zlib `export3mf` пишет записи stored (метод 0, «version needed» 1.0), `writeZip(…,
+  Deflate)` и чтение deflate-записи возвращают `Unsupported` с причиной. Stored-архив —
+  обычный ZIP: его читают `unzip`, Python `zipfile`, программы подготовки печати; файл больше
+  deflate-варианта в несколько раз (XML сетки сжимается хорошо).
+- Если zlib для WASM станет доступен (`ZLIB_ROOT` или кэш порта Emscripten), CMake найдёт его
+  (`find_package(ZLIB)`) и модуль соберётся с deflate без изменений кода.
 
 Точность: сетка вписана в поверхность с прогибом ≤ `linearDeflection`, поэтому для
 выпуклых тел 0 ≤ V − V_сетки ≤ S·δ (S — площадь поверхности). Координаты STL хранятся во
@@ -177,8 +207,8 @@ auto s = sectionByPlane(shape, pl);                  // edges, wires, faces, are
 
 ```bash
 cmake --build build-occt --target test_kernel_materials test_kernel_mass_properties \
-  test_kernel_mesh_export test_kernel_measure test_kernel_section
-ctest --test-dir build-occt -R 'kernel_(materials|mass_properties|mesh_export|measure|section)' --output-on-failure
+  test_kernel_mesh_export test_kernel_zip_archive test_kernel_measure test_kernel_section
+ctest --test-dir build-occt -R 'kernel_(materials|mass_properties|mesh_export|zip_archive|measure|section)' --output-on-failure
 ```
 
 - `test_kernel_materials`: инварианты таблицы, опорные значения EN 1993-1-1/EN 1999-1-1,
@@ -192,13 +222,19 @@ ctest --test-dir build-occt -R 'kernel_(materials|mass_properties|mesh_export|me
   3MF распаковывается (CRC), три XML разбираются expat, единицы, цвета, объекты, замкнутость
   и объём каждой сетки; порча байта обнаруживается. Пакет дополнительно проверен вручную
   `unzip -t` и Python `zipfile` + `xml.dom`.
+- `test_kernel_zip_archive`: CRC-32 против опубликованных значений и zlib, заголовки
+  stored-архива, разобранные вручную (сигнатура, метод, размеры, CRC), круговой проход,
+  обнаружение порчи байта, deflate (native) или `Unsupported` (без zlib).
 - `test_kernel_measure`, `test_kernel_section`: расстояния, углы, длины, площади, радиусы,
   площади сечений (брус, наклонная плоскость, цилиндр вдоль и поперёк оси, кольцо полого
   цилиндра, круг сферы) и объёмы отсечённых частей против формул.
 
 ## WASM
 
-В сборках Emscripten модуль пропускается, если zlib не найден (`cmake/kernel_analysis.cmake`):
-системного zlib при кросс-компиляции нет, а порт Emscripten требует загрузки из сети.
-Потребителей модуля в WASM пока нет; чтобы включить его, передайте zlib для WASM через
-`ZLIB_ROOT` или соберите с `-sUSE_ZLIB=1` там, где сеть доступна.
+Модуль входит в WASM-сборку без zlib (раздел «ZIP и zlib»): его линкуют `bendcore_kernel_wasm`,
+`bendcore_modeling_wasm` и `bendcore_assembly_wasm` для экспорта STL/3MF и массовых
+характеристик в интерфейсе (`docs/ui/DATA_EXCHANGE.md`). CMake сообщает `zlib not found for
+Emscripten - bendcore_kernel_analysis writes stored ZIP entries`; JS-модуль ядра отдаёт
+`exchangeInfo().zipMethod === 'stored'`. Проверка в node — `tests/wasm/exchange.test.mjs` (ZIP
+разбирается тестом, CRC каждой записи — через `zlib.crc32` node, XML разбирается, сетки
+замкнуты; дополнительно Python `zipfile.testzip()` и `xml.dom.minidom`, если есть python3).

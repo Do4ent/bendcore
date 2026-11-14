@@ -2,7 +2,9 @@
  * Application shell (docs/ui/APP_SHELL.md): start page (new part or assembly, open a file,
  * recent files, drafts to restore), tabs of open documents with the editors of the part
  * modeler, assembly and drawing pages, "part → create drawing" and "assembly → open component
- * part", autosave of drafts to IndexedDB, a common status bar with notifications, RU/EN.
+ * part", autosave of drafts to IndexedDB, a common status bar with notifications, RU/EN; import
+ * of STEP/IGES as a part without history or as an assembly, "Export…" of the active document and
+ * the mass properties of part tabs (docs/ui/DATA_EXCHANGE.md).
  *
  * Every editor runs its kernel module in its own Web Worker. window.bendcoreApp exposes the shell
  * state (read-only) and idle() for end-to-end tests.
@@ -13,6 +15,14 @@ import PartModelerApp from '../modeling/PartModelerApp';
 import AssemblyApp from '../assembly/AssemblyApp';
 import DrawingEditorApp from '../drawing/DrawingEditorApp';
 import KernelViewerApp from '../kernel/KernelViewerApp';
+import type { ImportedFile } from '../kernel/KernelViewerApp';
+import { defaultModelingBaseUrl, loadModelingFrom } from '../modeling/modelingLoader';
+import ExportDialog from '../exchange/ExportDialog';
+import MassSection from '../exchange/MassSection';
+import type { MassResult } from '../exchange/MassSection';
+import { PartExchange } from '../exchange/partExchange';
+import { IMPORT_ACCEPT, importFormatOf, parseDensity } from '../exchange/exchange';
+import type { ImportFormat } from '../exchange/exchange';
 import { WasmClient } from '../worker/wasmClient';
 import { waitIdle } from '../worker/idle';
 import type { DocKind, DocumentFile, PartSource } from './editorHost';
@@ -43,6 +53,11 @@ interface Tab {
   fault: TabFault | null;
   /** Mount number of the editor: a restart after a fault mounts it again with the draft. */
   generation: number;
+  /** "Import STEP/IGES": the file of a viewer tab, or the assembly text of an assembly tab. */
+  importFile?: ImportedFile | null;
+  importAssembly?: { name: string; format: ImportFormat; text: string } | null;
+  /** Incremented by "Export…" of the shell (EditorHostProps.exportRequest). */
+  exportRequest: number;
 }
 
 interface TabFault extends ModuleFaultInfo {
@@ -83,7 +98,7 @@ const KIND_KEY: Record<TabKind, MessageKey> = {
   part: 'kind.part',
   assembly: 'kind.assembly',
   drawing: 'kind.drawing',
-  viewer: 'start.viewStep',
+  viewer: 'kind.imported',
 };
 
 const MODULE_KEY: Record<ModuleKind, MessageKey> = {
@@ -125,6 +140,12 @@ const AppShell: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [menu, setMenu] = useState<{ tab: string; x: number; y: number } | null>(null);
   const openInput = useRef<HTMLInputElement | null>(null);
+  /** Export and mass properties of part tabs: one modeling worker, started on first use. */
+  const partExchange = useMemo(() => new PartExchange(() => loadModelingFrom(defaultModelingBaseUrl())), []);
+  useEffect(() => () => partExchange.dispose(), [partExchange]);
+  const [partExport, setPartExport] = useState<{ name: string; text: string } | null>(null);
+  const [massOpen, setMassOpen] = useState(false);
+  const [partDensity, setPartDensity] = useState('7850');
   /** Tabs whose draft changed since the last write (or must be deleted). */
   const pendingDrafts = useRef(new Set<string>());
   /** Tabs that have a draft record in the store. */
@@ -227,12 +248,24 @@ const AppShell: React.FC = () => {
 
   // ------------------------------------------------------------ tabs
 
-  const openTab = useCallback((kind: TabKind, initial: DocumentFile | null, opts: { id?: string; dirty?: boolean; title?: string } = {}) => {
+  const openTab = useCallback((kind: TabKind, initial: DocumentFile | null, opts: { id?: string; dirty?: boolean; title?: string; importFile?: ImportedFile } = {}) => {
     const id = opts.id ?? newTabId();
     const title = opts.title ?? initial?.name ?? '';
     setTabs((list) => [
       ...list.filter((x) => x.id !== id),
-      { id, kind, title, initial, initialDirty: opts.dirty ?? false, snapshot: initial, dirty: opts.dirty ?? false, fault: null, generation: 0 },
+      {
+        id,
+        kind,
+        title,
+        initial,
+        initialDirty: opts.dirty ?? false,
+        snapshot: initial,
+        dirty: opts.dirty ?? false,
+        fault: null,
+        generation: 0,
+        importFile: opts.importFile ?? null,
+        exportRequest: 0,
+      },
     ]);
     setActive(id);
     return id;
@@ -350,6 +383,39 @@ const AppShell: React.FC = () => {
     }
   };
 
+  /** "Import STEP/IGES": the viewer tab reads the file; an assembly moves on to the assembly editor. */
+  const importModels = async (list: FileList | null) => {
+    for (const f of list ? [...list] : []) {
+      if (!importFormatOf(f.name)) {
+        notify('error', t('exchange.unknownFormat', { name: f.name }));
+        continue;
+      }
+      openTab('viewer', null, { title: f.name, importFile: { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) } });
+    }
+  };
+
+  const viewerIsAssembly = (id: string, file: { name: string; format: ImportFormat; text: string; parts: number }) => {
+    setTabs((list) =>
+      list.map((x) =>
+        x.id === id
+          ? { ...x, kind: 'assembly', title: file.name, importFile: null, importAssembly: file, generation: x.generation + 1 }
+          : x,
+      ),
+    );
+    notify('info', t('exchange.importedAsAssembly', { name: file.name, parts: file.parts }));
+  };
+
+  /** "Export…" of the shell: part tabs export here, the other editors open their own dialog. */
+  const exportActive = () => {
+    const tab = tabsRef.current.find((x) => x.id === active);
+    if (!tab) return;
+    if (tab.kind === 'part') {
+      if (tab.snapshot) setPartExport({ name: tab.snapshot.name, text: tab.snapshot.text });
+      return;
+    }
+    setTabs((list) => list.map((x) => (x.id === tab.id ? { ...x, exportRequest: x.exportRequest + 1 } : x)));
+  };
+
   const restoreDrafts = () => {
     for (const d of offered) openTab(d.file.kind, migrateDrawingDocument(d.file), { id: d.id, dirty: true });
     setOffered([]);
@@ -451,11 +517,26 @@ const AppShell: React.FC = () => {
           />
         );
       case 'assembly':
-        return <AssemblyApp {...common} partLibrary={partLibrary} onOpenPart={(part) => openTab('part', part)} />;
+        return (
+          <AssemblyApp
+            {...common}
+            exportRequest={tab.exportRequest}
+            importFile={tab.importAssembly ?? null}
+            partLibrary={partLibrary}
+            onOpenPart={(part) => openTab('part', part)}
+          />
+        );
       case 'drawing':
         return <DrawingEditorApp {...common} />;
       case 'viewer':
-        return <KernelViewerApp onFault={common.onFault} />;
+        return (
+          <KernelViewerApp
+            onFault={common.onFault}
+            exportRequest={tab.exportRequest}
+            importFile={tab.importFile ?? null}
+            onAssembly={(file) => viewerIsAssembly(tab.id, file)}
+          />
+        );
     }
   };
 
@@ -508,6 +589,16 @@ const AppShell: React.FC = () => {
             </span>
           ))}
           <span className="app-tabs-fill" />
+          {activeTab && activeTab.kind !== 'drawing' && (
+            <button type="button" className="app-tab-action" onClick={exportActive} disabled={activeTab.kind === 'part' && !activeTab.snapshot} data-testid="shell-export">
+              {t('exchange.export')}
+            </button>
+          )}
+          {activeTab?.kind === 'part' && (
+            <button type="button" className="app-tab-action" aria-pressed={massOpen} onClick={() => setMassOpen((o) => !o)} data-testid="shell-mass">
+              {t('exchange.mass')}
+            </button>
+          )}
           <label className="app-lang">
             {t('app.language')}
             <select value={lang} onChange={(e) => i18n.setLang(e.target.value as Lang)} data-testid="lang">
@@ -576,6 +667,20 @@ const AppShell: React.FC = () => {
                 <button type="button" onClick={() => openTab('viewer', null, { title: 'STEP' })} data-testid="new-viewer">
                   {t('start.viewStep')}
                 </button>
+                <label className="app-file">
+                  {t('exchange.import')}
+                  <input
+                    type="file"
+                    multiple
+                    accept={IMPORT_ACCEPT}
+                    data-testid="import-model"
+                    onChange={(e) => {
+                      void importModels(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+                <p className="app-hint">{t('exchange.importHint')}</p>
               </div>
               <div className="app-card">
                 <h2>{t('start.open')}</h2>
@@ -672,6 +777,28 @@ const AppShell: React.FC = () => {
               <React.Fragment key={tab.generation}>{editorOf(tab)}</React.Fragment>
             </section>
           ))}
+          {massOpen && activeTab?.kind === 'part' && activeTab.snapshot && (
+            <aside className="app-mass kv-panel" data-testid="shell-mass-panel">
+              <MassSection
+                version={activeTab.snapshot.text}
+                density={{ value: partDensity, onChange: setPartDensity }}
+                load={async (): Promise<MassResult> => {
+                  const rho = parseDensity(partDensity);
+                  if (rho === null) return { kind: 'empty', reason: 'noDensity' };
+                  const props = await partExchange.massProperties(activeTab.snapshot!.text, rho);
+                  return props ? { kind: 'ok', props } : { kind: 'empty', reason: 'noBody' };
+                }}
+              />
+            </aside>
+          )}
+          {partExport && (
+            <ExportDialog
+              name={partExport.name}
+              onExport={(format, options) => partExchange.exportFile(partExport.text, format, options)}
+              onSaved={(name, size) => notify('info', t('exchange.saved', { name, size }))}
+              onClose={() => setPartExport(null)}
+            />
+          )}
         </main>
         <footer className="app-status" data-testid="app-status">
           <span data-testid="app-status-doc">

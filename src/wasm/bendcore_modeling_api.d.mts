@@ -1,6 +1,9 @@
 // Types of bendcore_modeling_api.mjs (docs/ui/PART_MODELING_UI.md).
 
 import { KernelError, KernelMesh, TessellationParams, Vec3, faceOfTriangle } from './bendcore_kernel_api.mjs';
+import type { ExportFormat, ExportOptions, MassProperties } from './bendcore_kernel_api.mjs';
+
+export type { ExportFormat, ExportOptions, MassProperties };
 
 export { KernelError, faceOfTriangle };
 
@@ -345,6 +348,8 @@ export class PartDocumentHandle {
   element(target: ShapeTarget, kind: ElementKind, index: number): ElementRecord;
   tessellate(target?: ShapeTarget, params?: TessellationParams): KernelMesh;
   properties(target?: ShapeTarget, density?: number | null): PartProperties;
+  exportFile(format: ExportFormat, options?: ExportOptions, target?: ShapeTarget): Uint8Array;
+  massProperties(density: number, target?: ShapeTarget): MassProperties;
   solveSketch(featureId: string, sketch: SketchData, options?: { drag?: { point: number; x: number; y: number }; lite?: boolean }): SketchSolution;
   editSketch(featureId: string, sketch: SketchData, tool: SketchTool): SketchEditOutcome;
 }

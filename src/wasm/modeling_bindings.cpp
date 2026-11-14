@@ -22,6 +22,7 @@
 #include <bendcore/modeling/part_features.hpp>
 #include <bendcore/modeling/part_sketch.hpp>
 
+#include "exchange_common.hpp"
 #include "modeling_bindings_internal.hpp"
 
 #include <emscripten/bind.h>
@@ -1016,6 +1017,44 @@ val docProperties(std::uint32_t handle, val target, val density) {
     });
 }
 
+// Export of a target shape to STEP / IGES / STL / 3MF (docs/ui/DATA_EXCHANGE.md): the part as a
+// single XCAF definition named options.name. Uint8Array of the file.
+val docExport(std::uint32_t handle, val target, std::string format, val options) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        namespace ex = bendcore::wasm_exchange;
+        const m::NamedShape shape = targetShape(doc, target);
+        if (shape.isNull()) throw InputError("the part has no body to export");
+        try {
+            const k::AssemblyDocument xcaf =
+                ex::partDocument(k::Shape(shape.shape()), ex::stringOption(options, "name", "Part"), std::nullopt);
+            auto bytes = ex::exportDocument(xcaf, format, options);
+            if (!bytes) return failure(bytes.error());
+            return success(ex::bytesToJs(bytes.value()));
+        } catch (const ex::OptionError& e) {
+            throw InputError(e.what());
+        }
+    });
+}
+
+// Mass properties of a target shape (bendcore_kernel_analysis): mass, centre of mass, inertia
+// tensor at the centre of mass, principal moments and axes.
+val docMassProperties(std::uint32_t handle, val target, val density) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        namespace ex = bendcore::wasm_exchange;
+        const m::NamedShape shape = targetShape(doc, target);
+        if (shape.isNull()) throw InputError("the part has no body");
+        double rho = 0.0;
+        try {
+            rho = ex::densityArgument(density);
+        } catch (const ex::OptionError& e) {
+            throw InputError(e.what());
+        }
+        auto p = k::computeMassProperties(k::Shape(shape.shape()), rho);
+        if (!p) return failure(p.error());
+        return success(ex::massToJs(p.value()));
+    });
+}
+
 }  // namespace bendcore::wasm_modeling
 
 using namespace bendcore::wasm_modeling;
@@ -1049,4 +1088,6 @@ EMSCRIPTEN_BINDINGS(bendcore_modeling) {
     emscripten::function("docElement", &docElement);
     emscripten::function("docTessellate", &docTessellate);
     emscripten::function("docProperties", &docProperties);
+    emscripten::function("docExport", &docExport);
+    emscripten::function("docMassProperties", &docMassProperties);
 }

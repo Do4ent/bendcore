@@ -94,6 +94,21 @@ export class KernelShape {
   tessellate(params = {}) {
     return this.#call('tessellate', params);
   }
+
+  /**
+   * File bytes of the shape (docs/ui/DATA_EXCHANGE.md). format: 'step' | 'iges' | 'stl' | '3mf';
+   * options: name, schema ('AP214' | 'AP242'), unit ('mm' | 'm' | 'inch'), igesMode ('brep' |
+   * 'faces'), stlFormat ('binary' | 'ascii'), linearDeflection (mm), angularDeflectionDeg.
+   * An imported shape keeps the names, colours and occurrences of its file.
+   */
+  exportFile(format, options = {}) {
+    return this.#call('exportShape', format, options);
+  }
+
+  /** Mass, centre of mass, inertia at the centre (kg, mm, kg·mm²) for a density in kg/m³. */
+  massProperties(density) {
+    return this.#call('massProperties', density);
+  }
 }
 
 export class Kernel {
@@ -113,6 +128,23 @@ export class Kernel {
       throw new KernelError('InvalidInput', 'readStep expects a Uint8Array');
     }
     return new KernelShape(this.#module, unwrap(this.#module.readStep(bytes)));
+  }
+
+  /**
+   * STEP or IGES with its XCAF structure: { shape, structure } — shape is the only part or a
+   * compound of all parts in world coordinates; structure tells whether the file is an assembly.
+   */
+  importModel(bytes, format) {
+    if (!(bytes instanceof Uint8Array)) {
+      throw new KernelError('InvalidInput', 'importModel expects a Uint8Array');
+    }
+    const { handle, structure } = unwrap(this.#module.importModel(bytes, format));
+    return { shape: new KernelShape(this.#module, handle), structure };
+  }
+
+  /** { zipMethod: 'deflate' | 'stored' } — ZIP entries of 3MF in this build. */
+  exchangeInfo() {
+    return this.#module.exchangeInfo();
   }
 }
 

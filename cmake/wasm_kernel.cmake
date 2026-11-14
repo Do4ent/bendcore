@@ -20,7 +20,8 @@ set(BENDCORE_WASM_KERNEL_OUT "${CMAKE_BINARY_DIR}/wasm_kernel")
 set(BENDCORE_WASM_KERNEL_OPT "Oz" CACHE STRING "Optimisation level of bendcore_kernel_wasm (O2, O3, Os, Oz)")
 
 add_executable(bendcore_kernel_wasm ${BENDCORE_WASM_KERNEL_ROOT}/src/wasm/kernel_bindings.cpp)
-target_link_libraries(bendcore_kernel_wasm PRIVATE bendcore_kernel)
+# STEP/IGES with structure (xcaf) and STL/3MF, mass properties (analysis), docs/ui/DATA_EXCHANGE.md.
+target_link_libraries(bendcore_kernel_wasm PRIVATE bendcore_kernel bendcore_kernel_xcaf bendcore_kernel_analysis)
 target_compile_options(bendcore_kernel_wasm PRIVATE -${BENDCORE_WASM_KERNEL_OPT})
 set_target_properties(bendcore_kernel_wasm PROPERTIES
   OUTPUT_NAME bendcore_kernel
@@ -56,3 +57,15 @@ endif()
 include(${CMAKE_CURRENT_LIST_DIR}/wasm_modeling.cmake OPTIONAL)
 include(${CMAKE_CURRENT_LIST_DIR}/wasm_assembly.cmake OPTIONAL)
 include(${CMAKE_CURRENT_LIST_DIR}/wasm_drawing.cmake OPTIONAL)  # bendcore_drawing_wasm, docs/ui/DRAWING_UI.md
+
+# Data exchange across the three modules (docs/ui/DATA_EXCHANGE.md): STEP/IGES round trips,
+# STL/3MF read back by independent readers, mass properties, IGES corpus.
+if(BENDCORE_NODE AND TARGET bendcore_modeling_wasm AND TARGET bendcore_assembly_wasm)
+  add_test(NAME wasm_exchange
+    COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_KERNEL_ROOT}/tests/wasm/exchange.test.mjs"
+            --kernel "${BENDCORE_WASM_KERNEL_OUT}"
+            --modeling "${CMAKE_BINARY_DIR}/wasm_modeling"
+            --assembly "${CMAKE_BINARY_DIR}/wasm_assembly"
+            --corpus "${BENDCORE_WASM_KERNEL_ROOT}/tests/corpus/generated")
+  set_tests_properties(wasm_exchange PROPERTIES TIMEOUT 600)
+endif()

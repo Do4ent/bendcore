@@ -164,6 +164,16 @@ export class PartDocumentHandle {
     return this.#call('docProperties', target, density);
   }
 
+  /** File bytes of a target body: format 'step' | 'iges' | 'stl' | '3mf' (docs/ui/DATA_EXCHANGE.md). */
+  exportFile(format, options = {}, target = 'final') {
+    return this.#call('docExport', target, format, options);
+  }
+
+  /** Mass, centre of mass, inertia tensor and principal axes for a density in kg/m³. */
+  massProperties(density, target = 'final') {
+    return this.#call('docMassProperties', target, density);
+  }
+
   /**
    * Solves sketch data in the context of sketch node `featureId` (variables, placement, projected
    * edges) without changing the document (docs/ui/SKETCH_EDITOR.md): solved points and curves,
