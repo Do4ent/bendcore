@@ -35,6 +35,7 @@ import SheetCanvas, { Handle, SheetCanvasHandle } from './SheetCanvas';
 import { FONT_FAMILY, FONT_FILE, defaultDrawingBaseUrl, loadDrawingFrom } from './drawingLoader';
 import { printDocument, printHtml } from './printSheet';
 import { CHARACTERISTICS, SCALES, SHEET_SIDES, STANDARD_VIEWS } from './labels';
+import { TEXT_FONTS, isTextFont, subassemblyRows, toggleDissolved } from './documentSettings';
 import {
   EdgePick,
   Outline,
@@ -104,6 +105,31 @@ function download(bytes: Uint8Array | string, name: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** What "saved" compares: the drawing document and the dissolved sub-assemblies of the session. */
+const savedKey = (drawing: string, dissolved: readonly string[]) => JSON.stringify([drawing, dissolved]);
+
+/**
+ * Loads a drawing on its model and applies the specification settings kept beside it in the file
+ * (dissolved sub-assemblies, docs/ui/DRAWING_UI.md, "Файл чертежа").
+ */
+async function loadWithSettings(
+  m: Remote<DrawingKernel>,
+  drawing: string,
+  model: string,
+  dissolvedAssemblies: string[] | undefined,
+): Promise<{ drawing: Remote<DrawingHandle>; report: UpdateReport }> {
+  const r = await m.load(drawing, model);
+  if (dissolvedAssemblies && dissolvedAssemblies.length > 0) {
+    try {
+      return { drawing: r.drawing, report: await r.drawing.setSettings({ dissolvedAssemblies }) };
+    } catch (e) {
+      await r.drawing.dispose().catch(() => undefined);
+      throw e;
+    }
+  }
+  return r;
+}
+
 function errorOf(e: unknown): { code: string; message: string } {
   if (e && typeof e === 'object' && 'code' in e && 'detail' in e) {
     return { code: String((e as { code: string }).code), message: String((e as { detail: string }).detail) };
@@ -167,8 +193,10 @@ export default function DrawingEditorApp({
   /** Serialises drawing bodies: one runs at a time, in click order. */
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
   /** Drawing and model JSON after the last completed change (cancel restores them). */
-  const snapshotRef = useRef<{ text: string; model: string; name: string; modelName: string } | null>(null);
+  const snapshotRef = useRef<{ text: string; model: string; name: string; modelName: string; dissolvedAssemblies: string[] } | null>(null);
   const savedRef = useRef<string | null>(null);
+  /** Dissolved sub-assemblies of the session (the drawing document does not hold them). */
+  const dissolvedRef = useRef<string[]>([]);
   const hostRef = useRef({ onChange, onFile });
   hostRef.current = { onChange, onFile };
   const [notice, setNotice] = useState<string | null>(null);
@@ -260,6 +288,7 @@ export default function DrawingEditorApp({
       }
       if (drawingRef.current !== d) return;
       setDesc(description);
+      dissolvedRef.current = description.dissolvedAssemblies;
       setSheetId(id);
       setPicture(pic);
       setVariables(vars);
@@ -274,9 +303,10 @@ export default function DrawingEditorApp({
     const [text, model] = await Promise.all([d.save(), d.saveModel()]);
     if (drawingRef.current !== d) return;
     const names = namesRef.current;
-    snapshotRef.current = { text, model, name: names.drawing, modelName: names.model };
-    const file = packDrawingFile({ drawing: text, model, modelName: names.model });
-    hostRef.current.onChange?.({ kind: 'drawing', name: names.drawing, text: file }, text !== savedRef.current);
+    const dissolvedAssemblies = dissolvedRef.current;
+    snapshotRef.current = { text, model, name: names.drawing, modelName: names.model, dissolvedAssemblies };
+    const file = packDrawingFile({ drawing: text, model, modelName: names.model, dissolvedAssemblies });
+    hostRef.current.onChange?.({ kind: 'drawing', name: names.drawing, text: file }, savedKey(text, dissolvedAssemblies) !== savedRef.current);
   }, []);
   /** File name of the drawing (.bcdrw.json) and of the model it was made from. */
   const namesRef = useRef({ drawing: '', model: '' });
@@ -360,13 +390,13 @@ export default function DrawingEditorApp({
     const loaded: { report: UpdateReport | null } = { report: null };
     const ok = await openDrawing(
       async (m) => {
-        const r = await m.load(content.drawing, content.model);
+        const r = await loadWithSettings(m, content.drawing, content.model, content.dissolvedAssemblies);
         loaded.report = r.report;
         return r.drawing;
       },
       name,
       content.modelName,
-      saved ? content.drawing : null,
+      saved ? savedKey(content.drawing, content.dissolvedAssemblies ?? []) : null,
       k,
     );
     if (loaded.report) setReport(loaded.report);
@@ -424,7 +454,7 @@ export default function DrawingEditorApp({
     const file = files[0];
     const model = await file.text();
     const drawingText = await d.save();
-    if (await openContent({ drawing: drawingText, model, modelName: file.name }, namesRef.current.drawing, false)) {
+    if (await openContent({ drawing: drawingText, model, modelName: file.name, dissolvedAssemblies: dissolvedRef.current }, namesRef.current.drawing, false)) {
       setMessage(t('drawing.file.modelReplaced', { name: file.name }));
     }
   };
@@ -438,9 +468,10 @@ export default function DrawingEditorApp({
       // Latin letters: Chromium replaces a download name with Cyrillic by "download".
       const base = designation || drawingFileName(namesRef.current.drawing).slice(0, -DRAWING_FILE_EXTENSION.length);
       const name = downloadName(base, '', DRAWING_FILE_EXTENSION.slice(1));
-      const fileText = packDrawingFile({ drawing: text, model, modelName: namesRef.current.model });
+      const dissolvedAssemblies = dissolvedRef.current;
+      const fileText = packDrawingFile({ drawing: text, model, modelName: namesRef.current.model, dissolvedAssemblies });
       download(fileText, name, 'application/json');
-      savedRef.current = text;
+      savedRef.current = savedKey(text, dissolvedAssemblies);
       namesRef.current = { ...namesRef.current, drawing: name };
       const file: DocumentFile = { kind: 'drawing', name, text: fileText };
       hostRef.current.onFile?.(file);
@@ -469,7 +500,9 @@ export default function DrawingEditorApp({
       const client = await loadDrawingFrom(defaultDrawingBaseUrl());
       setKernel(client);
       setStatus('ready');
-      if (snap) await openDrawing(async (m) => (await m.load(snap.text, snap.model)).drawing, snap.name, snap.modelName, saved, client.root);
+      if (snap) {
+        await openDrawing(async (m) => (await loadWithSettings(m, snap.text, snap.model, snap.dissolvedAssemblies)).drawing, snap.name, snap.modelName, saved, client.root);
+      }
       else {
         setDesc(null);
         setPicture(null);
@@ -757,6 +790,7 @@ export default function DrawingEditorApp({
   const specPositions = (spec.table?.sections ?? []).flatMap((s) => s.items.filter((i) => i.position > 0).map((i) => i.position));
   const balloonCount = (position: number) => (sheet?.balloons ?? []).filter((b) => b.text === String(position)).length;
   const missingPositions = specPositions.filter((p) => balloonCount(p) === 0);
+  const subassemblies = desc?.model.kind === 'assembly' ? subassemblyRows(spec.table, desc.dissolvedAssemblies) : [];
   const selected = sheet?.views.find((v) => v.id === selectedView) ?? null;
   const drawing = drawingRef.current;
   // Draggable points: dimension texts and the shelves of manual positions.
@@ -874,6 +908,24 @@ export default function DrawingEditorApp({
                     <option value="">{t('drawing.scaleAuto', { scale: sheet.computedScale?.label ?? '' })}</option>
                     {SCALES.map((s) => (
                       <option key={s.join(':')} value={s.join(':')}>{scaleText(s)}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="dr-row">
+                <label title={t('drawing.textFontHint')}>
+                  {t('drawing.textFont')}
+                  <select
+                    value={desc.textFont}
+                    data-testid="text-font"
+                    onChange={(e) => {
+                      const textFont = e.target.value;
+                      if (!isTextFont(textFont)) return;
+                      run(t('drawing.done.textFont', { font: t(`drawing.textFont.${textFont}`) }), (d) => d.setSettings({ textFont }));
+                    }}
+                  >
+                    {TEXT_FONTS.map((f) => (
+                      <option key={f} value={f}>{t(`drawing.textFont.${f}`)}</option>
                     ))}
                   </select>
                 </label>
@@ -1246,6 +1298,28 @@ export default function DrawingEditorApp({
                 <div className="dr-muted" data-testid="balloon-summary">
                   {t('drawing.balloonsCount', { count: sheet.balloons.length, total: specPositions.length })}
                   {missingPositions.length > 0 && <div data-testid="balloon-missing">{t('drawing.balloonsMissing', { list: missingPositions.join(', ') })}</div>}
+                </div>
+              )}
+              {desc?.model.kind === 'assembly' && spec.table && (
+                <div className="dr-box" data-testid="subassemblies">
+                  <h2>{t('drawing.subassemblies')}</h2>
+                  {subassemblies.length === 0 && <div className="dr-muted">{t('drawing.subassembliesNone')}</div>}
+                  {subassemblies.map((sa) => (
+                    <label key={sa.key} className="dr-check" title={t('drawing.dissolvedHint')}>
+                      <input
+                        type="checkbox"
+                        checked={sa.dissolved}
+                        data-testid={`dissolve-${sa.key}`}
+                        onChange={() => {
+                          const on = !sa.dissolved;
+                          const dissolvedAssemblies = toggleDissolved(desc.dissolvedAssemblies, sa.key, on);
+                          run(t(on ? 'drawing.done.dissolved' : 'drawing.done.notDissolved', { name: sa.label }), (d) => d.setSettings({ dissolvedAssemblies }));
+                        }}
+                      />
+                      {sa.position > 0 ? `${sa.position}. ` : ''}
+                      {sa.label} — {t('drawing.dissolved')}
+                    </label>
+                  ))}
                 </div>
               )}
               {desc?.model.kind === 'assembly' && sheet && (

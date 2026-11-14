@@ -75,16 +75,18 @@ async function box(page: Page, x: number, y: number, length: number, width: numb
   return previewAndOk(page);
 }
 
-/** "Show all" (F, outside input fields): the copies may lie outside the view framed earlier. */
-async function showAll(page: Page) {
-  await page.locator('body').click({ position: { x: 5, y: 840 } });
-  await page.keyboard.press('f');
+/**
+ * Times the viewport framed the model by itself (data-frames of the viewport): on the first body
+ * and after an operation that adds bodies outside the view (docs/ui/KERNEL_VIEWPORT.md); no "F".
+ */
+async function frames(page: Page): Promise<number> {
+  await state(page);
+  return Number((await page.getByTestId('kernel-viewport').getAttribute('data-frames')) ?? 0);
 }
 
 /** Picks a body of the active "bodies" slot by a point of its top face. */
 async function pickBody(page: Page, x: number, y: number, z: number, count: number) {
   expect((await state(page)).panel!.activeSlot).toBe('bodies');
-  await showAll(page);
   await clickModelPoint(page, x, y, z);
   await expect.poll(async () => (await state(page)).panel!.picks.bodies.length).toBe(count);
 }
@@ -105,15 +107,22 @@ test('linear pattern of a body, mirror of one copy, deletion of another', async 
   const block = 20 * 10 * 10;
   await box(page, 0, 0, 20, 10, 10);
   await expectBodies(page, 1, block);
+  const framedBlock = await frames(page);
+  expect(framedBlock).toBeGreaterThan(0);
 
-  // Three bodies along X, 30 apart: x in [0, 20], [30, 50], [60, 80].
+  // Three bodies along X, 30 apart: x in [0, 20], [30, 50], [60, 80]. The copies lie outside the
+  // view framed on the block: the viewport shows all by itself.
   await openPanel(page, 'BodyLinearPattern');
   await pickBody(page, 10, 5, 10, 1);
   await expect(page.getByTestId('option-direction1')).toHaveValue('X');
   await fill(page, { 'param-count1': 3, 'param-spacing1': 30 });
   await previewAndOk(page);
   await expectBodies(page, 3, 3 * block);
+  expect(await frames(page)).toBeGreaterThan(framedBlock);
+  // Undo and redo: the copies are in view now, the camera stays.
+  const framedPattern = await frames(page);
   await undoRedo(page, [1, block], [3, 3 * block]);
+  expect(await frames(page)).toBe(framedPattern);
 
   // Mirror of the last copy about YZ: a fourth body in x in [-80, -60].
   await openPanel(page, 'BodyMirror');
@@ -124,11 +133,14 @@ test('linear pattern of a body, mirror of one copy, deletion of another', async 
   await undoRedo(page, [3, 3 * block], [4, 4 * block]);
 
   // Delete the middle copy.
+  const framedMirror = await frames(page);
   await openPanel(page, 'DeleteBody');
   await pickBody(page, 40, 5, 10, 1);
   await previewAndOk(page);
   await expectBodies(page, 3, 3 * block);
   await undoRedo(page, [4, 4 * block], [3, 3 * block]);
+  // Deletion adds no body: the view is not changed.
+  expect(await frames(page)).toBe(framedMirror);
   expect((await state(page)).features.map((f) => f.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok']);
 
   // Undo everything back to the single block and redo it all.

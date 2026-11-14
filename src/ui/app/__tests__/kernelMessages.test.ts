@@ -107,9 +107,11 @@ describe('coverage of the kernel messages', () => {
     expect(uncovered.filter((e) => !listed.includes(e)).map((e) => `${e}  (${where.get(e)})`)).toEqual([]);
     // Entries no source generates any more, or that a template covers now.
     expect(listed.filter((e) => !uncovered.includes(e))).toEqual([]);
-    // The main errors of the operations are templates, not "other".
+    // Every message the user meets (operations, files, mates, views, dimensions) is a template;
+    // "other" keeps messages of programming errors of the API (null shapes, registries, internal
+    // drawing primitives, line type tables): at least 80 % of the messages are templates.
     const share = 1 - uncovered.length / new Set(covered.map(entryOf)).size;
-    expect(share).toBeGreaterThan(0.2);
+    expect(share).toBeGreaterThanOrEqual(0.8);
   });
 
   test('every template matches a message of the kernel sources', () => {
@@ -120,7 +122,9 @@ describe('coverage of the kernel messages', () => {
 
   test('every template has a Russian text without kernel English and an English text', () => {
     const latin = /[A-Za-z]{3,}/g;
-    const allowed = new Set(['OCCT', 'DXF', 'INSUNITS', 'ASCII', 'bendcore', 'json', 'step', 'stp', 'brep', 'sketch', 'JSON', 'WebAssembly', 'ISO']);
+    const allowed = new Set(['OCCT', 'DXF', 'INSUNITS', 'ASCII', 'bendcore', 'json', 'step', 'stp', 'brep', 'sketch', 'JSON', 'WebAssembly', 'ISO',
+      // Names of file formats and fonts, as the user sees them in the interface.
+      'PDF', 'TrueType', 'DejaVu', 'Sans', 'Liberation', 'BENDCORE', 'DRAWING', 'FONT', 'base', 'R2000']);
     for (const [id, pattern] of KERNEL_TEMPLATES) {
       const key = `kernel.msg.${id}` as MessageKey;
       expect([id, key in ru, key in en]).toEqual([id, true, true]);
@@ -150,6 +154,24 @@ describe('localization', () => {
       ['InvalidInput', "sketch 'Profile' has no closed profile", /^Эскиз «Profile» не содержит замкнутого контура$/],
       ['InvalidInput', 'fillet needs an existing body', /^Скругление: нужно уже построенное тело$/],
       ['InvalidInput', 'the DXF file has no $INSUNITS; choose the drawing units', /^В файле DXF нет единиц/],
+      // Views and sections: the sheet and view prefix with the nested reason.
+      ['OperationFailed', "sheet 'S1', view 'V2': section: OCCT failure: BRepAlgoAPI_Cut", /^Лист «S1», вид «V2»: разрез: сбой геометрического ядра OCCT$/],
+      ['message', "sheet 'S1': view 'V3' reduced to 1:2", /^Лист «S1»: масштаб вида «V3» уменьшен до 1:2$/],
+      ['InvalidInput', 'stepped section: two plane points at the same position along the step axis', /^Ступенчатый разрез: две точки/],
+      // Dimensions and positions.
+      ['message', 'edge #4 resolved to 2 elements', /^Ссылке edge #4 соответствуют 2 элементов$/],
+      ['message', "sheet 'S1', view 'V1': no assembly part is visible for positions", /^Лист «S1», вид «V1»: не видно ни одной детали/],
+      // Assembly: mates, fasteners, patterns, loading of files.
+      ['InvalidInput', 'occurrence 7 is not a top-level occurrence', /^occurrence 7 не является вхождением верхнего уровня$/],
+      ['InvalidInput', 'hole at (15, 30, 20): screw is too short: grip 25 mm, shank ends 3.5 mm inside the nut face', /винт короток: пакет 25 мм/],
+      ['InvalidInput', 'circular pattern needs count >= 2', /^Круговому массиву нужно не меньше двух экземпляров$/],
+      ['IoError', "cannot read subassembly 'frame.json': cannot open 'frame.json'", /^Не удалось прочитать подсборку «frame\.json»: не удаётся открыть «frame\.json»$/],
+      ['ParseError', 'cache: invalid base64', /^Кэш формы в файле повреждён/],
+      // Part operations.
+      ['OperationFailed', 'rib does not reach the body on either side', /^Ребро жёсткости не достаёт до тела ни с одной стороны$/],
+      ['InvalidInput', "hole #2: hole point is outside the face", /^Отверстие #2: /],
+      ['OperationFailed', 'thin wall: BRepOffsetAPI_MakeThickSolid failed', /^Тонкая стенка не построена/],
+      ['message', "face 'Extrude:F3' was split into 2 parts", /^Элемент типа «грань» «Extrude:F3» разделён на 2 частей$/],
     ];
     for (const [code, original, expected] of cases) {
       const m = localizeKernelMessage(tRu, code, original);
@@ -164,7 +186,9 @@ describe('localization', () => {
     expect(m.template).toBe('brokenReference');
     expect(m.text).toBe("Ссылка edges[0] 'Extrude:E3' потеряна: элемент типа «ребро» «Extrude:E3» удалён операцией «Fillet1»");
     // An unknown detail: the reference template without it.
-    const raw = localizeKernelMessage(tRu, 'message', "broken reference face[0] 'X': reference is a edge, slot expects a face");
+    const kind = localizeKernelMessage(tRu, 'message', "broken reference face[0] 'X': reference is a edge, slot expects a face");
+    expect(kind.text).toBe("Ссылка face[0] 'X' потеряна: ссылка указывает на элемент типа «ребро», а нужен элемент типа «грань»");
+    const raw = localizeKernelMessage(tRu, 'message', "broken reference face[0] 'X': some detail of a future kernel");
     expect(raw.template).toBe('brokenReferenceRaw');
     expect(raw.text).toBe("Ссылка face[0] 'X' потеряна");
   });

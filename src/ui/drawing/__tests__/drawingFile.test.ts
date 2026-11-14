@@ -25,6 +25,24 @@ describe('drawing file', () => {
     expect(r).toEqual({ ok: true, migrated: false, content: { drawing, model: part, modelName: 'кронштейн.bcpart.json' } });
   });
 
+  test('dissolved sub-assemblies of the specification are kept beside the documents', () => {
+    const text = packDrawingFile({ drawing, model: assembly, modelName: 'узел.bcasm.json', dissolvedAssemblies: ['УВ.02.000', 'Кронштейн в сборе'] });
+    expect(JSON.parse(text).specification).toEqual({ dissolvedAssemblies: ['УВ.02.000', 'Кронштейн в сборе'] });
+    expect(unpackDrawingFile(text)).toEqual({
+      ok: true,
+      migrated: false,
+      content: { drawing, model: assembly, modelName: 'узел.bcasm.json', dissolvedAssemblies: ['УВ.02.000', 'Кронштейн в сборе'] },
+    });
+    // An empty list is not written: the file is the one of a drawing without settings.
+    expect(packDrawingFile({ drawing, model: assembly, modelName: 'a', dissolvedAssemblies: [] })).toBe(packDrawingFile({ drawing, model: assembly, modelName: 'a' }));
+    // A malformed list is an error, not silently dropped.
+    const bad = JSON.parse(packDrawingFile({ drawing, model: assembly, modelName: 'a' }));
+    bad.specification = { dissolvedAssemblies: [1] };
+    expect(unpackDrawingFile(JSON.stringify(bad))).toMatchObject({ ok: false, error: { code: 'invalid' } });
+    bad.specification = 'x';
+    expect(unpackDrawingFile(JSON.stringify(bad))).toMatchObject({ ok: false, error: { code: 'invalid' } });
+  });
+
   test('the shell detects the drawing file and the earlier drawing document as drawings', () => {
     expect(detectKind(packDrawingFile({ drawing, model: assembly, modelName: 'a' }))).toEqual({ kind: 'drawing' });
     expect(detectKind(drawing)).toEqual({ kind: 'drawing' });
