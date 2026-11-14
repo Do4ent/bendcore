@@ -141,7 +141,7 @@ export function pathSketch(text: string, t: Translate = RU): SketchData {
       start: -1,
       end: -1,
       center: -1,
-      radius: '',
+      radius: '0',
       counterClockwise: true,
       construction: false,
       projection: -1,

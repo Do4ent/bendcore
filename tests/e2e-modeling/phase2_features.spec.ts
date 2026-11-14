@@ -87,9 +87,14 @@ async function pathSketch(page: Page, plane: string, offset: number, path: strin
   return previewAndOk(page);
 }
 
+/** Block length × width × height from the origin: rectangle sketch on XY, extrusion. */
 async function box(page: Page, length: number, width: number, height: number) {
-  await openPanel(page, 'Box');
-  await fill(page, { 'param-length': length, 'param-width': width, 'param-height': height });
+  await openPanel(page, 'Sketch');
+  await fill(page, { 'sketch-x': 0, 'sketch-y': 0, 'sketch-width': length, 'sketch-height': width });
+  const sketch = await previewAndOk(page);
+  await openPanel(page, 'Extrude');
+  await expect(page.getByTestId('link-sketch')).toHaveValue(sketch);
+  await fill(page, { 'param-distance': height });
   return previewAndOk(page);
 }
 
