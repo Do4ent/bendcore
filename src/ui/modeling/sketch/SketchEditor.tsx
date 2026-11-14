@@ -11,6 +11,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KernelMesh } from '../../../wasm/bendcore_kernel_api.mjs';
 import type {
+  DxfSketchImport,
+  ModelingKernel,
   PartDocumentHandle,
   SketchData,
   SketchSolution,
@@ -20,12 +22,14 @@ import type {
 import type { Remote } from '../../worker/wasmClient';
 import { LatestRunner } from '../../worker/latestRunner';
 import SketchCanvas from './SketchCanvas';
+import DxfImportPanel from './DxfImportPanel';
 import type { SketchCanvasHandle, SketchPointerEvent } from './SketchCanvas';
 import { dimensionGraphic, formatValue, offsetFor, twoPointDimension } from './dimensionLayout';
 import type { DimensionGraphic } from './dimensionLayout';
 import { DRAW_TOOLS, DrawError, DrawTool, PICK_COUNT, PICK_HINTS, drawShape } from './drawTools';
 import { constraintCaption, definitionCaption, describeConstraint } from './sketchLabels';
 import { useI18n } from '../../app/i18n';
+import { kernelMessageLine, localizeKernelError } from '../../app/kernelMessages';
 import type { MessageKey } from '../../app/i18n';
 import {
   ConstraintProposal,
@@ -98,6 +102,8 @@ declare global {
 export interface SketchEditorProps {
   /** Part document in the WASM worker: solves and edits are asynchronous. */
   doc: Remote<PartDocumentHandle>;
+  /** Modeling module of the document (DXF import, ModelingKernel.dxfSketch). */
+  kernel: Remote<ModelingKernel>;
   featureId: string;
   /** Body the sketch is drawn on (shown behind the sketch). */
   body: KernelMesh | null;
@@ -118,13 +124,11 @@ interface PendingDimension {
   at: { x: number; y: number } | null;
 }
 
-function errorText(e: unknown): string {
-  if (e && typeof e === 'object' && 'detail' in e) return String((e as { detail: string }).detail);
-  return e instanceof Error ? e.message : String(e);
-}
 
-const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExit, onCancel }) => {
+const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, body, onExit, onCancel }) => {
   const { t } = useI18n();
+  /** Kernel errors in the interface language (docs/ui/APP_SHELL.md, "Сообщения ядра"). */
+  const errorText = (e: unknown): string => kernelMessageLine(localizeKernelError(t, e));
   const [data, setData] = useState<SketchData>(emptySketch);
   const [solution, setSolution] = useState<SketchSolution | null>(null);
   const [history, setHistory] = useState<SketchData[]>([]);
@@ -152,6 +156,8 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
       return value;
     });
   const [message, setMessage] = useState<string | null>(null);
+  const [dxfOpen, setDxfOpen] = useState(false);
+  const [dxfInserted, setDxfInserted] = useState<{ curves: number; open: number } | null>(null);
   const [construction, setConstruction] = useState(false);
   const [gridSnap, setGridSnap] = useState(false);
   const [reference, setReference] = useState(false);
@@ -274,6 +280,21 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
       setSelectedConstraints([]);
     });
   };
+
+  /**
+   * DXF import (DxfImportPanel): the kernel appended the file's curves to the data; solve it as
+   * one step of the sketch history and select the open ends, so that gaps in the contour show.
+   */
+  const insertDxf = (r: DxfSketchImport) =>
+    enqueue(async () => {
+      setOffsets({});
+      setSelectedConstraints([]);
+      if ((await solveAndCommit(r.sketch, true)) === null) return;
+      setSelection(Array.from(r.openEnds).map(pointRef));
+      setDxfInserted({ curves: r.entities.length, open: r.openEnds.length });
+      setDxfOpen(false);
+      canvasRef.current?.fit();
+    });
 
   /** Runs a kernel editing tool on the current data. */
   const runTool = (spec: SketchTool): Promise<boolean> =>
@@ -837,7 +858,16 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExi
           <button type="button" data-testid="sketch-fit" onClick={() => canvasRef.current?.fit()}>
             {t('sketch.fit')}
           </button>
+          <button type="button" data-testid="sketch-dxf-open" disabled={dxfOpen} onClick={() => setDxfOpen(true)}>
+            {t('sketch.dxf.open')}
+          </button>
         </div>
+        {dxfInserted && (
+          <div className="sk-dxf-line" role="status" data-testid="sketch-dxf-inserted">
+            {t('sketch.dxf.inserted', { n: dxfInserted.curves, open: dxfInserted.open })}
+          </div>
+        )}
+        {dxfOpen && <DxfImportPanel kernel={kernel} current={() => dataRef.current} onInsert={(r) => void insertDxf(r)} onClose={() => setDxfOpen(false)} />}
 
         <fieldset className="pm-group sk-tools">
           <legend>{t('sketch.drawing')}</legend>

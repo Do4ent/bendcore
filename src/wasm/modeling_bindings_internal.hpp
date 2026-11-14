@@ -15,6 +15,7 @@
 #include <Standard_Failure.hxx>
 
 #include <cstdint>
+#include <cstdio>
 #include <exception>
 #include <map>
 #include <memory>
@@ -82,6 +83,21 @@ val point(const k::Point3& p);
 val placementJs(const m::SketchPlacement& p);
 
 val toJs(const m::SketchData& d);
+
+// Decimal spelling of a value written into sketch expressions. The expression parser has no
+// exponent notation, so tiny values (solver noise around 0) become 0 and the rest is written in
+// plain positional form.
+inline std::string decimalText(double v) {
+    if (v < 1e-9 && v > -1e-9) return "0";
+    std::string text = val::global("String")(val(v)).as<std::string>();
+    if (text.find('e') == std::string::npos) return text;
+    char buf[64];
+    std::snprintf(buf, sizeof buf, "%.12f", v);
+    text = buf;
+    while (!text.empty() && text.back() == '0') text.pop_back();
+    if (!text.empty() && text.back() == '.') text.pop_back();
+    return text;
+}
 m::SketchData sketchFromJs(const val& v);
 
 }  // namespace bendcore::wasm_modeling

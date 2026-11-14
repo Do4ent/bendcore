@@ -153,6 +153,7 @@ export const LONG_OPERATIONS: Record<string, string> = {
   importStep: 'load',
   importIges: 'load',
   importModel: 'load',
+  dxfSketch: 'load',
   solve: 'solve',
   dragEnd: 'solve',
   insertPart: 'solve',

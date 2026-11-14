@@ -354,6 +354,58 @@ export class PartDocumentHandle {
   editSketch(featureId: string, sketch: SketchData, tool: SketchTool): SketchEditOutcome;
 }
 
+export interface DxfSketchOptions {
+  /** layer names to import (case-insensitive); default: every layer that is neither frozen nor off */
+  layers?: string[];
+  /** $INSUNITS code to use instead of the file's (required when the file has none) */
+  units?: number;
+  /** $INSUNITS code used only when the file has none */
+  defaultUnits?: number;
+  /** mm; end points closer than this become one sketch point (default 0.001) */
+  tolerance?: number;
+  /** imported points are fixed */
+  fixed?: boolean;
+  /** also import paper-space entities */
+  paperSpace?: boolean;
+  /** sketch data the imported geometry is appended to */
+  into?: SketchData;
+}
+
+export interface DxfLayerInfo {
+  name: string;
+  color: number;
+  frozen: boolean;
+  off: boolean;
+  /** supported curves of the layer (model space unless paperSpace) */
+  curves: number;
+  selected: boolean;
+}
+
+export interface DxfSketchImport {
+  sketch: SketchData;
+  layers: DxfLayerInfo[];
+  version: string;
+  /** $INSUNITS of the file (0: none) */
+  fileUnits: number;
+  /** units used */
+  units: number;
+  mmPerUnit: number;
+  tolerance: number;
+  imported: { lines: number; arcs: number; circles: number; polylines: number; polylineSegments: number; degenerate: number };
+  /** ids of the imported entities in sketch */
+  entities: Int32Array;
+  /** new points, and end points merged into an existing point */
+  points: number;
+  merged: number;
+  /** points that end exactly one imported line or arc */
+  openEnds: Int32Array;
+  ignored: { texts: number; paperSpace: number; otherLayers: number };
+  /** entity types the DXF reader does not read (SPLINE, ELLIPSE, INSERT, ...) -> count */
+  skipped: Record<string, number>;
+  warnings: string[];
+  bounds: { min: [number, number]; max: [number, number] } | null;
+}
+
 export interface ModelingInfo {
   occtVersion: string;
   liveDocuments: number;
@@ -364,6 +416,7 @@ export class ModelingKernel {
   info(): ModelingInfo;
   catalog(): FeatureTypeSpec[];
   sketchTemplate(spec: { profiles: SketchProfileTemplate[] }): SketchData;
+  dxfSketch(bytes: Uint8Array | string, options?: DxfSketchOptions): DxfSketchImport;
   createDocument(): PartDocumentHandle;
   loadDocument(json: string): { document: PartDocumentHandle; report: RebuildReport };
 }
