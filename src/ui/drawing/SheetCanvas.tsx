@@ -4,17 +4,21 @@
  * pan (middle button, or drag on the free sheet in the select tool). In the select tool a view is
  * selected by a click and moved by dragging: the ghost of the view (of the whole projection group
  * for a view in projection relation) follows the pointer, and on release the editor calls
- * moveView() of the kernel.
+ * moveView() of the kernel. Dimension texts and the shelves of manual positions have handles: in the
+ * select tool they are dragged and on release the editor calls moveDimension() / setBalloon(). The
+ * outline of a local section (or the plane points of a stepped section) being drawn is shown.
  */
 
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { PictureView, Point, SheetPicture } from '../../wasm/bendcore_drawing_api.mjs';
 import {
   EdgePick,
+  Outline,
   SheetTransform,
   Tool,
   curvePath,
   fitTransform,
+  outlinePath,
   panBy,
   screenToSheet,
   viewAt,
@@ -37,11 +41,24 @@ interface Props {
   onSheetClick(point: Point, view: PictureView | null): void;
   /** Drag of a view: the new centre of the dragged view's bounds, sheet mm. */
   onMoveView(view: string, x: number, y: number): void;
+  /** Draggable annotation points (dimension texts, position shelves), sheet mm. */
+  handles?: Handle[];
+  /** Drag of a handle: its new point, sheet mm. */
+  onMoveHandle?(handle: Handle, x: number, y: number): void;
+  /** Outline being drawn (local section) or picked plane points (stepped section). */
+  outline?: Outline | null;
+}
+
+export interface Handle {
+  kind: 'dimension' | 'balloon';
+  id: string;
+  at: Point;
 }
 
 interface Drag {
-  kind: 'pan' | 'view';
+  kind: 'pan' | 'view' | 'handle';
   view?: string;
+  handle?: Handle;
   start: Point; // screen px
   startSheet: Point;
   moved: boolean;
@@ -61,6 +78,7 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
   const [t, setT] = useState<SheetTransform | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [ghost, setGhost] = useState<{ views: string[]; dx: number; dy: number } | null>(null);
+  const [handleGhost, setHandleGhost] = useState<Point | null>(null);
   const W = picture.width;
   const H = picture.height;
 
@@ -109,6 +127,16 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
     const p = screenToSheet(t, H, s);
     const target = e.target as Element;
     const viewId = target.getAttribute('data-view-box');
+    const handleIndex = target.getAttribute('data-handle');
+    if (e.button === 0 && tool === 'select' && handleIndex !== null && props.handles) {
+      const handle = props.handles[Number(handleIndex)];
+      if (handle) {
+        e.preventDefault();
+        box.current!.setPointerCapture(e.pointerId);
+        setDrag({ kind: 'handle', handle, start: s, startSheet: p, moved: false, pointerId: e.pointerId });
+        return;
+      }
+    }
     if (e.button === 1 || (e.button === 0 && tool === 'select' && !viewId)) {
       e.preventDefault();
       box.current!.setPointerCapture(e.pointerId);
@@ -122,7 +150,8 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
       setDrag({ kind: 'view', view: viewId, start: s, startSheet: p, moved: false, pointerId: e.pointerId });
       return;
     }
-    if (tool === 'detail' || tool === 'section' || tool === 'balloon') props.onSheetClick(p, viewAt(picture.views, p));
+    if (tool === 'detail' || tool === 'section' || tool === 'balloon' || tool === 'localSection' || tool === 'thread')
+      props.onSheetClick(p, viewAt(picture.views, p));
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -135,6 +164,11 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
       return;
     }
     const p = screenToSheet(t, H, s);
+    if (drag.kind === 'handle') {
+      if (moved) setHandleGhost([drag.handle!.at[0] + p[0] - drag.startSheet[0], drag.handle!.at[1] + p[1] - drag.startSheet[1]]);
+      if (moved !== drag.moved) setDrag({ ...drag, moved });
+      return;
+    }
     if (moved) setGhost({ views: groupOf(drag.view!), dx: p[0] - drag.startSheet[0], dy: p[1] - drag.startSheet[1] });
     if (moved !== drag.moved) setDrag({ ...drag, moved });
   };
@@ -142,7 +176,11 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
   const onPointerUp = (e: React.PointerEvent) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
     box.current!.releasePointerCapture(e.pointerId);
-    if (drag.kind === 'view' && drag.moved && t) {
+    if (drag.kind === 'handle' && drag.moved && t && props.onMoveHandle) {
+      const p = screenToSheet(t, H, local(e));
+      const h = drag.handle!;
+      props.onMoveHandle(h, h.at[0] + p[0] - drag.startSheet[0], h.at[1] + p[1] - drag.startSheet[1]);
+    } else if (drag.kind === 'view' && drag.moved && t) {
       const p = screenToSheet(t, H, local(e));
       const v = picture.views.find((x) => x.id === drag.view);
       if (v) {
@@ -154,10 +192,11 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
       props.onSelectView(null);
     }
     setGhost(null);
+    setHandleGhost(null);
     setDrag(null);
   };
 
-  const pickTool = tool === 'dimension' || tool === 'roughness' || tool === 'tolerance' || tool === 'datum' || tool === 'balloon';
+  const pickTool = tool === 'dimension' || tool === 'chain' || tool === 'baseline' || tool === 'roughness' || tool === 'tolerance' || tool === 'datum' || tool === 'balloon';
   const isPicked = (view: string, index: number) => picks.some((p) => p.view === view && p.index === index);
 
   return (
@@ -202,6 +241,14 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
                       ))}
                     </g>
                   ))}
+              {props.outline && props.outline.points.length > 0 && (
+                <g className="dr-outline" data-testid="outline">
+                  <path d={outlinePath(props.outline)} />
+                  {props.outline.points.map((q, i) => (
+                    <circle key={i} cx={q[0]} cy={q[1]} r={1} />
+                  ))}
+                </g>
+              )}
               {picture.views.map((v) => (
                 <g key={`edges-${v.id}`} className={pickTool ? 'dr-edges dr-pickable' : 'dr-edges'}>
                   {v.edges.map((e) => (
@@ -227,6 +274,19 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
                   ))}
                 </g>
               ))}
+              {tool === 'select' &&
+                (props.handles ?? []).map((h, i) => (
+                  <circle
+                    key={`handle-${h.kind}-${h.id}`}
+                    data-handle={i}
+                    data-testid={`handle-${h.kind}-${h.id}`}
+                    className="dr-handle"
+                    cx={h.at[0]}
+                    cy={h.at[1]}
+                    r={2}
+                  />
+                ))}
+              {handleGhost && <circle className="dr-handle dr-handle-ghost" cx={handleGhost[0]} cy={handleGhost[1]} r={2} />}
             </g>
           </svg>
         </div>

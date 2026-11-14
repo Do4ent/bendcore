@@ -34,6 +34,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -320,6 +322,7 @@ struct Session {
     std::unique_ptr<vw::ViewCache> cache = std::make_unique<vw::ViewCache>(64, 0);
     std::optional<dd::ModelSnapshot> shown;  // the model state the drawing shows (last update)
     dd::UpdateReport lastReport;
+    dd::DrawingHistory history{100};  // undo/redo of the drawing edits (transactions)
 };
 
 std::map<std::uint32_t, std::unique_ptr<Session>>& sessions() {
@@ -387,10 +390,12 @@ json updateReportJson(const dd::UpdateReport& r) {
 
 // Applies edit to the sheet definitions and updates against the shown snapshot; restores the
 // definitions if the edit or the update fails. Returns the warnings of the update.
+// A successful edit is recorded in the undo history under label.
 template <typename Edit>
-json transaction(Session& s, Edit&& edit) {
+json transaction(Session& s, const char* label, Edit&& edit) {
     if (!s.shown) raise({k::ErrorCode::InvalidInput, "drawing: the session has no model snapshot"});
     const std::vector<dd::SheetDef> backup = s.doc.sheets();
+    dd::DrawingEditState before = dd::captureEditState(s.doc);
     json result;
     try {
         result = edit();
@@ -398,6 +403,7 @@ json transaction(Session& s, Edit&& edit) {
         if (result.is_null()) result = json::object();
         result["warnings"] = rep.warnings;
         result["dangling"] = rep.dangling;
+        s.history.record(std::move(before), label);
     } catch (...) {
         s.doc.sheets() = backup;
         // The restored definitions were valid: recompute them so that the computed state matches.
@@ -434,6 +440,7 @@ std::string freshId(const dd::DrawingDocument& doc, const std::string& prefix) {
         for (const auto& t : s.tolerances) used.insert(t.id);
         for (const auto& d : s.datums) used.insert(d.id);
         for (const auto& b : s.balloons) used.insert(b.id);
+        for (const auto& t : s.threadNotes) used.insert(t.id);
     }
     for (int i = 1;; ++i) {
         std::string id = prefix + std::to_string(i);
@@ -460,7 +467,17 @@ json viewDefJson(const dd::ViewDef& v) {
         j["planePoint"] = vec3Json(v.planePoint);
         j["sectionKind"] = enumName(v.sectionKind, kSecKinds);
         j["markView"] = v.markView;
+        json sp = json::array();
+        for (const vw::Vec3& p : v.stepPoints) sp.push_back(vec3Json(p));
+        j["stepPoints"] = sp;
     }
+    json ls = json::array();
+    for (const vw::LocalSection& c : v.localSections) {
+        json pts = json::array();
+        for (const dv::Point2& p : c.boundary.points) pts.push_back(pointJson(p));
+        ls.push_back({{"points", pts}, {"spline", c.boundary.spline}, {"depth", c.depth}});
+    }
+    j["localSections"] = ls;
     if (v.kind == dd::ViewKind::Detail) {
         j["detailCenter"] = pointJson(v.detailCenter);
         j["detailRadius"] = v.detailRadius;
@@ -469,6 +486,12 @@ json viewDefJson(const dd::ViewDef& v) {
 }
 
 bool inGroup(const dd::ViewDef& v) { return v.kind == dd::ViewKind::Base || v.side.has_value(); }
+
+json historyJson(const Session& s) {
+    return {{"canUndo", s.history.canUndo()}, {"canRedo", s.history.canRedo()},
+            {"undoLabel", s.history.undoLabel()}, {"redoLabel", s.history.redoLabel()},
+            {"undoDepth", s.history.undoDepth()}, {"redoDepth", s.history.redoDepth()}};
+}
 
 json describe(Session& s) {
     json sheets = json::array();
@@ -559,6 +582,20 @@ json describe(Session& s) {
             }
             positions.push_back(std::move(p));
         }
+        json threadNotes = json::array();
+        for (std::size_t i = 0; i < sd.threadNotes.size(); ++i) {
+            const auto& t = sd.threadNotes[i];
+            json tj = {{"id", t.id}, {"view", t.view}, {"toleranceField", t.def.toleranceField}, {"offset", t.def.offset},
+                       {"leaderAngle", t.def.leaderAngleDeg}, {"state", nullptr}};
+            if (cs && i < cs->threadNotes.size()) {
+                const an::DimensionResult& r = cs->threadNotes[i];
+                tj["state"] = r.state == an::DimensionState::Ok ? "ok" : "dangling";
+                tj["text"] = r.text;
+                tj["reason"] = r.reason;
+                if (!r.geometry.labels.empty()) tj["labelPosition"] = pointJson(r.geometry.labels.front().position);
+            }
+            threadNotes.push_back(std::move(tj));
+        }
         json sheet = {{"id", sd.id},
                       {"format", enumName(sd.format.base, kFormats)},
                       {"multiplier", sd.format.multiplier},
@@ -574,7 +611,8 @@ json describe(Session& s) {
                       {"technicalRequirements", sd.technicalRequirements},
                       {"partsList", sd.partsList},
                       {"balloons", balloons},
-                      {"positions", positions}};
+                      {"positions", positions},
+                      {"threadNotes", threadNotes}};
         if (cs) {
             sheet["name"] = cs->sheet.name;
             sheet["width"] = cs->sheet.widthMm;
@@ -590,7 +628,8 @@ json describe(Session& s) {
     return {{"model", {{"kind", dd::toString(ml.kind)}, {"path", ml.path}, {"resultHash", ml.resultHash},
                        {"revision", ml.revision}, {"properties", propertiesJson(ml.properties)}}},
             {"projection", s.doc.settings().projection == vw::ProjectionMethod::FirstAngle ? "firstAngle" : "thirdAngle"},
-            {"sheets", sheets}};
+            {"sheets", sheets},
+            {"history", historyJson(s)}};
 }
 
 // ------------------------------------------------------------------ creation
@@ -783,10 +822,13 @@ std::string setModelProperties(std::uint32_t handle, std::string text) {
         if (s.kind != dd::ModelKind::Part)
             raise({k::ErrorCode::Unsupported, "model properties of an assembly come from its root definition"});
         const dd::ModelProperties backup = s.doc.model().properties;
+        dd::DrawingEditState before = dd::captureEditState(s.doc);
         try {
             propertiesApply(s.doc.model().properties, j);
             const dd::ModelSnapshot snap = take(dd::snapshotPart(*s.part, s.doc.model().properties));
-            return updateReportJson(runUpdate(s, snap));
+            json rep = updateReportJson(runUpdate(s, snap));
+            s.history.record(std::move(before), "setModelProperties");
+            return rep;
         } catch (...) {
             s.doc.model().properties = backup;
             throw;
@@ -800,7 +842,7 @@ std::string addSheet(std::uint32_t handle, std::string text) {
     return guarded([&]() -> json {
         Session& s = session(handle);
         const json j = text.empty() ? json::object() : parseArg(text, "sheet");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "addSheet", [&]() -> json {
             dd::SheetDef sd = newSheet(s.doc, j);
             const std::string id = sd.id;
             if (s.doc.findSheet(id)) throw InputError("sheet '" + id + "' already exists");
@@ -813,7 +855,7 @@ std::string addSheet(std::uint32_t handle, std::string text) {
 std::string removeSheet(std::uint32_t handle, std::string id) {
     return guarded([&]() -> json {
         Session& s = session(handle);
-        return transaction(s, [&]() -> json {
+        return transaction(s, "removeSheet", [&]() -> json {
             auto& sh = s.doc.sheets();
             if (sh.size() == 1) throw InputError("the last sheet of a drawing cannot be removed");
             for (auto it = sh.begin(); it != sh.end(); ++it) {
@@ -831,7 +873,7 @@ std::string setSheet(std::uint32_t handle, std::string id, std::string text) {
     return guarded([&]() -> json {
         Session& s = session(handle);
         const json j = parseArg(text, "sheet");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "setSheet", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, id);
             if (j.contains("format") || j.contains("multiplier") || j.contains("orientation")) sd.format = formatFrom(j, sd.format);
             if (j.contains("scale")) sd.scale = scaleFrom(j.at("scale"));
@@ -872,7 +914,7 @@ std::string addView(std::uint32_t handle, std::string sheetId, std::string text)
     return guarded([&]() -> json {
         Session& s = session(handle);
         const json j = parseArg(text, "view");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "addView", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             dd::ViewDef v;
             v.kind = enumFrom(need(j, "kind"), kViewKinds, "view kind");
@@ -934,6 +976,10 @@ std::string addView(std::uint32_t handle, std::string sheetId, std::string text)
                     v.planePoint = vec3From(need(j, "planePoint"), "planePoint");
                     if (j.contains("sectionKind")) v.sectionKind = enumFrom(j.at("sectionKind"), kSecKinds, "section kind");
                     v.markView = strOr(j, "markView", v.parent);
+                    if (j.contains("stepPoints")) {
+                        if (!j.at("stepPoints").is_array()) throw InputError("stepPoints must be an array of [x, y, z]");
+                        for (const json& p : j.at("stepPoints")) v.stepPoints.push_back(vec3From(p, "stepPoints[]"));
+                    }
                     if (j.contains("side") && !j.at("side").is_null()) v.side = enumFrom(j.at("side"), kSides, "side");
                     else orientBase(v, j);
                     break;
@@ -961,7 +1007,7 @@ void collectDependents(const dd::SheetDef& sd, const std::string& id, std::set<s
 std::string removeView(std::uint32_t handle, std::string sheetId, std::string viewId) {
     return guarded([&]() -> json {
         Session& s = session(handle);
-        return transaction(s, [&]() -> json {
+        return transaction(s, "removeView", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             bool found = false;
             for (const auto& v : sd.views) found = found || v.id == viewId;
@@ -976,6 +1022,8 @@ std::string removeView(std::uint32_t handle, std::string sheetId, std::string vi
             erase(sd.roughness);
             erase(sd.tolerances);
             erase(sd.datums);
+            erase(sd.balloons);
+            erase(sd.threadNotes);
             return {{"removed", std::vector<std::string>(gone.begin(), gone.end())}};
         });
     });
@@ -987,7 +1035,7 @@ std::string moveView(std::uint32_t handle, std::string sheetId, std::string view
     return guarded([&]() -> json {
         Session& s = session(handle);
         if (!std::isfinite(x) || !std::isfinite(y)) throw InputError("view position must be finite");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "moveView", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             const dd::ComputedSheet& cs = computedSheetOf(s, sheetId);
             const dd::ComputedView& cv = computedViewOf(cs, viewId);
@@ -1024,7 +1072,7 @@ std::string setView(std::uint32_t handle, std::string sheetId, std::string viewI
     return guarded([&]() -> json {
         Session& s = session(handle);
         const json j = parseArg(text, "view");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "setView", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             dd::ViewDef* v = nullptr;
             for (auto& o : sd.views)
@@ -1183,7 +1231,7 @@ std::string addDimension(std::uint32_t handle, std::string sheetId, std::string 
         Session& s = session(handle);
         const json picks = parseArg(picksText, "picks");
         const json opts = optsText.empty() ? json::object() : parseArg(optsText, "options");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "addDimension", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), viewId);
             dd::DimensionItem item;
@@ -1204,7 +1252,7 @@ std::string setDimension(std::uint32_t handle, std::string sheetId, std::string 
     return guarded([&]() -> json {
         Session& s = session(handle);
         const json j = parseArg(text, "dimension");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "setDimension", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             for (auto& d : sd.dimensions) {
                 if (d.id != id) continue;
@@ -1242,7 +1290,7 @@ std::string addSymbol(std::uint32_t handle, std::string sheetId, std::string vie
         Session& s = session(handle);
         const json pick = parseArg(pickText, "pick");
         const json spec = specText.empty() ? json::object() : parseArg(specText, "symbol");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "addSymbol", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), viewId);
             const double at = numOr(spec, "at", 0.5);
@@ -1295,7 +1343,7 @@ std::string addBalloon(std::uint32_t handle, std::string sheetId, std::string vi
         Session& s = session(handle);
         const json pick = parseArg(pickText, "pick");
         const json spec = specText.empty() ? json::object() : parseArg(specText, "position");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "addBalloon", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), viewId);
             const vw::ViewEdge& e = pickedEdge(cv, pick);
@@ -1318,7 +1366,7 @@ std::string setBalloon(std::uint32_t handle, std::string sheetId, std::string id
     return guarded([&]() -> json {
         Session& s = session(handle);
         const json j = parseArg(text, "position");
-        return transaction(s, [&]() -> json {
+        return transaction(s, "setBalloon", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             for (auto& b : sd.balloons) {
                 if (b.id != id) continue;
@@ -1333,7 +1381,7 @@ std::string setBalloon(std::uint32_t handle, std::string sheetId, std::string id
 std::string removeAnnotation(std::uint32_t handle, std::string sheetId, std::string id) {
     return guarded([&]() -> json {
         Session& s = session(handle);
-        return transaction(s, [&]() -> json {
+        return transaction(s, "removeAnnotation", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             std::size_t n = 0;
             n += std::erase_if(sd.dimensions, [&](const auto& x) { return x.id == id; });
@@ -1341,11 +1389,254 @@ std::string removeAnnotation(std::uint32_t handle, std::string sheetId, std::str
             n += std::erase_if(sd.tolerances, [&](const auto& x) { return x.id == id; });
             n += std::erase_if(sd.datums, [&](const auto& x) { return x.id == id; });
             n += std::erase_if(sd.balloons, [&](const auto& x) { return x.id == id; });
+            n += std::erase_if(sd.threadNotes, [&](const auto& x) { return x.id == id; });
             if (n == 0) throw InputError("unknown annotation '" + id + "'");
             return nullptr;
         });
     });
 }
+
+// ---- sections on views, dimension groups, dragging, thread dimensions, undo/redo
+
+an::ModelBinding shownBinding(const Session& s) {
+    if (!s.shown) raise({k::ErrorCode::InvalidInput, "drawing: the session has no model snapshot"});
+    return take(s.shown->historyNames ? an::ModelBinding::fromNamedShape(*s.shown->named)
+                                      : an::ModelBinding::fromShape(s.shown->shape));
+}
+
+dd::ViewDef& viewDefOf(dd::SheetDef& sd, const std::string& id) {
+    for (auto& v : sd.views)
+        if (v.id == id) return v;
+    throw InputError("unknown view '" + id + "' on sheet '" + sd.id + "'");
+}
+
+// Local section (GOST 2.305) on a base or projected view: {points: [[x, y], ...] in sheet mm,
+// spline?: bool, depth: mm from the nearest point of the model}. The points are converted to
+// the coordinates of the view (model mm).
+std::string addLocalSection(std::uint32_t handle, std::string sheetId, std::string viewId, std::string text) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        const json j = parseArg(text, "local section");
+        return transaction(s, "addLocalSection", [&]() -> json {
+            dd::SheetDef& sd = sheetOf(s, sheetId);
+            const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), viewId);
+            dd::ViewDef& v = viewDefOf(sd, viewId);
+            if (v.kind != dd::ViewKind::Base && v.kind != dd::ViewKind::Projected)
+                throw InputError("a local section is made on the base view or a projected view");
+            const json& pts = need(j, "points");
+            if (!pts.is_array() || pts.size() < 3) throw InputError("a local section needs at least 3 boundary points");
+            vw::LocalSection c;
+            for (const json& p : pts) {
+                const dv::Point2 q = point2From(p, "points[]");
+                c.boundary.points.push_back({(q.x - cv.sheetView.anchor.x) / cv.sheetView.scale,
+                                             (q.y - cv.sheetView.anchor.y) / cv.sheetView.scale});
+            }
+            c.boundary.spline = boolOr(j, "spline", false);
+            c.depth = numOr(j, "depth", 0.0);
+            if (!(c.depth > 0)) throw InputError("depth must be > 0 (mm from the nearest point of the model)");
+            take(vw::localBoundaryLoop(c.boundary));  // self-intersection and degenerate outlines
+            v.localSections.push_back(std::move(c));
+            return {{"view", viewId}, {"index", v.localSections.size() - 1}};
+        });
+    });
+}
+
+std::string removeLocalSection(std::uint32_t handle, std::string sheetId, std::string viewId, int index) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        return transaction(s, "removeLocalSection", [&]() -> json {
+            dd::ViewDef& v = viewDefOf(sheetOf(s, sheetId), viewId);
+            if (index < 0 || std::size_t(index) >= v.localSections.size())
+                throw InputError("view '" + viewId + "' has no local section " + std::to_string(index));
+            v.localSections.erase(v.localSections.begin() + index);
+            return nullptr;
+        });
+    });
+}
+
+// Dimension label dragged to the sheet point (x, y): new offset/text shift, or the leader angle
+// of a radius/diameter (annotations::moveDimensionTo).
+std::string moveDimension(std::uint32_t handle, std::string sheetId, std::string id, double x, double y) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        if (!std::isfinite(x) || !std::isfinite(y)) throw InputError("dimension position must be finite");
+        return transaction(s, "moveDimension", [&]() -> json {
+            dd::SheetDef& sd = sheetOf(s, sheetId);
+            for (auto& d : sd.dimensions) {
+                if (d.id != id) continue;
+                const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), d.view);
+                const an::ModelBinding binding = shownBinding(s);
+                an::AnnotationStyle style;
+                style.font = &requireFont();
+                d.def = take(an::moveDimensionTo(d.def, binding, cv.sheetView, {x, y}, style));
+                return {{"offset", d.def.offset}, {"textShift", d.def.textShift}, {"leaderAngle", d.def.leaderAngleDeg}};
+            }
+            throw InputError("unknown dimension '" + id + "'");
+        });
+    });
+}
+
+// Chain or baseline dimensions (GOST 2.307) from picked edges of one view: {mode: 'chain' |
+// 'baseline', direction?: 'horizontal' | 'vertical', offset?, spacing?}. Points: a vertex of a
+// straight edge, the centre of a circle or arc; the first pick is the base of a baseline group.
+std::string addDimensionGroup(std::uint32_t handle, std::string sheetId, std::string viewId, std::string picksText, std::string optsText) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        const json picks = parseArg(picksText, "picks");
+        const json opts = optsText.empty() ? json::object() : parseArg(optsText, "options");
+        return transaction(s, "addDimensionGroup", [&]() -> json {
+            dd::SheetDef& sd = sheetOf(s, sheetId);
+            const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), viewId);
+            if (!picks.is_array() || picks.size() < 2) throw InputError("pick at least two edges for a chain or baseline");
+            const std::string mode = strOr(opts, "mode", "chain");
+            if (mode != "chain" && mode != "baseline") throw InputError("mode must be 'chain' or 'baseline'");
+            std::vector<an::Anchor> anchors;
+            std::vector<dv::Point2> points;
+            std::optional<dv::Point2> dir;
+            for (const json& p : picks) {
+                const vw::ViewEdge& e = pickedEdge(cv, p);
+                const auto [a, q] = featurePoint(s, e);
+                anchors.push_back(a);
+                points.push_back(q);
+                if (!dir) dir = lineDirection(e);
+            }
+            bool horizontal;
+            if (opts.contains("direction")) {
+                const std::string d = strOr(opts, "direction");
+                if (d != "horizontal" && d != "vertical") throw InputError("direction must be 'horizontal' or 'vertical'");
+                horizontal = d == "horizontal";
+            } else if (dir && std::abs(dir->x) < 1e-6) {
+                horizontal = true;
+            } else if (dir && std::abs(dir->y) < 1e-6) {
+                horizontal = false;
+            } else {
+                horizontal = std::abs(points.back().x - points.front().x) >= std::abs(points.back().y - points.front().y);
+            }
+            const an::DimensionType type = horizontal ? an::DimensionType::Horizontal : an::DimensionType::Vertical;
+            const vw::Box2 vb = cv.sheetView.view.bounds;
+            double my = 0, mx = 0;
+            for (const dv::Point2& q : points) {
+                my += q.y / double(points.size());
+                mx += q.x / double(points.size());
+            }
+            const double magnitude = std::abs(numOr(opts, "offset", 10.0));
+            const double offset = horizontal ? (my >= 0.5 * (vb.minY + vb.maxY) ? magnitude : -magnitude)
+                                             : (mx <= 0.5 * (vb.minX + vb.maxX) ? magnitude : -magnitude);
+            const an::ModelBinding binding = shownBinding(s);
+            std::vector<an::DimensionDef> defs;
+            if (mode == "chain") {
+                defs = take(an::chainDimensions(type, anchors, binding, cv.sheetView, offset));
+            } else {
+                const std::vector<an::Anchor> rest(anchors.begin() + 1, anchors.end());
+                defs = take(an::baselineDimensions(type, anchors.front(), rest, binding, cv.sheetView, offset,
+                                                   numOr(opts, "spacing", 7.0)));
+            }
+            json ids = json::array();
+            for (an::DimensionDef& def : defs) {
+                dd::DimensionItem item;
+                item.id = freshId(s.doc, "D");
+                item.view = viewId;
+                item.def = std::move(def);
+                ids.push_back(item.id);
+                sd.dimensions.push_back(std::move(item));
+            }
+            return {{"ids", ids}};
+        });
+    });
+}
+
+double segmentDistance(dv::Point2 p, dv::Point2 a, dv::Point2 b) {
+    const double dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+    const double t = l2 > 0 ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0.0, 1.0) : 0.0;
+    return std::hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+
+void threadDefApply(an::ThreadDimensionDef& def, const json& j) {
+    if (j.contains("toleranceField")) {
+        def.toleranceField = strOr(j, "toleranceField");
+        for (char c : def.toleranceField)
+            if (!std::isalnum(static_cast<unsigned char>(c))) throw InputError("tolerance field: letters and digits only (6H, 6g)");
+    }
+    if (j.contains("offset")) def.offset = numOr(j, "offset", def.offset);
+    if (j.contains("leaderAngle")) def.leaderAngleDeg = numOr(j, "leaderAngle", def.leaderAngleDeg);
+    if (j.contains("textShift")) def.textShift = numOr(j, "textShift", def.textShift);
+}
+
+// Thread dimension (GOST 2.311, p. 5) on a view: the thread nearest to the sheet point `at`
+// ([x, y]); {at, toleranceField?, offset?, leaderAngle?, textShift?, id?}.
+std::string addThreadNote(std::uint32_t handle, std::string sheetId, std::string viewId, std::string text) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        const json j = parseArg(text, "thread dimension");
+        return transaction(s, "addThreadNote", [&]() -> json {
+            dd::SheetDef& sd = sheetOf(s, sheetId);
+            const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), viewId);
+            if (cv.threads.empty()) throw InputError("view '" + viewId + "' shows no thread");
+            const dv::Point2 at = point2From(need(j, "at"), "at");
+            const an::ThreadImage* best = nullptr;
+            double bestD = 1e300;
+            for (const an::ThreadImage& t : cv.threads) {
+                double d;
+                if (t.aspect == an::ThreadAspect::End) {
+                    const dv::Point2 c = cv.sheetView.toSheet(t.majorArc.center);
+                    d = std::abs(std::hypot(at.x - c.x, at.y - c.y) - t.majorArc.radius * cv.sheetView.scale);
+                } else {
+                    d = std::min(segmentDistance(at, cv.sheetView.toSheet(t.majorLines[0].a), cv.sheetView.toSheet(t.majorLines[0].b)),
+                                 segmentDistance(at, cv.sheetView.toSheet(t.majorLines[1].a), cv.sheetView.toSheet(t.majorLines[1].b)));
+                }
+                if (d < bestD) {
+                    bestD = d;
+                    best = &t;
+                }
+            }
+            if (best->faces.empty()) throw InputError("the thread has no face");
+            dd::ThreadNoteItem item;
+            item.id = strOr(j, "id");
+            if (item.id.empty()) item.id = freshId(s.doc, "TH");
+            item.view = viewId;
+            item.face = take(dd::elementReference(*s.shown, m::ElementKind::Face, best->faces.front()));
+            threadDefApply(item.def, j);
+            const std::string id = item.id;
+            sd.threadNotes.push_back(std::move(item));
+            return {{"id", id}, {"thread", an::threadDesignationText(best->thread)}};
+        });
+    });
+}
+
+std::string setThreadNote(std::uint32_t handle, std::string sheetId, std::string id, std::string text) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        const json j = parseArg(text, "thread dimension");
+        return transaction(s, "setThreadNote", [&]() -> json {
+            for (auto& t : sheetOf(s, sheetId).threadNotes) {
+                if (t.id != id) continue;
+                threadDefApply(t.def, j);
+                return nullptr;
+            }
+            throw InputError("unknown thread dimension '" + id + "'");
+        });
+    });
+}
+
+// Undo/redo of the drawing edits: the definitions are restored and the drawing is updated
+// against the shown model snapshot; if the update fails, the step is reverted.
+std::string undoRedo(std::uint32_t handle, bool undo) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        if (!s.shown) raise({k::ErrorCode::InvalidInput, "drawing: the session has no model snapshot"});
+        const std::string label = take(undo ? s.history.undo(s.doc) : s.history.redo(s.doc));
+        try {
+            dd::UpdateReport rep = runUpdate(s, *s.shown);
+            return {{"label", label}, {"warnings", rep.warnings}, {"dangling", rep.dangling}, {"history", historyJson(s)}};
+        } catch (...) {
+            (void)(undo ? s.history.redo(s.doc) : s.history.undo(s.doc));
+            if (auto r = s.doc.update(*s.shown, *s.cache, s.spec ? s.spec->specification() : nullptr); r) s.lastReport = r.value();
+            throw;
+        }
+    });
+}
+std::string undoEdit(std::uint32_t handle) { return undoRedo(handle, true); }
+std::string redoEdit(std::uint32_t handle) { return undoRedo(handle, false); }
 
 // ---- picture
 
@@ -1526,6 +1817,14 @@ EMSCRIPTEN_BINDINGS(bendcore_drawing) {
     emscripten::function("addBalloon", &addBalloon);
     emscripten::function("setBalloon", &setBalloon);
     emscripten::function("sheetPicture", &sheetPicture);
+    emscripten::function("addLocalSection", &addLocalSection);
+    emscripten::function("removeLocalSection", &removeLocalSection);
+    emscripten::function("moveDimension", &moveDimension);
+    emscripten::function("addDimensionGroup", &addDimensionGroup);
+    emscripten::function("addThreadNote", &addThreadNote);
+    emscripten::function("setThreadNote", &setThreadNote);
+    emscripten::function("undo", &undoEdit);
+    emscripten::function("redo", &redoEdit);
     emscripten::function("specification", &specification);
     emscripten::function("exportPdf", &exportPdf);
     emscripten::function("exportSheet", &exportSheet);
