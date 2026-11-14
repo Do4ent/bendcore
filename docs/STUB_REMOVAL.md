@@ -425,11 +425,11 @@ assembly,drawing,app}`, `web/app`, `src/wasm` не затрагивались.
 
 ### 9.4 Проверка
 
-| Конфигурация | До (`1f6b1fd`) | После |
+| Конфигурация | До (`1f6b1fd`) | После (с `c593c1f`) |
 |---|---|---|
 | `build`, Release, без OCCT | ctest 59/59 | ctest 41/41 (−20 тестов удалённых подсистем и тестов без проверок, +`manual_dimensions`, +`drawing_sketches`) |
-| `build-occt`, Release, OCCT | ctest 136/136 | __OCCT__ |
-| WASM `cmake --preset wasm`, `BENDCORE_EIGEN_DIR=/usr/include/eigen3` (трубный `bendcore_wasm`) | сборка OK, ctest 47/47 | __WASM__ |
+| `build-occt`, Release, OCCT | ctest 136/136 | ctest 118/118 (те же −20 и +2) |
+| WASM `cmake --preset wasm`, `BENDCORE_EIGEN_DIR=/usr/include/eigen3` (трубный `bendcore_wasm`) | сборка OK, ctest 47/47 | сборка OK, ctest 34/34 (−15: тесты без GTest из списка выше, +2) |
 | Jest (полный) | наборов 22/22, тестов 374/374 | наборов 23/23, тестов 380/380 (+`sketchArc`) |
 | `npm run typecheck` | — | OK |
 | `check_no_stubs.sh --paths src include tests` | 674 | 0 |
