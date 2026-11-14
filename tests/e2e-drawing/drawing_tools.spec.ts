@@ -147,9 +147,11 @@ test('local section, undo/redo, chain and baseline, drag of a dimension, print a
     expect(dims.map((d) => Math.round(d.value! * 1e6) / 1e6).sort((a, c) => a - c)).toEqual(expected);
   }
 
-  // Drag of the first dimension text by (30, −20) px: the text follows the pointer.
+  // Drag of the A = 60 text by (30, −20) px: the text follows the pointer (a text that does not fit
+  // between the extension lines stands outside them and moves only across the dimension line).
   await page.getByTestId('tool-select').click();
-  const d0 = (await state(page)).description!.sheets[0].dimensions[0];
+  const all = (await state(page)).description!.sheets[0].dimensions;
+  const d0 = all.reduce((a, c) => (c.value! > a.value! ? c : a));
   const handle = page.getByTestId(`handle-dimension-${d0.id}`);
   await expect(handle).toHaveCount(1);
   const hb = (await handle.boundingBox())!;
@@ -162,7 +164,7 @@ test('local section, undo/redo, chain and baseline, drag of a dimension, print a
   await page.mouse.up();
   await expect(page.getByTestId('status')).toContainText('Размер перенесён');
   await expectNoError(page);
-  const d1 = (await state(page)).description!.sheets[0].dimensions[0];
+  const d1 = (await state(page)).description!.sheets[0].dimensions.find((d) => d.id === d0.id)!;
   expect(d1.labelPosition![0] - d0.labelPosition![0]).toBeCloseTo(30 / zoom, 3);
   expect(d1.labelPosition![1] - d0.labelPosition![1]).toBeCloseTo(20 / zoom, 3);
   expect(d1.value).toBe(d0.value);
@@ -188,8 +190,9 @@ test('local section, undo/redo, chain and baseline, drag of a dimension, print a
   const info = pdfinfo(printed);
   if (info) {
     const m = /Page size:\s+([\d.]+) x ([\d.]+) pts/.exec(info)!;
-    expect(Number(m[1])).toBeCloseTo((420 * 72) / 25.4, 0);
-    expect(Number(m[2])).toBeCloseTo((297 * 72) / 25.4, 0);
+    // Chromium rounds the page to whole CSS pixels (1 px = 0,26 mm): within 1 pt = 0,35 mm.
+    expect(Math.abs(Number(m[1]) - (420 * 72) / 25.4)).toBeLessThan(1);
+    expect(Math.abs(Number(m[2]) - (297 * 72) / 25.4)).toBeLessThan(1);
     expect(info).toMatch(/Pages:\s+1/);
   }
 
