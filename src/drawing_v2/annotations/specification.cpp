@@ -4,6 +4,7 @@
 #include <bendcore/drawing_v2/specification.hpp>
 
 #include <algorithm>
+#include <functional>
 #include <cctype>
 #include <cmath>
 #include <set>
@@ -26,8 +27,10 @@ bool sortedByDesignation(SpecSection s) {
 
 // Текст в ячейке: высота по ряду ГОСТ 2.304 от preferred вниз до 2,5 и сжатие до 0,6.
 Result<Text> fitText(const Rect& cell, const std::string& value, double preferred, HAlign h, bool vertical,
-                     const TrueTypeFont* font, const char* what) {
-    constexpr double kMargin = 0.5, kMinWf = 0.6;
+                     const TextMetrics* font, const char* what) {
+    constexpr double kMargin = 0.5;
+    // Сжатие — только для шрифта TrueType (0,6); шрифт ГОСТ 2.304 не сжимается.
+    const double kMinWf = font ? font->minWidthFactor() : gostStrokeFont().minWidthFactor();
     const double along = vertical ? cell.height() : cell.width();
     const double across = vertical ? cell.width() : cell.height();
     const double avail = along - 2.0 * kMargin;
@@ -36,7 +39,7 @@ Result<Text> fitText(const Rect& cell, const std::string& value, double preferre
         if (hgt > preferred + 1e-9 || hgt > across - 1.0 + 1e-9) continue;
         const double w = estimateTextWidth(value, hgt, font);
         const double wf = w <= avail ? 1.0 : avail / w;
-        if (wf < kMinWf) continue;
+        if (wf < kMinWf - 1e-12) continue;
         Text t;
         t.utf8 = value;
         t.height = hgt;
@@ -147,8 +150,27 @@ Result<Specification> buildSpecification(const assembly_v2::AssemblyDocument& do
         if (d.position != 0) return invalid("specification: documents have no position numbers");
         buckets[SpecSection::Documentation].push_back(d);
     }
-    for (const auto& row : bom.value().rows) {
-        if (row.level != 0) continue;
+    // Составные части верхнего уровня; «разборные» подсборки заменяются своим составом.
+    std::vector<assembly_v2::BomRow> rows;
+    std::function<void(const assembly_v2::BomRow&, int)> addRow = [&](const assembly_v2::BomRow& r, int mult) {
+        if (r.kind == assembly_v2::DefinitionKind::Assembly && o.dissolve.count(r.definition)) {
+            for (const auto& c : r.children) addRow(c, mult * r.quantity);
+            return;
+        }
+        for (auto& x : rows)
+            if (x.definition == r.definition) {
+                x.quantity += r.quantity * mult;
+                return;
+            }
+        assembly_v2::BomRow copy = r;
+        copy.children.clear();
+        copy.level = 0;
+        copy.quantity = r.quantity * mult;
+        rows.push_back(std::move(copy));
+    };
+    for (const auto& row : bom.value().rows)
+        if (row.level == 0) addRow(row, 1);
+    for (const auto& row : rows) {
         SpecSection sec = row.kind == assembly_v2::DefinitionKind::Assembly ? SpecSection::AssemblyUnits
                           : row.designation.empty()                         ? SpecSection::StandardProducts
                                                                             : SpecSection::Parts;
@@ -267,6 +289,7 @@ Result<SpecDocument> renderSpecification(const Specification& spec, const SpecSh
         auto dr = Drawing::create(gs.value(), 0.5);
         if (!dr) return dr.error();
         Drawing d = std::move(dr).value();
+        d.setTextFont(o.textFont);
         TitleBlockData td = o.title;
         td.designation = spec.designation;
         td.name = spec.name;

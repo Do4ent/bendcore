@@ -160,15 +160,20 @@
 
 `checkModel(snapshot)` — без обновления: изменилась ли модель, какие виды и размеры будут
 пересчитаны. `render(font)` — листы `Drawing` (виды, штриховка, осевые, обозначения, размеры,
-знаки, позиции, технические требования, перечень). Тот же шрифт следует задать для обновления
-(`setFont`) — ширины текстов определяют геометрию размеров и полок.
+знаки, позиции, технические требования, перечень). Шрифт текстов — `DrawingSettings::textFont`:
+`gost2304` (по умолчанию; однолинейный шрифт типа Б ГОСТ 2.304, метрики встроены, `font` не
+нужен) или `truetype` (метрики и вывод — шрифтом `font`; тот же шрифт следует задать для
+обновления, `setFont`, — ширины текстов определяют геометрию размеров и полок). `EXPORT.md`,
+«Шрифт ГОСТ 2.304».
 
 ## Спецификация — отдельный документ
 
 `SpecificationDocument` — свой файл (`"format": "bendcore-specification"`, версия 1): ссылка на
 сборку, `SpecificationSettings` (форматы, примечания, разделы по ключу «обозначение или
 наименование» составной части — устойчиво при перезагрузке сборки; документы раздела
-«Документация», сборочный чертёж и его формат, резерв позиций), графы основной надписи.
+«Документация», сборочный чертёж и его формат, резерв позиций, «разборные» подсборки
+`dissolved` — `"dissolvedAssemblies"`, шрифт `textFont`), графы основной надписи. Позиции
+подсборок на сборочном чертеже — `SPECIFICATION.md`, «Состав из BOM».
 `update(snapshot)` строит состав `buildSpecification` (ГОСТ 2.106, `SPECIFICATION.md`) и
 возвращает, изменился ли он; `specification()` передаётся в `DrawingDocument::update`, чтобы
 номера позиций на чертеже совпали со спецификацией. `render(font)` — листы формы 1 (А4,
@@ -194,7 +199,7 @@ JSON, `"format": "bendcore-drawing"`, `"version": 2` (`DrawingDocument::kFormatV
  "model": {"kind": "part", "path": "bracket.json", "resultHash": "9f3c…", "revision": 2,
            "properties": {"designation": "РД.10.001", "name": "Кронштейн", "material": "Сталь 20", "density": 7850}},
  "settings": {"lineThickness": 0.5, "projection": "firstAngle", "viewGap": 30, "margin": 15,
-              "maxScale": [5, 1], "reducedAxonometry": true},
+              "maxScale": [5, 1], "reducedAxonometry": true, "textFont": "gost2304"},
  "sheets": [{"id": "S1", "format": {"base": "A3", "multiplier": 1, "orientation": "landscape"},
    "scale": null, "title": {"organization": "bendcore", "developer": {"surname": "Иванов", "date": "11.26"}, …},
    "views": [{"id": "F", "kind": "base", "toward": [0, -1, 0], "right": [1, 0, 0], …},
@@ -229,17 +234,20 @@ JSON, `"format": "bendcore-drawing"`, `"version": 2` (`DrawingDocument::kFormatV
 
 ## Экспорт комплекта
 
-`exportKit(drawing, specification, {directory, baseName, font})`:
+`exportKit(drawing, specification, {directory, baseName, font})` (`font` обязателен только
+при шрифте `truetype`; при шрифте ГОСТ он даёт невидимый текстовый слой PDF):
 
 - `<base>.pdf` — один многостраничный PDF: листы чертежа, затем листы спецификации (размер
   страницы — по листу, шрифт встраивается один раз; `EXPORT.md`);
 - `<base>_<лист>.dxf` и `.svg` на каждый лист чертежа, `<base>_SP<n>.dxf/.svg` — на каждый лист
   спецификации.
 
-Примеры (`docs/drawing/examples/`, получены тестами): `assembly_unit.pdf` — сборочный чертёж
+Примеры (`docs/drawing/examples/`, получены тестами): `assembly_unit_gost2304.png` — тот же
+сборочный чертёж шрифтом ГОСТ 2.304 (120 dpi, `unit.pdf` теста `test_drawing_document_assembly`);
+`assembly_unit.pdf` — сборочный чертёж
 узла «вал + втулка + крепёж» (А3) и спецификация (А4); `bracket_a3.png` — превью 100 dpi
-рабочего чертежа кронштейна после изменения длины полки A = 80 (PDF с встроенным шрифтом —
-около 0,8 МБ).
+рабочего чертежа кронштейна после изменения длины полки A = 80 (PDF: линии шрифта ГОСТ и
+невидимый слой DejaVu Sans, встроенный целиком, — около 1 МБ).
 
 ## Ограничения
 

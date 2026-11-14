@@ -355,6 +355,8 @@ dd::ModelSnapshot currentSnapshot(Session& s) {
 dd::UpdateReport runUpdate(Session& s, const dd::ModelSnapshot& snap) {
     const an::Specification* spec = nullptr;
     if (s.spec) {
+        // The specification sheets use the text font of the drawing.
+        s.spec->settings().textFont = s.doc.settings().textFont;
         take(s.spec->update(snap));
         spec = s.spec->specification();
     }
@@ -628,6 +630,8 @@ json describe(Session& s) {
     return {{"model", {{"kind", dd::toString(ml.kind)}, {"path", ml.path}, {"resultHash", ml.resultHash},
                        {"revision", ml.revision}, {"properties", propertiesJson(ml.properties)}}},
             {"projection", s.doc.settings().projection == vw::ProjectionMethod::FirstAngle ? "firstAngle" : "thirdAngle"},
+            {"textFont", dv::toString(s.doc.settings().textFont)},
+            {"dissolvedAssemblies", s.spec ? json(s.spec->settings().dissolved) : json::array()},
             {"sheets", sheets},
             {"history", historyJson(s)}};
 }
@@ -831,6 +835,49 @@ std::string setModelProperties(std::uint32_t handle, std::string text) {
             return rep;
         } catch (...) {
             s.doc.model().properties = backup;
+            throw;
+        }
+    });
+}
+
+// ---- document settings
+
+// {textFont: "gost2304" | "truetype"} (undoable, part of the edit state) and, for an assembly,
+// {dissolvedAssemblies: [component keys]} - sub-assemblies listed by their parts (GOST 2.106).
+std::string setSettings(std::uint32_t handle, std::string text) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        if (!s.shown) raise({k::ErrorCode::InvalidInput, "drawing: the session has no model snapshot"});
+        const json j = parseArg(text, "settings");
+        const dd::DrawingSettings backup = s.doc.settings();
+        const std::set<std::string> dissolvedBackup = s.spec ? s.spec->settings().dissolved : std::set<std::string>{};
+        dd::DrawingEditState before = dd::captureEditState(s.doc);
+        try {
+            if (j.contains("textFont")) {
+                if (!j.at("textFont").is_string()) throw InputError("textFont must be a string");
+                auto f = dv::textFontFromString(j.at("textFont").get<std::string>());
+                if (!f) throw InputError("textFont must be 'gost2304' or 'truetype'");
+                s.doc.settings().textFont = *f;
+            }
+            if (j.contains("dissolvedAssemblies")) {
+                if (!s.spec) raise({k::ErrorCode::Unsupported, "dissolved sub-assemblies need an assembly model"});
+                std::set<std::string> keys;
+                for (const json& k : j.at("dissolvedAssemblies")) {
+                    if (!k.is_string()) throw InputError("dissolvedAssemblies must be strings");
+                    keys.insert(k.get<std::string>());
+                }
+                s.spec->settings().dissolved = std::move(keys);
+            }
+            json rep = updateReportJson(runUpdate(s, *s.shown));
+            s.history.record(std::move(before), "setSettings");
+            return rep;
+        } catch (...) {
+            s.doc.settings() = backup;
+            if (s.spec) s.spec->settings().dissolved = dissolvedBackup;
+            try {
+                runUpdate(s, *s.shown);
+            } catch (...) {
+            }
             throw;
         }
     });
@@ -1467,7 +1514,7 @@ std::string moveDimension(std::uint32_t handle, std::string sheetId, std::string
                 const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), d.view);
                 const an::ModelBinding binding = shownBinding(s);
                 an::AnnotationStyle style;
-                style.font = &requireFont();
+                style.font = s.doc.textMetrics(&requireFont());
                 d.def = take(an::moveDimensionTo(d.def, binding, cv.sheetView, {x, y}, style));
                 return {{"offset", d.def.offset}, {"textShift", d.def.textShift}, {"leaderAngle", d.def.leaderAngleDeg}};
             }
@@ -1571,11 +1618,15 @@ std::string addThreadNote(std::uint32_t handle, std::string sheetId, std::string
         return transaction(s, "addThreadNote", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), viewId);
-            if (cv.threads.empty()) throw InputError("view '" + viewId + "' shows no thread");
+            // Thread dimensions are placed on side and end views only (not on axonometry, GOST 2.317).
+            const bool any = std::any_of(cv.threads.begin(), cv.threads.end(),
+                                         [](const an::ThreadImage& t) { return t.aspect != an::ThreadAspect::Oblique; });
+            if (!any) throw InputError("view '" + viewId + "' shows no thread to dimension");
             const dv::Point2 at = point2From(need(j, "at"), "at");
             const an::ThreadImage* best = nullptr;
             double bestD = 1e300;
             for (const an::ThreadImage& t : cv.threads) {
+                if (t.aspect == an::ThreadAspect::Oblique) continue;
                 double d;
                 if (t.aspect == an::ThreadAspect::End) {
                     const dv::Point2 c = cv.sheetView.toSheet(t.majorArc.center);
@@ -1806,6 +1857,7 @@ EMSCRIPTEN_BINDINGS(bendcore_drawing) {
     emscripten::function("addSheet", &addSheet);
     emscripten::function("removeSheet", &removeSheet);
     emscripten::function("setSheet", &setSheet);
+    emscripten::function("setSettings", &setSettings);
     emscripten::function("addView", &addView);
     emscripten::function("removeView", &removeView);
     emscripten::function("moveView", &moveView);

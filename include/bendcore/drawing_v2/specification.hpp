@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -71,10 +72,16 @@ struct SpecificationOptions {
     std::string assemblyDrawingFormat = "А3";
     // Резервные номера позиций после каждого раздела (ГОСТ 2.106 разрешает резерв).
     int reservePositions = 0;
+    // «Разборные» подсборки: определения-сборки, которые не являются сборочными единицами
+    // этой спецификации (нет своей спецификации, ГОСТ 2.106) — вместо них записываются их
+    // составные части (рекурсивно, количество умножается на число вхождений; одинаковые
+    // определения суммируются). Позиции получают детали подсборки, а не она сама.
+    std::set<std::uint32_t> dissolve;
 };
 
 // Спецификация сборки: составные части верхнего уровня корневой сборки с количеством на одну
-// сборку (structuredBom, уровень 0). Порядок в разделах: «Сборочные единицы», «Детали» — по
+// сборку (structuredBom, уровень 0); подсборка — сборочная единица со своей позицией, её
+// детали в эту спецификацию не входят (ГОСТ 2.106), кроме подсборок из options.dissolve. Порядок в разделах: «Сборочные единицы», «Детали» — по
 // возрастанию обозначений; «Стандартные изделия», «Прочие изделия», «Материалы» — по
 // наименованию, затем по обозначению (сравнение с числами по значению: М6 < М10).
 // Позиции — сквозная нумерация в порядке записи (кроме «Документации»).
@@ -97,7 +104,8 @@ struct SpecRow {
 
 struct SpecSheetOptions {
     TitleBlockData title;            // обозначение и наименование берутся из спецификации
-    const TrueTypeFont* font = nullptr;  // для подгонки текста по ширине граф
+    const TextMetrics* font = nullptr;  // метрики для подгонки текста по ширине граф
+    TextFont textFont = TextFont::TrueType;  // шрифт вывода текста листов (Drawing::setTextFont)
     double textHeight = 3.5;
     double rowHeight = 8.0;          // ГОСТ 2.106, форма 1: строки не менее 8 мм
     double headerHeight = 15.0;
@@ -123,7 +131,7 @@ Result<SpecDocument> renderSpecification(const Specification& spec, const SpecSh
 // --- Перечень составных частей ISO 7573 на поле чертежа ---
 
 struct PartsListOptions {
-    const TrueTypeFont* font = nullptr;
+    const TextMetrics* font = nullptr;
     double rowHeight = 8.0;
     double textHeight = 3.5;
     // Заголовки граф: позиция, количество, наименование, обозначение, материал.

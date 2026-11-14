@@ -5,6 +5,7 @@
 // OS/2. Шрифт с запретом встраивания (OS/2 fsType, бит 1 — Restricted License) отвергается.
 
 #include <bendcore/drawing_v2/common.hpp>
+#include <bendcore/drawing_v2/text_font.hpp>
 
 #include <cstdint>
 #include <string>
@@ -14,7 +15,7 @@
 
 namespace bendcore::drawing_v2 {
 
-class TrueTypeFont {
+class TrueTypeFont final : public TextMetrics {
 public:
     static Result<TrueTypeFont> loadFile(const std::string& path);
     static Result<TrueTypeFont> fromBytes(std::vector<std::uint8_t> bytes, std::string source);
@@ -46,7 +47,8 @@ public:
     // Отношение высоты прописных к кеглю (capHeight / unitsPerEm).
     double capHeightRatio() const { return double(capHeight_) / double(unitsPerEm_); }
     // Ширина строки в мм при высоте прописных capHeightMm (без кернинга).
-    double textWidthMm(std::u32string_view text, double capHeightMm) const;
+    double textWidthMm(std::u32string_view text, double capHeightMm) const override;
+    bool hasGlyph(char32_t cp) const override { return glyphIndex(cp) != 0; }
 
 private:
     TrueTypeFont() = default;

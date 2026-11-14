@@ -351,7 +351,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
     report.modelChanged = report.previousHash != report.currentHash;
 
     annotations::AnnotationStyle style;
-    style.font = font_;
+    style.font = textMetrics(font_);
 
     // Привязка размеров: деталь — имена из истории операций, сборка — только сигнатуры.
     auto bindingR = model.historyNames ? ModelBinding::fromNamedShape(*model.named) : ModelBinding::fromShape(model.shape);
@@ -679,11 +679,15 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 if (!cg) return Error{cg.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + cg.error().message};
                 cv.centers = std::move(cg).value();
             }
-            // Условная резьба модели (ГОСТ 2.311): на ортогональных видах и разрезах.
-            if (v.threads && !threadInfos.empty() && v.kind != ViewKind::Axonometric && v.kind != ViewKind::Detail) {
+            // Условная резьба модели (ГОСТ 2.311): ортогональные виды и разрезы; аксонометрия
+            // (ГОСТ 2.317) — эллипс наружного диаметра; выносной элемент — изображение резьбы
+            // вида-родителя, отсечённое окружностью элемента.
+            if (v.threads && !threadInfos.empty()) {
                 auto ti = annotations::threadImages(threadInfos, binding.topology(), cv.sheetView.view);
                 if (!ti) return Error{ti.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + ti.error().message};
                 cv.threads = std::move(ti).value();
+                if (v.kind == ViewKind::Detail)
+                    for (annotations::ThreadImage& t : cv.threads) t.clip = annotations::ThreadClip{v.detailCenter, v.detailRadius};
             }
             cs.views.push_back(std::move(cv));
         }
@@ -906,6 +910,13 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         // 7. Позиции по спецификации (ГОСТ 2.109). Сначала ручные: точка выноски на видимой линии
         // выбранного ребра, номер — позиция детали, которой принадлежит ребро.
         std::set<assembly_v2::DefinitionId> manualDefinitions;
+        // Определение с позицией для каждого ребра (0 — нет): деталь или подсборка-сборочная единица.
+        std::vector<assembly_v2::DefinitionId> edgePosition;
+        if (model.kind == ModelKind::Assembly && spec) {
+            edgePosition.assign(model.edgeOwner.size(), assembly_v2::DefinitionId(0));
+            for (std::uint32_t e = 0; e < edgePosition.size(); ++e)
+                if (auto o = positionOwner(model, e, *spec)) edgePosition[e] = *o;
+        }
         if (!sd.balloons.empty() && model.kind != ModelKind::Assembly)
             return invalid("sheet '" + sd.id + "': positions need an assembly model");
         for (BalloonItem& bi : sd.balloons) {
@@ -924,9 +935,9 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             }
             std::optional<int> position;
             std::optional<assembly_v2::DefinitionId> owner;
-            if (rb.ok && ref.index < model.edgeOwner.size()) {
-                owner = model.edgeOwner[ref.index];
-                position = spec->positionOf(*owner);
+            if (rb.ok) {
+                owner = positionOwner(model, ref.index, *spec);
+                if (owner) position = spec->positionOf(*owner);
             }
             if (!rb.ok || !best || !position) {
                 report.dangling.push_back(sd.id + "/" + bi.id + ": " +
@@ -960,12 +971,13 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 }
             }
             DimensionResult res;
-            if (!image) {
+            if (!image || image->aspect == annotations::ThreadAspect::Oblique) {
                 res.state = DimensionState::Dangling;
                 const bool isThread = rb.ok && std::any_of(threadInfos.begin(), threadInfos.end(),
                                                            [&](const modeling::ThreadInfo& t) { return t.face == ref.index; });
                 res.reason = !rb.ok      ? "reference is broken: " + rb.detail
                              : !isThread ? "the face carries no thread"
+                             : image     ? "thread dimensions are not placed on an axonometric view '" + tn.view + "'"
                                          : "the thread is not shown in view '" + tn.view + "'";
                 report.dangling.push_back(sd.id + "/" + tn.id + ": " + res.reason);
             } else {
@@ -991,8 +1003,8 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                     if (!it.definition || it.position <= 0 || manualDefinitions.count(*it.definition)) continue;
                     std::optional<std::pair<Point2, double>> best;
                     for (const ViewEdge& e : cv.sheetView.view.edges) {
-                        if (e.visibility != Visibility::Visible || !e.edgeIndex || *e.edgeIndex >= model.edgeOwner.size()) continue;
-                        if (model.edgeOwner[*e.edgeIndex] != *it.definition) continue;
+                        if (e.visibility != Visibility::Visible || !e.edgeIndex || *e.edgeIndex >= edgePosition.size()) continue;
+                        if (edgePosition[*e.edgeIndex] != *it.definition) continue;
                         auto p = pickPoint(e.curve);
                         if (p && (!best || p->second > best->second)) best = p;
                     }
@@ -1074,10 +1086,16 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
     return report;
 }
 
+const TextMetrics* DrawingDocument::textMetrics(const TrueTypeFont* trueType) const {
+    if (settings_.textFont == TextFont::Gost2304) return &gostStrokeFont();
+    return trueType;
+}
+
 Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) const {
     if (computed_.empty() || computed_.size() != sheets_.size()) return invalid("drawing render: the document is not updated");
+    const TextMetrics* metrics = textMetrics(font);
     annotations::AnnotationStyle style;
-    style.font = font;
+    style.font = metrics;
     std::vector<Drawing> out;
     for (std::size_t si = 0; si < computed_.size(); ++si) {
         const ComputedSheet& cs = computed_[si];
@@ -1085,9 +1103,10 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
         auto dr = Drawing::create(cs.sheet, settings_.lineThickness);
         if (!dr) return dr.error();
         Drawing d = std::move(dr).value();
+        d.setTextFont(settings_.textFont);
         FrameOptions fo;
         fo.form = si == 0 ? TitleBlockForm::Form1 : TitleBlockForm::Form2a;
-        fo.font = font;
+        fo.font = metrics;
         auto lay = addFrameAndTitleBlock(d, cs.title, fo);
         if (!lay) return Error{lay.error().code, "sheet '" + cs.id + "': " + lay.error().message};
         if (auto st = ensureViewLayers(d); !st) return st.error();
@@ -1165,7 +1184,7 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
         TitleBlockLayout above = lay.value();
         if (sd.partsList && cs.specification) {
             annotations::PartsListOptions po;
-            po.font = font;
+            po.font = metrics;
             auto table = annotations::addPartsList(d, lay.value(), *cs.specification, po);
             if (!table) return Error{table.error().code, "sheet '" + cs.id + "', parts list: " + table.error().message};
             above.titleBlock.y1 = table.value().y1;

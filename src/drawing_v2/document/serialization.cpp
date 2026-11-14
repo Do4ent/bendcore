@@ -122,6 +122,12 @@ bool flag(const json& j, const char* name, bool def) {
     if (!j.at(name).is_boolean()) fail(std::string("'") + name + "' must be a boolean");
     return j.at(name).get<bool>();
 }
+TextFont textFontFrom(const json& j) {
+    if (!j.is_string()) fail("'textFont' must be a string");
+    auto f = textFontFromString(j.get<std::string>());
+    if (!f) fail("unknown text font '" + j.get<std::string>() + "' (gost2304, truetype)");
+    return *f;
+}
 
 json vec(const Vec3& v) { return json::array({v.x, v.y, v.z}); }
 Vec3 vecFrom(const json& j) {
@@ -334,7 +340,8 @@ Result<std::string> DrawingDocument::toJson() const {
                      {"viewGap", settings_.viewGap},
                      {"margin", settings_.margin},
                      {"maxScale", scaleJson(settings_.maxScale)},
-                     {"reducedAxonometry", settings_.reducedAxonometry}};
+                     {"reducedAxonometry", settings_.reducedAxonometry},
+                     {"textFont", toString(settings_.textFont)}};
     json sheets = json::array();
     for (const SheetDef& s : sheets_) {
         json js;
@@ -474,6 +481,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
             d.settings_.margin = num(s, "margin", 15);
             if (s.contains("maxScale") && !s.at("maxScale").is_null()) d.settings_.maxScale = *scaleFrom(s.at("maxScale"));
             d.settings_.reducedAxonometry = flag(s, "reducedAxonometry", true);
+            if (s.contains("textFont")) d.settings_.textFont = textFontFrom(s.at("textFont"));
         }
         for (const json& js : field(j, "sheets")) {
             SheetDef s;
@@ -685,7 +693,9 @@ Result<std::string> SpecificationDocument::toJson() const {
                      {"documents", docs},
                      {"addAssemblyDrawing", settings_.addAssemblyDrawing},
                      {"assemblyDrawingFormat", settings_.assemblyDrawingFormat},
-                     {"reservePositions", settings_.reservePositions}};
+                     {"reservePositions", settings_.reservePositions},
+                     {"dissolvedAssemblies", settings_.dissolved},
+                     {"textFont", toString(settings_.textFont)}};
     return j.dump(1);
 }
 
@@ -720,6 +730,8 @@ Result<SpecificationDocument> SpecificationDocument::fromJson(std::string_view t
         d.settings_.addAssemblyDrawing = flag(s, "addAssemblyDrawing", true);
         d.settings_.assemblyDrawingFormat = str(s, "assemblyDrawingFormat", "А3");
         d.settings_.reservePositions = integer(s, "reservePositions", 0);
+        d.settings_.dissolved = s.value("dissolvedAssemblies", std::set<std::string>{});
+        if (s.contains("textFont")) d.settings_.textFont = textFontFrom(s.at("textFont"));
         return d;
     } catch (const ParseFailure& e) {
         return Error{ErrorCode::ParseError, "specification: " + e.message};

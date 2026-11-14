@@ -8,21 +8,11 @@
 
 namespace bendcore::drawing_v2::annotations {
 
-double estimateTextWidth(std::string_view utf8, double h, const TrueTypeFont* font, double widthFactor) {
+double estimateTextWidth(std::string_view utf8, double h, const TextMetrics* font, double widthFactor) {
     auto cps = decodeUtf8(utf8);
     if (!cps) return 0.0;
-    if (font) return font->textWidthMm(cps.value(), h) * widthFactor;
-    // Шрифт типа Б (ГОСТ 2.304): прописные и цифры 6/10 h, строчные 5/10 h, расстояние между
-    // буквами 2/10 h.
-    double w = 0.0;
-    const auto& s = cps.value();
-    for (std::size_t i = 0; i < s.size(); ++i) {
-        const char32_t c = s[i];
-        const bool lowerCase = (c >= U'a' && c <= U'z') || (c >= U'а' && c <= U'я') || c == U'ё';
-        w += (lowerCase ? 0.5 : 0.6) * h;
-        if (i + 1 < s.size()) w += 0.2 * h;
-    }
-    return w * widthFactor;
+    const TextMetrics& m = font ? *font : static_cast<const TextMetrics&>(gostStrokeFont());
+    return m.textWidthMm(cps.value(), h) * widthFactor;
 }
 
 Status ensureLayer(Drawing& drawing, const std::string& name, int aci) {

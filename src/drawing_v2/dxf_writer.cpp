@@ -83,7 +83,7 @@ struct Handles {
 
 }  // namespace
 
-Result<std::string> writeDxf(const Drawing& drawing) {
+Result<std::string> writeDxf(const Drawing& drawing, const DxfOptions& options) {
     Handles h;
     DxfOut body;  // всё, кроме HEADER (HANDSEED известен только в конце)
 
@@ -306,7 +306,9 @@ Result<std::string> writeDxf(const Drawing& drawing) {
     // ENTITIES (пространство модели, 1 единица = 1 мм листа).
     body.pair(0, "SECTION");
     body.pair(2, "ENTITIES");
-    auto common = [&](const char* type, const Entity& e, LineType lt) {
+    // widthMm > 0 — толщина вместо толщины типа линии (линии шрифта ГОСТ 2.304: d = h/10);
+    // invisible — группа 60 = 1 (невидимый исходный текст при выводе шрифтом ГОСТ).
+    auto common = [&](const char* type, const Entity& e, LineType lt, double widthMm = 0.0, bool invisible = false) {
         const auto& spec = drawing.lineTypeSpec(lt);
         body.pair(0, type);
         body.pair(5, hex(h.take()));
@@ -314,8 +316,10 @@ Result<std::string> writeDxf(const Drawing& drawing) {
         body.pair(100, "AcDbEntity");
         body.pair(8, e.layer);
         body.pair(6, spec.pattern.empty() ? "Continuous" : spec.dxfName);
-        body.pair(370, dxfLineweight(drawing.lineWidth(lt)));
+        body.pair(370, dxfLineweight(widthMm > 0.0 ? widthMm : drawing.lineWidth(lt)));
+        if (invisible) body.pair(60, 1);
     };
+    const bool strokeText = drawing.textFont() == TextFont::Gost2304;
     auto writeLine = [&](const Entity& e, Point2 a, Point2 b) {
         common("LINE", e, e.lineType);
         body.pair(100, "AcDbLine");
@@ -353,7 +357,22 @@ Result<std::string> writeDxf(const Drawing& drawing) {
         } else if (const auto* t = std::get_if<Text>(&e.geometry)) {
             auto value = dxfString(t->utf8);
             if (!value) return value.error();
-            common("TEXT", e, LineType::SolidThin);
+            if (strokeText) {
+                auto lay = gostStrokeFont().layout(*t);
+                if (!lay) return lay.error();
+                for (const auto& stroke : lay.value().strokes) {
+                    common("LWPOLYLINE", e, LineType::SolidThin, lay.value().lineWidth);
+                    body.pair(100, "AcDbPolyline");
+                    body.pair(90, int(stroke.size()));
+                    body.pair(70, 0);
+                    for (const auto& pt : stroke) {
+                        body.real(10, pt.x);
+                        body.real(20, pt.y);
+                    }
+                }
+                if (!options.sourceText) continue;
+            }
+            common("TEXT", e, LineType::SolidThin, 0.0, strokeText);
             body.pair(100, "AcDbText");
             body.point(10, t->position);
             body.real(40, t->height);

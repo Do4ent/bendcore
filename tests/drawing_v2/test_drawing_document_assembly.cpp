@@ -207,7 +207,7 @@ TEST(DrawingDocumentAssembly, AssemblyDrawingWithPositionsAndSpecification) {
     for (int n = 1; n <= 5; ++n) EXPECT_TRUE(hasText(dxf, std::to_string(n))) << "position " << n;
     EXPECT_TRUE(hasText(dxf, "ВТ.01.000 СБ"));
     const DxfContent sdxf = readDxf(dir + "/unit_SP1.dxf");
-    EXPECT_TRUE(hasText(sdxf, "Болт М10×30 ГОСТ")) << "specification DXF";
+    EXPECT_TRUE(hasText(sdxf, "Болт М10×30 ГОСТ 7798-70")) << "specification DXF";
     EXPECT_NEAR(sdxf.limMaxX, 210.0, 1e-9);
     EXPECT_NEAR(sdxf.limMaxY, 297.0, 1e-9);
     if (std::string err = ezdxfCheck(dir + "/unit_S1.dxf", "ВТ.01.000 СБ"); !err.empty()) ADD_FAILURE() << err;

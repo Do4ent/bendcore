@@ -26,6 +26,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -73,7 +74,19 @@ struct ModelSnapshot {
     // Для каждой дочерней формы компаунда (TopoDS_Iterator, порядок развёртки) — определение
     // детали (условности разрезов сборок, ГОСТ 2.305, разд. 9).
     std::vector<assembly_v2::DefinitionId> childOwner;
+    // Для каждой дочерней формы — определения вхождений её пути от верхнего уровня до детали
+    // (последнее = childOwner); для каждого ребра — индекс дочерней формы (UINT32_MAX — нет).
+    // Номер позиции ребра — у первого определения цепочки, которое есть в спецификации:
+    // подсборка-сборочная единица получает позицию по линиям своих деталей (ГОСТ 2.109).
+    std::vector<std::vector<assembly_v2::DefinitionId>> childChain;
+    std::vector<std::uint32_t> edgeChild;
 };
+
+// Определение, номер позиции которого ставится на ребре edge: первое определение цепочки
+// вхождений (от верхнего уровня), имеющее позицию в spec; nullopt — такого нет (деталь «разборной»
+// подсборки, которой нет и в спецификации, или ребро вне развёртки).
+std::optional<assembly_v2::DefinitionId> positionOwner(const ModelSnapshot& model, std::uint32_t edge,
+                                                       const annotations::Specification& spec);
 
 // Снимок документа детали: итоговая форма с картой имён; масса = объём · плотность.
 // Ошибки: InvalidInput — у документа нет тела.
@@ -182,8 +195,8 @@ struct ViewDef {
     std::optional<Point2> position;
     bool hidden = true;       // невидимые линии
     bool centerLines = true;  // осевые и центровые
-    // Условная резьба модели по ГОСТ 2.311 (annotations::threadImages): на видах, где ось резьбы
-    // параллельна или перпендикулярна плоскости вида (кроме выносных элементов и аксонометрии).
+    // Условная резьба модели по ГОСТ 2.311 (annotations::threadImages): виды сбоку и вдоль оси,
+    // аксонометрия (эллипс у входа), выносной элемент (отсечение окружностью элемента).
     bool threads = true;
     bool autoBalloons = false;  // позиции ГОСТ 2.109 по составу сборки на этом виде
     views::HlrMethod method = views::HlrMethod::Exact;
@@ -274,6 +287,9 @@ struct DrawingSettings {
     double margin = 15.0;    // отступ области видов от рамки, мм
     views::ScaleRatio maxScale{5, 1};  // наибольший масштаб при автоматическом выборе
     bool reducedAxonometry = true;     // приведённые коэффициенты ГОСТ 2.317 (1 по осям)
+    // Шрифт текстов листа: однолинейный тип Б ГОСТ 2.304 (линиями во всех форматах экспорта,
+    // метрики — для основной надписи, размеров и полок) или TrueType (DejaVu Sans и др.).
+    TextFont textFont = TextFont::Gost2304;
 };
 
 // ---------------------------------------------------------------- результат обновления
@@ -377,9 +393,12 @@ public:
 
     StalenessReport checkModel(const ModelSnapshot& model) const;
 
-    // Шрифт для ширины текстов размеров и знаков при обновлении (полки, размещение числа);
-    // тот же шрифт следует передавать в render. Не сохраняется в файле.
+    // Шрифт TrueType для ширины текстов размеров и знаков при обновлении (полки, размещение
+    // числа), если DrawingSettings::textFont == TrueType; тот же шрифт следует передавать в
+    // render. Не сохраняется в файле. Со шрифтом ГОСТ 2.304 метрики — gostStrokeFont().
     void setFont(const TrueTypeFont* font) { font_ = font; }
+    // Метрики текста по настройке textFont: gostStrokeFont() или trueType.
+    const TextMetrics* textMetrics(const TrueTypeFont* trueType) const;
 
     // Пересчёт: виды — через кэш (HLR — ViewCache, разрезы — кэш документа по хэшу формы и
     // параметрам), компоновка и масштабы, переразрешение ссылок размеров и знаков, позиции по
@@ -393,7 +412,9 @@ public:
     const std::vector<ComputedSheet>& computedSheets() const { return computed_; }
 
     // Листы чертежа (рамка, основная надпись форм 1/2а, виды, обозначения, размеры, знаки,
-    // позиции, технические требования). Ошибка InvalidInput — документ не обновлён.
+    // позиции, технические требования); Drawing::textFont() — по DrawingSettings::textFont.
+    // font — шрифт TrueType (метрики при textFont == TrueType; со шрифтом ГОСТ не используется
+    // и может быть nullptr). Ошибка InvalidInput — документ не обновлён.
     Result<std::vector<Drawing>> render(const TrueTypeFont* font) const;
 
     Result<std::string> toJson() const;
@@ -464,6 +485,10 @@ struct SpecificationSettings {
     bool addAssemblyDrawing = true;
     std::string assemblyDrawingFormat = "А3";
     int reservePositions = 0;
+    // «Разборные» подсборки (ключи составных частей): в спецификацию и позиции сборочного
+    // чертежа входят их детали, а не сами подсборки (annotations::SpecificationOptions::dissolve).
+    std::set<std::string> dissolved;
+    TextFont textFont = TextFont::Gost2304;  // шрифт текстов листов спецификации
 };
 
 // Спецификация ГОСТ 2.106 как отдельный документ (свой файл "bendcore-specification").
@@ -483,7 +508,8 @@ public:
     Result<bool> update(const ModelSnapshot& model);
     const annotations::Specification* specification() const { return spec_ ? &*spec_ : nullptr; }
 
-    // Листы формы 1 (А4, основная надпись форм 2 и 2а). Ошибка — документ не обновлён.
+    // Листы формы 1 (А4, основная надпись форм 2 и 2а); шрифт — SpecificationSettings::textFont
+    // (font — TrueType, нужен только для textFont == TrueType). Ошибка — документ не обновлён.
     Result<annotations::SpecDocument> render(const TrueTypeFont* font) const;
 
     Result<std::string> toJson() const;
@@ -501,7 +527,9 @@ private:
 struct ExportKitOptions {
     std::string directory;
     std::string baseName = "drawing";
-    const TrueTypeFont* font = nullptr;  // обязателен (тексты основной надписи)
+    // Шрифт TrueType: обязателен, если чертёж или спецификация выводятся шрифтом TrueType; при
+    // шрифте ГОСТ 2.304 — необязателен (невидимый текстовый слой PDF для поиска).
+    const TrueTypeFont* font = nullptr;
     bool pdf = true;
     bool dxf = true;
     bool svg = true;

@@ -99,12 +99,25 @@ private:
 
 namespace {
 
+// Текст листа со шрифтом ГОСТ дублируется невидимым текстом TrueType, если шрифт задан и
+// содержит все знаки строки.
+bool invisibleLayer(const Drawing& drawing, const Text& t, const TrueTypeFont* font, const PdfOptions& o) {
+    if (drawing.textFont() != TextFont::Gost2304 || !o.sourceText || !font) return false;
+    auto cps = decodeUtf8(t.utf8);
+    if (!cps) return false;
+    for (char32_t cp : cps.value())
+        if (font->glyphIndex(cp) == 0) return false;
+    return true;
+}
+
 // Сбор используемых глифов всех страниц и проверка, что шрифт содержит все символы.
-Status collectGlyphs(const Drawing& drawing, const TrueTypeFont* font,
+Status collectGlyphs(const Drawing& drawing, const TrueTypeFont* font, const PdfOptions& o,
                      std::map<std::uint16_t, char32_t>& usedGlyphs) {
+    const bool strokeText = drawing.textFont() == TextFont::Gost2304;
     for (const Entity& e : drawing.entities()) {
         const auto* t = std::get_if<Text>(&e.geometry);
         if (!t) continue;
+        if (strokeText && !invisibleLayer(drawing, *t, font, o)) continue;
         if (!font) {
             return Error{ErrorCode::InvalidInput,
                          "PDF: drawing contains text, a TrueType font is required (PdfOptions::font)"};
@@ -126,21 +139,24 @@ Status collectGlyphs(const Drawing& drawing, const TrueTypeFont* font,
 }
 
 // Поток содержимого одной страницы.
-Result<std::string> pageContent(const Drawing& drawing, const TrueTypeFont* font) {
+Result<std::string> pageContent(const Drawing& drawing, const TrueTypeFont* font, const PdfOptions& o) {
     std::ostringstream cs;
     cs << "0 G 0 g 0 J 1 j\n";
-    std::string lastStyle;
+    std::string lastStyle = "0 J";
+    auto setStyle = [&](const std::string& s) {
+        if (s != lastStyle) {
+            cs << s;
+            lastStyle = s;
+        }
+    };
     auto style = [&](LineType lt) {
         const auto& spec = drawing.lineTypeSpec(lt);
         const double w = drawing.lineWidth(lt);
         std::string s = pt(w) + " w [";
         const auto dash = renderDashArray(spec.pattern, w);
         for (std::size_t i = 0; i < dash.size(); ++i) s += (i ? " " : "") + pt(dash[i]);
-        s += "] 0 d\n";
-        if (s != lastStyle) {
-            cs << s;
-            lastStyle = s;
-        }
+        s += "] 0 d 0 J\n";
+        setStyle(s);
     };
     auto P = [](Point2 p) { return pt(p.x) + " " + pt(p.y); };
     auto line = [&](Point2 a, Point2 b) { cs << P(a) << " m " << P(b) << " l S\n"; };
@@ -180,6 +196,32 @@ Result<std::string> pageContent(const Drawing& drawing, const TrueTypeFont* font
             if (!segs) return segs.error();
             style(e.lineType);
             for (const auto& s : segs.value()) line(s.a, s.b);
+        } else if (const auto* t = std::get_if<Text>(&e.geometry); t && drawing.textFont() == TextFont::Gost2304) {
+            // Шрифт ГОСТ 2.304: линии знаков, толщина d = h/10, круглые концы.
+            auto lay = gostStrokeFont().layout(*t);
+            if (!lay) return lay.error();
+            setStyle(pt(lay.value().lineWidth) + " w [] 0 d 1 J\n");
+            for (const auto& stroke : lay.value().strokes) {
+                cs << P(stroke[0]) << " m\n";
+                for (std::size_t i = 1; i < stroke.size(); ++i) cs << P(stroke[i]) << " l\n";
+                cs << "S\n";
+            }
+            if (!invisibleLayer(drawing, *t, font, o)) continue;
+            // Невидимый текст (3 Tr) той же длины строки: коэффициент ширины = длина линий / длина TrueType.
+            auto cps = decodeUtf8(t->utf8).value();
+            const double ttWidth = font->textWidthMm(cps, t->height);
+            if (!(ttWidth > 0.0)) continue;
+            Text inv = *t;
+            inv.widthFactor = lay.value().width / ttWidth;
+            const Point2 o2 = detail::textBaselineOrigin(inv, lay.value().width);
+            const double fontSizePt = t->height / font->capHeightRatio() * kPt;
+            const double r = t->rotationDeg * std::numbers::pi / 180.0;
+            const double k = t->slanted ? std::tan((90.0 - kGostTextSlantDeg) * std::numbers::pi / 180.0) : 0.0;
+            const double ca = std::cos(r), sa = std::sin(r), wf = inv.widthFactor;
+            cs << "BT 3 Tr /F1 " << num(fontSizePt, 4) << " Tf " << num(wf * ca, 6) << ' ' << num(wf * sa, 6) << ' '
+               << num(k * ca - sa, 6) << ' ' << num(k * sa + ca, 6) << ' ' << P(o2) << " Tm <";
+            for (char32_t cp : cps) cs << hex4(font->glyphIndex(cp));
+            cs << "> Tj 0 Tr ET\n";
         } else if (const auto* t = std::get_if<Text>(&e.geometry)) {
             auto cps = decodeUtf8(t->utf8).value();
             const double width = font->textWidthMm(cps, t->height) * t->widthFactor;
@@ -212,8 +254,8 @@ Result<std::string> writePdfPages(const std::vector<const Drawing*>& drawings, c
     std::vector<std::string> contents;
     for (const Drawing* d : drawings) {
         if (!d) return Error{ErrorCode::InvalidInput, "PDF: null page"};
-        if (auto st = collectGlyphs(*d, font, usedGlyphs); !st) return st.error();
-        auto c = pageContent(*d, font);
+        if (auto st = collectGlyphs(*d, font, options, usedGlyphs); !st) return st.error();
+        auto c = pageContent(*d, font, options);
         if (!c) return c.error();
         contents.push_back(std::move(c).value());
     }
