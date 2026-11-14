@@ -40,3 +40,11 @@ foreach(_t naming tree io survival sketch reference_parts advanced multibody)
   target_link_libraries(test_modeling_document_${_t} PRIVATE bendcore_modeling_document GTest::gtest GTest::gtest_main)
   bendcore_add_test(modeling_document_${_t} test_modeling_document_${_t})
 endforeach()
+
+# Reference parts (docs/modeling/REFERENCE_PARTS.md): phase 2 parts in their own source file;
+# mass through the kernel mass properties, STEP files in tests/corpus/reference_parts/.
+target_sources(test_modeling_document_reference_parts PRIVATE
+  ${BENDCORE_MODELING_DOC_ROOT}/tests/modeling/reference_parts_phase2.cpp)
+target_link_libraries(test_modeling_document_reference_parts PRIVATE bendcore_kernel_analysis)
+target_compile_definitions(test_modeling_document_reference_parts PRIVATE
+  BENDCORE_REFERENCE_PARTS_DIR="${BENDCORE_MODELING_DOC_ROOT}/tests/corpus/reference_parts")

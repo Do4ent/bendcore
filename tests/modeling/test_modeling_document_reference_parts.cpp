@@ -1,100 +1,42 @@
-// Reference parts of phase 1 (docs/ROADMAP_GENERAL_CAD.md, docs/modeling/REFERENCE_PARTS.md):
-// every part is built through the part document from sketches and feature operations. For
-// each part:
-//   * the volume is checked against an analytic formula;
+// Reference parts of phases 1 and 2 (docs/ROADMAP_GENERAL_CAD.md, docs/modeling/REFERENCE_PARTS.md):
+// every part is built through the part document from sketches and feature operations (phase 1
+// parts here, phase 2 parts in reference_parts_phase2.cpp). For each part:
+//   * the volume is checked against an analytic formula, the mass (kernel mass properties) against
+//     the formula volume times the density, the number of bodies against the expected one;
 //   * scenarios change sketch dimensions and feature parameters (document variables used by
 //     sketch constraints and feature parameters); after each rebuild every reference of the
-//     fillets, chamfers, holes, patterns, mirrors, shells, drafts and face sketches must still
-//     resolve (exactly or through history) with the feature built, and the volume must match;
-//     the share of surviving references over all parts and scenarios is printed (>= 95 %);
+//     fillets, chamfers, holes, patterns, mirrors, shells, drafts, face sketches, phase 2
+//     operations and body operations must still resolve (exactly or through history) with the
+//     feature built, and the volume must match; the share of surviving references over all
+//     parts and scenarios is printed (>= 95 %);
 //   * save -> load gives identical volumes, states and reference names (with and without the
 //     BRep cache);
-//   * undo / redo of a dimension change and of a structural edit return the exact volumes.
+//   * undo / redo of a dimension change and of a structural edit return the exact volumes;
+//   * the final shape goes through STEP (write -> read) with the same volume and bodies; with
+//     BENDCORE_WRITE_REFERENCE_STEP=1 the files and manifest.json are written to
+//     tests/corpus/reference_parts/, and the committed files are checked by a second test.
 
-#include "modeling_document_test_util.hpp"
+#include "reference_parts.hpp"
+
+#include <bendcore/kernel/mass_properties.hpp>
+#include <bendcore/kernel/step_io.hpp>
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <functional>
 #include <map>
 #include <set>
 
 using namespace bendcore::modeling;
 using namespace bendcore::modeling::testutil;
+using namespace bendcore::modeling::refparts;
 
 namespace {
-
-using Values = std::map<std::string, double>;
-
-// Circular edge with the given centre and radius whose axis is parallel to coordinate axis `axis`.
-TopoDS_Shape circleEdge(const TopoDS_Shape& shape, gp_Pnt center, double radius, int axis) {
-    TopoDS_Shape found;
-    int count = 0;
-    for (TopExp_Explorer ex(shape, TopAbs_EDGE); ex.More(); ex.Next()) {
-        BRepAdaptor_Curve c(TopoDS::Edge(ex.Current()));
-        if (c.GetType() != GeomAbs_Circle) continue;
-        const gp_Circ ci = c.Circle();
-        const gp_Dir d = ci.Axis().Direction();
-        const double comp[3] = {d.X(), d.Y(), d.Z()};
-        if (std::abs(std::abs(comp[axis]) - 1) > 1e-9 || std::abs(ci.Radius() - radius) > 1e-6) continue;
-        if (ci.Location().Distance(center) > 1e-6) continue;
-        if (!found.IsNull() && found.IsSame(ex.Current())) continue;
-        found = ex.Current();
-        ++count;
-    }
-    EXPECT_EQ(count, 1) << "circle edges of radius " << radius;
-    return found;
-}
-
-// Volume added by a concave fillet r (or removed by a convex one) along a circle of radius rho,
-// with the fillet spandrel lying outside that circle (Pappus).
-double ringFillet(double r, double rho) { return holeRimFilletLoss(r, rho); }
-// Volume removed by a 45-degree chamfer d on the outer (+1) or inner (-1) circular edge of radius R.
-double ringChamfer(double d, double R, int side) { return kPi * d * d * (R - side * d / 3.0); }
-
-FeatureSpec sketchSpec(const std::string& id, const std::string& plane, SketchData data) {
-    FeatureSpec s;
-    s.type = "Sketch";
-    s.id = id;
-    s.options = {{"plane", plane}};
-    s.sketch = std::move(data);
-    return s;
-}
-
-FeatureSpec faceSketch(const std::string& id, const TopoReference& face, std::string ox, std::string oy, std::string oz,
-                       SketchData data) {
-    FeatureSpec s = sketchSpec(id, "face", std::move(data));
-    s.references["face"] = {face};
-    s.parameters = {{"originX", std::move(ox)}, {"originY", std::move(oy)}, {"originZ", std::move(oz)}};
-    return s;
-}
-
-FeatureSpec extrudeSpec(const std::string& id, const std::string& sketch, std::map<std::string, std::string> options,
-                        std::map<std::string, std::string> params) {
-    FeatureSpec s;
-    s.type = "Extrude";
-    s.id = id;
-    s.options = std::move(options);
-    s.parameters = std::move(params);
-    s.links = {{"sketch", sketch}};
-    return s;
-}
-
-NamedShape built(PartDocument& doc) {
-    RebuildReport rep = doc.rebuild();
-    EXPECT_TRUE(rep.failed.empty()) << "failed: " << (rep.failed.empty() ? "" : rep.failed.front() + ": " +
-                                                                                    messages(info(doc, rep.failed.front())));
-    return doc.finalShape();
-}
-
-struct ReferencePart {
-    std::string name;
-    Values base;
-    std::function<void(PartDocument&)> build;
-    std::function<double(const Values&)> volume;
-    std::vector<std::pair<std::string, Values>> scenarios;
-};
 
 // ------------------------------------------------------------------ parts
 
@@ -523,16 +465,23 @@ ReferencePart ribbedBracket() {
     return p;
 }
 
-std::vector<ReferencePart> allParts() {
+std::vector<ReferencePart> phase1Parts() {
     return {bracket(), shaft(), flange(), cover(), housing(), counterboredPlate(),
             pulley(), bushing(), support(), gridPlate(), draftedBoss(), sweptGrip(), ribbedBracket()};
+}
+
+std::vector<ReferencePart> allParts() {
+    std::vector<ReferencePart> parts = phase1Parts();
+    for (auto& part : phase2Parts()) parts.push_back(std::move(part));
+    return parts;
 }
 
 // ------------------------------------------------------------------ checks
 
 const std::set<std::string> kWatched{"Fillet", "Chamfer", "Hole", "LinearPattern", "CircularPattern",
                                      "Mirror", "Shell", "Draft", "Sketch", "DatumPlane",
-                                     "ThreadedHole", "Sweep", "Loft", "Rib"};
+                                     "ThreadedHole", "Sweep", "Loft", "Rib", "BodyBoolean", "BodyMirror",
+                                     "BodyLinearPattern", "BodyCircularPattern", "DeleteBody"};
 
 struct Tally {
     int total = 0;
@@ -600,13 +549,54 @@ void expectSameState(const PartDocument& a, const PartDocument& b, const std::st
     }
 }
 
+// Mass of the part (kernel mass properties of the final shape) against the analytic volume
+// times the density: kg = mm³ · 1e-9 · kg/m³.
+void expectMass(const ReferencePart& part, const TopoDS_Shape& shape) {
+    auto mp = bendcore::kernel::computeMassProperties(bendcore::kernel::Shape(shape), part.density);
+    ASSERT_TRUE(mp.ok()) << mp.error().message;
+    const double expected = part.volume(part.base) * 1e-9 * part.density;
+    EXPECT_NEAR(mp.value().mass, expected, 1e-6 * expected) << part.name;
+    EXPECT_EQ(mp.value().bodyCount, part.bodies) << part.name;
+}
+
+std::size_t solidCount(const TopoDS_Shape& shape) {
+    std::size_t n = 0;
+    for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next()) ++n;
+    return n;
+}
+
+// STEP of the final shape: written, read back, volume and number of solids against the formula.
+// With BENDCORE_WRITE_REFERENCE_STEP set, the file is also written to
+// tests/corpus/reference_parts/ (docs/modeling/REFERENCE_PARTS.md, "STEP для сверки").
+std::string stepRoundTrip(const ReferencePart& part, const TopoDS_Shape& shape) {
+    auto text = bendcore::kernel::writeStep(bendcore::kernel::Shape(shape));
+    EXPECT_TRUE(text.ok()) << (text.ok() ? "" : text.error().message);
+    if (!text.ok()) return {};
+    auto back = bendcore::kernel::readStep(text.value());
+    EXPECT_TRUE(back.ok()) << (back.ok() ? "" : back.error().message);
+    if (!back.ok()) return {};
+    const double expected = part.volume(part.base);
+    EXPECT_NEAR(volume(back.value().occt()), expected, 1e-6 * expected) << part.name << " (STEP)";
+    EXPECT_EQ(solidCount(back.value().occt()), part.bodies) << part.name << " (STEP)";
+    return text.value();
+}
+
+std::string readFile(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    std::ostringstream out;
+    out << in.rdbuf();
+    return out.str();
+}
+
 }  // namespace
 
 TEST(ModelingReferenceParts, BuildChangeSaveLoadUndo) {
     Tally tally;
     int scenarioCount = 0;
     const auto parts = allParts();
-    ASSERT_GE(parts.size(), 10u);
+    ASSERT_GE(parts.size(), 25u);
+    const bool writeStep = std::getenv("BENDCORE_WRITE_REFERENCE_STEP") != nullptr;
+    nlohmann::json manifest = nlohmann::json::array();
     for (const ReferencePart& part : parts) {
         SCOPED_TRACE(part.name);
         PartDocument doc(partRegistry());
@@ -621,6 +611,21 @@ TEST(ModelingReferenceParts, BuildChangeSaveLoadUndo) {
         const double v0 = volume(doc.finalShape().shape());
         tallyReferences(doc, part.name + " / base", volumeMatches(doc, part.volume(part.base), part.name), tally);
         ++scenarioCount;
+        EXPECT_EQ(doc.bodies().size(), part.bodies) << part.name;
+        expectMass(part, doc.finalShape().shape());
+        const std::string step = stepRoundTrip(part, doc.finalShape().shape());
+        if (writeStep && !step.empty()) {
+            const std::string file = stepFileName(part.name);
+            std::ofstream(std::string(BENDCORE_REFERENCE_PARTS_DIR) + "/" + file, std::ios::binary) << step;
+            manifest.push_back({{"name", part.name},
+                                {"file", file},
+                                {"material", part.material},
+                                {"density_kg_m3", part.density},
+                                {"volume_mm3", part.volume(part.base)},
+                                {"mass_kg", part.volume(part.base) * 1e-9 * part.density},
+                                {"bodies", part.bodies},
+                                {"parameters", part.base}});
+        }
 
         // Dimension and parameter changes.
         for (const auto& [name, changes] : part.scenarios) {
@@ -693,4 +698,37 @@ TEST(ModelingReferenceParts, BuildChangeSaveLoadUndo) {
                 parts.size(), scenarioCount, tally.total, tally.survived, 100.0 * rate);
     RecordProperty("survival_rate_percent", std::to_string(100.0 * rate));
     EXPECT_GE(rate, 0.95);
+    if (writeStep) {
+        std::ofstream(std::string(BENDCORE_REFERENCE_PARTS_DIR) + "/manifest.json") << manifest.dump(2) << "\n";
+    }
+}
+
+// The committed STEP files of tests/corpus/reference_parts/ (for the mass comparison in another
+// CAD system): one per part, read back with the volume, the mass and the number of bodies of
+// the analytic formula; the manifest lists the same values.
+TEST(ModelingReferenceParts, CommittedStepFilesMatchFormulas) {
+    const std::string dir = BENDCORE_REFERENCE_PARTS_DIR;
+    const std::string text = readFile(dir + "/manifest.json");
+    ASSERT_FALSE(text.empty()) << dir << "/manifest.json";
+    const nlohmann::json manifest = nlohmann::json::parse(text);
+    const auto parts = allParts();
+    ASSERT_EQ(manifest.size(), parts.size());
+    for (const ReferencePart& part : parts) {
+        SCOPED_TRACE(part.name);
+        const auto entry = std::find_if(manifest.begin(), manifest.end(), [&](const nlohmann::json& e) {
+            return e.at("name").get<std::string>() == part.name;
+        });
+        ASSERT_NE(entry, manifest.end());
+        const double expected = part.volume(part.base);
+        EXPECT_EQ((*entry).at("file").get<std::string>(), stepFileName(part.name));
+        EXPECT_NEAR((*entry).at("volume_mm3").get<double>(), expected, 1e-9 * expected);
+        EXPECT_NEAR((*entry).at("mass_kg").get<double>(), expected * 1e-9 * part.density, 1e-9 * expected * 1e-9 * part.density);
+        auto shape = bendcore::kernel::readStep(readFile(dir + "/" + stepFileName(part.name)));
+        ASSERT_TRUE(shape.ok()) << shape.error().message;
+        EXPECT_NEAR(volume(shape.value().occt()), expected, 1e-6 * expected);
+        EXPECT_EQ(solidCount(shape.value().occt()), part.bodies);
+        auto mp = bendcore::kernel::computeMassProperties(shape.value(), part.density);
+        ASSERT_TRUE(mp.ok()) << mp.error().message;
+        EXPECT_NEAR(mp.value().mass, expected * 1e-9 * part.density, 1e-6 * expected * 1e-9 * part.density);
+    }
 }
