@@ -7,8 +7,14 @@
  *     "format": "bendcore-drawing-file", "version": 1,
  *     "modelName": "кронштейн.bcpart.json",
  *     "drawing": "<bendcore-drawing JSON, as DrawingHandle.save() wrote it>",
- *     "model":   "<bendcore-part or bendcore-assembly JSON, as DrawingHandle.saveModel() wrote it>"
+ *     "model":   "<bendcore-part or bendcore-assembly JSON, as DrawingHandle.saveModel() wrote it>",
+ *     "specification": { "dissolvedAssemblies": ["УВ.02.000"] }      (optional, assembly drawings)
  *   }
+ *
+ * "specification" keeps the settings of the specification document of the session that the
+ * drawing document does not hold: the sub-assemblies listed by their parts (setSettings
+ * {dissolvedAssemblies}); the editor applies them again after DrawingKernel.load. It is written
+ * only when the list is not empty, so files without dissolved sub-assemblies stay as before.
  *
  * Why the model is embedded and not referenced by a relative path: a page in the browser cannot
  * open a file by path (only files the user picks), drafts, recent files and the "part → drawing"
@@ -36,6 +42,8 @@ export interface DrawingFileContent {
   model: string;
   /** File name of the model when the drawing was made (shown in the editor). */
   modelName: string;
+  /** Sub-assemblies listed by their parts in the specification (component keys); none if absent. */
+  dissolvedAssemblies?: string[];
 }
 
 export type DrawingFileError =
@@ -69,6 +77,9 @@ export function packDrawingFile(content: DrawingFileContent): string {
       modelName: content.modelName,
       drawing: content.drawing,
       model: content.model,
+      ...(content.dissolvedAssemblies && content.dissolvedAssemblies.length > 0
+        ? { specification: { dissolvedAssemblies: [...content.dissolvedAssemblies] } }
+        : {}),
     },
     null,
     1,
@@ -85,7 +96,7 @@ export function unpackDrawingFile(text: string): DrawingFileResult {
   if (f.format !== DRAWING_FILE_FORMAT) {
     return { ok: false, error: { code: 'notDrawing', detail: `format ${JSON.stringify(f.format ?? null)} is not a drawing file` } };
   }
-  const { version, drawing, model, modelName } = f.value;
+  const { version, drawing, model, modelName, specification } = f.value;
   if (version !== DRAWING_FILE_VERSION) {
     return { ok: false, error: { code: 'invalid', detail: `drawing file version ${JSON.stringify(version ?? null)} is not supported (expected ${DRAWING_FILE_VERSION})` } };
   }
@@ -100,7 +111,23 @@ export function unpackDrawingFile(text: string): DrawingFileResult {
   if ('error' in m || !MODEL_FORMATS.has(String(m.format))) {
     return { ok: false, error: { code: 'invalid', detail: 'the field "model" is not a bendcore-part or bendcore-assembly document' } };
   }
-  return { ok: true, content: { drawing, model, modelName: typeof modelName === 'string' ? modelName : '' }, migrated: false };
+  const dissolved = dissolvedOf(specification);
+  if (dissolved === null) {
+    return { ok: false, error: { code: 'invalid', detail: 'the field "specification.dissolvedAssemblies" must be a list of texts' } };
+  }
+  const content: DrawingFileContent = { drawing, model, modelName: typeof modelName === 'string' ? modelName : '' };
+  if (dissolved.length > 0) content.dissolvedAssemblies = dissolved;
+  return { ok: true, content, migrated: false };
+}
+
+/** Dissolved sub-assemblies of the optional "specification" field; null when malformed. */
+function dissolvedOf(specification: unknown): string[] | null {
+  if (specification === undefined) return [];
+  if (typeof specification !== 'object' || specification === null || Array.isArray(specification)) return null;
+  const list = (specification as { dissolvedAssemblies?: unknown }).dissolvedAssemblies;
+  if (list === undefined) return [];
+  if (!Array.isArray(list) || !list.every((k) => typeof k === 'string')) return null;
+  return list as string[];
 }
 
 export interface NamedText {
