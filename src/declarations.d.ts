@@ -245,7 +245,8 @@ declare module 'three' {
   export class Box3 {
     min: Vector3;
     max: Vector3;
-    constructor();
+    constructor(min?: Vector3, max?: Vector3);
+    copy(box: Box3): this;
     setFromObject(object: Object3D): this;
     getCenter(target: Vector3): Vector3;
     getSize(target: Vector3): Vector3;

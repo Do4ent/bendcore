@@ -21,6 +21,7 @@ import { packEdgePolylines } from '../kernel/edgeBuffers';
 import type { EdgeBuffers } from '../kernel/edgeBuffers';
 import { closestPointOnSegmentToRay, edgeCandidates } from '../kernel/edgePick';
 import { rayPlane } from './assemblyMath';
+import { shouldReframeInstances } from '../kernel/autoFrame';
 import type { V3 } from './assemblyMath';
 
 export type AssemblyPickMode = 'face' | 'edge' | 'drag' | 'none';
@@ -100,6 +101,8 @@ interface SceneState {
   edgeBuffers: Map<string, EdgeBuffers>;
   geometries: Map<string, THREE.BufferGeometry>;
   framed: boolean;
+  /** times the view was framed automatically (data-frames, for end-to-end tests) */
+  frames: number;
   render: () => void;
 }
 
@@ -144,6 +147,8 @@ function frame(state: SceneState): boolean {
   const box = new THREE.Box3();
   for (const inst of state.instances.values()) box.expandByObject(inst.faces);
   if (box.isEmpty()) return false;
+  state.frames += 1;
+  state.renderer.domElement.parentElement?.setAttribute('data-frames', String(state.frames));
   const sphere = box.getBoundingSphere(new THREE.Sphere());
   const { camera, controls } = state;
   const radius = Math.max(sphere.radius, 1e-3);
@@ -215,6 +220,7 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       edgeBuffers: new Map(),
       geometries: new Map(),
       framed: false,
+      frames: 0,
       render,
     };
     stateRef.current = state;
@@ -475,6 +481,7 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       }
     }
     const wanted = new Set<string>();
+    const added: Instance[] = [];
     for (const part of parts) {
       if (!part.mesh || !meshes[part.mesh]) continue;
       const key = pathKey(part.path);
@@ -504,6 +511,7 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
         state.root.add(group);
         inst = { key, path: part.path, meshKey: part.mesh, group, faces, baseMaterial, highlight };
         state.instances.set(key, inst);
+        added.push(inst);
       }
       setMatrix(inst.group, part.world.matrix);
       const c = part.color;
@@ -523,6 +531,14 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       }
     }
     if (!state.framed && state.instances.size > 0) state.framed = frame(state);
+    else if (state.framed && added.length > 0) {
+      // An operation added instances (a pattern, fasteners) the camera does not show: show all.
+      const boxes = added.map((inst) => {
+        inst.group.updateMatrixWorld(true);
+        return new THREE.Box3().setFromObject(inst.faces);
+      });
+      if (shouldReframeInstances(boxes, state.camera)) frame(state);
+    }
     state.render();
   }, [meshes, parts]);
 

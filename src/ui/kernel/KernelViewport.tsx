@@ -19,6 +19,7 @@ import type { KernelMesh } from '../../wasm/bendcore_kernel_api.mjs';
 import { packEdgePolylines } from './edgeBuffers';
 import type { EdgeBuffers } from './edgeBuffers';
 import { closestPointOnSegmentToRay, edgeCandidates } from './edgePick';
+import { shouldReframePart } from './autoFrame';
 
 export interface FacePick {
   faceIndex: number;
@@ -60,6 +61,11 @@ export interface KernelViewportProps {
    */
   autoFrame?: 'always' | 'first';
   frameKey?: number;
+  /**
+   * Number of bodies of `mesh` (autoFrame 'first'): when it grows and the model grows beyond the
+   * view, the view is framed again (src/ui/kernel/autoFrame.ts).
+   */
+  bodyCount?: number | null;
 }
 
 const FACE_COLOR = 0xb8c4d6;
@@ -83,6 +89,11 @@ interface SceneState {
   highlight: THREE.Group;
   overlay: THREE.Group;
   framed: boolean;
+  /** bodies and bounding box of the mesh shown (for the re-framing of new bodies) */
+  bodies: number | null;
+  box: THREE.Box3;
+  /** times the view was framed automatically (data-frames, for end-to-end tests) */
+  frames: number;
   render: () => void;
 }
 
@@ -128,6 +139,8 @@ function buildEdges(buffers: EdgeBuffers, color = EDGE_COLOR): THREE.LineSegment
 /** Isometric view (CAD convention, Z up) framing the bounding sphere. */
 function frame(state: SceneState, sphere: THREE.Sphere): void {
   const { camera, controls } = state;
+  state.frames += 1;
+  state.renderer.domElement.parentElement?.setAttribute('data-frames', String(state.frames));
   const radius = Math.max(sphere.radius, 1e-3);
   const distance = radius / Math.sin((camera.fov * Math.PI) / 360) * 1.15;
   const dir = new THREE.Vector3(1, -1.2, 0.9).normalize();
@@ -168,6 +181,7 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
   overlay,
   autoFrame = 'always',
   frameKey,
+  bodyCount = null,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
@@ -219,6 +233,9 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       highlight,
       overlay: overlayGroup,
       framed: false,
+      bodies: null,
+      box: new THREE.Box3(),
+      frames: 0,
       render,
     };
     stateRef.current = state;
@@ -349,10 +366,21 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       state.edgeBuffers = packEdgePolylines(mesh.edges);
       state.model.add(faces);
       state.model.add(buildEdges(state.edgeBuffers));
+      faces.geometry.computeBoundingBox();
+      const box = new THREE.Box3();
+      if (faces.geometry.boundingBox) box.copy(faces.geometry.boundingBox);
       if (faces.geometry.boundingSphere && (autoFrame === 'always' || !state.framed)) {
         frame(state, faces.geometry.boundingSphere);
         state.framed = true;
+      } else if (
+        faces.geometry.boundingSphere &&
+        shouldReframePart({ bodiesBefore: state.bodies, bodies: bodyCount, boxBefore: state.box, box, camera: state.camera })
+      ) {
+        // An operation added a body the camera does not show (a pattern, a copy): show all.
+        frame(state, faces.geometry.boundingSphere);
       }
+      state.box = box;
+      state.bodies = bodyCount;
     }
     state.render();
     // autoFrame is a mount-time choice.

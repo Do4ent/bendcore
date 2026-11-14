@@ -137,6 +137,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const [catalog, setCatalog] = useState<FeatureTypeSpec[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot>({ features: [], doc: null, variables: [], properties: null });
   const [mesh, setMesh] = useState<KernelMesh | null>(null);
+  const [shownBodies, setShownBodies] = useState<number | null>(null);
   const [overlay, setOverlay] = useState<KernelMesh | null>(null);
   const [panel, setPanelState] = useState<PanelState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -197,8 +198,12 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
       const sketchId = p?.type === 'Sketch' ? p.featureId : selected;
       const sketch = features.find((f) => f.id === sketchId && f.type === 'Sketch');
       const sketchMesh = sketch?.sketchResult?.hasFaces ? await doc.tessellate(`sketch:${sketch.id}`, MESH_PARAMS) : null;
+      // Bodies of the shape shown (the viewport frames new bodies outside the view).
+      const target = shownTarget(p);
+      const bodies = target === 'final' ? properties.counts.solids : (await doc.properties(target)).counts.solids;
       if (docRef.current !== doc) return;
       setSnapshot({ features, doc: state, variables, properties });
+      setShownBodies(bodies);
       setMesh(shown);
       setOverlay(sketchMesh);
     } catch (e) {
@@ -918,6 +923,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
             overlay={overlay}
             autoFrame="first"
             frameKey={frameKey}
+            bodyCount={shownBodies}
             onReady={(h) => {
               viewRef.current = h;
             }}
