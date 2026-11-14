@@ -12,6 +12,7 @@ add_library(bendcore_drawing_views STATIC
   src/drawing_v2/views/hlr.cpp
   src/drawing_v2/views/overlap.cpp
   src/drawing_v2/views/sections.cpp
+  src/drawing_v2/views/section_cuts.cpp
   src/drawing_v2/views/center_lines.cpp
   src/drawing_v2/views/sheet_layout.cpp
   src/drawing_v2/views/render.cpp
@@ -31,6 +32,7 @@ if(GTest_FOUND)
     tests/drawing_v2/test_drawing_views_frames.cpp
     tests/drawing_v2/test_drawing_views_hlr.cpp
     tests/drawing_v2/test_drawing_views_sections.cpp
+    tests/drawing_v2/test_drawing_views_local_sections.cpp
     tests/drawing_v2/test_drawing_views_sheet.cpp
     tests/drawing_v2/test_drawing_views_export.cpp
   )

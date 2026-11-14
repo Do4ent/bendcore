@@ -238,6 +238,7 @@ Status runExact(const TopoDS_Shape& shape, const gp_Ax2& ax, const ViewFrame& fr
                 cls = outline[ie] ? EdgeClass::Silhouette : EdgeClass::Smooth;
             }
             if (old.ShapeType() == TopAbs_EDGE) {
+                if (mapper.skip && mapper.skip(old)) continue;
                 edgeIdx = mapper.edge(old);
                 if (mapper.edgeClass)
                     if (auto o = mapper.edgeClass(TopoDS::Edge(old))) cls = *o;
@@ -291,6 +292,7 @@ Status runPoly(const TopoDS_Shape& shape, const gp_Ax2& ax, const HlrOptions& op
             faceIdx = mapper.face(S);
         } else {
             if (regn && !outl) continue;
+            if (mapper.skip && S.ShapeType() == TopAbs_EDGE && mapper.skip(S)) continue;
             if (reg1) cls = outl ? EdgeClass::Silhouette : EdgeClass::Smooth;
             edgeIdx = mapper.edge(S);
             if (mapper.edgeClass && S.ShapeType() == TopAbs_EDGE)

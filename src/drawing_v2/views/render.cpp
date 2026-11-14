@@ -4,6 +4,7 @@
 #include <bendcore/drawing_v2/view_sheet.hpp>
 
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <numbers>
 
@@ -91,6 +92,67 @@ double gostHatchSpacing(double sheetAreaMm2) {
     return std::clamp(s, 1.0, 10.0);
 }
 
+namespace {
+
+double pointSegmentDistance(Point2 p, Point2 a, Point2 b) {
+    const double dx = b.x - a.x, dy = b.y - a.y;
+    const double l2 = dx * dx + dy * dy;
+    double t = l2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2 : 0.0;
+    t = std::clamp(t, 0.0, 1.0);
+    return std::hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+// Контуры двух областей касаются: вершина одной лежит на звене другой (допуск tol).
+bool regionsTouch(const std::vector<std::vector<Point2>>& A, const std::vector<std::vector<Point2>>& B, double tol) {
+    auto touches = [tol](const std::vector<std::vector<Point2>>& P, const std::vector<std::vector<Point2>>& Q) {
+        for (const auto& lp : P)
+            for (const Point2& p : lp)
+                for (const auto& lq : Q)
+                    for (std::size_t i = 0; i < lq.size(); ++i)
+                        if (pointSegmentDistance(p, lq[i], lq[(i + 1) % lq.size()]) <= tol) return true;
+        return false;
+    };
+    return touches(A, B) || touches(B, A);
+}
+
+HatchPattern paletteEntry(std::size_t k) {
+    static constexpr double factors[] = {1.0, 0.6, 1.6, 0.4, 2.2};
+    return HatchPattern{k % 2 == 0 ? 45.0 : 135.0, factors[(k / 2) % 5]};
+}
+
+}  // namespace
+
+std::vector<HatchPattern> hatchPatterns(const SectionView& section, double tol) {
+    const std::size_t n = section.regions.size();
+    std::vector<int> owner(n, 0);
+    for (std::size_t i = 0; i < n && i < section.regionOwner.size(); ++i) owner[i] = section.regionOwner[i];
+    std::vector<int> owners(owner.begin(), owner.end());
+    std::sort(owners.begin(), owners.end());
+    owners.erase(std::unique(owners.begin(), owners.end()), owners.end());
+    std::map<int, std::size_t> color;
+    for (int o : owners) {
+        std::vector<bool> used;
+        for (const auto& [other, c] : color) {
+            bool adjacent = false;
+            for (std::size_t i = 0; i < n && !adjacent; ++i) {
+                if (owner[i] != o) continue;
+                for (std::size_t j = 0; j < n && !adjacent; ++j)
+                    if (owner[j] == other && regionsTouch(section.regions[i], section.regions[j], tol)) adjacent = true;
+            }
+            if (adjacent) {
+                if (used.size() <= c) used.resize(c + 1, false);
+                used[c] = true;
+            }
+        }
+        std::size_t k = 0;
+        while (k < used.size() && used[k]) ++k;
+        color[o] = k;
+    }
+    std::vector<HatchPattern> out(n);
+    for (std::size_t i = 0; i < n; ++i) out[i] = paletteEntry(color[owner[i]]);
+    return out;
+}
+
 Result<double> renderSectionHatch(Drawing& drawing, const SheetView& view,
                                   const SectionView& section, double spacing,
                                   const RenderOptions& o) {
@@ -104,11 +166,14 @@ Result<double> renderSectionHatch(Drawing& drawing, const SheetView& view,
             for (const auto& loop : region) area += polygonArea(loop);
         spacing = gostHatchSpacing(std::abs(area) * view.scale * view.scale);
     }
-    for (const auto& region : section.regions) {
+    const std::vector<HatchPattern> patterns = hatchPatterns(section);
+    for (std::size_t ri = 0; ri < section.regions.size(); ++ri) {
         Hatch h;
-        h.angleDeg = 45.0;  // металлы: 45° к линиям рамки (ГОСТ 2.306, п. 3)
-        h.spacing = spacing;
-        for (const auto& loop : region) {
+        // Металлы: 45° к линиям рамки (ГОСТ 2.306, п. 3); смежные детали — встречный наклон
+        // или другой шаг (ГОСТ 2.306, п. 4).
+        h.angleDeg = patterns[ri].angleDeg;
+        h.spacing = std::clamp(spacing * patterns[ri].spacingFactor, 1.0, 10.0);
+        for (const auto& loop : section.regions[ri]) {
             std::vector<Point2> l;
             for (const Point2& p : loop) l.push_back(view.toSheet(p));
             h.loops.push_back(std::move(l));
@@ -117,6 +182,68 @@ Result<double> renderSectionHatch(Drawing& drawing, const SheetView& view,
         if (!st) return st.error();
     }
     return spacing;
+}
+
+Result<Polyline> makeWavyPath(const std::vector<Point2>& path, double amplitude, double wavelength) {
+    using R = Result<Polyline>;
+    if (path.size() < 2) return R::failure(ErrorCode::InvalidInput, "wavy line: the path needs at least two points");
+    if (!(amplitude > 0) || !(wavelength > 0) || !std::isfinite(amplitude) || !std::isfinite(wavelength))
+        return R::failure(ErrorCode::InvalidInput, "wavy line: amplitude and wavelength must be positive");
+    std::vector<Point2> p;
+    for (const Point2& q : path) {
+        if (!std::isfinite(q.x) || !std::isfinite(q.y)) return R::failure(ErrorCode::InvalidInput, "wavy line: point is not finite");
+        if (!p.empty() && std::hypot(q.x - p.back().x, q.y - p.back().y) < 1e-9) continue;
+        p.push_back(q);
+    }
+    if (p.size() < 2) return R::failure(ErrorCode::InvalidInput, "wavy line: the path has zero length");
+    std::vector<double> cum{0.0};
+    for (std::size_t i = 1; i < p.size(); ++i) cum.push_back(cum.back() + std::hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y));
+    const double S = cum.back();
+    const bool closed = p.size() > 2 && std::hypot(p.front().x - p.back().x, p.front().y - p.back().y) < 1e-6 * std::max(1.0, S);
+    int halves = std::max(1, int(std::lround(2.0 * S / wavelength)));
+    if (closed) halves = std::max(2, 2 * int(std::lround(S / wavelength)));
+    const double step = std::min(wavelength, 2.0 * S / halves) / 32.0;
+    auto tangent = [&](std::size_t i) {  // направление звена i → i+1
+        const double dx = p[i + 1].x - p[i].x, dy = p[i + 1].y - p[i].y, l = std::hypot(dx, dy);
+        return Point2{dx / l, dy / l};
+    };
+    Polyline out;
+    for (std::size_t i = 0; i + 1 < p.size(); ++i) {
+        const Point2 t = tangent(i);
+        const double len = cum[i + 1] - cum[i];
+        const int n = std::max(1, int(std::ceil(len / step)));
+        for (int k = 0; k <= n; ++k) {
+            if (k == 0 && i > 0) continue;  // вершина — уже добавлена концом предыдущего звена
+            const double u = double(k) / n;
+            const double s = cum[i] + u * len;
+            Point2 nrm{-t.y, t.x};
+            // В вершине — нормаль биссектрисы соседних звеньев.
+            if (k == n && i + 2 < p.size()) {
+                const Point2 t2 = tangent(i + 1);
+                const double bx = -(t.y + t2.y), by = t.x + t2.x, bl = std::hypot(bx, by);
+                if (bl > 1e-9) nrm = {bx / bl, by / bl};
+            }
+            const double off = amplitude * std::sin(std::numbers::pi * halves * s / S);
+            out.points.push_back({p[i].x + u * (p[i + 1].x - p[i].x) + off * nrm.x,
+                                  p[i].y + u * (p[i + 1].y - p[i].y) + off * nrm.y});
+        }
+    }
+    return out;
+}
+
+Status renderBreakLines(Drawing& drawing, const SheetView& view, const SectionView& section,
+                        const RenderOptions& o, double amplitude, double wavelength) {
+    Status st = ensureViewLayers(drawing, o);
+    if (!st) return st;
+    for (const auto& line : section.breakLines) {
+        std::vector<Point2> sheet;
+        for (const Point2& q : line) sheet.push_back(view.toSheet(q));
+        auto wavy = makeWavyPath(sheet, amplitude, wavelength);
+        if (!wavy) return wavy.error();
+        st = addEntity(drawing, std::move(wavy).value(), o.thinLayer, LineType::SolidWavy);
+        if (!st) return st;
+    }
+    return okStatus();
 }
 
 namespace {
