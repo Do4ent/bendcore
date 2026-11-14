@@ -70,10 +70,14 @@ Result<ModelSnapshot> snapshotAssembly(std::shared_ptr<const assembly_v2::Assemb
     BRep_Builder builder;
     TopoDS_Compound compound;
     builder.MakeCompound(compound);
+    std::vector<assembly_v2::DefinitionId> childOwner;
     for (const assembly_v2::PlacedOccurrence& p : placed.value()) {
-        if (!p.shape.IsNull()) builder.Add(compound, p.shape);
+        if (p.shape.IsNull()) continue;
+        builder.Add(compound, p.shape);
+        childOwner.push_back(p.definition);
     }
     ModelSnapshot s;
+    s.childOwner = std::move(childOwner);
     s.kind = ModelKind::Assembly;
     s.shape = kernel::Shape(compound);
     s.assembly = document;

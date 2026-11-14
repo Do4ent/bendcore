@@ -77,11 +77,36 @@ Status renderView(Drawing& drawing, const SheetView& view, const RenderOptions& 
 // зависимости от площади): round(√A / 10) до 0,5 мм, в пределах 1…10.
 double gostHatchSpacing(double sheetAreaMm2);
 
+// Штриховка одной детали в разрезе: наклон и множитель шага.
+struct HatchPattern {
+    double angleDeg = 45.0;
+    double spacingFactor = 1.0;
+};
+
+// Штриховки деталей разреза (по SectionView::regionOwner): у всех фигур одной детали — одна
+// штриховка (ГОСТ 2.306-68, п. 4); у смежных деталей (контуры касаются, допуск tol мм модели) —
+// разная: наклон вправо и влево (45° и 135°), затем — другой шаг при том же наклоне (×0,6; ×1,6;
+// ×0,4; ×2,2). Раскраска — жадная по графу смежности в порядке номеров деталей. Возвращает
+// узор для каждой области.
+std::vector<HatchPattern> hatchPatterns(const SectionView& section, double tol = 1e-3);
+
 // Штриховка фигуры сечения: металл — 45° к рамке (ГОСТ 2.306, табл. 1, п. 3), сплошная
-// тонкая. spacing ≤ 0 — по gostHatchSpacing суммарной площади. Возвращает шаг.
+// тонкая; смежные детали разреза сборки — по hatchPatterns. spacing ≤ 0 — по gostHatchSpacing
+// суммарной площади (шаг с множителем ограничивается 1…10 мм). Возвращает базовый шаг.
 Result<double> renderSectionHatch(Drawing& drawing, const SheetView& view,
                                   const SectionView& section, double spacing = 0.0,
                                   const RenderOptions& options = {});
+
+// Сплошная волнистая линия вдоль ломаной path (мм листа): синусоида с амплитудой amplitude по
+// нормали к ломаной и длиной волны около wavelength (число полуволн округляется, чтобы концы
+// лежали на ломаной; замкнутая ломаная — целое число волн). ГОСТ 2.303, табл. 1, п. 3.
+Result<Polyline> makeWavyPath(const std::vector<Point2>& path, double amplitude = 1.0, double wavelength = 8.0);
+
+// Граница местного разреза (SectionView::breakLines) — сплошная волнистая тонкая (ГОСТ 2.303,
+// табл. 1, п. 3; ГОСТ 2.305, разд. 6), слой THIN.
+Status renderBreakLines(Drawing& drawing, const SheetView& view, const SectionView& section,
+                        const RenderOptions& options = {}, double amplitude = 1.0,
+                        double wavelength = 8.0);
 
 // --- Осевые линии и центровые метки ---
 struct CenterMark {
@@ -134,6 +159,17 @@ Result<SectionMarkGeometry> renderCuttingPlaneMark(Drawing& drawing, const Sheet
                                                    const std::string& letter,
                                                    double strokeLen = 12.0,
                                                    const RenderOptions& options = {});
+
+// Обозначение ступенчатого разреза (ГОСТ 2.305, разд. 6: штрихи разомкнутой линии у концов и в
+// местах перегибов следа): planes — параллельные плоскости, все перпендикулярны плоскости вида
+// parent; на parent след плоскости i действует между серединами соседних плоскостей вдоль следа.
+// У концов — штрихи и стрелки как у renderCuttingPlaneMark (по крайним плоскостям); в каждом
+// перегибе — штрих strokeLen вдоль следа до угла с каждой стороны и штрих по перемычке между
+// следами (длиной перемычки, если она 8…20 мм; длиннее — по штриху от каждого угла; короче —
+// 8 мм по середине перемычки). Возвращает число штрихов.
+Result<int> renderSteppedPlaneMark(Drawing& drawing, const SheetView& parent,
+                                   const std::vector<CuttingPlane>& planes, const std::string& letter,
+                                   double strokeLen = 12.0, const RenderOptions& options = {});
 
 // Обозначение выносного элемента на виде parent: окружность сплошной тонкой линией,
 // линия-выноска с полкой и буквой (ГОСТ 2.305, разд. 8).

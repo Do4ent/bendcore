@@ -367,6 +367,21 @@ Result<std::string> DrawingDocument::toJson() const {
                     {"autoBalloons", v.autoBalloons},
                     {"method", enumName(v.method, kHlr)},
                     {"autoMethod", v.autoMethod}};
+            // Необязательные поля (версия формата не меняется: прежние файлы их не содержат).
+            if (!v.stepPoints.empty()) {
+                json sp = json::array();
+                for (const Vec3& p : v.stepPoints) sp.push_back(vec(p));
+                jv["stepPoints"] = std::move(sp);
+            }
+            if (!v.localSections.empty()) {
+                json ls = json::array();
+                for (const LocalSection& c : v.localSections) {
+                    json pts = json::array();
+                    for (const Point2& p : c.boundary.points) pts.push_back(pt(p));
+                    ls.push_back({{"points", std::move(pts)}, {"spline", c.boundary.spline}, {"depth", c.depth}});
+                }
+                jv["localSections"] = std::move(ls);
+            }
             vs.push_back(std::move(jv));
         }
         js["views"] = std::move(vs);
@@ -507,6 +522,22 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                 v.autoBalloons = flag(jv, "autoBalloons", false);
                 if (jv.contains("method")) v.method = enumValue(jv.at("method"), kHlr, "HLR method");
                 v.autoMethod = flag(jv, "autoMethod", false);
+                if (jv.contains("stepPoints")) {
+                    if (!jv.at("stepPoints").is_array()) fail("stepPoints must be an array");
+                    for (const json& p : jv.at("stepPoints")) v.stepPoints.push_back(vecFrom(p));
+                }
+                if (jv.contains("localSections")) {
+                    if (!jv.at("localSections").is_array()) fail("localSections must be an array");
+                    for (const json& jc : jv.at("localSections")) {
+                        LocalSection c;
+                        const json& pts = field(jc, "points");
+                        if (!pts.is_array()) fail("local section points must be an array");
+                        for (const json& p : pts) c.boundary.points.push_back(ptFrom(p));
+                        c.boundary.spline = flag(jc, "spline", false);
+                        c.depth = num(jc, "depth", 0);
+                        v.localSections.push_back(std::move(c));
+                    }
+                }
                 s.views.push_back(std::move(v));
             }
             if (js.contains("dimensions")) {

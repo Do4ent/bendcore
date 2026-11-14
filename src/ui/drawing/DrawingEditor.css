@@ -94,3 +94,7 @@
 .dr-spec-section td { text-align: center; font-weight: 600; text-decoration: underline; }
 .dr-status { padding: 4px 10px; background: #fff; border-top: 1px solid var(--dr-border); }
 .dr-status.dr-error { color: var(--dr-error); }
+.dr-handle { fill: rgba(255, 140, 26, 0.25); stroke: var(--dr-accent); stroke-width: 0.3; cursor: grab; pointer-events: all; }
+.dr-handle-ghost { fill: rgba(255, 140, 26, 0.6); pointer-events: none; }
+.dr-outline path { fill: rgba(255, 140, 26, 0.12); stroke: var(--dr-accent); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.dr-outline circle { fill: var(--dr-accent); }

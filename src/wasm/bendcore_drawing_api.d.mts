@@ -91,6 +91,35 @@ export interface ViewInfo {
   markView?: string;
   detailCenter?: Point;
   detailRadius?: number;
+  /** Stepped section: further plane points (ГОСТ 2.305). */
+  stepPoints?: [number, number, number][];
+  /** Local sections of the view: boundary in view coordinates (model mm), depth from the front. */
+  localSections: LocalSectionInfo[];
+}
+export interface LocalSectionInfo {
+  points: Point[];
+  spline: boolean;
+  depth: number;
+}
+export interface ThreadNoteInfo {
+  id: string;
+  view: string;
+  toleranceField: string;
+  offset: number;
+  leaderAngle: number;
+  state: 'ok' | 'dangling' | null;
+  /** "M10×1,25LH-6H" */
+  text?: string;
+  reason?: string;
+  labelPosition?: Point;
+}
+export interface HistoryInfo {
+  canUndo: boolean;
+  canRedo: boolean;
+  undoLabel: string;
+  redoLabel: string;
+  undoDepth: number;
+  redoDepth: number;
 }
 export interface DimensionInfo {
   id: string;
@@ -145,6 +174,7 @@ export interface SheetInfo {
     target?: Point;
     shelf?: Point;
   }[];
+  threadNotes: ThreadNoteInfo[];
   name?: string;
   width?: number;
   height?: number;
@@ -156,6 +186,7 @@ export interface DrawingDescription {
   model: { kind: 'part' | 'assembly'; path: string; resultHash: string; revision: number; properties: ModelProperties };
   projection: 'firstAngle' | 'thirdAngle';
   sheets: SheetInfo[];
+  history: HistoryInfo;
 }
 
 export interface DimensionReport {
@@ -243,6 +274,7 @@ export interface ViewSpec {
   markView?: string;
   detailCenter?: Point;
   detailRadius?: number;
+  stepPoints?: [number, number, number][];
   scale?: ScaleRatio | null;
   position?: Point | null;
   hidden?: boolean;
@@ -304,6 +336,14 @@ export class DrawingHandle {
   addBalloon(sheet: string, view: string, pick: number, spec?: { id?: string; at?: Point | null }): string;
   setBalloon(sheet: string, id: string, changes: { at: Point | null }): EditResult;
   removeAnnotation(sheet: string, id: string): EditResult;
+  addLocalSection(sheet: string, view: string, spec: { points: Point[]; spline?: boolean; depth: number }): EditResult & { view: string; index: number };
+  removeLocalSection(sheet: string, view: string, index: number): EditResult;
+  moveDimension(sheet: string, id: string, x: number, y: number): EditResult & { offset: number; textShift: number; leaderAngle: number };
+  addDimensionGroup(sheet: string, view: string, picks: number[], options?: { mode?: 'chain' | 'baseline'; direction?: 'horizontal' | 'vertical'; offset?: number; spacing?: number }): string[];
+  addThreadNote(sheet: string, view: string, spec: { at: Point; toleranceField?: string; offset?: number; leaderAngle?: number; textShift?: number; id?: string }): EditResult & { id: string; thread: string };
+  setThreadNote(sheet: string, id: string, changes: { toleranceField?: string; offset?: number; leaderAngle?: number; textShift?: number }): EditResult;
+  undo(): EditResult & { label: string; history: HistoryInfo };
+  redo(): EditResult & { label: string; history: HistoryInfo };
   sheetPicture(sheet: string): SheetPicture;
   specification(): SpecificationTable;
   exportPdf(options?: { specification?: boolean }): Uint8Array;

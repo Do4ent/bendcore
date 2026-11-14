@@ -109,7 +109,19 @@ export function viewAt(views: PictureView[], p: Point): PictureView | null {
 
 // ---------------------------------------------------------------- tools
 
-export type Tool = 'select' | 'dimension' | 'roughness' | 'tolerance' | 'datum' | 'balloon' | 'detail' | 'section';
+export type Tool =
+  | 'select'
+  | 'dimension'
+  | 'chain'
+  | 'baseline'
+  | 'roughness'
+  | 'tolerance'
+  | 'datum'
+  | 'balloon'
+  | 'thread'
+  | 'section'
+  | 'localSection'
+  | 'detail';
 
 export interface EdgePick {
   view: string;
@@ -131,7 +143,8 @@ export const emptyPicks: PickState = { picks: [], ready: false, message: null };
  * Next pick state of an edge tool after a click on an edge. Dimension: up to two edges of one
  * view, ready at two (a single circle or arc is sent with the "Размер" button / Enter). Symbols:
  * one straight edge. Position (balloon): one edge of any kind — the leader point; the shelf is the
- * next click on the sheet (balloonShelf). A second click on a picked edge removes it.
+ * next click on the sheet (balloonShelf). Chain and baseline dimensions: any number of edges of one
+ * view, sent with the button / Enter (canDimensionGroup). A second click on a picked edge removes it.
  */
 export function addPick(state: PickState, tool: Tool, pick: EdgePick): PickState {
   const same = state.picks.findIndex((p) => p.view === pick.view && p.index === pick.index);
@@ -142,6 +155,12 @@ export function addPick(state: PickState, tool: Tool, pick: EdgePick): PickState
     }
     const picks = [...state.picks, pick].slice(-2);
     return { picks, ready: picks.length === 2, message: null };
+  }
+  if (tool === 'chain' || tool === 'baseline') {
+    if (state.picks.length > 0 && state.picks[0].view !== pick.view) {
+      return { picks: [pick], ready: false, message: 'drawing.pick.oneView' };
+    }
+    return { picks: [...state.picks, pick], ready: false, message: null };
   }
   if (tool === 'roughness' || tool === 'tolerance' || tool === 'datum') {
     if (pick.type === 'circle' || pick.type === 'arc') {
@@ -160,6 +179,38 @@ export function addPick(state: PickState, tool: Tool, pick: EdgePick): PickState
 export function balloonShelf(state: PickState, p: Point): { view: string; index: number; at: Point } | null {
   if (state.picks.length !== 1) return null;
   return { view: state.picks[0].view, index: state.picks[0].index, at: [p[0], p[1]] };
+}
+
+/** Chain/baseline dimensions need at least two picked edges of one view. */
+export function canDimensionGroup(state: PickState): boolean {
+  return state.picks.length >= 2 && state.picks.every((p) => p.view === state.picks[0].view);
+}
+
+/**
+ * Outline of a local section being drawn (sheet points): a click adds a point; a click on the
+ * first point (within `closeTol` mm) or Enter closes the outline when it has three points or more.
+ * Points closer than 0.5 mm to the previous one are ignored (double clicks).
+ */
+export interface Outline {
+  points: Point[];
+  closed: boolean;
+}
+export const emptyOutline: Outline = { points: [], closed: false };
+
+export function addOutlinePoint(o: Outline, p: Point, closeTol = 2): Outline {
+  if (o.closed) return { points: [p], closed: false };
+  const last = o.points[o.points.length - 1];
+  if (last && Math.hypot(p[0] - last[0], p[1] - last[1]) < 0.5) return o;
+  const first = o.points[0];
+  if (first && o.points.length >= 3 && Math.hypot(p[0] - first[0], p[1] - first[1]) <= closeTol) return { points: o.points, closed: true };
+  return { points: [...o.points, p], closed: false };
+}
+
+/** SVG path of an outline in sheet coordinates (closed with Z). */
+export function outlinePath(o: Outline): string {
+  if (o.points.length === 0) return '';
+  const [first, ...rest] = o.points;
+  return `M${fmt(first[0])} ${fmt(first[1])}` + rest.map((q) => `L${fmt(q[0])} ${fmt(q[1])}`).join('') + (o.closed ? 'Z' : '');
 }
 
 /** A single picked circle or arc can be dimensioned on request (diameter / radius). */

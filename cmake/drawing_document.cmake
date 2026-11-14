@@ -14,6 +14,8 @@ add_library(bendcore_drawing_document STATIC
   src/drawing_v2/document/drawing_document.cpp
   src/drawing_v2/document/serialization.cpp
   src/drawing_v2/document/specification_document.cpp
+  src/drawing_v2/document/section_rules.cpp
+  src/drawing_v2/document/history.cpp
 )
 target_include_directories(bendcore_drawing_document PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # nlohmann/json (MIT) — только для формата файла (serialization.cpp).
@@ -36,6 +38,7 @@ add_executable(test_drawing_document
   tests/drawing_v2/test_drawing_document_parts.cpp
   tests/drawing_v2/test_drawing_document_assembly.cpp
   tests/drawing_v2/test_drawing_document_io.cpp
+  tests/drawing_v2/test_drawing_document_sections.cpp
   tests/drawing_v2/test_drawing_threads.cpp
 )
 target_include_directories(test_drawing_document PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawing_v2

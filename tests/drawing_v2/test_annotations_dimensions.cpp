@@ -346,3 +346,39 @@ TEST(AnnotationsDimensions, ToleranceAndOverride) {
     EXPECT_TRUE(r.overridden);
     EXPECT_NEAR(r.value, 60, 1e-9);  // значение остаётся вычисленным
 }
+
+TEST(AnnotationsDimensions, MoveDimensionToAPoint) {
+    // Перенос мышью: число размера встаёт в заданную точку листа; размерная линия горизонтального
+    // размера — на высоте точки, вертикального — на её абсциссе; радиус — под углом на точку.
+    BlockPart part;
+    const ModelBinding m = part.binding();
+    const SheetView sv = sheetView(m, topFrame());
+    const BlockDims d = makeDims(m, 60, 40, 20, 30, 20, 5);
+    auto L0 = evaluateDimension(d.length, m, sv).value();
+    const Point2 target{L0.geometry.labels[0].position.x + 17, L0.geometry.labels[0].position.y - 6};
+    auto moved = moveDimensionTo(d.length, m, sv, target);
+    ASSERT_TRUE(moved.ok()) << moved.error().message;
+    EXPECT_NEAR(moved.value().offset, d.length.offset - 6, 1e-9);  // −10 → −16: ниже контура
+    auto L1 = evaluateDimension(moved.value(), m, sv).value();
+    EXPECT_NEAR(L1.geometry.labels[0].position.x, target.x, 1e-6);
+    EXPECT_NEAR(L1.geometry.labels[0].position.y, target.y, 1e-6);
+    EXPECT_NEAR(L1.geometry.dimensionLines[0].a.y, L0.geometry.dimensionLines[0].a.y - 6, 1e-9);
+    // Через изображение на другую сторону не переходит: offset остаётся отрицательным (−2).
+    auto across = moveDimensionTo(d.length, m, sv, {target.x, target.y + 200});
+    ASSERT_TRUE(across.ok());
+    EXPECT_DOUBLE_EQ(across.value().offset, -2.0);
+
+    auto W0 = evaluateDimension(d.width, m, sv).value();
+    const Point2 wt{W0.geometry.labels[0].position.x - 8, W0.geometry.labels[0].position.y + 5};
+    auto wm = moveDimensionTo(d.width, m, sv, wt);
+    ASSERT_TRUE(wm.ok());
+    auto W1 = evaluateDimension(wm.value(), m, sv).value();
+    EXPECT_NEAR(W1.geometry.labels[0].position.x, wt.x, 1e-6);
+    EXPECT_NEAR(W1.geometry.labels[0].position.y, wt.y, 1e-6);
+
+    // Радиус: центр отверстия на листе (100 + 2·30, 100 + 2·20) → направление на точку 30°.
+    const Point2 c{160, 140};
+    auto rm = moveDimensionTo(d.radius, m, sv, {c.x + 20 * std::cos(std::numbers::pi / 6), c.y + 20 * std::sin(std::numbers::pi / 6)});
+    ASSERT_TRUE(rm.ok());
+    EXPECT_NEAR(rm.value().leaderAngleDeg, 30.0, 1e-9);
+}

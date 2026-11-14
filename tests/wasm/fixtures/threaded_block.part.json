@@ -1,0 +1,166 @@
+{
+ "features": [
+  {
+   "id": "Profile",
+   "label": "Profile",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XY"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "0"
+     },
+     {
+      "fixed": true,
+      "x": "60",
+      "y": "0"
+     },
+     {
+      "fixed": true,
+      "x": "60",
+      "y": "40"
+     },
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "40"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Block",
+   "label": "Block",
+   "links": {
+    "sketch": "Profile"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "20",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "Tap",
+   "label": "Tap",
+   "links": {},
+   "options": {
+    "drillPoint": "false",
+    "end": "blind",
+    "hand": "left"
+   },
+   "parameters": {
+    "drillDepth": "18",
+    "drillDiameter": "0",
+    "nominal": "10",
+    "pitch": "1.25",
+    "threadLength": "12",
+    "x": "20",
+    "y": "20",
+    "z": "20"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "G[Block](Profile:R1)",
+      "signature": {
+       "center": [
+        30.0,
+        20.0,
+        20.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Plane",
+       "size": 2400.0
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "ThreadedHole"
+  }
+ ],
+ "format": "bendcore-part",
+ "rollback": null,
+ "variables": [],
+ "version": 3
+}

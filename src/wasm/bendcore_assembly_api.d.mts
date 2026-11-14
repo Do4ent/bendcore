@@ -62,6 +62,9 @@ export interface PartProperties {
   material: string;
   /** kg/m^3; null — no mass in the BOM. */
   density: number | null;
+  /** Drawing sections (GOST 2.305 §9): true — always cut, false — kept whole in a longitudinal
+   *  section, null — default rule (fasteners, shafts, axles, balls are not cut). */
+  sectionCut?: boolean | null;
 }
 
 export type Color = [number, number, number, number];

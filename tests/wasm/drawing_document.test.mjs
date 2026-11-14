@@ -506,3 +506,166 @@ describe('bendcore_drawing_wasm', () => {
     },
   );
 });
+
+// Local section (ГОСТ 2.305), undo/redo of the drawing edits, chain and baseline dimensions,
+// dragging of a dimension (docs/ui/DRAWING_UI.md). Geometry of the bracket: the hole Ø8 at x = 40
+// goes through the plate z ∈ [0, 8]; in the front view its walls x = 36 and 44 are hidden lines.
+describe('local section, undo/redo, chain and baseline, drag', () => {
+  const toSheet = (v, p) => [v.anchor[0] + v.factor * p[0], v.anchor[1] + v.factor * p[1]];
+  // Length (model mm) of visible / hidden vertical edges of the view at view x = x0.
+  const verticalAt = (v, x0, visible) => {
+    const xs = v.anchor[0] + v.factor * x0;
+    let len = 0;
+    for (const e of v.edges) {
+      if (e.visible !== visible || !isVertical(e) || Math.abs(e.points[0][0] - xs) > 1e-4) continue;
+      len += Math.abs(e.points[1][1] - e.points[0][1]) / v.factor;
+    }
+    return len;
+  };
+
+  test('local section around the hole; undo and redo restore the document', () => {
+    const drawing = kernel.createFromPart(partJson, { properties: PROPS });
+    try {
+      const F = drawing.addView('S1', { kind: 'base', standard: 'front' });
+      drawing.addView('S1', { kind: 'projected', standard: 'top' });
+      let v = view(drawing.sheetPicture('S1'), F);
+      assert.ok(verticalAt(v, 36, false) > 7.9, 'hole wall hidden before the section');
+      assert.equal(verticalAt(v, 36, true), 0);
+      const before = drawing.save();
+      const h0 = drawing.describe().history;
+      assert.equal(h0.canUndo, true);
+      assert.equal(h0.undoDepth, 2);
+
+      // Region x ∈ [33, 47], z ∈ [1, 7]; depth 15 = half the width Wd: the plane y = 0 through the axis.
+      const region = [[33, 1], [47, 1], [47, 7], [33, 7]].map((p) => toSheet(v, p));
+      const r = drawing.addLocalSection('S1', F, { points: region, depth: P.Wd / 2 });
+      assert.equal(r.index, 0);
+      v = view(drawing.sheetPicture('S1'), F);
+      // Inside the region the walls of the hole are visible (behind the plane), outside — hidden.
+      assert.ok(Math.abs(verticalAt(v, 36, true) - 6) < 1e-3, `visible wall ${verticalAt(v, 36, true)}`);
+      assert.ok(Math.abs(verticalAt(v, 44, true) - 6) < 1e-3);
+      const desc = drawing.describe();
+      const ls = desc.sheets[0].views.find((x) => x.id === F).localSections;
+      assert.equal(ls.length, 1);
+      assert.ok(Math.abs(ls[0].points[0][0] - 33) < 1e-9 && Math.abs(ls[0].points[0][1] - 1) < 1e-9, 'view coordinates');
+      assert.equal(ls[0].depth, 15);
+      assert.equal(desc.history.undoLabel, 'addLocalSection');
+      // DXF: hatching of the section figure.
+      const pairs = dxfPairs(new TextDecoder().decode(drawing.exportSheet('S1', 'dxf')));
+      assert.ok(pairs.some(([c, val]) => c === 8 && val === 'HATCH'), 'hatch lines');
+      const after = drawing.save();
+      assert.notEqual(after, before);
+
+      // Undo: the document is the one before the edit; redo: after it.
+      const u = drawing.undo();
+      assert.equal(u.label, 'addLocalSection');
+      assert.equal(drawing.save(), before);
+      assert.equal(verticalAt(view(drawing.sheetPicture('S1'), F), 36, true), 0);
+      assert.equal(drawing.describe().history.canRedo, true);
+      drawing.redo();
+      assert.equal(drawing.save(), after);
+      // Three undos: back to the empty sheet; nothing more to undo.
+      drawing.undo();
+      drawing.undo();
+      drawing.undo();
+      assert.equal(drawing.describe().sheets[0].views.length, 0);
+      expectKernelError(() => drawing.undo(), 'InvalidInput', 'nothing to undo');
+      drawing.redo();
+      drawing.redo();
+      drawing.redo();
+      assert.equal(drawing.save(), after);
+      // A failed edit is not recorded; a new edit clears redo.
+      const depth = drawing.describe().history.undoDepth;
+      expectKernelError(() => drawing.addLocalSection('S1', F, { points: region, depth: 0 }), 'InvalidInput', 'depth 0');
+      expectKernelError(
+        () => drawing.addLocalSection('S1', F, { points: [region[0], region[2], region[1], region[3]], depth: 5 }),
+        'InvalidInput',
+        'self-intersecting outline',
+      );
+      assert.equal(drawing.describe().history.undoDepth, depth);
+      drawing.undo();
+      assert.equal(drawing.describe().history.canRedo, true);
+      drawing.setSheet('S1', { technicalRequirements: ['Острые кромки притупить.'] });
+      assert.equal(drawing.describe().history.canRedo, false);
+      expectKernelError(() => drawing.removeLocalSection('S1', F, 0), 'InvalidInput', 'no local section after undo');
+    } finally {
+      drawing.dispose();
+    }
+  });
+
+  test('chain and baseline dimensions; a dragged dimension follows the pointer', () => {
+    const drawing = kernel.createFromPart(partJson, { properties: PROPS });
+    try {
+      const F = drawing.addView('S1', { kind: 'base', standard: 'front' });
+      const v = view(drawing.sheetPicture('S1'), F);
+      // Vertical lines x = 0 (back of the wall), x = T (inner face of the wall), x = A (end of the plate).
+      const left = extremeLine(v, isVertical, 0, Math.min);
+      const right = extremeLine(v, isVertical, 0, Math.max);
+      const xT = v.anchor[0] + v.factor * P.T;
+      const inner = v.edges.find((e) => e.visible && e.edgeIndex !== null && isVertical(e) && Math.abs(e.points[0][0] - xT) < 1e-6);
+      assert.ok(inner, 'inner wall line');
+      const chain = drawing.addDimensionGroup('S1', F, [left.index, inner.index, right.index], { mode: 'chain' });
+      assert.equal(chain.length, 2);
+      const values = (ids) => ids.map((id) => dimensionById(drawing, 'S1', id).value).sort((a, b) => a - b);
+      assert.deepEqual(values(chain).map((x) => Math.round(x * 1e6) / 1e6), [P.T, P.A - P.T]);
+      // Chain: one dimension line (same label height).
+      const y0 = chain.map((id) => dimensionById(drawing, 'S1', id).labelPosition[1]);
+      assert.ok(Math.abs(y0[0] - y0[1]) < 1e-6, 'chain on one line');
+      const base = drawing.addDimensionGroup('S1', F, [left.index, inner.index, right.index], { mode: 'baseline', spacing: 8 });
+      assert.deepEqual(values(base).map((x) => Math.round(x * 1e6) / 1e6), [P.T, P.A]);
+      const yb = base.map((id) => dimensionById(drawing, 'S1', id).labelPosition[1]);
+      assert.ok(Math.abs(Math.abs(yb[0] - yb[1]) - 8) < 1e-6, `baseline spacing ${yb}`);
+      expectKernelError(() => drawing.addDimensionGroup('S1', F, [left.index], { mode: 'chain' }), 'InvalidInput', 'one pick');
+
+      // Drag: the text lands at the pointer; the value does not change; undo puts it back.
+      const id = chain[0];
+      const d0 = dimensionById(drawing, 'S1', id);
+      const target = [d0.labelPosition[0] + 6, d0.labelPosition[1] + 9];
+      drawing.moveDimension('S1', id, target[0], target[1]);
+      const d1 = dimensionById(drawing, 'S1', id);
+      assert.ok(Math.hypot(d1.labelPosition[0] - target[0], d1.labelPosition[1] - target[1]) < 1e-6, `label ${d1.labelPosition}`);
+      assert.equal(d1.value, d0.value);
+      assert.equal(drawing.describe().history.undoLabel, 'moveDimension');
+      drawing.undo();
+      const d2 = dimensionById(drawing, 'S1', id);
+      assert.ok(Math.hypot(d2.labelPosition[0] - d0.labelPosition[0], d2.labelPosition[1] - d0.labelPosition[1]) < 1e-9);
+      expectKernelError(() => drawing.moveDimension('S1', 'nope', 1, 1), 'InvalidInput', 'unknown dimension');
+    } finally {
+      drawing.dispose();
+    }
+  });
+});
+
+// Thread dimension (ГОСТ 2.311) from the API the editor uses: the block with M10×1,25LH
+// (tests/wasm/fixtures/threaded_block.part.json, make_threaded_block_part.mjs).
+describe('thread dimension', () => {
+  test('nearest thread to the click, tolerance class, undo', () => {
+    const json = fs.readFileSync(path.join(here, 'fixtures/threaded_block.part.json'), 'utf8');
+    const drawing = kernel.createFromPart(json, { properties: PROPS });
+    try {
+      const F = drawing.addView('S1', { kind: 'base', standard: 'front' });
+      const v = view(drawing.sheetPicture('S1'), F);
+      // Front view (x, z): the thread at x = 20 from the top z = 20 down to z = 8.
+      const at = [v.anchor[0] + v.factor * 25, v.anchor[1] + v.factor * 15];
+      const r = drawing.addThreadNote('S1', F, { at, toleranceField: '6H' });
+      assert.equal(r.thread, 'M10×1,25LH');
+      let note = drawing.describe().sheets[0].threadNotes.find((n) => n.id === r.id);
+      assert.equal(note.state, 'ok');
+      assert.equal(note.text, 'M10×1,25LH-6H');
+      assert.ok(drawing.sheetPicture('S1').svg.includes('M10×1,25LH-6H'));
+      drawing.setThreadNote('S1', r.id, { toleranceField: '7H' });
+      note = drawing.describe().sheets[0].threadNotes[0];
+      assert.equal(note.text, 'M10×1,25LH-7H');
+      expectKernelError(() => drawing.setThreadNote('S1', r.id, { toleranceField: '6 H' }), 'InvalidInput', 'bad class');
+      drawing.undo();
+      assert.equal(drawing.describe().sheets[0].threadNotes[0].text, 'M10×1,25LH-6H');
+      drawing.removeAnnotation('S1', r.id);
+      assert.equal(drawing.describe().sheets[0].threadNotes.length, 0);
+      // A view without a thread: the isometric does not show threads.
+      const I = drawing.addView('S1', { kind: 'axonometric', axonometry: 'isometric' });
+      expectKernelError(() => drawing.addThreadNote('S1', I, { at }), 'InvalidInput', 'no thread on the view');
+    } finally {
+      drawing.dispose();
+    }
+  });
+});

@@ -22,6 +22,9 @@ struct SourceMapper {
     IndexOf face;  // грань формы HLR → индекс грани исходной модели
     // Переопределение класса ребра (например, контур сечения в разрезе).
     std::function<std::optional<EdgeClass>(const TopoDS_Edge&)> edgeClass;
+    // Рёбра формы HLR, которые не изображаются (уступы ступенчатого разреза, стенки выреза
+    // местного разреза — ГОСТ 2.305, разд. 6).
+    std::function<bool(const TopoDS_Shape&)> skip;
 };
 
 // Отображение по TopologyIndex самой формы (точное совпадение подформ).

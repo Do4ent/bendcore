@@ -184,6 +184,52 @@ export class DrawingHandle {
     return this.#call('removeAnnotation', sheet, id);
   }
 
+  /**
+   * Local section (ГОСТ 2.305) on a base or projected view: spec { points: [[x, y], ...] sheet mm,
+   * spline?: boolean, depth: mm from the nearest point of the model }. Returns { view, index }.
+   */
+  addLocalSection(sheet, view, spec) {
+    return this.#call('addLocalSection', sheet, view, text(spec));
+  }
+
+  removeLocalSection(sheet, view, index) {
+    return this.#call('removeLocalSection', sheet, view, index);
+  }
+
+  /** Drags the dimension text to the sheet point (x, y): new offset / text shift / leader angle. */
+  moveDimension(sheet, id, x, y) {
+    return this.#call('moveDimension', sheet, id, x, y);
+  }
+
+  /**
+   * Chain or baseline dimensions (ГОСТ 2.307) from picked edges of one view; options
+   * { mode: 'chain' | 'baseline', direction?, offset?, spacing? }. Returns the new ids.
+   */
+  addDimensionGroup(sheet, view, picks, options = {}) {
+    return this.#call('addDimensionGroup', sheet, view, text(picks), text(options)).ids;
+  }
+
+  /**
+   * Thread dimension (ГОСТ 2.311) of the thread nearest to spec.at ([x, y] sheet mm) on the view;
+   * spec { at, toleranceField?, offset?, leaderAngle?, textShift?, id? }. Returns { id, thread }.
+   */
+  addThreadNote(sheet, view, spec) {
+    return this.#call('addThreadNote', sheet, view, text(spec));
+  }
+
+  setThreadNote(sheet, id, changes) {
+    return this.#call('setThreadNote', sheet, id, text(changes));
+  }
+
+  /** Undoes the last drawing edit; returns { label, history, warnings, dangling }. */
+  undo() {
+    return this.#call('undo');
+  }
+
+  redo() {
+    return this.#call('redo');
+  }
+
   /** Sheet as SVG text (1 unit = 1 mm, y down) and the view edges in sheet mm (y up) for picking. */
   sheetPicture(sheet) {
     return this.#call('sheetPicture', sheet);
