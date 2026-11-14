@@ -1,0 +1,4 @@
+/* Kernel messages (KernelMessageText.tsx): the text, then the code and the original folded. */
+.kernel-message-details { display: inline-block; vertical-align: top; font-size: 11px; opacity: 0.85; }
+.kernel-message-details > summary { cursor: pointer; display: inline; }
+.kernel-message-details > code { display: block; white-space: pre-wrap; word-break: break-word; }

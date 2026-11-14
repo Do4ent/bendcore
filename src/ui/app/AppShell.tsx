@@ -34,6 +34,7 @@ import { migrateDrawingDocument, packDrawingFile, readDrawingFiles } from '../dr
 import type { ModuleFaultInfo } from './faultReport';
 import type { ModuleKind } from '../worker/protocol';
 import './AppShell.css';
+import { kernelMessageLine, localizeKernelError } from './kernelMessages';
 
 /** Interval of draft writes (ms); drafts are also written when the page is hidden or closed. */
 export const AUTOSAVE_MS = 2000;
@@ -229,11 +230,11 @@ const AppShell: React.FC = () => {
   useEffect(() => {
     const onRejection = (e: PromiseRejectionEvent) => {
       const r = e.reason as { code?: string; detail?: string; message?: string } | undefined;
-      notify('error', r?.code ? `${r.code}: ${r.detail ?? r.message}` : String(r?.message ?? e.reason));
+      notify('error', r?.code ? `${kernelMessageLine(localizeKernelError(t, r))} (${r.code})` : String(r?.message ?? e.reason));
     };
     window.addEventListener('unhandledrejection', onRejection);
     return () => window.removeEventListener('unhandledrejection', onRejection);
-  }, [notify]);
+  }, [notify, t]);
 
   const recordFile = useCallback(
     (file: DocumentFile) => {

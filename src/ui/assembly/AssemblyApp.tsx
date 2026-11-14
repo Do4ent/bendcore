@@ -54,6 +54,7 @@ import type { PickedElement } from './mateRules';
 import '../kernel/KernelViewer.css';
 import '../modeling/PartModeler.css';
 import './Assembly.css';
+import { KernelMessageText } from '../app/KernelMessageText';
 
 const MESH_PARAMS = { linearDeflection: 0.05, angularDeflection: 0.25 };
 
@@ -786,7 +787,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
       </div>
       {error && (
         <div className="kv-error" role="alert" data-testid="error">
-          {error.code}: {error.message}
+          <KernelMessageText code={error.code} message={error.message} />
         </div>
       )}
       {exporting && docRef.current && (

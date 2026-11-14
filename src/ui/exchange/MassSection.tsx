@@ -10,6 +10,7 @@ import { useI18n } from '../app/i18n';
 import { inertiaDiagonal, inertiaProducts } from './exchange';
 import type { MassProperties } from './exchange';
 import './Exchange.css';
+import { kernelMessageLine, localizeKernelError } from '../app/kernelMessages';
 
 /** What the module returned: properties, nothing to compute (reason), or an error text. */
 export type MassResult =
@@ -43,7 +44,7 @@ const MassSection: React.FC<MassSectionProps> = ({ load, version, density }) => 
       (e: unknown) => {
         if (!live) return;
         const ke = e as { code?: string; detail?: string; message?: string };
-        setError(ke.code ? `${ke.code}: ${ke.detail ?? ke.message}` : String(ke.message ?? e));
+        setError(ke.code ? `${kernelMessageLine(localizeKernelError(t, ke))} (${ke.code})` : String(ke.message ?? e));
         setResult(null);
       },
     );
