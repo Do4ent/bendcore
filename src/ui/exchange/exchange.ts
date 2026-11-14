@@ -114,3 +114,18 @@ export function inertiaDiagonal(p: MassProperties): [number, number, number] {
 export function inertiaProducts(p: MassProperties): [number, number, number] {
   return [p.inertiaAtCenter[0][1], p.inertiaAtCenter[0][2], p.inertiaAtCenter[1][2]];
 }
+
+/**
+ * Downloads the bytes as a file. The object URL is revoked a second later, not at once: Chromium
+ * may start the download after click() returns and then names it "download" if the URL is gone.
+ */
+export function downloadBytes(fileName: string, bytes: Uint8Array, type: string): void {
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

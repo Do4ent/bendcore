@@ -146,7 +146,9 @@ test('part exported to STEP and STL, files read back; mass of the part', async (
     await d.getByTestId('export-format').selectOption('step');
     await d.getByTestId('export-schema').selectOption('AP242');
   });
-  expect(step.name).toMatch(/\.step$/);
+  // The part is "деталь.bcpart.json": headless Chromium reports a non-ASCII download name as
+  // "download", so the name is checked in the shell's notification of the saved file.
+  expect((await shell(page)).notifications.map((n) => n.text).join('\n')).toContain('деталь.step');
   const text = step.bytes.toString('latin1');
   expect(text.startsWith('ISO-10303-21;')).toBe(true);
   expect(text).toContain('AP242_MANAGED_MODEL_BASED_3D_ENGINEERING');
@@ -165,7 +167,7 @@ test('part exported to STEP and STL, files read back; mass of the part', async (
     await d.getByTestId('export-stl-format').selectOption('binary');
     await d.getByTestId('export-deflection').fill('0.1');
   });
-  expect(stl.name).toMatch(/\.stl$/);
+  expect((await shell(page)).notifications.map((n) => n.text).join('\n')).toContain('деталь.stl');
   const tris = stlTriangles(stl.bytes);
   expect(tris.length).toBe(12);
   expect(Math.abs(signedVolume(tris) - W * D * H)).toBeLessThan(1e-6 * W * D * H);

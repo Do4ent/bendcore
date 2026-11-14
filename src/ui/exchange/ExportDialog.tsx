@@ -6,11 +6,11 @@
 
 import React, { useState } from 'react';
 import { caption, useI18n } from '../app/i18n';
-import { downloadText } from '../app/editorHost';
 import {
   DEFAULT_EXPORT_FORM,
   EXPORT_FORMATS,
   MEDIA_TYPES,
+  downloadBytes,
   exportFileName,
   exportOptions,
   isMeshFormat,
@@ -62,7 +62,7 @@ const ExportDialog: React.FC<ExportDialogProps> = ({ name, onExport, onClose, on
     try {
       const bytes = await onExport(form.format, checked.options);
       const fileName = exportFileName(name, form.format);
-      downloadText(fileName, bytes, MEDIA_TYPES[form.format]);
+      downloadBytes(fileName, bytes, MEDIA_TYPES[form.format]);
       onSaved?.(fileName, bytes.length);
       onClose();
     } catch (e) {
