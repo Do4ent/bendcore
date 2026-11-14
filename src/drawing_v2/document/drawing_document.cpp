@@ -351,7 +351,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
     report.modelChanged = report.previousHash != report.currentHash;
 
     annotations::AnnotationStyle style;
-    style.font = font_;
+    style.font = textMetrics(font_);
 
     // Привязка размеров: деталь — имена из истории операций, сборка — только сигнатуры.
     auto bindingR = model.historyNames ? ModelBinding::fromNamedShape(*model.named) : ModelBinding::fromShape(model.shape);
@@ -1074,10 +1074,16 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
     return report;
 }
 
+const TextMetrics* DrawingDocument::textMetrics(const TrueTypeFont* trueType) const {
+    if (settings_.textFont == TextFont::Gost2304) return &gostStrokeFont();
+    return trueType;
+}
+
 Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) const {
     if (computed_.empty() || computed_.size() != sheets_.size()) return invalid("drawing render: the document is not updated");
+    const TextMetrics* metrics = textMetrics(font);
     annotations::AnnotationStyle style;
-    style.font = font;
+    style.font = metrics;
     std::vector<Drawing> out;
     for (std::size_t si = 0; si < computed_.size(); ++si) {
         const ComputedSheet& cs = computed_[si];
@@ -1085,9 +1091,10 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
         auto dr = Drawing::create(cs.sheet, settings_.lineThickness);
         if (!dr) return dr.error();
         Drawing d = std::move(dr).value();
+        d.setTextFont(settings_.textFont);
         FrameOptions fo;
         fo.form = si == 0 ? TitleBlockForm::Form1 : TitleBlockForm::Form2a;
-        fo.font = font;
+        fo.font = metrics;
         auto lay = addFrameAndTitleBlock(d, cs.title, fo);
         if (!lay) return Error{lay.error().code, "sheet '" + cs.id + "': " + lay.error().message};
         if (auto st = ensureViewLayers(d); !st) return st.error();
@@ -1165,7 +1172,7 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
         TitleBlockLayout above = lay.value();
         if (sd.partsList && cs.specification) {
             annotations::PartsListOptions po;
-            po.font = font;
+            po.font = metrics;
             auto table = annotations::addPartsList(d, lay.value(), *cs.specification, po);
             if (!table) return Error{table.error().code, "sheet '" + cs.id + "', parts list: " + table.error().message};
             above.titleBlock.y1 = table.value().y1;

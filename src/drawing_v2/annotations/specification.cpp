@@ -26,8 +26,10 @@ bool sortedByDesignation(SpecSection s) {
 
 // Текст в ячейке: высота по ряду ГОСТ 2.304 от preferred вниз до 2,5 и сжатие до 0,6.
 Result<Text> fitText(const Rect& cell, const std::string& value, double preferred, HAlign h, bool vertical,
-                     const TrueTypeFont* font, const char* what) {
-    constexpr double kMargin = 0.5, kMinWf = 0.6;
+                     const TextMetrics* font, const char* what) {
+    constexpr double kMargin = 0.5;
+    // Сжатие — только для шрифта TrueType (0,6); шрифт ГОСТ 2.304 не сжимается.
+    const double kMinWf = font ? font->minWidthFactor() : gostStrokeFont().minWidthFactor();
     const double along = vertical ? cell.height() : cell.width();
     const double across = vertical ? cell.width() : cell.height();
     const double avail = along - 2.0 * kMargin;
@@ -36,7 +38,7 @@ Result<Text> fitText(const Rect& cell, const std::string& value, double preferre
         if (hgt > preferred + 1e-9 || hgt > across - 1.0 + 1e-9) continue;
         const double w = estimateTextWidth(value, hgt, font);
         const double wf = w <= avail ? 1.0 : avail / w;
-        if (wf < kMinWf) continue;
+        if (wf < kMinWf - 1e-12) continue;
         Text t;
         t.utf8 = value;
         t.height = hgt;
@@ -267,6 +269,7 @@ Result<SpecDocument> renderSpecification(const Specification& spec, const SpecSh
         auto dr = Drawing::create(gs.value(), 0.5);
         if (!dr) return dr.error();
         Drawing d = std::move(dr).value();
+        d.setTextFont(o.textFont);
         TitleBlockData td = o.title;
         td.designation = spec.designation;
         td.name = spec.name;

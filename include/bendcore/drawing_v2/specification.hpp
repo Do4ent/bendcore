@@ -97,7 +97,8 @@ struct SpecRow {
 
 struct SpecSheetOptions {
     TitleBlockData title;            // обозначение и наименование берутся из спецификации
-    const TrueTypeFont* font = nullptr;  // для подгонки текста по ширине граф
+    const TextMetrics* font = nullptr;  // метрики для подгонки текста по ширине граф
+    TextFont textFont = TextFont::TrueType;  // шрифт вывода текста листов (Drawing::setTextFont)
     double textHeight = 3.5;
     double rowHeight = 8.0;          // ГОСТ 2.106, форма 1: строки не менее 8 мм
     double headerHeight = 15.0;
@@ -123,7 +124,7 @@ Result<SpecDocument> renderSpecification(const Specification& spec, const SpecSh
 // --- Перечень составных частей ISO 7573 на поле чертежа ---
 
 struct PartsListOptions {
-    const TrueTypeFont* font = nullptr;
+    const TextMetrics* font = nullptr;
     double rowHeight = 8.0;
     double textHeight = 3.5;
     // Заголовки граф: позиция, количество, наименование, обозначение, материал.

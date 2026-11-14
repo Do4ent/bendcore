@@ -5,6 +5,7 @@
 #include <bendcore/drawing_v2/common.hpp>
 #include <bendcore/drawing_v2/line_types.hpp>
 #include <bendcore/drawing_v2/sheet.hpp>
+#include <bendcore/drawing_v2/text_font.hpp>
 
 #include <array>
 #include <map>
@@ -116,6 +117,12 @@ public:
     Status add(Entity entity);
     const std::vector<Entity>& entities() const { return entities_; }
 
+    // Шрифт текста при экспорте: TrueType (по умолчанию у листа, созданного напрямую) или
+    // однолинейный шрифт типа Б ГОСТ 2.304 (документ чертежа — по умолчанию,
+    // DrawingSettings::textFont). Метрики для раскладки задаются отдельно (TextMetrics).
+    TextFont textFont() const { return textFont_; }
+    void setTextFont(TextFont font) { textFont_ = font; }
+
 private:
     Drawing(Sheet sheet, double s);
 
@@ -124,6 +131,7 @@ private:
     std::vector<Layer> layers_;
     std::map<LineType, LineTypeSpec> specs_;
     std::vector<Entity> entities_;
+    TextFont textFont_ = TextFont::TrueType;
 };
 
 // Сплошная волнистая линия от a до b: синусоида с амплитудой amplitude и длиной волны

@@ -124,13 +124,17 @@ TEST(AnnotationsSpecification, SectionsOrderAndPositions) {
 TEST(AnnotationsSpecification, SheetsAndPagination) {
     Gearbox g(30);  // 30 штифтов — спецификация на два листа
     auto spec = buildSpecification(g.doc, g.options()).value();
-    auto doc = renderSpecification(spec);
+    // Высота 5: наименования штифтов «Штифт 3×10 ГОСТ 3128-70» по метрикам шрифта типа Б
+    // ГОСТ 2.304 — 156d = 78 мм > 61 мм графы, переносятся на вторую строку.
+    SpecSheetOptions so;
+    so.textHeight = 5.0;
+    ASSERT_GT(estimateTextWidth("Штифт 3×10 ГОСТ 3128-70", 5.0, nullptr), 61.0);
+    auto doc = renderSpecification(spec, so);
     ASSERT_TRUE(doc.ok()) << doc.error().message;
     // Ёмкость: (287 − 40 − 15)/8 = 29 строк на первом листе, (287 − 15 − 15)/8 = 32 на остальных.
     EXPECT_EQ(doc.value().firstSheetRows, 29);
     EXPECT_EQ(doc.value().otherSheetRows, 32);
-    // Наименования стандартных изделий не помещаются в 61 мм графы при h = 3,5 (оценка ширины
-    // шрифта типа Б) и переносятся на вторую строку — листов не меньше двух.
+    // Перенос наименований — листов не меньше двух.
     ASSERT_GE(doc.value().sheets.size(), 2u);
     ASSERT_EQ(doc.value().rows.size(), doc.value().sheets.size());
     EXPECT_LE(doc.value().rows[0].size(), 29u);

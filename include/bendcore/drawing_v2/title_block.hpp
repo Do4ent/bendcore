@@ -5,6 +5,7 @@
 // документа — спецификации ГОСТ 2.106) и форма 2а (185×15, последующие листы).
 
 #include <bendcore/drawing_v2/model.hpp>
+#include <bendcore/drawing_v2/text_font.hpp>
 #include <bendcore/drawing_v2/truetype_font.hpp>
 
 #include <map>
@@ -41,10 +42,12 @@ struct FrameOptions {
     TitleBlockForm form = TitleBlockForm::Form1;
     // Дополнительные графы 19–23 вдоль левой границы рамки (12×145 мм).
     bool storageStrip = true;
-    // Шрифт для проверки, что текст помещается в графу. Если задан и текст не помещается
-    // при данной высоте, сначала текст сжимается (коэффициент ширины до 0,6), затем высота уменьшается по ряду ГОСТ 2.304 до 2,5; не помещается
-    // и при 2,5 — ошибка InvalidInput. Если не задан, ширина не проверяется.
-    const TrueTypeFont* font = nullptr;
+    // Метрики шрифта для проверки, что текст помещается в графу: gostStrokeFont() (шрифт типа Б
+    // ГОСТ 2.304 — тексты основной надписи помещаются без сжатия) или TrueTypeFont. Если текст
+    // не помещается при данной высоте, сначала он сжимается (коэффициент ширины до 0,6), затем
+    // высота уменьшается по ряду ГОСТ 2.304 до 2,5; не помещается и при 2,5 — ошибка
+    // InvalidInput. Если не задан, ширина не проверяется.
+    const TextMetrics* font = nullptr;
     std::string frameLayer = "FRAME";
     std::string textLayer = "TITLE";
 };

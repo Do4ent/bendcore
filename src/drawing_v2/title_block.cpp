@@ -13,7 +13,6 @@ namespace {
 constexpr double kLeftMargin = 20.0;   // ГОСТ 2.104: поле подшивки
 constexpr double kOtherMargin = 5.0;
 constexpr double kTitleWidth = 185.0;
-constexpr double kMinWidthFactor = 0.6;  // ширина прописных типа Б 6/10 h (ГОСТ 2.304) против ≈1,0 h у DejaVu Sans
 constexpr double kCellMargin = 0.5;
 
 class Builder {
@@ -32,7 +31,8 @@ public:
     }
 
     // Текст в ячейке: подбор высоты по ряду ГОСТ 2.304 (от preferred вниз до 2,5) и
-    // коэффициента ширины (не меньше 0,6) по шрифту, если он задан.
+    // коэффициента ширины (не меньше TextMetrics::minWidthFactor: TrueType — 0,6, шрифт
+    // ГОСТ 2.304 — без сжатия) по метрикам шрифта, если они заданы.
     Status text(const Rect& cell, const std::string& value, double preferred, HAlign h,
                 bool vertical = false, const char* field = "") {
         if (value.empty()) return okStatus();
@@ -51,7 +51,7 @@ public:
             }
             const double w = o_.font->textWidthMm(cps.value(), hgt);
             const double need = w <= avail ? 1.0 : avail / w;
-            if (need >= kMinWidthFactor) {
+            if (need >= o_.font->minWidthFactor() - 1e-12) {
                 height = hgt;
                 wf = need;
                 break;

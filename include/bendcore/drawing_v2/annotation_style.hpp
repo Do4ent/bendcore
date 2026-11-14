@@ -4,6 +4,7 @@
 // ширины текста. Документация — docs/drawing/ANNOTATIONS.md.
 
 #include <bendcore/drawing_v2/model.hpp>
+#include <bendcore/drawing_v2/stroke_font.hpp>
 #include <bendcore/drawing_v2/truetype_font.hpp>
 
 #include <array>
@@ -37,16 +38,15 @@ struct AnnotationStyle {
     bool omitZeroDeviation = true;
     std::string layer = "DIM";
     int layerColor = 3;
-    // Шрифт для ширины текста (полки, рамки допусков). Без шрифта ширина оценивается по
-    // пропорциям шрифта типа Б ГОСТ 2.304 (см. estimateTextWidth).
-    const TrueTypeFont* font = nullptr;
+    // Метрики шрифта для ширины текста (полки, рамки допусков): TrueTypeFont или
+    // gostStrokeFont(). Без шрифта — метрики шрифта типа Б ГОСТ 2.304 (gostStrokeFont()).
+    const TextMetrics* font = nullptr;
 };
 
-// Ширина строки высотой h, мм. Со шрифтом — по метрикам шрифта (без кернинга), умноженная на
-// widthFactor. Без шрифта — шрифт типа Б ГОСТ 2.304: ширина прописных и цифр 6/10 h,
-// строчных 5/10 h, расстояние между буквами 2/10 h, пробел 6/10 h (оценка: пропорции
-// отдельных букв не учитываются).
-double estimateTextWidth(std::string_view utf8, double h, const TrueTypeFont* font, double widthFactor = 1.0);
+// Ширина строки высотой h, мм, по метрикам шрифта (без кернинга), умноженная на widthFactor.
+// Без шрифта — по метрикам шрифта типа Б ГОСТ 2.304 (gostStrokeFont(): ширины знаков по
+// таблицам стандарта, расстояние между буквами 2/10 h).
+double estimateTextWidth(std::string_view utf8, double h, const TextMetrics* font, double widthFactor = 1.0);
 
 // Создаёт слой, если его нет.
 Status ensureLayer(Drawing& drawing, const std::string& name, int aci);

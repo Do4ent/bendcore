@@ -71,7 +71,8 @@ Result<bool> SpecificationDocument::update(const ModelSnapshot& model) {
 Result<annotations::SpecDocument> SpecificationDocument::render(const TrueTypeFont* font) const {
     if (!spec_) return invalid("specification render: the document is not updated");
     annotations::SpecSheetOptions so;
-    so.font = font;
+    so.textFont = settings_.textFont;
+    so.font = settings_.textFont == TextFont::Gost2304 ? static_cast<const TextMetrics*>(&gostStrokeFont()) : font;
     so.title.litera = title_.litera;
     so.title.organization = title_.organization;
     so.title.developer = title_.developer;
@@ -85,7 +86,9 @@ Result<annotations::SpecDocument> SpecificationDocument::render(const TrueTypeFo
 Result<ExportKitResult> exportKit(const DrawingDocument& drawing, const SpecificationDocument* specification,
                                   const ExportKitOptions& options) {
     if (options.directory.empty()) return invalid("export kit: no output directory");
-    if (!options.font) return invalid("export kit: a font is required for the title block texts");
+    const bool trueType = drawing.settings().textFont == TextFont::TrueType ||
+                          (specification && specification->settings().textFont == TextFont::TrueType);
+    if (!options.font && trueType) return invalid("export kit: a TrueType font is required for the texts (text font 'truetype')");
     std::error_code ec;
     std::filesystem::create_directories(options.directory, ec);
     if (ec) return Error{ErrorCode::IoError, "export kit: cannot create '" + options.directory + "': " + ec.message()};

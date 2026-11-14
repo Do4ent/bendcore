@@ -274,6 +274,9 @@ struct DrawingSettings {
     double margin = 15.0;    // отступ области видов от рамки, мм
     views::ScaleRatio maxScale{5, 1};  // наибольший масштаб при автоматическом выборе
     bool reducedAxonometry = true;     // приведённые коэффициенты ГОСТ 2.317 (1 по осям)
+    // Шрифт текстов листа: однолинейный тип Б ГОСТ 2.304 (линиями во всех форматах экспорта,
+    // метрики — для основной надписи, размеров и полок) или TrueType (DejaVu Sans и др.).
+    TextFont textFont = TextFont::Gost2304;
 };
 
 // ---------------------------------------------------------------- результат обновления
@@ -377,9 +380,12 @@ public:
 
     StalenessReport checkModel(const ModelSnapshot& model) const;
 
-    // Шрифт для ширины текстов размеров и знаков при обновлении (полки, размещение числа);
-    // тот же шрифт следует передавать в render. Не сохраняется в файле.
+    // Шрифт TrueType для ширины текстов размеров и знаков при обновлении (полки, размещение
+    // числа), если DrawingSettings::textFont == TrueType; тот же шрифт следует передавать в
+    // render. Не сохраняется в файле. Со шрифтом ГОСТ 2.304 метрики — gostStrokeFont().
     void setFont(const TrueTypeFont* font) { font_ = font; }
+    // Метрики текста по настройке textFont: gostStrokeFont() или trueType.
+    const TextMetrics* textMetrics(const TrueTypeFont* trueType) const;
 
     // Пересчёт: виды — через кэш (HLR — ViewCache, разрезы — кэш документа по хэшу формы и
     // параметрам), компоновка и масштабы, переразрешение ссылок размеров и знаков, позиции по
@@ -393,7 +399,9 @@ public:
     const std::vector<ComputedSheet>& computedSheets() const { return computed_; }
 
     // Листы чертежа (рамка, основная надпись форм 1/2а, виды, обозначения, размеры, знаки,
-    // позиции, технические требования). Ошибка InvalidInput — документ не обновлён.
+    // позиции, технические требования); Drawing::textFont() — по DrawingSettings::textFont.
+    // font — шрифт TrueType (метрики при textFont == TrueType; со шрифтом ГОСТ не используется
+    // и может быть nullptr). Ошибка InvalidInput — документ не обновлён.
     Result<std::vector<Drawing>> render(const TrueTypeFont* font) const;
 
     Result<std::string> toJson() const;
@@ -464,6 +472,7 @@ struct SpecificationSettings {
     bool addAssemblyDrawing = true;
     std::string assemblyDrawingFormat = "А3";
     int reservePositions = 0;
+    TextFont textFont = TextFont::Gost2304;  // шрифт текстов листов спецификации
 };
 
 // Спецификация ГОСТ 2.106 как отдельный документ (свой файл "bendcore-specification").
@@ -483,7 +492,8 @@ public:
     Result<bool> update(const ModelSnapshot& model);
     const annotations::Specification* specification() const { return spec_ ? &*spec_ : nullptr; }
 
-    // Листы формы 1 (А4, основная надпись форм 2 и 2а). Ошибка — документ не обновлён.
+    // Листы формы 1 (А4, основная надпись форм 2 и 2а); шрифт — SpecificationSettings::textFont
+    // (font — TrueType, нужен только для textFont == TrueType). Ошибка — документ не обновлён.
     Result<annotations::SpecDocument> render(const TrueTypeFont* font) const;
 
     Result<std::string> toJson() const;
@@ -501,7 +511,9 @@ private:
 struct ExportKitOptions {
     std::string directory;
     std::string baseName = "drawing";
-    const TrueTypeFont* font = nullptr;  // обязателен (тексты основной надписи)
+    // Шрифт TrueType: обязателен, если чертёж или спецификация выводятся шрифтом TrueType; при
+    // шрифте ГОСТ 2.304 — необязателен (невидимый текстовый слой PDF для поиска).
+    const TrueTypeFont* font = nullptr;
     bool pdf = true;
     bool dxf = true;
     bool svg = true;

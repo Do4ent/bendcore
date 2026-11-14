@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <numbers>
+#include <optional>
 #include <sstream>
 
 namespace bendcore::drawing_v2 {
@@ -106,6 +107,27 @@ Result<std::string> writeSvg(const Drawing& drawing, const SvgOptions& options) 
                 }
                 os << '"' << strokeAttrs(e.lineType) << "/>\n";
             } else if (const auto* t = std::get_if<Text>(&e.geometry)) {
+                std::optional<StrokeTextLayout> strokes;
+                if (drawing.textFont() == TextFont::Gost2304) {
+                    auto lay = gostStrokeFont().layout(*t);
+                    if (!lay) return lay.error();
+                    strokes = std::move(lay).value();
+                    os << "<g class=\"text\" data-text=\"" << xmlEscape(t->utf8) << "\">\n<path d=\"";
+                    bool first = true;
+                    for (const auto& stroke : strokes->strokes) {
+                        for (std::size_t i = 0; i < stroke.size(); ++i) {
+                            os << (first ? "" : " ") << (i == 0 ? 'M' : 'L') << num(stroke[i].x) << ' '
+                               << num(Y(stroke[i].y));
+                            first = false;
+                        }
+                    }
+                    os << "\" fill=\"none\" stroke=\"#000000\" stroke-width=\"" << num(strokes->lineWidth)
+                       << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" data-linetype=\"gost2304\"/>\n";
+                    if (!options.sourceText) {
+                        os << "</g>\n";
+                        continue;
+                    }
+                }
                 const double fontSize = t->height / capRatio;
                 const char* anchor = t->hAlign == HAlign::Left     ? "start"
                                      : t->hAlign == HAlign::Center ? "middle"
@@ -120,9 +142,18 @@ Result<std::string> writeSvg(const Drawing& drawing, const SvgOptions& options) 
                 if (t->slanted) os << " skewX(" << num(-(90.0 - kGostTextSlantDeg)) << ')';
                 if (t->widthFactor != 1.0) os << " scale(" << num(t->widthFactor) << " 1)";
                 os << "\" font-family=\"" << xmlEscape(options.fontFamily) << "\" font-size=\""
-                   << num(fontSize) << "\" text-anchor=\"" << anchor
-                   << "\" fill=\"#000000\" stroke=\"none\" data-cap-height=\"" << num(t->height)
-                   << "\">" << xmlEscape(t->utf8) << "</text>\n";
+                   << num(fontSize) << "\" text-anchor=\"" << anchor;
+                if (strokes) {
+                    // Прозрачный текст поверх линий шрифта ГОСТ: та же длина строки до сжатия.
+                    if (strokes->width > 0.0)
+                        os << "\" textLength=\"" << num(strokes->width / t->widthFactor)
+                           << "\" lengthAdjust=\"spacingAndGlyphs";
+                    os << "\" fill=\"#000000\" fill-opacity=\"0\" stroke=\"none\" data-cap-height=\"" << num(t->height)
+                       << "\">" << xmlEscape(t->utf8) << "</text>\n</g>\n";
+                } else {
+                    os << "\" fill=\"#000000\" stroke=\"none\" data-cap-height=\"" << num(t->height)
+                       << "\">" << xmlEscape(t->utf8) << "</text>\n";
+                }
             } else if (const auto* f = std::get_if<SolidFill>(&e.geometry)) {
                 os << "<polygon points=\"";
                 for (std::size_t i = 0; i < f->points.size(); ++i) {

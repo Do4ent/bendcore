@@ -7,6 +7,7 @@ add_library(bendcore_drawing_v2 STATIC
   src/drawing_v2/line_types.cpp
   src/drawing_v2/model.cpp
   src/drawing_v2/truetype_font.cpp
+  src/drawing_v2/stroke_font.cpp
   src/drawing_v2/render_util.cpp
   src/drawing_v2/title_block.cpp
   src/drawing_v2/dxf_writer.cpp
@@ -26,6 +27,7 @@ if(GTest_FOUND)
     tests/drawing_v2/test_sheet_linetypes.cpp
     tests/drawing_v2/test_model.cpp
     tests/drawing_v2/test_font.cpp
+    tests/drawing_v2/test_stroke_font.cpp
     tests/drawing_v2/test_title_block.cpp
     tests/drawing_v2/test_dxf.cpp
     tests/drawing_v2/test_svg.cpp
