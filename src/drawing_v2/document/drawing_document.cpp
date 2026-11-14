@@ -679,11 +679,15 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 if (!cg) return Error{cg.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + cg.error().message};
                 cv.centers = std::move(cg).value();
             }
-            // Условная резьба модели (ГОСТ 2.311): на ортогональных видах и разрезах.
-            if (v.threads && !threadInfos.empty() && v.kind != ViewKind::Axonometric && v.kind != ViewKind::Detail) {
+            // Условная резьба модели (ГОСТ 2.311): ортогональные виды и разрезы; аксонометрия
+            // (ГОСТ 2.317) — эллипс наружного диаметра; выносной элемент — изображение резьбы
+            // вида-родителя, отсечённое окружностью элемента.
+            if (v.threads && !threadInfos.empty()) {
                 auto ti = annotations::threadImages(threadInfos, binding.topology(), cv.sheetView.view);
                 if (!ti) return Error{ti.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + ti.error().message};
                 cv.threads = std::move(ti).value();
+                if (v.kind == ViewKind::Detail)
+                    for (annotations::ThreadImage& t : cv.threads) t.clip = annotations::ThreadClip{v.detailCenter, v.detailRadius};
             }
             cs.views.push_back(std::move(cv));
         }
@@ -967,12 +971,13 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 }
             }
             DimensionResult res;
-            if (!image) {
+            if (!image || image->aspect == annotations::ThreadAspect::Oblique) {
                 res.state = DimensionState::Dangling;
                 const bool isThread = rb.ok && std::any_of(threadInfos.begin(), threadInfos.end(),
                                                            [&](const modeling::ThreadInfo& t) { return t.face == ref.index; });
                 res.reason = !rb.ok      ? "reference is broken: " + rb.detail
                              : !isThread ? "the face carries no thread"
+                             : image     ? "thread dimensions are not placed on an axonometric view '" + tn.view + "'"
                                          : "the thread is not shown in view '" + tn.view + "'";
                 report.dangling.push_back(sd.id + "/" + tn.id + ": " + res.reason);
             } else {

@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <sstream>
 
 using namespace ddtest;
@@ -225,9 +226,11 @@ TEST(DrawingThreads, EndViewsArcThreeQuartersVisibleAndHidden) {
     EXPECT_EQ(byNominal(under, 10)->visibility, Visibility::Hidden);
     EXPECT_EQ(byNominal(under, 8)->visibility, Visibility::Visible);
 
-    // Аксонометрия: резьба не изображается.
+    // Аксонометрия: эллипсы наружного диаметра у входа (IsometricEllipseOfMajorDiameter).
     const auto iso = projectShape(md.binding.shape(), axonometricFrame(front, Axonometry::Isometric)).value();
-    EXPECT_TRUE(imagesOn(md, iso).empty());
+    const auto obl = imagesOn(md, iso);
+    ASSERT_EQ(obl.size(), 2u);
+    for (const auto& t : obl) EXPECT_EQ(t.aspect, ThreadAspect::Oblique);
 }
 
 TEST(DrawingThreads, DesignationDimensionOnSideAndEndViews) {
@@ -473,6 +476,152 @@ TEST(DrawingThreads, DocumentDrawsThreadsAndExportsDxfPdf) {
 
 // ГОСТ 2.311: сплошная тонкая — не ближе 0,8 мм к основной линии. M10×1,25 при 1:1: (D − сверло)/2
 // = 0,625 мм < 0,8 → линия на 4,375 + 0,8 мм от оси; при 2:1 — 1,25 мм ≥ 0,8, точно по D.
+// Аксонометрия (ГОСТ 2.317): окружность наружного диаметра у входа проецируется в эллипс с
+// большой полуосью r и малой r·|cos θ|, θ — угол оси резьбы с направлением взгляда.
+TEST(DrawingThreads, IsometricEllipseOfMajorDiameter) {
+    ThreadPart part;
+    const Model md = modelOf(part.doc);
+    for (Axonometry type : {Axonometry::Isometric, Axonometry::Dimetric}) {
+        const ViewFrame frame = axonometricFrame(defaultFrontFrame(), type);
+        const auto iv = projectShape(md.binding.shape(), frame).value();
+        const auto images = imagesOn(md, iv);
+        const ThreadImage* m10 = byNominal(images, 10);
+        ASSERT_NE(m10, nullptr);
+        EXPECT_EQ(m10->aspect, ThreadAspect::Oblique);
+        EXPECT_EQ(m10->visibility, Visibility::Visible);  // вход на верхней грани виден сверху
+        Drawing d = Drawing::create(gostSheet(GostFormat::A3, 1, Orientation::Landscape).value()).value();
+        const double scale = 2.0;
+        const SheetView sv{iv, scale, {200, 150}};
+        ASSERT_TRUE(renderThreads(d, sv, {*m10}).ok());
+        ASSERT_EQ(d.entities().size(), 1u);
+        const auto* pl = std::get_if<Polyline>(&d.entities()[0].geometry);
+        ASSERT_NE(pl, nullptr);
+        EXPECT_TRUE(pl->closed);
+        EXPECT_EQ(pl->points.size(), 72u);
+        EXPECT_EQ(d.entities()[0].lineType, LineType::SolidThin);
+        // Центр — проекция входа (20, 20, 20), радиус — наружный диаметр 10 в масштабе 2.
+        const Point2 c = sv.toSheet(frame.project({20, 20, 20}));
+        const double r = 5.0 * scale, cosT = std::abs(frame.toward.z);  // ось резьбы — −Z
+        double rmax = 0, rmin = 1e300;
+        for (const Point2& p : pl->points) {
+            const double q = std::hypot(p.x - c.x, p.y - c.y);
+            rmax = std::max(rmax, q), rmin = std::min(rmin, q);
+        }
+        EXPECT_LE(rmax, r + 1e-9);
+        EXPECT_NEAR(rmax, r, 1e-3 * r);  // узлы через 5°: большая полуось — с точностью сетки
+        EXPECT_NEAR(rmin, r * cosT, 0.02 * r);  // узлы через 5°: малая полуось — с точностью сетки
+        EXPECT_GE(rmin, r * cosT - 1e-9);
+        // Размер резьбы в аксонометрии не проставляется.
+        auto dim = threadDimension(*m10, sv, {});
+        ASSERT_FALSE(dim.ok());
+        EXPECT_EQ(dim.error().code, bendcore::kernel::ErrorCode::Unsupported);
+    }
+}
+
+// Выносной элемент: линии резьбы отсекаются окружностью элемента; точки обреза — на окружности.
+TEST(DrawingThreads, DetailClipsThreadLinesAndArc) {
+    ThreadPart part;
+    const Model md = modelOf(part.doc);
+    const auto fv = projectShape(md.binding.shape(), defaultFrontFrame()).value();
+    const auto dv = detailView(fv, {20, 20}, 6.0).value();
+    auto images = imagesOn(md, dv);
+    const ThreadImage* side = byNominal(images, 10);
+    ASSERT_NE(side, nullptr);
+    ASSERT_EQ(side->aspect, ThreadAspect::Side);
+    ThreadImage clipped = *side;
+    clipped.clip = ThreadClip{{20, 20}, 6.0};
+    Drawing d = Drawing::create(gostSheet(GostFormat::A3, 1, Orientation::Landscape).value()).value();
+    const double scale = 4.0;
+    const SheetView sv{dv, scale, {100, 100}};
+    ASSERT_TRUE(renderThreads(d, sv, {clipped}).ok());
+    // Резьба видна сквозь стенку штриховыми: две линии x = 20 ± 5 от входа z = 20 вниз до окружности
+    // (20, 20; 6): длина √(6² − 5²) = √11 (мм модели); граница резьбы на z = 8 — вне элемента.
+    ASSERT_EQ(d.entities().size(), 2u);
+    const Point2 C = sv.toSheet({20, 20});
+    for (const auto& e : d.entities()) {
+        const auto& l = std::get<LineSeg>(e.geometry);
+        EXPECT_NEAR(std::abs(l.a.x - C.x), 5 * scale, 1e-9);
+        EXPECT_NEAR(std::abs(l.a.y - l.b.y), std::sqrt(11.0) * scale, 1e-9);
+        EXPECT_NEAR(std::max(l.a.y, l.b.y), C.y, 1e-9);
+        const Point2 low = l.a.y < l.b.y ? l.a : l.b;
+        EXPECT_NEAR(std::hypot(low.x - C.x, low.y - C.y), 6 * scale, 1e-9);
+    }
+    // Вид сверху вдоль оси: дуга 3/4 (350°…260°) радиуса 5, окружность элемента (24, 20; 3) отсекает
+    // её по углам ±α от 0°, cos α = (4² + 5² − 3²)/(2·4·5) = 0,8 → интервал [350°, 36,87°].
+    const auto tv = projectShape(md.binding.shape(), makeFrame({0, 0, 1}, {1, 0, 0}).value()).value();
+    auto ends = imagesOn(md, tv);
+    const ThreadImage* end = byNominal(ends, 10);
+    ASSERT_NE(end, nullptr);
+    ASSERT_EQ(end->aspect, ThreadAspect::End);
+    ThreadImage ec = *end;
+    ec.clip = ThreadClip{{end->entry.x + 4, end->entry.y}, 3.0};
+    Drawing d2 = Drawing::create(gostSheet(GostFormat::A3, 1, Orientation::Landscape).value()).value();
+    ASSERT_TRUE(renderThreads(d2, SheetView{tv, 1.0, {100, 100}}, {ec}, {}, 0.0).ok());
+    ASSERT_EQ(d2.entities().size(), 1u);
+    const auto& a = std::get<Arc>(d2.entities()[0].geometry);
+    EXPECT_NEAR(std::fmod(a.startDeg + 360.0, 360.0), 350.0, 1e-9);
+    EXPECT_NEAR(std::fmod(a.endDeg + 360.0, 360.0), std::acos(0.8) * 180 / std::numbers::pi, 1e-9);
+}
+
+// Документ: резьба изображается на аксонометрии и выносном элементе; размер резьбы на
+// аксонометрии — висячий с причиной.
+TEST(DrawingThreads, DocumentAxonometryAndDetailViews) {
+    ThreadPart part;
+    auto snap = snapshotPart(part.doc, {"РД.20.002", "Плита", "Сталь 45", 7850.0});
+    ASSERT_TRUE(snap.ok()) << snap.error().message;
+    DrawingDocument doc;
+    doc.model().path = "plate.json";
+    SheetDef s;
+    s.id = "S1";
+    ViewDef f;
+    f.id = "F";
+    ViewDef iso;
+    iso.id = "I";
+    iso.kind = ViewKind::Axonometric;
+    iso.parent = "F";
+    ViewDef det;
+    det.id = "D";
+    det.kind = ViewKind::Detail;
+    det.parent = "F";
+    det.detailCenter = {20, 20};
+    det.detailRadius = 6;
+    s.views = {f, iso, det};
+    const auto& recs = snap.value().named->records(m::ElementKind::Face);
+    const auto wall = std::find_if(recs.begin(), recs.end(), [](const m::ElementRecord& r) { return r.name == "Tap:Wall"; });
+    ASSERT_NE(wall, recs.end());
+    ThreadNoteItem note;
+    note.id = "TH";
+    note.view = "I";
+    note.face = elementReference(snap.value(), m::ElementKind::Face, static_cast<std::uint32_t>(wall - recs.begin())).value();
+    s.threadNotes = {note};
+    doc.sheets().push_back(s);
+    ViewCache cache(8, 1);
+    auto rep = doc.update(snap.value(), cache);
+    ASSERT_TRUE(rep.ok()) << rep.error().message;
+    const ComputedSheet& cs = doc.computedSheets()[0];
+    EXPECT_EQ(cs.views[1].threads.size(), 2u);
+    for (const auto& t : cs.views[1].threads) EXPECT_EQ(t.aspect, ThreadAspect::Oblique);
+    ASSERT_EQ(cs.views[2].threads.size(), 1u);  // в элемент попадает только M10
+    ASSERT_TRUE(cs.views[2].threads[0].clip);
+    ASSERT_EQ(rep.value().dangling.size(), 1u);
+    EXPECT_NE(rep.value().dangling[0].find("axonometric"), std::string::npos) << rep.value().dangling[0];
+    auto sheets = doc.render(nullptr);
+    ASSERT_TRUE(sheets.ok()) << sheets.error().message;
+    // Линии резьбы выносного элемента — внутри его окружности на листе.
+    const ComputedView& dvw = cs.views[2];
+    const Point2 C = dvw.sheetView.toSheet({20, 20});
+    const double R = 6 * dvw.sheetView.scale;
+    std::size_t inside = 0;
+    for (const auto& e : sheets.value()[0].entities()) {
+        const auto* l = std::get_if<LineSeg>(&e.geometry);
+        if (!l || e.lineType != LineType::Dashed) continue;
+        const double ra = std::hypot(l->a.x - C.x, l->a.y - C.y), rb = std::hypot(l->b.x - C.x, l->b.y - C.y);
+        if (ra <= R + 1e-6 && rb <= R + 1e-6 && std::abs(std::abs(l->a.x - C.x) - threadSheetRadius(dvw.threads[0], dvw.sheetView.scale)) < 1e-6)
+            ++inside;
+    }
+    EXPECT_EQ(inside, 2u);
+}
+
 TEST(DrawingThreads, ThinLineKeepsMinimumGapAtSmallScale) {
     ThreadPart part;
     const Model md = modelOf(part.doc);

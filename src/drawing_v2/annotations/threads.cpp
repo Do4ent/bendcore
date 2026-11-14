@@ -10,6 +10,8 @@
 #include <TopoDS.hxx>
 
 #include <algorithm>
+#include <numbers>
+#include <optional>
 #include <cmath>
 #include <set>
 
@@ -196,14 +198,111 @@ Result<std::vector<ThreadImage>> threadImages(const std::vector<modeling::Thread
                 img.visibility = visible && reaches ? Visibility::Visible : Visibility::Hidden;
                 img.majorArc = Arc{img.entry, R, opt.arcStartDeg, std::fmod(opt.arcStartDeg + opt.arcSweepDeg, 360.0)};
                 out.push_back(std::move(img));
+            } else {
+                // Косой вид (аксонометрия ГОСТ 2.317): эллипс наружного диаметра у входа.
+                img.aspect = ThreadAspect::Oblique;
+                if (circles.empty()) continue;
+                const auto entryEdge = std::min_element(circles.begin(), circles.end(), [](const EdgeCircle& x, const EdgeCircle& y) {
+                    return std::abs(x.along) < std::abs(y.along);
+                });
+                const double along0 = entryEdge->along;
+                bool any = false, visible = false;
+                for (const ViewEdge& e : view.edges) {
+                    if (!e.edgeIndex) continue;
+                    const bool atEntry = std::any_of(circles.begin(), circles.end(), [&](const EdgeCircle& x) {
+                        return x.edge == *e.edgeIndex && std::abs(x.along - along0) <= tol;
+                    });
+                    if (!atEntry) continue;
+                    any = true;
+                    if (e.visibility == Visibility::Visible) visible = true;
+                }
+                if (!any) continue;
+                img.visibility = visible ? Visibility::Visible : Visibility::Hidden;
+                // Ортонормированный базис плоскости окружности резьбы: u ⟂ dir, v = dir × u.
+                const Vec3 seed = std::abs(dir.x) < 0.9 ? Vec3{1, 0, 0} : Vec3{0, 1, 0};
+                Vec3 u = seed - dot(seed, dir) * dir;
+                u = (1.0 / std::sqrt(dot(u, u))) * u;
+                const Vec3 v = cross(dir, u);
+                // Проекция направления: разность проекций точек (project — проекция точки).
+                const Point2 o0 = frame.project(Vec3{0, 0, 0});
+                img.ellipseU = sub(frame.project(u), o0);
+                img.ellipseV = sub(frame.project(v), o0);
+                out.push_back(std::move(img));
             }
-            // Косой вид (аксонометрия): ГОСТ 2.311 изображение не задаёт — не выводится.
         }
     } catch (const Standard_Failure& f) {
         return R::failure(ErrorCode::OperationFailed, std::string("thread image: OCCT: ") + f.what());
     }
     return out;
 }
+
+namespace {
+
+// Участок отрезка a→b внутри окружности (c, R): параметры [t0, t1] ⊂ [0, 1].
+std::optional<std::pair<double, double>> insideSpan(Point2 a, Point2 b, Point2 c, double R) {
+    const Point2 d = sub(b, a), f = sub(a, c);
+    const double A = d.x * d.x + d.y * d.y, B = 2 * (f.x * d.x + f.y * d.y), C = f.x * f.x + f.y * f.y - R * R;
+    if (A < 1e-24) return std::nullopt;
+    const double disc = B * B - 4 * A * C;
+    if (disc <= 0) return std::nullopt;
+    const double s = std::sqrt(disc);
+    const double t0 = std::max(0.0, (-B - s) / (2 * A)), t1 = std::min(1.0, (-B + s) / (2 * A));
+    if (t1 - t0 <= 1e-12) return std::nullopt;
+    return std::pair{t0, t1};
+}
+
+// Ломаная, отсечённая окружностью: куски внутри (≥ 2 точек). Замкнутая ломаная (первая точка =
+// последней), пересекающая окружность, даёт куски без разрыва в начальной точке.
+std::vector<std::vector<Point2>> clipPolyline(const std::vector<Point2>& pts, Point2 c, double R) {
+    std::vector<std::vector<Point2>> out;
+    std::vector<Point2> cur;
+    auto lerp = [](Point2 a, Point2 b, double t) { return Point2{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; };
+    for (std::size_t i = 1; i < pts.size(); ++i) {
+        auto span = insideSpan(pts[i - 1], pts[i], c, R);
+        if (!span) {
+            if (cur.size() >= 2) out.push_back(std::move(cur));
+            cur.clear();
+            continue;
+        }
+        const Point2 p0 = lerp(pts[i - 1], pts[i], span->first), p1 = lerp(pts[i - 1], pts[i], span->second);
+        if (cur.empty() || span->first > 1e-12) {
+            if (cur.size() >= 2) out.push_back(std::move(cur));
+            cur = {p0};
+        }
+        cur.push_back(p1);
+        if (span->second < 1.0 - 1e-12) {
+            out.push_back(std::move(cur));
+            cur.clear();
+        }
+    }
+    if (cur.size() >= 2) out.push_back(std::move(cur));
+    const bool closed = pts.size() > 2 && norm(sub(pts.front(), pts.back())) < 1e-12;
+    if (closed && out.size() >= 2 && norm(sub(out.back().back(), out.front().front())) < 1e-12) {
+        out.back().insert(out.back().end(), out.front().begin() + 1, out.front().end());
+        out.erase(out.begin());
+    }
+    return out;
+}
+
+// Дуга (центр c, радиус r, от a0 на sweep градусов против ч. с.), отсечённая окружностью (cc, R):
+// интервалы {начало, раствор} внутри окружности.
+std::vector<std::pair<double, double>> clipArc(Point2 c, double r, double a0, double sweep, Point2 cc, double R) {
+    const double dd = norm(sub(cc, c));
+    if (dd + r <= R) return {{a0, sweep}};
+    if (dd >= R + r || r >= dd + R) return {};
+    // Точки окружности резьбы внутри — углы в пределах ±α от направления на центр ограничения.
+    const double alpha =
+        std::acos(std::clamp((dd * dd + r * r - R * R) / (2 * dd * r), -1.0, 1.0)) * 180.0 / std::numbers::pi;
+    const double mid = std::atan2(cc.y - c.y, cc.x - c.x) * 180.0 / std::numbers::pi;
+    std::vector<std::pair<double, double>> out;
+    for (int k = -2; k <= 2; ++k) {
+        const double lo = std::max(a0, mid - alpha + 360.0 * k), hi = std::min(a0 + sweep, mid + alpha + 360.0 * k);
+        if (hi - lo > 1e-9) out.emplace_back(lo, hi - lo);
+    }
+    return out;
+}
+
+}  // namespace
 
 double threadSheetRadius(const ThreadImage& image, double scale, double minThinGap) {
     return std::max(image.thread.nominal / 2.0 * scale, image.thread.drill / 2.0 * scale + minThinGap);
@@ -225,23 +324,56 @@ Status renderThreads(Drawing& drawing, const views::SheetView& view, const std::
         const std::string& thinLayer = hidden ? o.hiddenLayer : o.thinLayer;
         const double r = threadSheetRadius(t, view.scale, minThinGap);
         const Point2 c = view.toSheet(t.entry);
+        std::optional<std::pair<Point2, double>> clip;
+        if (t.clip) clip = std::pair{view.toSheet(t.clip->center), t.clip->radius * view.scale};
+        // Ломаная (closed — последняя точка совпадает с первой) с отсечением окружностью
+        // выносного элемента.
+        auto addPath = [&](const std::vector<Point2>& pts, bool closed, const std::string& layer, LineType lt) -> Status {
+            if (!clip) {
+                if (pts.size() == 2) return drawing.add(Entity{LineSeg{pts[0], pts[1]}, layer, lt});
+                std::vector<Point2> p = pts;
+                if (closed) p.pop_back();
+                return drawing.add(Entity{Polyline{p, closed}, layer, lt});
+            }
+            for (const auto& piece : clipPolyline(pts, clip->first, clip->second)) {
+                Status st = piece.size() == 2 ? drawing.add(Entity{LineSeg{piece[0], piece[1]}, layer, lt})
+                                              : drawing.add(Entity{Polyline{piece, false}, layer, lt});
+                if (!st) return st;
+            }
+            return okStatus();
+        };
         if (t.aspect == ThreadAspect::Side) {
             const Point2 n{-t.axis.y, t.axis.x};
             const Point2 end = add(c, mul(t.thread.length * view.scale, t.axis));
             for (double side : {1.0, -1.0}) {
-                const LineSeg l{add(c, mul(side * r, n)), add(end, mul(side * r, n))};
-                if (auto st = drawing.add(Entity{l, thinLayer, thin}); !st) return st;
+                if (auto st = addPath({add(c, mul(side * r, n)), add(end, mul(side * r, n))}, false, thinLayer, thin); !st)
+                    return st;
             }
             if (t.boundary) {
-                const LineSeg b{add(end, mul(r, n)), sub(end, mul(r, n))};
-                if (auto st = drawing.add(Entity{b, hidden ? o.hiddenLayer : o.visibleLayer,
-                                                 hidden ? LineType::Dashed : LineType::SolidThick});
+                if (auto st = addPath({add(end, mul(r, n)), sub(end, mul(r, n))}, false, hidden ? o.hiddenLayer : o.visibleLayer,
+                                      hidden ? LineType::Dashed : LineType::SolidThick);
                     !st)
                     return st;
             }
-        } else {
+        } else if (t.aspect == ThreadAspect::End) {
             const Arc& a = t.majorArc;
-            if (auto st = drawing.add(Entity{Arc{c, r, a.startDeg, a.endDeg}, thinLayer, thin}); !st) return st;
+            if (!clip) {
+                if (auto st = drawing.add(Entity{Arc{c, r, a.startDeg, a.endDeg}, thinLayer, thin}); !st) return st;
+            } else {
+                double sweep = std::fmod(a.endDeg - a.startDeg, 360.0);
+                if (sweep <= 0.0) sweep += 360.0;
+                for (const auto& [s0, sw] : clipArc(c, r, a.startDeg, sweep, clip->first, clip->second)) {
+                    if (auto st = drawing.add(Entity{Arc{c, r, s0, s0 + sw}, thinLayer, thin}); !st) return st;
+                }
+            }
+        } else {
+            constexpr int kSegments = 72;
+            std::vector<Point2> pts;
+            for (int i = 0; i <= kSegments; ++i) {
+                const double a = 2.0 * std::numbers::pi * (i % kSegments) / kSegments;
+                pts.push_back(add(c, mul(r, add(mul(std::cos(a), t.ellipseU), mul(std::sin(a), t.ellipseV)))));
+            }
+            if (auto st = addPath(pts, true, thinLayer, thin); !st) return st;
         }
     }
     return okStatus();
@@ -250,6 +382,9 @@ Status renderThreads(Drawing& drawing, const views::SheetView& view, const std::
 Result<DimensionResult> threadDimension(const ThreadImage& image, const views::SheetView& view,
                                         const ThreadDimensionDef& def, const AnnotationStyle& style) {
     if (!(view.scale > 0) || !std::isfinite(view.scale)) return invalid("thread dimension: view scale must be positive");
+    if (image.aspect == ThreadAspect::Oblique)
+        return Result<DimensionResult>::failure(ErrorCode::Unsupported,
+                                                "thread dimension: not drawn on an axonometric view (GOST 2.317)");
     DimensionResult res;
     res.state = DimensionState::Ok;
     res.text = threadDesignationText(image.thread, def.toleranceField);
