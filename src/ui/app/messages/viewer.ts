@@ -3,7 +3,7 @@
 
 export const viewerRu = {
   'viewer.title': 'bendcore · ядро',
-  'viewer.open': 'Открыть STEP…',
+  'viewer.open': 'Открыть STEP/IGES…',
   'viewer.deflection': 'Прогиб, мм',
   'viewer.angle': 'Угол, рад',
   'viewer.retessellate': 'Перестроить сетку',
@@ -19,7 +19,8 @@ export const viewerRu = {
   'viewer.area': 'Площадь, мм²',
   'viewer.box': 'Габарит, мм',
   'viewer.triangles': 'Треугольников',
-  'viewer.openHint': 'Откройте STEP-файл.',
+  'viewer.openHint': 'Откройте файл STEP или IGES.',
+  'viewer.parts': 'Деталей в файле',
   'viewer.face': 'Грань',
   'viewer.index': 'Индекс',
   'viewer.surface': 'Поверхность',
@@ -45,7 +46,7 @@ export const viewerRu = {
 
 export const viewerEn: Record<keyof typeof viewerRu, string> = {
   'viewer.title': 'bendcore · kernel',
-  'viewer.open': 'Open STEP…',
+  'viewer.open': 'Open STEP/IGES…',
   'viewer.deflection': 'Deflection, mm',
   'viewer.angle': 'Angle, rad',
   'viewer.retessellate': 'Rebuild mesh',
@@ -61,7 +62,8 @@ export const viewerEn: Record<keyof typeof viewerRu, string> = {
   'viewer.area': 'Area, mm²',
   'viewer.box': 'Bounding box, mm',
   'viewer.triangles': 'Triangles',
-  'viewer.openHint': 'Open a STEP file.',
+  'viewer.openHint': 'Open a STEP or IGES file.',
+  'viewer.parts': 'Parts in the file',
   'viewer.face': 'Face',
   'viewer.index': 'Index',
   'viewer.surface': 'Surface',

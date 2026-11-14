@@ -21,7 +21,7 @@ set(BENDCORE_WASM_ASSEMBLY_OUT "${CMAKE_BINARY_DIR}/wasm_assembly")
 set(BENDCORE_WASM_ASSEMBLY_OPT "Oz" CACHE STRING "Optimisation level of bendcore_assembly_wasm (O2, O3, Os, Oz)")
 
 add_executable(bendcore_assembly_wasm ${BENDCORE_WASM_ASSEMBLY_ROOT}/src/wasm/assembly_bindings.cpp)
-target_link_libraries(bendcore_assembly_wasm PRIVATE bendcore_fasteners)
+target_link_libraries(bendcore_assembly_wasm PRIVATE bendcore_fasteners bendcore_kernel_analysis)  # IGES/3MF, mass, docs/ui/DATA_EXCHANGE.md
 target_compile_options(bendcore_assembly_wasm PRIVATE -${BENDCORE_WASM_ASSEMBLY_OPT})
 set_target_properties(bendcore_assembly_wasm PROPERTIES
   OUTPUT_NAME bendcore_assembly

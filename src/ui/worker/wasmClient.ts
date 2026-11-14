@@ -34,7 +34,9 @@ export type RemoteResult<R> = R extends { dispose(): void }
     ? { document: RemoteResult<D>; report: P }
     : R extends { drawing: infer D; report: infer P }
       ? { drawing: RemoteResult<D>; report: P }
-      : R;
+      : R extends { shape: infer S; structure: infer P }
+        ? { shape: RemoteResult<S>; structure: P }
+        : R;
 
 /** Asynchronous view of an object in the worker: its methods, each returning a Promise. */
 export type Remote<T> = {

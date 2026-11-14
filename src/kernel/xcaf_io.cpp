@@ -6,14 +6,33 @@
 #include "step_preflight.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <map>
+#include <random>
 #include <sstream>
 #include <utility>
 
+#include <BRepBuilderAPI_MakeSolid.hxx>
+#include <BRepBuilderAPI_Sewing.hxx>
+#include <BRep_Builder.hxx>
+#include <BRep_Tool.hxx>
 #include <DESTEP_Parameters.hxx>
+#include <IGESCAFControl_Reader.hxx>
+#include <IGESCAFControl_Writer.hxx>
+#include <IGESControl_Controller.hxx>
+#include <IGESData_GlobalSection.hxx>
+#include <IGESData_IGESModel.hxx>
+#include <Interface_Static.hxx>
+#include <ShapeFix_Solid.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Compound.hxx>
+#include <TopoDS_Iterator.hxx>
+#include <TopoDS_Shell.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Interface_InterfaceModel.hxx>
 #include <NCollection_HSequence.hxx>
@@ -582,7 +601,22 @@ public:
           shapes_(xcaf.shapes()),
           colors_(xcaf.colors()),
           layers_(xcaf.layers()),
-          labels_(doc.definitions.size()) {}
+          labels_(doc.definitions.size()),
+          componentLabels_(doc.definitions.size()) {}
+
+    // Replaces the markers by the names of the definitions and components (writers that take
+    // the names from the labels and need no attribute pass afterwards: IGES).
+    void useDocumentNames() {
+        for (std::size_t i = 0; i < labels_.size(); ++i) {
+            if (labels_[i].IsNull()) {
+                continue;
+            }
+            TDataStd_Name::Set(labels_[i], fromUtf8(doc_.definitions[i].name));
+            for (std::size_t k = 0; k < componentLabels_[i].size(); ++k) {
+                TDataStd_Name::Set(componentLabels_[i][k], fromUtf8(doc_.definitions[i].components[k].name));
+            }
+        }
+    }
 
     // Creates the definitions reachable from the roots, children before parents, the roots
     // in the order of AssemblyDocument::roots (free shapes keep that order in the file).
@@ -640,6 +674,7 @@ private:
                 }
                 const auto k = static_cast<std::size_t>(&c - d.components.data());
                 TDataStd_Name::Set(comp, fromUtf8(componentMarker(i, k)));
+                componentLabels_[i].push_back(comp);
                 if (c.color) {
                     colors_->SetColor(comp, toOcct(*c.color), XCAFDoc_ColorSurf);
                 }
@@ -661,6 +696,7 @@ private:
     Handle(XCAFDoc_ColorTool) colors_;
     Handle(XCAFDoc_LayerTool) layers_;
     std::vector<TDF_Label> labels_;
+    std::vector<std::vector<TDF_Label>> componentLabels_;
 };
 
 // Replaces the markers of DocumentToXcaf in the transferred model by the attributes of the
@@ -868,6 +904,365 @@ Result<std::string> writeStepAssembly(const AssemblyDocument& document, const As
         if (status != IFSelect_RetDone || !out) {
             return R::failure(ErrorCode::IoError,
                               "STEP write failed (IFSelect status " + std::to_string(status) + ")");
+        }
+        return out.str();
+    } catch (const Standard_Failure& failure) {
+        return R::failure(ErrorCode::OperationFailed, failureText(failure));
+    } catch (const std::exception& e) {
+        return R::failure(ErrorCode::OperationFailed, e.what());
+    }
+}
+
+// ====================================================================== IGES
+
+namespace {
+
+// Temporary file holding the IGES text for the reader (OCCT reads IGES only from a file).
+class TempIgesFile {
+public:
+    explicit TempIgesFile(std::string_view data) {
+        static std::atomic<unsigned long> counter{0};
+        std::error_code ec;
+        const std::filesystem::path dir = std::filesystem::temp_directory_path(ec);
+        if (ec) {
+            error_ = "no temporary directory: " + ec.message();
+            return;
+        }
+        std::random_device rd;
+        for (int attempt = 0; attempt < 8 && path_.empty(); ++attempt) {
+            const std::filesystem::path candidate =
+                dir / ("bendcore-iges-" + std::to_string(rd()) + "-" + std::to_string(++counter) + ".igs");
+            if (std::filesystem::exists(candidate, ec)) {
+                continue;
+            }
+            std::ofstream out(candidate, std::ios::binary | std::ios::trunc);
+            if (!out) {
+                error_ = "cannot create " + candidate.string();
+                continue;
+            }
+            out.write(data.data(), static_cast<std::streamsize>(data.size()));
+            out.close();
+            if (!out) {
+                error_ = "cannot write " + candidate.string();
+                std::filesystem::remove(candidate, ec);
+                continue;
+            }
+            path_ = candidate.string();
+        }
+    }
+    ~TempIgesFile() {
+        if (!path_.empty()) {
+            std::error_code ec;
+            std::filesystem::remove(path_, ec);
+        }
+    }
+    TempIgesFile(const TempIgesFile&) = delete;
+    TempIgesFile& operator=(const TempIgesFile&) = delete;
+
+    const std::string& path() const { return path_; }
+    const std::string& error() const { return error_; }
+
+private:
+    std::string path_;
+    std::string error_;
+};
+
+// Millimetres per unit of the IGES global section unit flag (IGES 5.3, global parameter 14).
+std::optional<double> igesUnitFlagToMm(int flag) {
+    switch (flag) {
+        case 1: return 25.4;        // inch
+        case 2: return 1.0;         // millimetre
+        case 4: return 304.8;       // foot
+        case 5: return 1609344.0;   // mile
+        case 6: return 1000.0;      // metre
+        case 7: return 1.0e6;       // kilometre
+        case 8: return 0.0254;      // mil
+        case 9: return 1.0e-3;      // micron
+        case 10: return 10.0;       // centimetre
+        case 11: return 2.54e-5;    // microinch
+        default: return std::nullopt;
+    }
+}
+
+const char* igesUnitName(StepLengthUnit unit) {
+    switch (unit) {
+        case StepLengthUnit::Metre: return "M";
+        case StepLengthUnit::Inch: return "INCH";
+        case StepLengthUnit::Millimetre: break;
+    }
+    return "MM";
+}
+
+bool hasSolid(const TopoDS_Shape& shape) { return TopExp_Explorer(shape, TopAbs_SOLID).More(); }
+
+// Sews a part that arrived as loose faces; closed shells become solids. Face colours follow
+// the faces through the sewing history. Returns false (shape unchanged) when sewing gives a
+// shell that is not closed.
+bool sewIntoSolids(AssemblyDefinition& def, double tolerance, std::vector<std::string>& warnings) {
+    const TopoDS_Shape input = def.shape.occt();
+    if (!TopExp_Explorer(input, TopAbs_FACE).More()) {
+        return false;
+    }
+    BRepBuilderAPI_Sewing sewing(tolerance);
+    sewing.Add(input);
+    sewing.Perform();
+    const TopoDS_Shape sewn = sewing.SewedShape();
+    if (sewn.IsNull()) {
+        return false;
+    }
+    BRep_Builder builder;
+    TopoDS_Compound solids;
+    builder.MakeCompound(solids);
+    int closed = 0;
+    int open = 0;
+    for (TopExp_Explorer ex(sewn, TopAbs_SHELL); ex.More(); ex.Next()) {
+        const TopoDS_Shell shell = TopoDS::Shell(ex.Current());
+        if (!BRep_Tool::IsClosed(shell)) {
+            ++open;
+            continue;
+        }
+        BRepBuilderAPI_MakeSolid makeSolid(shell);
+        if (!makeSolid.IsDone()) {
+            ++open;
+            continue;
+        }
+        ShapeFix_Solid fix(makeSolid.Solid());
+        fix.Perform();  // orients the shell outward
+        builder.Add(solids, fix.Solid());
+        ++closed;
+    }
+    if (closed == 0 || open != 0) {
+        warnings.push_back("part '" + def.name + "': sewing gave " + std::to_string(closed + open) + " shell(s), " +
+                           std::to_string(open) + " not closed; kept as faces without a solid");
+        return false;
+    }
+    TopoDS_Shape result = solids;
+    if (closed == 1) {
+        TopoDS_Iterator it(solids);
+        result = it.Value();
+    }
+    std::vector<FaceColor> colors;
+    if (!def.faceColors.empty()) {
+        auto before = TopologyIndex::build(def.shape);
+        auto after = TopologyIndex::build(Shape(result));
+        if (before && after) {
+            for (const FaceColor& fc : def.faceColors) {
+                const TopoDS_Shape oldFace = before.value().faces()[fc.faceIndex].face;
+                const TopoDS_Shape newFace =
+                    sewing.IsModifiedSubShape(oldFace) ? sewing.ModifiedSubShape(oldFace) : oldFace;
+                for (TopExp_Explorer f(newFace, TopAbs_FACE); f.More(); f.Next()) {
+                    if (const auto idx = after.value().faceIndex(f.Current())) {
+                        colors.push_back({*idx, fc.color});
+                    }
+                }
+            }
+            std::sort(colors.begin(), colors.end(),
+                      [](const FaceColor& a, const FaceColor& b) { return a.faceIndex < b.faceIndex; });
+            colors.erase(std::unique(colors.begin(), colors.end(),
+                                     [](const FaceColor& a, const FaceColor& b) { return a.faceIndex == b.faceIndex; }),
+                         colors.end());
+        }
+    }
+    warnings.push_back("part '" + def.name + "': faces without a solid were sewn into " + std::to_string(closed) +
+                       " solid(s)");
+    def.shape = Shape(result);
+    def.faceColors = std::move(colors);
+    return true;
+}
+
+// A root part of several solids becomes an assembly of one part per solid (IGES writes the
+// bodies of an assembly as separate solid entities under one root). Names come from the XCAF
+// sub-shape labels of the solids, colours from the faces: a solid whose faces share one colour
+// gets it as the part colour.
+void splitSolidsIntoParts(AssemblyDocument& out, std::size_t index, const TDF_Label& label) {
+    std::vector<TopoDS_Shape> bodies;
+    for (TopExp_Explorer ex(out.definitions[index].shape.occt(), TopAbs_SOLID); ex.More(); ex.Next()) {
+        bodies.push_back(ex.Current());
+    }
+    if (bodies.size() < 2) {
+        return;
+    }
+    std::map<std::uint32_t, AssemblyColor> faceColor;
+    for (const FaceColor& fc : out.definitions[index].faceColors) {
+        faceColor[fc.faceIndex] = fc.color;
+    }
+    auto whole = TopologyIndex::build(out.definitions[index].shape);
+    if (!whole) {
+        return;
+    }
+    NCollection_Sequence<TDF_Label> subs;
+    XCAFDoc_ShapeTool::GetSubShapes(label, subs);
+    const std::string baseName = out.definitions[index].name;
+    std::vector<AssemblyComponent> components;
+    for (std::size_t k = 0; k < bodies.size(); ++k) {
+        AssemblyDefinition part;
+        part.kind = DefinitionKind::Part;
+        part.name = baseName + "_" + std::to_string(k + 1);
+        for (int i = 1; i <= subs.Length(); ++i) {
+            if (XCAFDoc_ShapeTool::GetShape(subs.Value(i)).IsSame(bodies[k])) {
+                const std::string name = labelName(subs.Value(i));
+                if (!name.empty()) {
+                    part.name = name;
+                }
+            }
+        }
+        part.shape = Shape(bodies[k]);
+        part.productId = std::string();
+        auto local = TopologyIndex::build(part.shape);
+        if (local) {
+            for (std::uint32_t f = 0; f < local.value().faces().size(); ++f) {
+                const auto wholeIndex = whole.value().faceIndex(local.value().faces()[f].face);
+                if (!wholeIndex) {
+                    continue;
+                }
+                if (const auto it = faceColor.find(*wholeIndex); it != faceColor.end()) {
+                    part.faceColors.push_back({f, it->second});
+                }
+            }
+        }
+        const bool uniform =
+            !part.faceColors.empty() && local && part.faceColors.size() == local.value().faces().size() &&
+            std::all_of(part.faceColors.begin(), part.faceColors.end(), [&](const FaceColor& fc) {
+                const AssemblyColor& c0 = part.faceColors.front().color;
+                return fc.color.r == c0.r && fc.color.g == c0.g && fc.color.b == c0.b && fc.color.alpha == c0.alpha;
+            });
+        if (uniform) {
+            part.color = part.faceColors.front().color;
+            part.faceColors.clear();
+        } else if (!part.color) {
+            part.color = out.definitions[index].color;
+        }
+        AssemblyComponent c;
+        c.name = part.name;
+        c.definition = out.definitions.size();
+        components.push_back(std::move(c));
+        out.definitions.push_back(std::move(part));
+    }
+    AssemblyDefinition& assembly = out.definitions[index];
+    assembly.kind = DefinitionKind::Assembly;
+    assembly.shape = Shape();
+    assembly.faceColors.clear();
+    assembly.components = std::move(components);
+}
+
+}  // namespace
+
+Result<AssemblyDocument> readIgesAssembly(std::string_view data, const IgesReadOptions& options) {
+    using R = Result<AssemblyDocument>;
+    if (data.empty()) {
+        return R::failure(ErrorCode::ParseError, "IGES input is empty");
+    }
+    if (data.size() > options.maxInputBytes) {
+        return R::failure(ErrorCode::InvalidInput, "IGES input of " + std::to_string(data.size()) +
+                                                       " bytes exceeds the limit of " +
+                                                       std::to_string(options.maxInputBytes) + " bytes");
+    }
+    // IGES is fixed-format text of 80-column records; column 73 holds the section letter. A
+    // first record that is not a start (S) or global (G) record is not IGES.
+    {
+        const std::size_t eol = data.find_first_of("\r\n");
+        const std::string_view first = data.substr(0, eol);
+        if (first.size() < 73 || (first[72] != 'S' && first[72] != 'G')) {
+            return R::failure(ErrorCode::ParseError, "IGES input does not start with a start or global section record");
+        }
+    }
+    try {
+        return detail::callConvertingFaults<R>([&]() -> R {
+            TempIgesFile file(data);
+            if (file.path().empty()) {
+                return R::failure(ErrorCode::IoError, "IGES temporary file: " + file.error());
+            }
+            TempXcafDocument xcaf;
+            IGESCAFControl_Reader reader;
+            reader.SetNameMode(true);
+            reader.SetColorMode(true);
+            reader.SetLayerMode(true);
+            const IFSelect_ReturnStatus status = reader.ReadFile(file.path().c_str());
+            if (status != IFSelect_RetDone) {
+                return R::failure(ErrorCode::ParseError,
+                                  "IGES input could not be parsed (IFSelect status " + std::to_string(status) + ")");
+            }
+            if (reader.NbRootsForTransfer() <= 0) {
+                return R::failure(ErrorCode::ParseError, "IGES input has no transferable entities");
+            }
+            if (!reader.Transfer(xcaf.doc())) {
+                return R::failure(ErrorCode::OperationFailed, "IGES entities could not be transferred to XCAF");
+            }
+            AssemblyDocument out;
+            const Handle(IGESData_IGESModel) model = Handle(IGESData_IGESModel)::DownCast(reader.Model());
+            if (!model.IsNull()) {
+                const IGESData_GlobalSection& global = model->GlobalSection();
+                if (!global.UnitName().IsNull()) {
+                    out.fileLengthUnits.emplace_back(global.UnitName()->ToCString());
+                }
+                out.fileUnitMm = igesUnitFlagToMm(global.UnitFlag());
+            }
+            NCollection_Sequence<TDF_Label> free;
+            xcaf.shapes()->GetFreeShapes(free);
+            if (free.Length() == 0) {
+                return R::failure(ErrorCode::OperationFailed, "IGES transfer produced no shapes");
+            }
+            const StepAttributes noAttributes;
+            XcafToDocument converter(xcaf, noAttributes, out);
+            for (int i = 1; i <= free.Length(); ++i) {
+                auto root = converter.convert(free.Value(i));
+                if (!root) {
+                    return R(root.error());
+                }
+                out.roots.push_back(root.value());
+            }
+            if (options.sewingTolerance > 0.0) {
+                for (AssemblyDefinition& def : out.definitions) {
+                    if (def.kind == DefinitionKind::Part && !hasSolid(def.shape.occt())) {
+                        sewIntoSolids(def, options.sewingTolerance, out.warnings);
+                    }
+                }
+            }
+            if (options.splitSolids) {
+                for (int i = 1; i <= free.Length(); ++i) {
+                    const std::size_t index = out.roots[static_cast<std::size_t>(i - 1)];
+                    if (out.definitions[index].kind == DefinitionKind::Part) {
+                        splitSolidsIntoParts(out, index, free.Value(i));
+                    }
+                }
+            }
+            return out;
+        });
+    } catch (const Standard_Failure& failure) {
+        return R::failure(detail::faultOr(failure, ErrorCode::ParseError), "IGES input is malformed: " + failureText(failure));
+    } catch (const std::exception& e) {
+        return R::failure(ErrorCode::ParseError, std::string("IGES input is malformed: ") + e.what());
+    }
+}
+
+Result<std::string> writeIgesAssembly(const AssemblyDocument& document, const IgesWriteOptions& options) {
+    using R = Result<std::string>;
+    try {
+        auto checked = checkStructure(document);
+        if (!checked) {
+            return R(checked.error());
+        }
+        TempXcafDocument xcaf;
+        DocumentToXcaf builder(document, xcaf);
+        auto built = builder.build();
+        if (!built) {
+            return R(built.error());
+        }
+        builder.useDocumentNames();
+        // IGESControl_Writer takes the unit and the B-rep mode from the static parameters.
+        IGESControl_Controller::Init();
+        Interface_Static::SetCVal("write.iges.unit", igesUnitName(options.fileUnit));
+        Interface_Static::SetIVal("write.iges.brep.mode", options.mode == IgesWriteMode::BRep ? 1 : 0);
+        IGESCAFControl_Writer writer;
+        writer.SetNameMode(true);
+        writer.SetColorMode(true);
+        writer.SetLayerMode(false);
+        if (!writer.Transfer(xcaf.doc())) {
+            return R::failure(ErrorCode::OperationFailed, "IGESCAFControl_Writer could not transfer the document");
+        }
+        std::ostringstream out;
+        if (!writer.Write(out) || !out) {
+            return R::failure(ErrorCode::IoError, "IGES write failed");
         }
         return out.str();
     } catch (const Standard_Failure& failure) {

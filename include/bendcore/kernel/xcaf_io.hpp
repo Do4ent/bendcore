@@ -110,6 +110,45 @@ Result<AssemblyDocument> readStepAssembly(std::string_view data);
 Result<std::string> writeStepAssembly(const AssemblyDocument& document,
                                       const AssemblyWriteOptions& options = {});
 
+// ------------------------------------------------------------------------------- IGES
+// IGES 5.3 through IGESCAFControl (docs/kernel/XCAF_IO.md, "IGES"). Names and colours are
+// carried; IGES has no product structure comparable to STEP, so the reader returns what
+// IGESCAFControl_Reader puts into XCAF (usually one part per top-level entity) and the
+// writer turns occurrences into located copies.
+
+enum class IgesWriteMode {
+    BRep,   // manifold solid B-rep objects (entity 186): a solid reads back as a solid
+    Faces,  // trimmed surfaces (entity 144) only, as most CAD systems write IGES
+};
+
+struct IgesWriteOptions {
+    IgesWriteMode mode = IgesWriteMode::BRep;
+    StepLengthUnit fileUnit = StepLengthUnit::Millimetre;
+};
+
+struct IgesReadOptions {
+    // A part that arrives as faces without a solid (trimmed-surface IGES) is sewn
+    // (BRepBuilderAPI_Sewing with this tolerance, mm) and, when the sewn shell is closed,
+    // turned into a solid; `warnings` reports every part treated so. 0 disables sewing.
+    double sewingTolerance = 1.0e-3;
+    // A top-level part of several solids becomes an assembly with one part per solid (names
+    // from the XCAF sub-shape labels, colours from the faces). IGES writers put the bodies of
+    // an assembly under one root, so this recovers the parts; false keeps one multi-body part.
+    bool splitSolids = true;
+    std::size_t maxInputBytes = kStepDefaultMaxInputBytes;
+};
+
+// The IGES reader of OCCT reads only from a file: the text is written to a temporary file
+// (std::filesystem::temp_directory_path(); MEMFS /tmp in WebAssembly) that is removed after
+// reading. Errors: empty or oversized input -> ParseError / InvalidInput; text OCCT cannot
+// load, no transferable entities -> ParseError; temporary file not writable -> IoError;
+// transfer without shapes -> OperationFailed. File unit: converted to mm, `fileLengthUnits`
+// holds the unit name of the global section.
+Result<AssemblyDocument> readIgesAssembly(std::string_view data, const IgesReadOptions& options = {});
+
+// Same structural checks and errors as writeStepAssembly(); layers are not written.
+Result<std::string> writeIgesAssembly(const AssemblyDocument& document, const IgesWriteOptions& options = {});
+
 // One part occurrence in world coordinates, found by walking the tree from a root.
 struct PlacedPart {
     std::size_t root = 0;                  // index into AssemblyDocument::roots

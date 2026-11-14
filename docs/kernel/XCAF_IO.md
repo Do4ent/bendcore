@@ -7,11 +7,12 @@
 
 ## Назначение
 
-`readStep` из `step_io.hpp` возвращает только геометрию. Этот модуль читает и пишет STEP
-вместе с тем, что OCCT хранит в документе XCAF: дерево сборки, имена, цвета, слои, единицы.
+`readStep` из `step_io.hpp` возвращает только геометрию. Этот модуль читает и пишет STEP и
+IGES вместе с тем, что OCCT хранит в документе XCAF: дерево сборки, имена, цвета, слои, единицы.
 Результат чтения — `AssemblyDocument`, обычная структура значений, не зависящая от OCAF
-(документ XCAF живёт только внутри вызова). Работа только с буферами в памяти — файловая
-система не используется (нужно для WASM и сервера).
+(документ XCAF живёт только внутри вызова). Вход и выход — буферы в памяти; файловая система
+не используется, кроме временного файла при чтении IGES (читатель IGES в OCCT читает только
+файл, раздел «IGES»; в WASM это MEMFS).
 
 ## API
 
@@ -135,13 +136,68 @@ NAUO — `OperationFailed` (маркеры в файл не попадают —
 - `XCAFApp_Application` — глобальный объект OCCT; одновременные вызовы из разных потоков
   требуют внешней синхронизации.
 
+## IGES
+
+```cpp
+Result<AssemblyDocument> doc = readIgesAssembly(igesText);              // IgesReadOptions
+Result<std::string> text = writeIgesAssembly(doc.value(),
+    {.mode = IgesWriteMode::BRep, .fileUnit = StepLengthUnit::Millimetre});
+```
+
+Та же структура `AssemblyDocument`, что у STEP; трансляторы — `IGESCAFControl_Reader` /
+`IGESCAFControl_Writer` (TKDEIGES), режимы имён и цветов включены.
+
+**Чтение.** Читатель IGES в OCCT работает только с файлом (`IGESFile_Read` открывает путь, у
+`IGESSelect_WorkLibrary` нет чтения из потока), поэтому текст пишется во временный файл
+`std::filesystem::temp_directory_path()/bendcore-iges-<случайное>-<счётчик>.igs` (в WASM — MEMFS
+`/tmp`) и удаляется после чтения. До записи — предел размера (`maxInputBytes`, как у STEP) и
+проверка первой записи: в столбце 73 должна стоять буква раздела S или G (IGES — записи по
+80 столбцов). Далее `ReadFile` → `Transfer(doc)` в документ XCAF в мм (файл в дюймах или метрах
+пересчитывается) и то же преобразование меток, что у STEP (`XcafToDocument`, без атрибутов
+PRODUCT/NAUO — в IGES их нет; `productId` пустой). Единица файла — `GlobalSection().UnitName()`
+в `fileLengthUnits`, `fileUnitMm` — по флагу единиц глобального раздела (IGES 5.3,
+параметр 14: 1 дюйм, 2 мм, 4 фут, 5 миля, 6 м, 7 км, 8 mil, 9 мкм, 10 см, 11 микродюйм).
+
+Два шага после передачи:
+
+1. **Сшивка.** Деталь, у которой есть грани, но нет тела (IGES из обрезанных поверхностей,
+   тип 144 — так пишет большинство CAD), сшивается `BRepBuilderAPI_Sewing` с допуском
+   `sewingTolerance` (по умолчанию 10⁻³ мм); каждая замкнутая оболочка превращается в тело
+   (`BRepBuilderAPI_MakeSolid` + `ShapeFix_Solid` для ориентации наружу). Цвета граней
+   переносятся по истории сшивки. Если хотя бы одна оболочка не замкнута, деталь остаётся
+   гранями. Каждый случай — строка в `warnings`. `sewingTolerance = 0` отключает шаг.
+2. **Разбиение на детали.** IGES не хранит структуру изделия: `IGESCAFControl_Writer` (и
+   другие системы) пишут тела сборки под одним корнем, и читатель возвращает одну деталь из
+   нескольких тел. Если `splitSolids` (по умолчанию), корневая деталь из ≥ 2 тел становится
+   сборкой: по детали на тело, имя — из метки XCAF этого тела (имена тел IGES), иначе
+   `<имя>_<k>`; цвета граней тела, совпадающие у всех граней, становятся цветом детали.
+   Положения — единичные (тела уже в мировой СК). `splitSolids = false` оставляет
+   многотельную деталь.
+
+**Запись.** Проверка структуры как у `writeStepAssembly`, документ XCAF (`DocumentToXcaf`),
+метки получают настоящие имена (`useDocumentNames`: писатель IGES берёт имя метки);
+`IGESControl_Controller::Init()`, статические параметры `write.iges.unit` (`MM`, `M`, `INCH`) и
+`write.iges.brep.mode` (1 — тела как manifold solid B-rep object, тип 186; 0 — обрезанные
+поверхности, тип 144), `Transfer(doc)`, `Write(ostream)`. Слои не пишутся. Вхождения сборки
+пишутся копиями тел на своих местах; при чтении они возвращаются отдельными деталями
+(шаг 2), общий прототип не восстанавливается.
+
+Ошибки: пустой вход, не IGES, OCCT не разобрал файл, нет передаваемых сущностей —
+`ParseError`; превышен предел размера — `InvalidInput`; временный файл не создан —
+`IoError`; передача без форм — `OperationFailed`; запись — как у STEP.
+
+Ограничения IGES: нет структуры изделия, атрибутов PRODUCT/NAUO и слоёв при записи; сборка
+читается плоским списком деталей; статические параметры OCCT (`Interface_Static`) общие для
+процесса — одновременная запись IGES из нескольких потоков не поддерживается (WASM-модули
+однопоточны).
+
 ## Как тестировать
 
 ```bash
 cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install
-cmake --build build-occt --target test_kernel_xcaf test_kernel_xcaf_roundtrip
-ctest --test-dir build-occt -R '^kernel_xcaf' --output-on-failure
+cmake --build build-occt --target test_kernel_xcaf test_kernel_xcaf_roundtrip test_kernel_iges
+ctest --test-dir build-occt -R '^kernel_(xcaf|iges)' --output-on-failure
 ```
 
 - `test_kernel_xcaf` — корпус `tests/corpus/generated` (эталоны из `manifest.json`,
@@ -165,3 +221,11 @@ ctest --test-dir build-occt -R '^kernel_xcaf' --output-on-failure
   прототипа с одинаковым именем получают свои `id`; `id` по умолчанию = имя; нумерация NAUO
   OCCT; ASCII-атрибуты видны в тексте файла, маркеры — нет); атрибуты файла корпуса
   (`id` = имя, NAUO `1…4`, нет `reference_designator`).
+- `test_kernel_iges` — IGES: брус 100×60×20 туда и обратно в режиме B-rep (тип 186 в файле,
+  6 граней, объём `abc`, имя, единица мм, без предупреждений); цилиндр в режиме поверхностей
+  (нет типа 186; сшит в одно тело с 3 гранями, объём πr²h с допуском 10⁻⁵, предупреждение;
+  без сшивки — нет тел); сборка из двух брусков и штифта с цветами — 3 детали, 15 граней,
+  суммарный объём, габарит 0…40 × 0…10 × 0…10, два красных и один синий, корень — сборка с
+  именами BLOCK, BLOCK, PIN; без разбиения — одна деталь из 3 тел; файл в дюймах
+  (`fileUnitMm = 25.4`, объём в мм³); ошибки; закоммиченные IGES корпуса (`manifest.json`,
+  раздел `iges`: объём, число тел и граней — по формулам модели-источника).

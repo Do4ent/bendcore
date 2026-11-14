@@ -1,10 +1,21 @@
 // Types of bendcore_assembly_api.mjs (docs/ui/ASSEMBLY_UI.md).
 
 import { KernelError, faceOfTriangle } from './bendcore_kernel_api.mjs';
-import type { KernelMesh, Vec3 } from './bendcore_kernel_api.mjs';
+import type { ExportFormat, ExportOptions, KernelMesh, MassProperties, Vec3 } from './bendcore_kernel_api.mjs';
 
 export { KernelError, faceOfTriangle };
-export type { KernelMesh, Vec3 };
+export type { ExportFormat, ExportOptions, KernelMesh, MassProperties, Vec3 };
+
+export interface AssemblyMassProperties {
+  /** mm³ and mm² of all part occurrences. */
+  volume: number;
+  area: number;
+  parts: number;
+  /** Paths of occurrences whose part has no density (left out of the mass). */
+  partsWithoutDensity: string[];
+  /** Over the parts with a density; null when none has one. */
+  mass: MassProperties | null;
+}
 
 export type ElementKind = 'face' | 'edge' | 'vertex';
 export type EntityUse = 'auto' | 'axis' | 'point';
@@ -321,7 +332,7 @@ export interface LoadReport {
 
 export interface InsertPartSpec {
   name?: string;
-  format?: 'part-json' | 'step';
+  format?: 'part-json' | 'step' | 'iges';
   data: string;
   placement?: PlacementInput;
   properties?: Partial<PartProperties>;
@@ -338,6 +349,8 @@ export class AssemblyDocumentHandle {
   state(): AssemblyState;
   save(options?: { embedGeometry?: boolean; indent?: number }): string;
   exportStep(options?: { schema?: 'AP214' | 'AP242' }): string;
+  exportFile(format: ExportFormat, options?: ExportOptions): Uint8Array;
+  massProperties(): AssemblyMassProperties;
   insertPart(spec: InsertPartSpec): { definition: number; occurrence: number };
   insertOccurrence(spec: {
     definition: number;
@@ -409,6 +422,7 @@ export class AssemblyKernel {
   createDocument(name?: string): AssemblyDocumentHandle;
   loadDocument(json: string): { document: AssemblyDocumentHandle; report: LoadReport };
   importStep(text: string): AssemblyDocumentHandle;
+  importIges(text: string): AssemblyDocumentHandle;
 }
 
 export type AssemblyModuleFactory = (options?: Record<string, unknown>) => Promise<unknown>;

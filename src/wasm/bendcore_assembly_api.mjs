@@ -72,6 +72,16 @@ export class AssemblyDocumentHandle {
     return this.#call('asmExportStep', options);
   }
 
+  /** File bytes: format 'step' | 'iges' | 'stl' | '3mf' (docs/ui/DATA_EXCHANGE.md). */
+  exportFile(format, options = {}) {
+    return this.#call('asmExport', format, options);
+  }
+
+  /** { volume, area, parts, partsWithoutDensity, mass: MassProperties | null }. */
+  massProperties() {
+    return this.#call('asmMassProperties');
+  }
+
   /** { name, format: 'part-json' | 'step', data, placement, properties, fixed, parent } → { definition, occurrence } */
   insertPart(spec) {
     return this.#call('asmInsertPart', spec);
@@ -249,6 +259,12 @@ export class AssemblyKernel {
   importStep(text) {
     if (typeof text !== 'string') throw new KernelError('InvalidInput', 'importStep expects STEP text');
     return new AssemblyDocumentHandle(this.#module, unwrap(this.#module.asmImportStep(text)));
+  }
+
+  /** New document from IGES (XCAF): one part per solid, names and colours of the file. */
+  importIges(text) {
+    if (typeof text !== 'string') throw new KernelError('InvalidInput', 'importIges expects IGES text');
+    return new AssemblyDocumentHandle(this.#module, unwrap(this.#module.asmImportIges(text)));
   }
 }
 

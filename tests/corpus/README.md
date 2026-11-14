@@ -1,4 +1,4 @@
-# Корпус STEP-моделей bendcore
+# Корпус STEP- и IGES-моделей bendcore
 
 Корпус для регрессии импорта (docs/ROADMAP_GENERAL_CAD.md, фаза 0, п. 6).
 Правило: в корпус попадают только файлы с подтверждённой лицензией на распространение;
@@ -31,6 +31,22 @@
 | `multibody_two_boxes.step` | AP214 | одна деталь из двух тел (compound) | 1000 + 1000 | 12 |
 | `assembly_bracket_pins_ap214.step` | AP214 | сборка XCAF: BASE_PLATE (красная) ×1, PIN (синий) ×2, SPACER (зелёная) ×1 | abc + 2πrp²hp + π(Rs²−rs²)hs | 12+4=16 |
 | `assembly_bracket_pins_ap242.step` | AP242 | та же сборка в AP242 | то же | 16 |
+
+IGES-копии части моделей (тот же генератор, `IGESCAFControl_Writer`, единица мм) перечислены
+в разделе `iges` манифеста: `file`, `model` (имя модели в `models`, чьи формулы — эталон) и
+`mode` (`brep` — тела, тип 186; `faces` — только обрезанные поверхности, тип 144, читатель
+сшивает их в тело):
+
+| Файл | Модель | Режим |
+|---|---|---|
+| `box_100x60x20.igs` | `box_100x60x20` | brep |
+| `cylinder_r20_h50.igs` | `cylinder_r20_h50` | brep |
+| `l_bracket_60x40x8_w30.igs` | `l_bracket_60x40x8_w30` | brep |
+| `plate_120x80x10_hole_d20_faces.igs` | `plate_120x80x10_hole_d20` | faces |
+| `assembly_bracket_pins.igs` | `assembly_bracket_pins_ap214` | brep (4 тела под одним корнем) |
+
+Их читают `test_kernel_iges` (native), `tests/wasm/exchange.test.mjs` (WASM) и сквозной тест
+`tests/e2e-app/exchange.spec.ts`.
 
 Для каждой модели манифест содержит также площадь поверхности (формула в поле
 `formula`), точные габариты, ожидаемое ключевое слово `FILE_SCHEMA`, имя верхней формы,

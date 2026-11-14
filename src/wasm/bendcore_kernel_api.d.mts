@@ -115,6 +115,46 @@ export interface KernelMesh {
   missingEdges: Uint32Array;
 }
 
+export type ExportFormat = 'step' | 'iges' | 'stl' | '3mf';
+
+/** Options of every export (docs/ui/DATA_EXCHANGE.md); fields of other formats are ignored. */
+export interface ExportOptions {
+  /** Part name written to STEP/IGES (PRODUCT name) and as the STL solid name. */
+  name?: string;
+  schema?: 'AP214' | 'AP242';
+  unit?: 'mm' | 'm' | 'inch';
+  igesMode?: 'brep' | 'faces';
+  stlFormat?: 'binary' | 'ascii';
+  /** Chordal deflection of STL/3MF meshes, mm (default 0.05). */
+  linearDeflection?: number;
+  /** Angular deflection of STL/3MF meshes, degrees (default 20). */
+  angularDeflectionDeg?: number;
+}
+
+/** Units: kg, mm, kg·mm². Inertia about the centre of mass, axes parallel to the global axes. */
+export interface MassProperties {
+  mass: number;
+  volume: number;
+  area: number;
+  centerOfMass: Vec3;
+  inertiaAtCenter: [Vec3, Vec3, Vec3];
+  /** Ascending. */
+  principalMoments: Vec3;
+  principalAxes: [Vec3, Vec3, Vec3];
+  bodies: number;
+}
+
+export interface ImportStructure {
+  /** Several placed parts or an assembly root. */
+  assembly: boolean;
+  parts: number;
+  definitions: number;
+  paths: string[];
+  warnings: string[];
+  name: string;
+  fileUnitMm: number | null;
+}
+
 export class KernelShape {
   readonly handle: number;
   readonly disposed: boolean;
@@ -128,6 +168,8 @@ export class KernelShape {
   edgeTypes(): CurveType[];
   face(index: number): FaceInfo;
   tessellate(params?: TessellationParams): KernelMesh;
+  exportFile(format: ExportFormat, options?: ExportOptions): Uint8Array;
+  massProperties(density: number): MassProperties;
 }
 
 export interface KernelInfo {
@@ -138,6 +180,8 @@ export interface KernelInfo {
 export class Kernel {
   info(): KernelInfo;
   readStep(bytes: Uint8Array): KernelShape;
+  importModel(bytes: Uint8Array, format: 'step' | 'iges'): { shape: KernelShape; structure: ImportStructure };
+  exchangeInfo(): { zipMethod: 'deflate' | 'stored' };
 }
 
 export type KernelModuleFactory = (options?: Record<string, unknown>) => Promise<unknown>;

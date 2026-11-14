@@ -1,7 +1,7 @@
 // Генератор синтетического корпуса STEP с аналитически известными величинами.
 //
 // Использование: generate_corpus <каталог>
-// Пишет <каталог>/<модель>.step и <каталог>/manifest.json.
+// Пишет <каталог>/<модель>.step, IGES-копии части моделей (<модель>.igs) и <каталог>/manifest.json.
 //
 //        generate_corpus --large <файл.step> <минимум МБ>
 // Крупный STEP для нагрузочного теста (tests/regression/stress/test_stress_step.cpp): сетка
@@ -29,6 +29,9 @@
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
 #include <DESTEP_Parameters.hxx>
+#include <IGESCAFControl_Writer.hxx>
+#include <IGESControl_Controller.hxx>
+#include <Interface_Static.hxx>
 #include <NCollection_IndexedMap.hxx>
 #include <Quantity_Color.hxx>
 #include <STEPCAFControl_Writer.hxx>
@@ -406,7 +409,8 @@ void set_name(const TDF_Label& l, const std::string& name) {
   TDataStd_Name::Set(l, TCollection_ExtendedString(name.c_str()));
 }
 
-void write_step(const Model& m, const std::filesystem::path& file) {
+// Документ XCAF модели: деталь или сборка с именами и цветами деталей.
+Handle(TDocStd_Document) build_xcaf(const Model& m) {
   Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
   Handle(TDocStd_Document) doc;
   app->NewDocument("MDTV-XCAF", doc);
@@ -436,6 +440,12 @@ void write_step(const Model& m, const std::filesystem::path& file) {
     }
     shapes->UpdateAssemblies();
   }
+  return doc;
+}
+
+void write_step(const Model& m, const std::filesystem::path& file) {
+  Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
+  Handle(TDocStd_Document) doc = build_xcaf(m);
 
   DESTEP_Parameters params;
   params.InitFromStatic();
@@ -449,6 +459,23 @@ void write_step(const Model& m, const std::filesystem::path& file) {
     throw std::runtime_error(m.name + ": STEPCAFControl_Writer::Perform не записал " + file.string());
   }
   app->Close(doc);
+}
+
+// IGES 5.3 той же модели (IGESCAFControl_Writer, единица мм). brep = true: тела как
+// manifold solid B-rep object (тип 186); false: только обрезанные поверхности (тип 144), как
+// пишет большинство CAD — читатель сшивает их в тело.
+void write_iges(const Model& m, const std::filesystem::path& file, bool brep) {
+  Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
+  Handle(TDocStd_Document) doc = build_xcaf(m);
+  IGESControl_Controller::Init();
+  Interface_Static::SetCVal("write.iges.unit", "MM");
+  Interface_Static::SetIVal("write.iges.brep.mode", brep ? 1 : 0);
+  IGESCAFControl_Writer writer;
+  writer.SetNameMode(true);
+  writer.SetColorMode(true);
+  const bool ok = writer.Transfer(doc) && writer.Write(file.string().c_str());
+  app->Close(doc);
+  if (!ok) throw std::runtime_error(m.name + ": IGESCAFControl_Writer не записал " + file.string());
 }
 
 nlohmann::json to_json(const Model& m) {
@@ -600,6 +627,27 @@ int main(int argc, char** argv) {
       write_step(m, out / (m.name + ".step"));
       manifest["models"].push_back(to_json(m));
       std::cout << "записано: " << (out / (m.name + ".step")).string() << "\n";
+    }
+    // IGES-копии части моделей: ожидаемые значения — у модели с тем же именем в "models".
+    struct IgesCopy {
+      std::string model;
+      std::string file;
+      bool brep;
+    };
+    const std::vector<IgesCopy> iges = {
+        {"box_100x60x20", "box_100x60x20.igs", true},
+        {"cylinder_r20_h50", "cylinder_r20_h50.igs", true},
+        {"l_bracket_60x40x8_w30", "l_bracket_60x40x8_w30.igs", true},
+        {"plate_120x80x10_hole_d20", "plate_120x80x10_hole_d20_faces.igs", false},
+        {"assembly_bracket_pins_ap214", "assembly_bracket_pins.igs", true},
+    };
+    manifest["iges"] = nlohmann::json::array();
+    for (const IgesCopy& c : iges) {
+      const auto it = std::find_if(models.begin(), models.end(), [&](const Model& m) { return m.name == c.model; });
+      if (it == models.end()) throw std::runtime_error("нет модели " + c.model + " для IGES");
+      write_iges(*it, out / c.file, c.brep);
+      manifest["iges"].push_back({{"file", c.file}, {"model", c.model}, {"mode", c.brep ? "brep" : "faces"}});
+      std::cout << "записано: " << (out / c.file).string() << "\n";
     }
     std::ofstream mf(out / "manifest.json");
     mf << manifest.dump(2) << "\n";

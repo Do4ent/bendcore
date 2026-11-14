@@ -1,5 +1,32 @@
 {
   "generator": "tests/corpus/generate_corpus.cpp",
+  "iges": [
+    {
+      "file": "box_100x60x20.igs",
+      "mode": "brep",
+      "model": "box_100x60x20"
+    },
+    {
+      "file": "cylinder_r20_h50.igs",
+      "mode": "brep",
+      "model": "cylinder_r20_h50"
+    },
+    {
+      "file": "l_bracket_60x40x8_w30.igs",
+      "mode": "brep",
+      "model": "l_bracket_60x40x8_w30"
+    },
+    {
+      "file": "plate_120x80x10_hole_d20_faces.igs",
+      "mode": "faces",
+      "model": "plate_120x80x10_hole_d20"
+    },
+    {
+      "file": "assembly_bracket_pins.igs",
+      "mode": "brep",
+      "model": "assembly_bracket_pins_ap214"
+    }
+  ],
   "models": [
     {
       "area": 18400.0,

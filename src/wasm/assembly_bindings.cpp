@@ -28,11 +28,15 @@
 #include <bendcore/modeling/part_document.hpp>
 #include <bendcore/modeling/part_features.hpp>
 
+#include "exchange_common.hpp"
+
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
 #include <Standard_Failure.hxx>
 #include <Standard_Version.hxx>
+#include <BRep_Builder.hxx>
+#include <TopoDS_Compound.hxx>
 #include <TopoDS_TShape.hxx>
 
 #include <algorithm>
@@ -971,6 +975,72 @@ val asmImportStep(std::string step) {
     return guarded([&] { return success(val(addSession(take(a::AssemblyDocument::importStep(step))))); });
 }
 
+namespace ex = bendcore::wasm_exchange;
+
+// Option errors of the exchange helpers are argument errors of the caller.
+template <typename Body>
+auto withOptions(Body&& body) {
+    try {
+        return body();
+    } catch (const ex::OptionError& e) {
+        throw InputError(e.what());
+    }
+}
+
+// IGES through XCAF (docs/ui/DATA_EXCHANGE.md): a root of several solids becomes an assembly
+// of one part per solid; names and colours as in the file.
+val asmImportIges(std::string iges) {
+    return guarded([&] {
+        const k::AssemblyDocument xcaf = take(k::readIgesAssembly(iges));
+        return success(val(addSession(take(a::AssemblyDocument::fromXcaf(xcaf)))));
+    });
+}
+
+// {format: step|iges|stl|3mf, options} -> Uint8Array. Structure, names and colours as for
+// exportStep; STL merges the parts, 3MF writes one object per part occurrence.
+val asmExport(std::uint32_t handle, std::string format, val options) {
+    return withSession(handle, [&](Session& s) {
+        const k::AssemblyDocument xcaf = take(s.history.document().toXcaf());
+        const std::string bytes = take(withOptions([&] { return ex::exportDocument(xcaf, format, options); }));
+        return success(ex::bytesToJs(bytes));
+    });
+}
+
+// Mass properties of the assembly (bendcore_kernel_analysis): every part occurrence with the
+// density of its definition, summed with the parallel axis theorem. Parts without a density
+// are listed and left out of the mass; volume and area cover all parts.
+val asmMassProperties(std::uint32_t handle) {
+    return withSession(handle, [&](Session& s) {
+        const a::AssemblyDocument& doc = s.history.document();
+        const auto placed = take(doc.placedParts());
+        std::vector<k::MassProperties> withMass;
+        double volume = 0.0, area = 0.0;
+        val missing = val::array();
+        for (const a::PlacedOccurrence& p : placed) {
+            if (p.shape.IsNull()) continue;
+            const a::Definition& def = doc.definition(p.definition);
+            const double rho = def.properties.density.value_or(1000.0);
+            k::MassProperties mp = take(k::computeMassProperties(k::Shape(p.shape), rho));
+            volume += mp.volume;
+            area += mp.area;
+            if (def.properties.density) withMass.push_back(mp);
+            else missing.call<void>("push", p.pathName);
+        }
+        val o = val::object();
+        o.set("volume", volume);
+        o.set("area", area);
+        o.set("parts", static_cast<double>(placed.size()));
+        o.set("partsWithoutDensity", missing);
+        if (withMass.empty()) {
+            o.set("mass", val::null());
+        } else {
+            const k::MassProperties total = take(k::combine(withMass));
+            o.set("mass", ex::massToJs(total));
+        }
+        return success(o);
+    });
+}
+
 val asmDispose(std::uint32_t handle) {
     if (!sessions().erase(handle)) return failure("InvalidInput", "unknown assembly handle " + std::to_string(handle));
     // Meshes no longer referenced by any document keep only their cache entry: drop them.
@@ -1044,7 +1114,7 @@ void placeBeside(a::AssemblyDocument& d, a::OccurrenceId occ) {
     check(d.setPlacement(occ, t));
 }
 
-// Part data from {format: 'part-json' | 'step', data: text}.
+// Part data from {format: 'part-json' | 'step' | 'iges', data: text}.
 a::PartData partFromJs(const val& v) {
     const std::string format = optionalString(v, "format", "part-json", "part");
     const std::string data = requireString(v["data"], "part.data");
@@ -1056,7 +1126,17 @@ a::PartData partFromJs(const val& v) {
         k::Shape shape = take(k::readStep(data));
         return a::PartData{shape.occt(), nullptr};
     }
-    throw InputError("part.format must be 'part-json' or 'step'");
+    if (format == "iges") {
+        // All placed parts of the file as one part (as readStep does for STEP).
+        const auto placed = take(k::flattenAssembly(take(k::readIgesAssembly(data))));
+        BRep_Builder builder;
+        TopoDS_Compound all;
+        builder.MakeCompound(all);
+        for (const k::PlacedPart& p : placed) builder.Add(all, p.shape.occt());
+        if (placed.size() == 1) return a::PartData{placed.front().shape.occt(), nullptr};
+        return a::PartData{all, nullptr};
+    }
+    throw InputError("part.format must be 'part-json', 'step' or 'iges'");
 }
 
 // {name, format, data, placement, properties, fixed, parent} -> {definition, occurrence}
@@ -1623,6 +1703,9 @@ EMSCRIPTEN_BINDINGS(bendcore_assembly) {
     emscripten::function("asmCreate", &asmCreate);
     emscripten::function("asmLoad", &asmLoad);
     emscripten::function("asmImportStep", &asmImportStep);
+    emscripten::function("asmImportIges", &asmImportIges);
+    emscripten::function("asmExport", &asmExport);
+    emscripten::function("asmMassProperties", &asmMassProperties);
     emscripten::function("asmDispose", &asmDispose);
     emscripten::function("asmState", &asmState);
     emscripten::function("asmSave", &asmSave);

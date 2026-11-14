@@ -70,17 +70,38 @@ struct ThreeMfObject {
     std::optional<Rgb> color;  // written as a base material displaycolor
 };
 
-// 3MF core specification 1.x package: [Content_Types].xml, _rels/.rels, 3D/3dmodel.model;
-// unit="millimeter", one <object type="model"> and one build <item> per input object.
-// The ZIP entries are deflated with zlib and carry zlib CRC-32.
-Result<std::string> export3mf(const std::vector<ThreeMfObject>& objects, const MeshExportParams& params = {});
-
-// Minimal ZIP reader for the packages written here and by other tools (stored or deflated
-// entries, no ZIP64, no encryption): entry name -> uncompressed bytes, CRC-32 checked.
 struct ZipEntry {
     std::string name;
     std::string data;
 };
+
+// Compression of ZIP entries. Deflate needs zlib, which only the native build links: the
+// WebAssembly build has no zlib (the Emscripten port is downloaded from the network at build
+// time), so it writes stored entries (docs/kernel/ANALYSIS.md, "ZIP и zlib").
+enum class ZipMethod : std::uint16_t { Stored = 0, Deflate = 8 };
+
+// true when this build links zlib (deflate on write, inflate on read).
+bool zipDeflateAvailable() noexcept;
+// Deflate where available, Stored otherwise; export3mf writes with this method.
+ZipMethod zipDefaultMethod() noexcept;
+
+// CRC-32 of ZIP (ISO 3309 / ITU-T V.42: reflected polynomial 0xEDB88320, initial value and
+// final XOR 0xFFFFFFFF), table-driven, independent of zlib. `crc` continues a previous value.
+std::uint32_t crc32(std::string_view data, std::uint32_t crc = 0) noexcept;
+
+// ZIP archive (no ZIP64): every entry with the given method, CRC-32 of the uncompressed
+// bytes, DOS date 1980-01-01 00:00 so that equal input gives byte-identical archives.
+// Unsupported for Deflate without zlib and for archives that would need ZIP64.
+Result<std::string> writeZip(const std::vector<ZipEntry>& entries, ZipMethod method);
+
+// 3MF core specification 1.x package: [Content_Types].xml, _rels/.rels, 3D/3dmodel.model;
+// unit="millimeter", one <object type="model"> and one build <item> per input object.
+// ZIP entries use zipDefaultMethod() (deflate natively, stored in WebAssembly).
+Result<std::string> export3mf(const std::vector<ThreeMfObject>& objects, const MeshExportParams& params = {});
+
+// Minimal ZIP reader for the packages written here and by other tools (stored or deflated
+// entries, no ZIP64, no encryption): entry name -> uncompressed bytes, CRC-32 checked.
+// A deflated entry without zlib in the build is Unsupported.
 Result<std::vector<ZipEntry>> readZip(std::string_view archive);
 
 }  // namespace bendcore::kernel

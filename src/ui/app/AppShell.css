@@ -80,11 +80,30 @@
   color: var(--app-muted);
 }
 
+.app-tab-action {
+  margin: 0 4px 4px;
+}
+
 .app-main {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+/* Mass properties of a part tab (docs/ui/DATA_EXCHANGE.md): over the editor's right side. */
+.app-mass {
+  position: absolute;
+  top: 48px;
+  right: 8px;
+  z-index: 20;
+  width: 300px;
+  max-width: calc(100% - 16px);
+  padding: 8px;
+  border: 1px solid var(--app-border, #d8dee6);
+  border-radius: 6px;
+  background: var(--app-bg, #ffffff);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
 }
 .app-panel {
   flex: 1;

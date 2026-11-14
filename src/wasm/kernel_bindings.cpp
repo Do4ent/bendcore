@@ -11,10 +11,14 @@
 #include <bendcore/kernel/step_io.hpp>
 #include <bendcore/kernel/tessellation.hpp>
 
+#include "exchange_common.hpp"
+
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
 #include <BRepAdaptor_Surface.hxx>
+#include <BRep_Builder.hxx>
+#include <TopoDS_Compound.hxx>
 #include <Standard_Failure.hxx>
 #include <Standard_Version.hxx>
 #include <TopAbs_Orientation.hxx>
@@ -40,6 +44,9 @@ namespace {
 struct Entry {
     k::Shape shape;
     std::optional<k::TopologyIndex> index;  // built on first use
+    // Structure of an imported STEP / IGES file (names, colours, occurrences): export writes it
+    // instead of the bare shape. Empty for readStep() shapes.
+    std::optional<k::AssemblyDocument> source;
 };
 
 std::map<std::uint32_t, Entry>& registry() {
@@ -137,7 +144,7 @@ val readStep(val bytes) {
         auto shape = k::readStep(data);
         if (!shape) return failure(shape.error());
         const std::uint32_t handle = nextHandle()++;
-        registry().emplace(handle, Entry{std::move(shape).value(), std::nullopt});
+        registry().emplace(handle, Entry{std::move(shape).value(), std::nullopt, std::nullopt});
         return success(val(handle));
     } catch (const Standard_Failure& e) {
         return failure("OperationFailed", std::string("OCCT: ") + e.what());
@@ -367,9 +374,83 @@ val tessellate(std::uint32_t handle, val params) {
     });
 }
 
+namespace ex = bendcore::wasm_exchange;
+
+// STEP or IGES with its XCAF structure -> {handle, structure}. The shape of the handle is the
+// single placed part, or a compound of all placed parts in world coordinates.
+val importModel(val bytes, std::string format) {
+    try {
+        const std::string data = ex::bytesFromJs(bytes, "importModel bytes");
+        auto doc = ex::readDocument(format, data);
+        if (!doc) return failure(doc.error());
+        auto placed = k::flattenAssembly(doc.value());
+        if (!placed) return failure(placed.error());
+        if (placed.value().empty()) return failure("OperationFailed", "the file has no part with a shape");
+        k::Shape shape = placed.value().front().shape;
+        if (placed.value().size() > 1) {
+            BRep_Builder builder;
+            TopoDS_Compound all;
+            builder.MakeCompound(all);
+            for (const k::PlacedPart& p : placed.value()) builder.Add(all, p.shape.occt());
+            shape = k::Shape(all);
+        }
+        val out = val::object();
+        out.set("structure", ex::structureToJs(doc.value(), placed.value()));
+        const std::uint32_t handle = nextHandle()++;
+        registry().emplace(handle, Entry{std::move(shape), std::nullopt, std::move(doc).value()});
+        out.set("handle", handle);
+        return success(out);
+    } catch (const ex::OptionError& e) {
+        return failure("InvalidInput", e.what());
+    } catch (const Standard_Failure& e) {
+        return failure("OperationFailed", std::string("OCCT: ") + e.what());
+    } catch (const std::exception& e) {
+        return failure("OperationFailed", e.what());
+    }
+}
+
+// {format: step|iges|stl|3mf, options} -> Uint8Array of the file.
+val exportShape(std::uint32_t handle, std::string format, val options) {
+    return withShape(handle, [&](Entry& e) {
+        try {
+            const std::string name = ex::stringOption(options, "name", "Part");
+            const k::AssemblyDocument doc = e.source ? *e.source : ex::partDocument(e.shape, name, std::nullopt);
+            auto bytes = ex::exportDocument(doc, format, options);
+            if (!bytes) return failure(bytes.error());
+            return success(ex::bytesToJs(bytes.value()));
+        } catch (const ex::OptionError& err) {
+            return failure("InvalidInput", err.what());
+        }
+    });
+}
+
+// Mass, centre of mass and inertia (bendcore_kernel_analysis) for one density, kg/m^3.
+val massProperties(std::uint32_t handle, val density) {
+    return withShape(handle, [&](Entry& e) {
+        try {
+            auto p = k::computeMassProperties(e.shape, ex::densityArgument(density));
+            if (!p) return failure(p.error());
+            return success(ex::massToJs(p.value()));
+        } catch (const ex::OptionError& err) {
+            return failure("InvalidInput", err.what());
+        }
+    });
+}
+
+// Byte layout of the formats in this build: {zipMethod: 'deflate' | 'stored'} (3MF).
+val exchangeInfo() {
+    val out = val::object();
+    out.set("zipMethod", std::string(k::zipDeflateAvailable() ? "deflate" : "stored"));
+    return out;
+}
+
 }  // namespace
 
 EMSCRIPTEN_BINDINGS(bendcore_kernel) {
+    emscripten::function("importModel", &importModel);
+    emscripten::function("exportShape", &exportShape);
+    emscripten::function("massProperties", &massProperties);
+    emscripten::function("exchangeInfo", &exchangeInfo);
     emscripten::function("kernelInfo", &kernelInfo);
     emscripten::function("readStep", &readStep);
     emscripten::function("disposeShape", &disposeShape);

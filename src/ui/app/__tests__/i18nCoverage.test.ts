@@ -13,7 +13,7 @@ import { AREAS, en, isMessageKey, ru } from '../i18n';
 
 const uiRoot = path.resolve(__dirname, '../..');
 /** The application and its editors (the older Electron tube window in src/ui/*.tsx is not part of it). */
-const DIRS = ['app', 'modeling', 'modeling/sketch', 'assembly', 'drawing', 'kernel', 'worker'];
+const DIRS = ['app', 'modeling', 'modeling/sketch', 'assembly', 'drawing', 'kernel', 'worker', 'exchange'];
 
 function sources(): { file: string; text: string }[] {
   const out: { file: string; text: string }[] = [];
