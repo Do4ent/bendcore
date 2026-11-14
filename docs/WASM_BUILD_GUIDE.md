@@ -83,8 +83,8 @@ Eigen 3.3+ (MPL-2.0, только заголовки) нужен `sketch.cpp`, P
 | До изменений, `BENDCORE_EIGEN_DIR=/usr/include/eigen3` (как `scripts/build_wasm.sh` и CI) | 3.4.0 | OK | 60/60 |
 | После | 3.4.0 (найден автоматически) | OK | 59/59 (удалён `dxf_reader_comprehensive` — тест без проверок) |
 
-Прежнее заявление «59 WASM-тестов проходят» (`BUILD_STATUS_2026-11-06.md`) не могло
-относиться к заглушке: с ней не собирается даже библиотека ядра. Оно соответствует сборке
+Прежнее заявление «59 WASM-тестов проходят» (удалённый отчёт `BUILD_STATUS_2026-11-06.md`,
+`docs/DOCS_CLEANUP.md`) не могло относиться к заглушке: с ней не собирается даже библиотека ядра. Оно соответствует сборке
 через `scripts/build_wasm.sh`, который передаёт настоящий Eigen.
 
 ### Advanced: Step-by-Step
@@ -112,22 +112,18 @@ file build-wasm/web/bendcore.{js,wasm,mjs}
 
 ### Workflow: `.github/workflows/wasm.yml`
 
-Runs on:
-- Every push to `main`
-- Every PR
-- Manual trigger (`workflow_dispatch`)
+Запуск: push в `main`, PR, вручную (`workflow_dispatch`), вызов из `production-deploy.yml`
+(`workflow_call`). Задачи:
 
-### Jobs
+1. **wasm** — этот модуль (`bendcore_wasm`): emsdk, `./scripts/build_wasm.sh`, проверка
+   страницы `web/index.html` в Playwright, артефакт `bendcore-wasm`.
+2. **wasm-modules** — четыре модуля страниц CAD (ядро, деталь, сборка, чертёж) на OCCT для
+   WASM, node-тесты `wasm_*`.
+3. **wasm-e2e** — наборы Playwright по модулям.
 
-1. **wasm**: Build BendCore as WebAssembly
-   - Install emsdk
-   - Run `./scripts/build_wasm.sh`
-   - Run Playwright tests on generated page
-   - Upload artifacts
-
-2. **occt**: Build OpenCASCADE (separate OCCT tests)
-   - Cached separately
-   - Runs independently
+Подробно (кэши, ключи, артефакты) — `docs/qa/QA.md`, раздел 4. Запуск на GitHub в
+рамках этих работ не проверялся: workflow прогонялись по шагам локально
+(`docs/qa/QA.md`, «Только в CI»).
 
 ### Debugging Failures
 
@@ -186,15 +182,9 @@ build-wasm/web/
 | `Out of memory` | Increase swap, use Release build |
 | `Link errors` | Check CMakeFiles/CMakeError.log |
 
-## CI Status
-
-- **JavaScript/TypeScript:** `.github/workflows/build-test.yml` ✅ (Always tested)
-- **WebAssembly:** `.github/workflows/wasm.yml` ✅ (Tested on push to main)
-- **OCCT:** Part of wasm.yml ✅ (Cached separately)
-
 ## Related
 
 - `./scripts/build_wasm.sh` - Build script
 - `CMakePresets.json` - CMake configuration
 - `.github/workflows/wasm.yml` - CI workflow
-- `docs/ARCHITECTURE.md` - System architecture
+- `docs/qa/QA.md` — CI и проверки
