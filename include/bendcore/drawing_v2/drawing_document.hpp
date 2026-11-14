@@ -70,6 +70,9 @@ struct ModelSnapshot {
     // Для каждого ребра формы (индекс TopologyIndex) — определение детали, которой оно
     // принадлежит (по развёртке placedParts).
     std::vector<assembly_v2::DefinitionId> edgeOwner;
+    // Для каждой дочерней формы компаунда (TopoDS_Iterator, порядок развёртки) — определение
+    // детали (условности разрезов сборок, ГОСТ 2.305, разд. 9).
+    std::vector<assembly_v2::DefinitionId> childOwner;
 };
 
 // Снимок документа детали: итоговая форма с картой имён; масса = объём · плотность.
@@ -87,6 +90,29 @@ using ModelLoader = std::function<Result<ModelSnapshot>(const ModelLink&)>;
 ModelLoader fileModelLoader(std::string baseDirectory);
 
 std::string hashHex(std::uint64_t hash);
+
+// Условности разрезов сборок (ГОСТ 2.305-2008, разд. 9; ГОСТ 2.109-73): как деталь показывается
+// в разрезе.
+enum class SectionRule {
+    Cut,                    // рассекается
+    WholeInLongitudinal,    // при продольном разрезе — нерассечённой (крепёж, валы, оси)
+    NeverCut,               // всегда нерассечённой (шарики)
+};
+// Правило детали: PartProperties::sectionCut (true — Cut, false — WholeInLongitudinal), иначе по
+// умолчанию: наименование или имя начинается со слова «Шарик»/«Ball» — NeverCut; стандартное
+// изделие (обозначение пустое — так в спецификацию попадают изделия библиотеки крепежа) или
+// наименование «Болт», «Винт», «Шпилька», «Гайка», «Шайба», «Штифт», «Шпонка», «Заклёпка», «Вал»,
+// «Ось», «Шпиндель» (и англ. bolt, screw, stud, nut, washer, pin, key, rivet, shaft, axle,
+// spindle) — WholeInLongitudinal; прочие — Cut.
+SectionRule sectionRule(const assembly_v2::PartProperties& properties, const std::string& definitionName);
+
+// Разрез продольный для детали: ось детали (ось цилиндрической грани наибольшей площади) лежит в
+// секущей плоскости (|ось · нормаль| ≤ 0,1). Деталь без цилиндров — продольный (true).
+bool longitudinalSection(const TopoDS_Shape& part, views::Vec3 sight);
+
+// Части снимка для разреза с направлением взгляда sight: деталь — одна часть; сборка — дочерние
+// формы компаунда по childOwner, keepWhole — по sectionRule и longitudinalSection.
+views::SectionParts sectionParts(const ModelSnapshot& model, views::Vec3 sight);
 
 // Ссылка на элемент модели по индексу TopologyIndex её формы (имя + сигнатура; у сборки — только
 // сигнатура). Ошибка InvalidInput — индекс вне формы.
@@ -137,6 +163,12 @@ struct ViewDef {
     views::Vec3 planePoint{0, 0, 0};
     views::SectionKind sectionKind = views::SectionKind::Cut;
     std::string markView;  // Section: вид, на котором обозначается секущая плоскость
+    // Section: ступенчатый разрез (ГОСТ 2.305, разд. 6) — ещё точки плоскостей, параллельных
+    // первой (planePoint); уступы — посередине между соседними точками вдоль следа на markView.
+    std::vector<views::Vec3> stepPoints;
+    // Base/Projected: местные разрезы (ГОСТ 2.305, разд. 6) — замкнутые области в координатах
+    // этого вида (мм модели) и глубина от ближайшей к наблюдателю точки модели.
+    std::vector<views::LocalSection> localSections;
     // Detail: окружность в координатах вида parent (мм модели).
     Point2 detailCenter;
     double detailRadius = 0.0;
@@ -377,6 +409,48 @@ private:
     std::vector<ComputedSheet> computed_;
     std::map<std::uint64_t, std::shared_ptr<const views::SectionView>> sectionCache_;
     const TrueTypeFont* font_ = nullptr;
+};
+
+// ---------------------------------------------------------------- отмена и повтор
+
+// Состояние правки документа чертежа: всё, что пользователь меняет в чертеже (листы, виды,
+// размеры и знаки, основная надпись, настройки, свойства изделия для основной надписи). Модель
+// (параметры детали, состав сборки) — не входит: её изменение приходит обновлением по модели.
+struct DrawingEditState {
+    std::vector<SheetDef> sheets;
+    DrawingSettings settings;
+    ModelProperties properties;
+};
+DrawingEditState captureEditState(const DrawingDocument& doc);
+void restoreEditState(DrawingDocument& doc, const DrawingEditState& state);
+
+// История правок (транзакций) документа чертежа: record — состояние до успешной правки и её
+// название; undo/redo — восстановление определений (после него нужен update). Новая правка
+// очищает повтор; глубина ограничена limit (старые записи отбрасываются).
+class DrawingHistory {
+public:
+    explicit DrawingHistory(std::size_t limit = 100) : limit_(limit == 0 ? 1 : limit) {}
+    void record(DrawingEditState before, std::string label);
+    bool canUndo() const { return !undo_.empty(); }
+    bool canRedo() const { return !redo_.empty(); }
+    std::string undoLabel() const { return undo_.empty() ? std::string() : undo_.back().label; }
+    std::string redoLabel() const { return redo_.empty() ? std::string() : redo_.back().label; }
+    std::size_t undoDepth() const { return undo_.size(); }
+    std::size_t redoDepth() const { return redo_.size(); }
+    // Восстанавливает состояние до последней правки; текущее уходит в повтор. Возвращает название
+    // отменённой правки. Ошибка InvalidInput — отменять нечего. Если обновление после undo не
+    // удалось, redo возвращает документ в прежнее состояние (и наоборот).
+    Result<std::string> undo(DrawingDocument& doc);
+    Result<std::string> redo(DrawingDocument& doc);
+    void clear();
+
+private:
+    struct Entry {
+        DrawingEditState state;
+        std::string label;
+    };
+    std::size_t limit_;
+    std::vector<Entry> undo_, redo_;
 };
 
 // ---------------------------------------------------------------- спецификация

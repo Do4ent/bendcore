@@ -204,6 +204,7 @@ std::optional<kernel::AssemblyColor> colorFrom(const json& j) {
 json propertiesJson(const PartProperties& p) {
     json j = {{"designation", p.designation}, {"name", p.name}, {"material", p.material}};
     j["density"] = p.density ? json(*p.density) : json(nullptr);
+    if (p.sectionCut) j["sectionCut"] = *p.sectionCut;  // необязательное поле (чертёж, ГОСТ 2.305)
     return j;
 }
 
@@ -216,6 +217,10 @@ PartProperties propertiesFrom(const json& j) {
     if (j.contains("density") && !j.at("density").is_null()) {
         p.density = number(j, "density");
         if (!(*p.density >= 0.0)) bad("density must be >= 0");
+    }
+    if (j.contains("sectionCut") && !j.at("sectionCut").is_null()) {
+        if (!j.at("sectionCut").is_boolean()) bad("sectionCut must be a boolean");
+        p.sectionCut = j.at("sectionCut").get<bool>();
     }
     return p;
 }

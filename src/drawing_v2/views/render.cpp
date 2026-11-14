@@ -379,6 +379,91 @@ Result<SectionMarkGeometry> renderCuttingPlaneMark(Drawing& drawing, const Sheet
     return g;
 }
 
+Result<int> renderSteppedPlaneMark(Drawing& drawing, const SheetView& parent,
+                                   const std::vector<CuttingPlane>& planes, const std::string& letter,
+                                   double strokeLen, const RenderOptions& o) {
+    using R = Result<int>;
+    if (planes.size() < 2) return R::failure(ErrorCode::InvalidInput, "stepped plane mark: needs at least two planes");
+    if (!(strokeLen >= 8.0 && strokeLen <= 20.0))
+        return R::failure(ErrorCode::InvalidInput, "stepped plane mark: stroke length must be 8..20 mm (GOST 2.303)");
+    // Следы плоскостей на листе и их порядок вдоль следа.
+    struct Tr {
+        Point2 a, b, p;  // концы следа и проекция точки плоскости (лист)
+        double tau;
+    };
+    std::vector<Tr> tr;
+    Point2 t{0, 0};
+    for (const CuttingPlane& pl : planes) {
+        auto c = cuttingTrace(parent.view.frame, parent.view.bounds, pl);
+        if (!c) return c.error();
+        Tr x{parent.toSheet(c.value().a), parent.toSheet(c.value().b), parent.toSheet(parent.view.frame.project(pl.point)), 0};
+        const double len = std::hypot(x.b.x - x.a.x, x.b.y - x.a.y);
+        if (len < 1e-9) return R::failure(ErrorCode::InvalidInput, "stepped plane mark: degenerate trace");
+        t = {(x.b.x - x.a.x) / len, (x.b.y - x.a.y) / len};
+        tr.push_back(x);
+    }
+    for (Tr& x : tr) x.tau = x.p.x * t.x + x.p.y * t.y;
+    std::sort(tr.begin(), tr.end(), [](const Tr& u, const Tr& v) { return u.tau < v.tau; });
+    // Концы — как обозначение крайних плоскостей (штрих, стрелка и буква только у своего конца).
+    int strokes = 0;
+    Status st = ensureViewLayers(drawing, o);
+    if (!st) return st.error();
+    for (int end = 0; end < 2; ++end) {
+        const Tr& x = end == 0 ? tr.front() : tr.back();
+        // Плоскость крайнего следа.
+        CuttingPlane pl = planes.front();
+        for (const CuttingPlane& c : planes) {
+            const Point2 q = parent.toSheet(parent.view.frame.project(c.point));
+            if (std::hypot(q.x - x.p.x, q.y - x.p.y) < 1e-9) pl = c;
+        }
+        Drawing tmp = drawing;
+        auto mk = renderCuttingPlaneMark(tmp, parent, pl, letter, strokeLen, o);
+        if (!mk) return mk.error();
+        // Из обозначения крайней плоскости берётся конец со своей стороны: i = 0 — у начала следа.
+        const SectionMarkGeometry& m = mk.value();
+        const int i = end == 0 ? 0 : 1;
+        if (auto s1 = addEntity(drawing, m.strokes[i], o.symbolLayer, LineType::Open); !s1) return s1.error();
+        if (auto s1 = addEntity(drawing, m.arrowShafts[i], o.symbolLayer, LineType::SolidThin); !s1) return s1.error();
+        if (auto s1 = addEntity(drawing, m.arrowHeads[i], o.symbolLayer, LineType::SolidThin); !s1) return s1.error();
+        Text txt;
+        txt.position = m.letterPos[i];
+        txt.utf8 = letter;
+        txt.height = o.letterHeight;
+        txt.hAlign = HAlign::Center;
+        txt.vAlign = VAlign::Middle;
+        if (auto s1 = addEntity(drawing, std::move(txt), o.symbolLayer, LineType::SolidThin); !s1) return s1.error();
+        ++strokes;
+    }
+    // Перегибы.
+    auto onTrace = [&](const Tr& x, double tau) {
+        const double ta = x.a.x * t.x + x.a.y * t.y;
+        return add(x.a, mul(tau - ta, t));
+    };
+    for (std::size_t k = 0; k + 1 < tr.size(); ++k) {
+        const double m = 0.5 * (tr[k].tau + tr[k + 1].tau);
+        const Point2 c1 = onTrace(tr[k], m), c2 = onTrace(tr[k + 1], m);
+        std::vector<LineSeg> segs = {LineSeg{add(c1, mul(-strokeLen, t)), c1}, LineSeg{c2, add(c2, mul(strokeLen, t))}};
+        const double lc = std::hypot(c2.x - c1.x, c2.y - c1.y);
+        if (lc > 1e-9) {
+            const Point2 u{(c2.x - c1.x) / lc, (c2.y - c1.y) / lc};
+            if (lc >= 8.0 && lc <= 20.0) {
+                segs.push_back({c1, c2});
+            } else if (lc > 20.0) {
+                segs.push_back({c1, add(c1, mul(strokeLen, u))});
+                segs.push_back({add(c2, mul(-strokeLen, u)), c2});
+            } else {
+                const Point2 mid = mul(0.5, add(c1, c2));
+                segs.push_back({add(mid, mul(-4.0, u)), add(mid, mul(4.0, u))});
+            }
+        }
+        for (const LineSeg& sg : segs) {
+            if (auto s1 = addEntity(drawing, sg, o.symbolLayer, LineType::Open); !s1) return s1.error();
+            ++strokes;
+        }
+    }
+    return strokes;
+}
+
 Status renderDetailMark(Drawing& drawing, const SheetView& parent, Point2 center, double radius,
                         const std::string& letter, const RenderOptions& o) {
     if (!(radius > 0)) return Status::failure(ErrorCode::InvalidInput, "detail mark: radius <= 0");

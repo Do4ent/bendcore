@@ -160,6 +160,17 @@ Result<SectionMarkGeometry> renderCuttingPlaneMark(Drawing& drawing, const Sheet
                                                    double strokeLen = 12.0,
                                                    const RenderOptions& options = {});
 
+// Обозначение ступенчатого разреза (ГОСТ 2.305, разд. 6: штрихи разомкнутой линии у концов и в
+// местах перегибов следа): planes — параллельные плоскости, все перпендикулярны плоскости вида
+// parent; на parent след плоскости i действует между серединами соседних плоскостей вдоль следа.
+// У концов — штрихи и стрелки как у renderCuttingPlaneMark (по крайним плоскостям); в каждом
+// перегибе — штрих strokeLen вдоль следа до угла с каждой стороны и штрих по перемычке между
+// следами (длиной перемычки, если она 8…20 мм; длиннее — по штриху от каждого угла; короче —
+// 8 мм по середине перемычки). Возвращает число штрихов.
+Result<int> renderSteppedPlaneMark(Drawing& drawing, const SheetView& parent,
+                                   const std::vector<CuttingPlane>& planes, const std::string& letter,
+                                   double strokeLen = 12.0, const RenderOptions& options = {});
+
 // Обозначение выносного элемента на виде parent: окружность сплошной тонкой линией,
 // линия-выноска с полкой и буквой (ГОСТ 2.305, разд. 8).
 Status renderDetailMark(Drawing& drawing, const SheetView& parent, Point2 center, double radius,

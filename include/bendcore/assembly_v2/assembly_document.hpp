@@ -73,6 +73,10 @@ struct PartProperties {
     std::string name;               // наименование; пусто — имя определения
     std::string material;
     std::optional<double> density;  // кг/м³; без плотности масса не считается
+    // Рассекать ли деталь в разрезах сборочного чертежа (ГОСТ 2.305, разд. 9; ГОСТ 2.109):
+    // true — рассекается всегда, false — при продольном разрезе показывается нерассечённой;
+    // пусто — правило по умолчанию (docs/drawing/VIEWS.md, «Условности разрезов сборок»).
+    std::optional<bool> sectionCut;
 };
 
 struct Occurrence {

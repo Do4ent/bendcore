@@ -501,6 +501,12 @@ a::PartProperties propertiesFromJs(const val& v, a::PartProperties base) {
         if (!(rho > 0)) throw InputError("properties.density must be positive (kg/m^3)");
         base.density = rho;
     }
+    const val sc = v["sectionCut"];
+    if (sc.isNull()) base.sectionCut.reset();
+    else if (!sc.isUndefined()) {
+        if (sc.typeOf().as<std::string>() != "boolean") throw InputError("properties.sectionCut must be a boolean or null");
+        base.sectionCut = sc.as<bool>();
+    }
     return base;
 }
 
@@ -510,6 +516,7 @@ val propertiesToJs(const a::PartProperties& p) {
     out.set("name", p.name);
     out.set("material", p.material);
     out.set("density", p.density ? val(*p.density) : val::null());
+    out.set("sectionCut", p.sectionCut ? val(*p.sectionCut) : val::null());
     return out;
 }
 

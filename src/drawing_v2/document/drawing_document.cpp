@@ -245,6 +245,22 @@ Status DrawingDocument::validate() const {
                     if (!(v.detailRadius > 0)) return invalid("drawing: " + where + ": detail radius must be positive");
                     break;
             }
+            if (!v.localSections.empty()) {
+                if (v.kind != ViewKind::Base && v.kind != ViewKind::Projected)
+                    return invalid("drawing: " + where + ": local sections are made on the base or a projected view");
+                for (const LocalSection& c : v.localSections) {
+                    if (c.boundary.points.size() < 3) return invalid("drawing: " + where + ": a local section boundary needs at least 3 points");
+                    for (const Point2& p : c.boundary.points)
+                        if (!std::isfinite(p.x) || !std::isfinite(p.y)) return invalid("drawing: " + where + ": non-finite local section point");
+                    if (!(c.depth > 0) || !std::isfinite(c.depth)) return invalid("drawing: " + where + ": local section depth must be positive");
+                }
+            }
+            if (!v.stepPoints.empty()) {
+                if (v.kind != ViewKind::Section) return invalid("drawing: " + where + ": step points belong to a section");
+                for (const Vec3& p : v.stepPoints)
+                    if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+                        return invalid("drawing: " + where + ": non-finite step point");
+            }
             if (v.side && seen.count(v.parent) && !isGroupView(*seen[v.parent]))
                 return invalid("drawing: " + where + ": a view in projection relation needs a parent in the group");
             seen[v.id] = &v;
@@ -434,7 +450,41 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             HlrOptions ho;
             ho.method = v.method;
             ho.hidden = v.hidden;
-            if (v.kind == ViewKind::Base || v.kind == ViewKind::Projected || v.kind == ViewKind::Axonometric) {
+            if ((v.kind == ViewKind::Base || v.kind == ViewKind::Projected) && !v.localSections.empty()) {
+                // Вид с местными разрезами (ГОСТ 2.305, разд. 6) — кэш документа.
+                const ViewFrame& f = frames[v.id];
+                const SectionParts parts = sectionParts(model, -1.0 * f.toward);
+                std::uint64_t key = 1469598103934665603ull;
+                key = fnv(key, &model.contentHash, sizeof model.contentHash);
+                const std::uint64_t ph = viewParametersHash(f, ho);
+                key = fnv(key, &ph, sizeof ph);
+                const int tag = 0x4c;
+                key = fnv(key, &tag, sizeof tag);
+                for (const LocalSection& c : v.localSections) {
+                    key = fnvDouble(key, c.depth);
+                    const int sp = c.boundary.spline ? 1 : 0;
+                    key = fnv(key, &sp, sizeof sp);
+                    for (const Point2& p : c.boundary.points) key = fnvDouble(fnvDouble(key, p.x), p.y);
+                    const std::size_t count = c.boundary.points.size();
+                    key = fnv(key, &count, sizeof count);
+                }
+                for (bool k : parts.keepWhole) key = fnv(key, &k, sizeof k);
+                auto it = sectionCache_.find(key);
+                if (it != sectionCache_.end()) {
+                    sections[v.id] = it->second;
+                    cachedFlag[v.id] = true;
+                    ++sectionsCached;
+                } else {
+                    auto sec = localSectionShape(model.shape, f, v.localSections, ho, parts);
+                    if (!sec) return Error{sec.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + sec.error().message};
+                    auto ptr = std::make_shared<const SectionView>(std::move(sec).value());
+                    if (sectionCache_.size() >= 64) sectionCache_.erase(sectionCache_.begin());
+                    sectionCache_[key] = ptr;
+                    sections[v.id] = ptr;
+                    cachedFlag[v.id] = false;
+                    ++sectionsComputed;
+                }
+            } else if (v.kind == ViewKind::Base || v.kind == ViewKind::Projected || v.kind == ViewKind::Axonometric) {
                 const ViewCacheStats b = cache.stats();
                 pending[v.id] = cache.request(ViewRequest{model.shape, frames[v.id], ho, v.autoMethod});
                 const ViewCacheStats a = cache.stats();
@@ -449,13 +499,27 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 for (double c : {plane.point.x, plane.point.y, plane.point.z}) key = fnvDouble(key, c);
                 const int kind = int(v.sectionKind);
                 key = fnv(key, &kind, sizeof kind);
+                const SectionParts parts = sectionParts(model, plane.sight);
+                for (bool k : parts.keepWhole) key = fnv(key, &k, sizeof k);
+                // Ступенчатый разрез: уступы — вдоль следа на виде обозначения.
+                Vec3 stepAxis{0, 0, 0};
+                if (!v.stepPoints.empty()) {
+                    stepAxis = cross(plane.sight, frames.at(v.markView).toward);
+                    if (!(length(stepAxis) > 1e-9))
+                        return invalid("sheet '" + sd.id + "', section '" + v.id + "': the planes are parallel to the view '" + v.markView + "'");
+                    for (const Vec3& p : v.stepPoints)
+                        for (double c : {p.x, p.y, p.z}) key = fnvDouble(key, c);
+                }
                 auto it = sectionCache_.find(key);
                 if (it != sectionCache_.end()) {
                     sections[v.id] = it->second;
                     cachedFlag[v.id] = true;
                     ++sectionsCached;
                 } else {
-                    auto sec = sectionShape(model.shape, f, plane, v.sectionKind, ho);
+                    std::vector<Vec3> pts{v.planePoint};
+                    pts.insert(pts.end(), v.stepPoints.begin(), v.stepPoints.end());
+                    auto sec = v.stepPoints.empty() ? sectionShape(model.shape, f, plane, v.sectionKind, ho, parts)
+                                                    : steppedSectionShape(model.shape, f, pts, stepAxis, v.sectionKind, ho, parts);
                     if (!sec) return Error{sec.error().code, "sheet '" + sd.id + "', section '" + v.id + "': " + sec.error().message};
                     auto ptr = std::make_shared<const SectionView>(std::move(sec).value());
                     if (sectionCache_.size() >= 64) sectionCache_.erase(sectionCache_.begin());
@@ -627,10 +691,14 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         for (const ComputedView& cv : cs.views) {
             if (cv.kind != ViewKind::Section) continue;
             const ComputedView& mark = cs.views[indexOf.at(cv.def.markView)];
-            const CuttingPlane plane{cv.def.planePoint, -1.0 * cv.sheetView.view.frame.toward};
-            auto tr = cuttingTrace(mark.sheetView.view.frame, mark.sheetView.view.bounds, plane);
-            if (!tr) return invalid("sheet '" + sd.id + "', section '" + cv.id + "': the plane cannot be marked on '" +
-                                    mark.id + "': " + tr.error().message);
+            std::vector<Vec3> pts{cv.def.planePoint};
+            pts.insert(pts.end(), cv.def.stepPoints.begin(), cv.def.stepPoints.end());
+            for (const Vec3& p : pts) {
+                const CuttingPlane plane{p, -1.0 * cv.sheetView.view.frame.toward};
+                auto tr = cuttingTrace(mark.sheetView.view.frame, mark.sheetView.view.bounds, plane);
+                if (!tr) return invalid("sheet '" + sd.id + "', section '" + cv.id + "': the plane cannot be marked on '" +
+                                        mark.id + "': " + tr.error().message);
+            }
         }
 
         // 5. Размеры: перепривязка ссылок к новой форме и пересчёт по виду.
@@ -1032,6 +1100,8 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
             if (auto st = renderView(d, cv.sheetView, ro); !st) return fail(st.error());
             if (cv.section) {
                 if (auto h = renderSectionHatch(d, cv.sheetView, *cv.section, 0.0, ro); !h) return fail(h.error());
+                if (!cv.section->breakLines.empty())
+                    if (auto st = renderBreakLines(d, cv.sheetView, *cv.section, ro); !st) return fail(st.error());
             }
             if (!cv.centers.marks.empty() || !cv.centers.axes.empty()) {
                 if (auto st = renderCenterLines(d, cv.sheetView, cv.centers, ro); !st) return fail(st.error());
@@ -1042,9 +1112,14 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
             if (!cv.label.empty()) {
                 if (auto st = renderViewLabel(d, cv.sheetView, cv.label, ro); !st) return fail(st.error());
             }
-            if (cv.kind == ViewKind::Section) {
+            if (cv.kind == ViewKind::Section && cv.def.stepPoints.empty()) {
                 const CuttingPlane plane{cv.def.planePoint, -1.0 * cv.sheetView.view.frame.toward};
                 auto mk = renderCuttingPlaneMark(d, byId.at(cv.def.markView)->sheetView, plane, cv.letter, 12.0, ro);
+                if (!mk) return fail(mk.error());
+            } else if (cv.kind == ViewKind::Section) {
+                std::vector<CuttingPlane> planes{{cv.def.planePoint, -1.0 * cv.sheetView.view.frame.toward}};
+                for (const Vec3& p : cv.def.stepPoints) planes.push_back({p, -1.0 * cv.sheetView.view.frame.toward});
+                auto mk = renderSteppedPlaneMark(d, byId.at(cv.def.markView)->sheetView, planes, cv.letter, 12.0, ro);
                 if (!mk) return fail(mk.error());
             }
             if (cv.kind == ViewKind::Detail) {
