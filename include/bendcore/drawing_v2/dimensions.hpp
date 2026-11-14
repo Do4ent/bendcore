@@ -155,6 +155,16 @@ DimensionGeometry labelledLinearGeometry(Point2 a, Point2 b, Point2 side, double
 DimensionGeometry labelledDiameterGeometry(Point2 center, double radius, double angleDeg, const std::string& text,
                                            const AnnotationStyle& style = {});
 
+// Перенос размера мышью (интерфейс чертежа): размерная линия (дуга) и число переносятся так,
+// чтобы размерное число встало в точку target листа. Линейные, угловой размер и диаметр цилиндра
+// сбоку — новые offset и textShift (решение линейной системы по приращениям положения числа при
+// изменении offset и textShift на 1 мм); размерная линия не переходит на другую сторону
+// изображения: при смене знака offset остаётся на прежней стороне в 2 мм. Радиус и диаметр
+// окружности — направление размерной линии leaderAngleDeg на target от центра. Ошибка
+// InvalidInput — размер висячий или не имеет надписи.
+Result<DimensionDef> moveDimensionTo(const DimensionDef& def, const ModelBinding& model, const SheetView& view,
+                                     Point2 target, const AnnotationStyle& style = {});
+
 // --- Ассоциативность ---
 
 struct RebindResult {

@@ -940,4 +940,59 @@ Result<std::vector<DimensionDef>> baselineDimensions(DimensionType type, const A
     return out;
 }
 
+Result<DimensionDef> moveDimensionTo(const DimensionDef& def, const ModelBinding& model, const SheetView& view,
+                                     Point2 target, const AnnotationStyle& style) {
+    using R = Result<DimensionDef>;
+    if (!std::isfinite(target.x) || !std::isfinite(target.y)) return R::failure(ErrorCode::InvalidInput, "move dimension: target is not finite");
+    auto labelOf = [&](const DimensionDef& d) -> Result<Point2> {
+        auto r = evaluateDimension(d, model, view, style);
+        if (!r) return r.error();
+        if (r.value().state != DimensionState::Ok)
+            return Result<Point2>::failure(ErrorCode::InvalidInput, "move dimension: the dimension is dangling: " + r.value().reason);
+        if (r.value().geometry.labels.empty()) return Result<Point2>::failure(ErrorCode::InvalidInput, "move dimension: no label");
+        return r.value().geometry.labels.front().position;
+    };
+    auto l0 = labelOf(def);
+    if (!l0) return l0.error();
+    const Point2 L0 = l0.value();
+    DimensionDef out = def;
+    if (def.type == DimensionType::Radius || def.type == DimensionType::Diameter) {
+        DimensionDef turned = def;
+        turned.leaderAngleDeg += 15.0;
+        auto lt = labelOf(turned);
+        if (!lt) return lt.error();
+        if (std::hypot(lt.value().x - L0.x, lt.value().y - L0.y) > 1e-6) {
+            // По окружности: направление от центра к target.
+            if (def.anchors.empty()) return R::failure(ErrorCode::InvalidInput, "move dimension: no anchor");
+            auto c = anchorPoint(def.anchors.front(), model, view.view);
+            if (!c) return c.error();
+            const Point2 cs = view.toSheet(c.value());
+            if (std::hypot(target.x - cs.x, target.y - cs.y) < 1e-9) return out;
+            out.leaderAngleDeg = std::atan2(target.y - cs.y, target.x - cs.x) * 180.0 / std::numbers::pi;
+            return out;
+        }
+    }
+    DimensionDef dOff = def, dShift = def;
+    dOff.offset += 1.0;
+    dShift.textShift += 1.0;
+    auto lo = labelOf(dOff);
+    if (!lo) return lo.error();
+    auto ls = labelOf(dShift);
+    if (!ls) return ls.error();
+    const Point2 n{lo.value().x - L0.x, lo.value().y - L0.y}, t{ls.value().x - L0.x, ls.value().y - L0.y};
+    const Point2 d{target.x - L0.x, target.y - L0.y};
+    const double det = n.x * t.y - n.y * t.x;
+    double a = 0, b = 0;
+    if (std::abs(det) > 1e-9) {
+        a = (d.x * t.y - d.y * t.x) / det;
+        b = (n.x * d.y - n.y * d.x) / det;
+    } else if (n.x * n.x + n.y * n.y > 1e-18) {
+        a = (d.x * n.x + d.y * n.y) / (n.x * n.x + n.y * n.y);
+    }
+    out.offset = def.offset + a;
+    out.textShift = def.textShift + b;
+    if (def.offset != 0.0 && (out.offset > 0) != (def.offset > 0)) out.offset = std::copysign(2.0, def.offset);
+    return out;
+}
+
 }  // namespace bendcore::drawing_v2::annotations
