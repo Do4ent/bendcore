@@ -1,0 +1,87 @@
+#pragma once
+
+// Устойчивые булевы операции на OCCT: проверка входа, лестница нечёткого допуска,
+// проверка результата после каждой попытки. Подробности: docs/kernel/GEOMETRY_HEALING.md.
+
+#include <bendcore/kernel/result.hpp>
+
+#include <BRepTools_History.hxx>
+#include <TopoDS_Shape.hxx>
+#include <Standard_Handle.hxx>
+
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace bendcore::kernel {
+
+enum class BooleanType { Fuse, Cut, Common };
+
+const char* toString(BooleanType type) noexcept;
+
+// Объём (мм³) и площадь поверхности (мм²) формы — для проверки границ объёма.
+struct BooleanInputMass {
+    double volume = 0.0;
+    double area = 0.0;
+};
+
+struct BooleanOptions {
+    // Лестница FuzzyValue: если fuzzyLadder пуст, строится 0, fuzzyStart, fuzzyStart*fuzzyFactor, ...
+    // до maxFuzzyValue включительно. Если задан явно — используется как есть (по возрастанию,
+    // значения больше maxFuzzyValue отбрасываются).
+    std::vector<double> fuzzyLadder;
+    double fuzzyStart = 1e-7;
+    double fuzzyFactor = 10.0;
+    double maxFuzzyValue = 1e-4;
+
+    bool runParallel = true;
+    bool checkInputs = true;       // BRepAlgoAPI_Check для каждого аргумента и инструмента
+    bool simplifyResult = true;    // BRepAlgoAPI_BuilderAlgo::SimplifyResult после успеха
+    bool checkVolumeBounds = true; // объём результата в пределах, допустимых для операции
+    // Известные объём и площадь входов (по порядку аргументов/инструментов; пусто или nullopt —
+    // вычислить). Нужны только при checkVolumeBounds; например, BooleanResult::mass предыдущего
+    // шага цепочки вырезов. Непустой вектор — ровно по числу входов, иначе InvalidInput.
+    std::vector<std::optional<BooleanInputMass>> argumentMass;
+    std::vector<std::optional<BooleanInputMass>> toolMass;
+
+    // Ожидаемое число тел в результате (например, 1 для Fuse соприкасающихся деталей).
+    std::optional<int> expectedSolidCount;
+    // Тела тоньше этого (оценка 2·V/A) считаются щелями-артефактами; 0 — проверка выключена.
+    double minSolidThickness = 0.0;
+};
+
+struct BooleanResult {
+    TopoDS_Shape shape;
+    double fuzzyValue = 0.0;   // допуск удачной попытки
+    int attempts = 0;          // число выполненных попыток, включая удачную
+    bool simplifyApplied = false;  // применён SimplifyResult
+    double volume = 0.0;       // объём результата, мм³
+    // Объём и площадь результата, если границы объёма проверялись (checkVolumeBounds и тела на
+    // входе): можно передать следующей операции как argumentMass, не пересчитывая.
+    std::optional<BooleanInputMass> mass;
+    std::vector<std::string> warnings;  // предупреждения OCCT и причины отказа прежних попыток
+    // История удачной попытки от элементов входов (аргументов и инструментов) к shape:
+    // BRepAlgoAPI_BuilderAlgo::History() — история булевой операции (BOPAlgo_Builder), а если
+    // simplifyApplied — уже объединённая (BRepTools_History::Merge) с историей
+    // ShapeUpgrade_UnifySameDomain. Если SimplifyResult отвергнут, — история до упрощения.
+    // Элемент входа, не упомянутый в истории и присутствующий в shape, не изменился.
+    // Пустая (null), если результат не содержит граней (Cut/Common без остатка).
+    opencascade::handle<BRepTools_History> history;
+};
+
+// Ошибки: InvalidInput — пустая форма или вход не прошёл BRepAlgoAPI_Check;
+// OperationFailed — ни одна попытка лестницы не дала приемлемого результата
+// (сообщение содержит причины по каждой попытке) или исключение OCCT.
+Result<BooleanResult> booleanOp(BooleanType type, const TopoDS_Shape& a, const TopoDS_Shape& b,
+                                const BooleanOptions& options = {});
+
+// Вариант со списками: аргументы (objects) и инструменты (tools) через
+// BRepAlgoAPI_BooleanOperation::SetArguments / SetTools.
+Result<BooleanResult> booleanOp(BooleanType type, const std::vector<TopoDS_Shape>& arguments,
+                                const std::vector<TopoDS_Shape>& tools,
+                                const BooleanOptions& options = {});
+
+// Лестница допусков, которую использует booleanOp для данных опций.
+std::vector<double> fuzzyLadder(const BooleanOptions& options);
+
+}  // namespace bendcore::kernel

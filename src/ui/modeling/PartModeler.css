@@ -1,0 +1,103 @@
+/* Part modeling page (docs/ui/PART_MODELING_UI.md); base layout and colours from KernelViewer.css. */
+.pm-root {
+  --pm-ok: #2e7d32;
+  --pm-warning: #b26a00;
+  --pm-error: #c62828;
+  --pm-accent: #ff8c1a;
+}
+
+.pm-toolbar { gap: 6px; }
+.pm-toolbar button { padding: 3px 8px; }
+.pm-sep { width: 1px; align-self: stretch; background: var(--kv-border); margin: 0 4px; }
+
+.pm-main { display: flex; flex: 1; min-height: 0; }
+
+.pm-left {
+  width: 260px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border-right: 1px solid var(--kv-border);
+}
+.pm-left h2, .pm-right h2 { font-size: 13px; margin: 8px 0 4px; }
+
+.pm-right { width: 330px; }
+
+.pm-hint { color: var(--kv-muted); margin: 4px 0; }
+
+.pm-tree ul { list-style: none; margin: 0; padding: 0; }
+.pm-tree-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.pm-tree-item:hover { background: #eef2f7; }
+.pm-tree-item.pm-selected { background: #e3ecf8; }
+.pm-tree-type { color: var(--kv-muted); font-size: 11px; }
+.pm-tree-menu-button { border: none; background: none; cursor: pointer; padding: 0 4px; }
+.pm-tree-message { grid-column: 2 / 5; font-size: 11px; color: var(--pm-error); }
+.pm-state-mark { font-weight: 700; text-align: center; }
+.pm-state-ok .pm-state-mark { color: var(--pm-ok); }
+.pm-state-warning .pm-state-mark, .pm-state-warning .pm-tree-message { color: var(--pm-warning); }
+.pm-state-error .pm-state-mark { color: var(--pm-error); }
+.pm-state-suppressed, .pm-state-rolled-back { color: var(--kv-muted); }
+.pm-state-suppressed .pm-tree-label { text-decoration: line-through; }
+
+.pm-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid var(--kv-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+.pm-menu button { display: block; width: 100%; text-align: left; border: none; background: none; padding: 4px 12px; cursor: pointer; white-space: nowrap; }
+.pm-menu button:hover { background: #eef2f7; }
+
+.pm-rollback {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 2px 0;
+  padding: 2px 4px;
+  border-top: 2px solid var(--pm-accent);
+  color: var(--pm-warning);
+  font-size: 11px;
+}
+
+.pm-variables table { width: 100%; border-collapse: collapse; }
+.pm-variables td { padding: 1px 2px; }
+.pm-variables input { width: 100%; box-sizing: border-box; }
+
+.pm-panel { border-bottom: 1px solid var(--kv-border); padding-bottom: 8px; }
+.pm-group { border: 1px solid var(--kv-border); border-radius: 4px; margin: 6px 0; padding: 4px 8px; }
+.pm-group legend { color: var(--kv-muted); font-size: 11px; }
+.pm-field { display: grid; grid-template-columns: 1fr 110px; align-items: center; gap: 2px 6px; margin: 3px 0; }
+.pm-field input, .pm-field select { width: 100%; box-sizing: border-box; }
+.pm-field-wide { grid-template-columns: 1fr; }
+.pm-value { grid-column: 2; color: var(--kv-muted); font-size: 11px; font-style: normal; }
+.pm-slot { margin: 4px 0; padding: 4px; border-radius: 4px; }
+.pm-slot-active { background: #fff4e8; outline: 1px solid var(--pm-accent); }
+.pm-slot-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.pm-picks { list-style: none; margin: 2px 0; padding: 0; }
+.pm-picks li { display: flex; justify-content: space-between; gap: 4px; font-size: 11px; }
+.pm-picks code { word-break: break-all; }
+.pm-preview-state { margin: 6px 0; padding: 4px 6px; border-radius: 4px; background: #f3f5f8; }
+.pm-preview-state.pm-state-error { background: var(--kv-error-bg); color: var(--kv-error-fg); }
+.pm-missing { color: var(--pm-warning); margin: 4px 0; padding-left: 16px; }
+.pm-panel-buttons { display: flex; gap: 6px; justify-content: flex-end; }
+.pm-primary { font-weight: 600; }
+
+@media (max-width: 900px) {
+  .pm-main { flex-direction: column; }
+  .pm-left, .pm-right { width: auto; max-height: 35vh; border: none; border-top: 1px solid var(--kv-border); }
+}

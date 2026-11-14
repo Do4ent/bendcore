@@ -9,7 +9,7 @@ declare module '*.css' {
   export default classes;
 }
 
-// Three.js type stubs (minimal, for projects without @types/three)
+// Minimal Three.js type declarations (for builds without @types/three)
 declare module 'three' {
   export class Vector3 {
     x: number;
@@ -38,6 +38,7 @@ declare module 'three' {
     setFromMatrixColumn(matrix: Matrix4, index: number): this;
     applyQuaternion(q: Quaternion): this;
     angleTo(v: Vector3): number;
+    fromArray(array: ArrayLike<number>, offset?: number): this;
   }
 
   export class Matrix4 {
@@ -45,6 +46,11 @@ declare module 'three' {
     constructor();
     identity(): this;
     multiply(m: Matrix4): this;
+    makeBasis(x: Vector3, y: Vector3, z: Vector3): this;
+    setPosition(v: Vector3): this;
+    copy(m: Matrix4): this;
+    invert(): this;
+    fromArray(array: ArrayLike<number>, offset?: number): this;
   }
 
   export class BufferGeometry {
@@ -52,7 +58,15 @@ declare module 'three' {
     attributes: Record<string, BufferAttribute>;
     boundingBox: Box3 | null;
     setAttribute(name: string, attribute: BufferAttribute): this;
+    getAttribute(name: string): BufferAttribute;
+    getIndex(): BufferAttribute | null;
     setIndex(index: number[] | BufferAttribute): this;
+    index: BufferAttribute | null;
+    groups: Array<{ start: number; count: number; materialIndex?: number }>;
+    boundingSphere: Sphere | null;
+    addGroup(start: number, count: number, materialIndex?: number): void;
+    clearGroups(): void;
+    computeBoundingSphere(): void;
     setFromPoints(points: Vector3[]): this;
     computeBoundingBox(): void;
     computeVertexNormals(): void;
@@ -75,7 +89,32 @@ declare module 'three' {
   }
 
   export class Material {
+    userData: Record<string, any>;
     dispose(): void;
+  }
+
+  export interface MaterialParameters {
+    color?: number | string;
+    side?: number;
+    transparent?: boolean;
+    opacity?: number;
+    polygonOffset?: boolean;
+    polygonOffsetFactor?: number;
+    polygonOffsetUnits?: number;
+    depthTest?: boolean;
+  }
+
+  export class Sphere {
+    center: Vector3;
+    radius: number;
+    constructor(center?: Vector3, radius?: number);
+  }
+
+  export interface Intersection {
+    distance: number;
+    point: Vector3;
+    object: Object3D;
+    faceIndex?: number;
   }
 
   export class LineBasicMaterial extends Material {
@@ -83,13 +122,14 @@ declare module 'three' {
   }
 
   export class MeshPhongMaterial extends Material {
+    color: Color;
     emissive: Color;
     shininess: number;
-    constructor(params?: { color?: number | string; transparent?: boolean; opacity?: number; side?: number; emissive?: number | string; shininess?: number });
+    constructor(params?: MaterialParameters & { emissive?: number | string; shininess?: number });
   }
 
   export class MeshBasicMaterial extends Material {
-    constructor(params?: { color?: number | string; map?: Texture; transparent?: boolean });
+    constructor(params?: MaterialParameters & { map?: Texture; depthWrite?: boolean });
   }
 
   export class Texture {
@@ -109,7 +149,14 @@ declare module 'three' {
     up: Vector3;
     scale: Vector3;
     children: Object3D[];
+    matrix: Matrix4;
+    matrixAutoUpdate: boolean;
     userData: Record<string, any>;
+    matrix: Matrix4;
+    matrixWorld: Matrix4;
+    matrixAutoUpdate: boolean;
+    matrixWorldNeedsUpdate: boolean;
+    updateMatrixWorld(force?: boolean): void;
     add(...objects: Object3D[]): this;
     remove(...objects: Object3D[]): this;
     traverse(callback: (obj: Object3D) => void): void;
@@ -128,9 +175,9 @@ declare module 'three' {
   }
 
   export class Mesh extends Object3D {
-    constructor(geometry?: BufferGeometry, material?: Material);
+    constructor(geometry?: BufferGeometry, material?: Material | Material[]);
     geometry: BufferGeometry;
-    material: Material;
+    material: Material | Material[];
     matrixWorld: Matrix4;
     castShadow: boolean;
     receiveShadow: boolean;
@@ -155,6 +202,8 @@ declare module 'three' {
 
   export class Color {
     constructor(color?: number | string);
+    constructor(r: number, g: number, b: number);
+    getHex(): number;
     r: number;
     g: number;
     b: number;
@@ -182,6 +231,17 @@ declare module 'three' {
     updateMatrixWorld(force?: boolean): void;
   }
 
+  export class OrthographicCamera extends Camera {
+    constructor(left?: number, right?: number, top?: number, bottom?: number, near?: number, far?: number);
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    near: number;
+    far: number;
+    updateProjectionMatrix(): void;
+  }
+
   export class Box3 {
     min: Vector3;
     max: Vector3;
@@ -192,6 +252,7 @@ declare module 'three' {
     isEmpty(): boolean;
     union(box: Box3): this;
     expandByObject(object: Object3D): this;
+    getBoundingSphere(target: Sphere): Sphere;
   }
 
   export class WebGLRenderer {
@@ -200,6 +261,7 @@ declare module 'three' {
     shadowMap: { enabled: boolean; type: number };
     setSize(width: number, height: number): void;
     setPixelRatio(ratio: number): void;
+    setClearColor(color: number | string, alpha?: number): void;
     render(scene: Scene, camera: Camera): void;
     dispose(): void;
   }
@@ -252,7 +314,8 @@ declare module 'three' {
     constructor();
     ray: Ray;
     setFromCamera(coords: { x: number; y: number }, camera: Camera): void;
-    intersectObjects(objects: Object3D[], recursive?: boolean): Array<{ object: Object3D; point: Vector3; distance: number }>;
+    intersectObjects(objects: Object3D[], recursive?: boolean): Intersection[];
+    intersectObject(object: Object3D, recursive?: boolean): Intersection[];
   }
 
   export class Vector2 {
@@ -287,5 +350,21 @@ declare module 'three' {
     constructor();
     addLevel(object: Object3D, distance: number): this;
     update(camera: Camera): void;
+  }
+}
+
+// OrbitControls from the three.js examples (three/examples/jsm/controls/OrbitControls.js).
+declare module 'three/examples/jsm/controls/OrbitControls' {
+  import { Camera, Vector3 } from 'three';
+  export class OrbitControls {
+    constructor(camera: Camera, domElement: HTMLElement);
+    target: Vector3;
+    enableDamping: boolean;
+    screenSpacePanning: boolean;
+    enabled: boolean;
+    update(): boolean;
+    addEventListener(type: 'change' | 'start' | 'end', listener: () => void): void;
+    removeEventListener(type: 'change' | 'start' | 'end', listener: () => void): void;
+    dispose(): void;
   }
 }

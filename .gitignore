@@ -100,3 +100,9 @@ release/
 # Test reports
 playwright-report/
 test-results/
+
+# OCCT build artifacts (third_party/build_occt.sh)
+third_party/occt-*
+
+# Рабочие копии параллельных агентов (git worktree)
+.claude/worktrees/

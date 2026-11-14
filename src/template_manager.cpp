@@ -27,12 +27,24 @@ std::vector<TemplateMatch> TemplateMatcher::find_best_matches(
     int num_results) {
 
   std::vector<TemplateMatch> matches;
+  // Tie-breaker for equal confidence: relative distance of the request
+  // from the template's default (nominal) parameters; smaller is better.
+  std::vector<double> default_distance;
+
+  auto relative_gap = [](double value, const TemplateParameter& p) {
+    double range = p.max - p.min;
+    return range > 1e-9 ? std::abs(value - p.default_value) / range : 0.0;
+  };
 
   // Score each template
   for (const auto& template_obj : library.templates) {
     double score = calculate_template_score(
         template_obj, outer_diameter, wall_thickness,
         bend_angle, radius_ratio, bend_spacing);
+    default_distance.push_back(
+        relative_gap(outer_diameter, template_obj.outer_diameter) +
+        relative_gap(wall_thickness, template_obj.wall_thickness) +
+        relative_gap(radius_ratio, template_obj.bend_radius_ratio));
 
     auto violations = check_constraint_violations(
         template_obj, outer_diameter, wall_thickness,
@@ -50,8 +62,19 @@ std::vector<TemplateMatch> TemplateMatcher::find_best_matches(
     });
   }
 
-  // Sort by confidence score (descending)
-  std::sort(matches.begin(), matches.end());
+  // Sort by confidence (descending), then by closeness to template defaults
+  std::vector<size_t> order(matches.size());
+  for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+  std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+    if (matches[a].confidence != matches[b].confidence) {
+      return matches[a].confidence > matches[b].confidence;
+    }
+    return default_distance[a] < default_distance[b];
+  });
+  std::vector<TemplateMatch> sorted;
+  sorted.reserve(matches.size());
+  for (size_t i : order) sorted.push_back(std::move(matches[i]));
+  matches = std::move(sorted);
 
   // Return top N results
   if (matches.size() > static_cast<size_t>(num_results)) {

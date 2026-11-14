@@ -148,7 +148,7 @@ describe('RibbonBar', () => {
         expect(groupTitles()).toContain('Import');
       });
       expect(ribbonButton('STEP')).toBeInTheDocument();
-      expect(ribbonButton('DWFx')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /DWFx/ })).not.toBeInTheDocument();
     });
   });
 
@@ -190,23 +190,13 @@ describe('RibbonBar', () => {
     });
   });
 
-  describe('Gap Checking Panel', () => {
-    test('should handle check-gaps command', () => {
+  describe('Analysis tab', () => {
+    test('has no gap or mass buttons (their panels showed fixed sample data)', () => {
       render(<RibbonBar onCommand={mockOnCommand} />);
       fireEvent.click(tab('Analysis'));
-
-      fireEvent.click(ribbonButton('Gaps'));
-      expect(mockOnCommand).toHaveBeenCalledWith('check-gaps');
-    });
-  });
-
-  describe('Mass Calculation Panel', () => {
-    test('should handle calculate-mass command', () => {
-      render(<RibbonBar onCommand={mockOnCommand} />);
-      fireEvent.click(tab('Analysis'));
-
-      fireEvent.click(ribbonButton('Mass'));
-      expect(mockOnCommand).toHaveBeenCalledWith('calculate-mass');
+      expect(screen.queryByRole('button', { name: /^Gaps/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Mass/ })).not.toBeInTheDocument();
+      expect(ribbonButton('Check All')).toBeInTheDocument();
     });
   });
 

@@ -1,0 +1,1060 @@
+/**
+ * Sketch editor with constraints (docs/ui/SKETCH_EDITOR.md). Edits the SketchData of one sketch
+ * node of the part document: drawing tools, constraints and dimensions, dragging, editing tools,
+ * region selection. Every change is solved by the kernel (PartDocumentHandle.solveSketch); the
+ * geometry shown, the degrees of freedom, the definition of each element and the conflicting /
+ * redundant constraints are the kernel's answer. Editing tools (trim, extend, offset, mirror,
+ * patterns, corner fillet and chamfer) are kernel functions (editSketch). The document itself is
+ * changed once, when the user leaves the sketch.
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { KernelMesh } from '../../../wasm/bendcore_kernel_api.mjs';
+import type {
+  PartDocumentHandle,
+  SketchData,
+  SketchSolution,
+  SketchSolvedCurve,
+  SketchTool,
+} from '../../../wasm/bendcore_modeling_api.mjs';
+import type { Remote } from '../../worker/wasmClient';
+import { LatestRunner } from '../../worker/latestRunner';
+import SketchCanvas from './SketchCanvas';
+import type { SketchCanvasHandle, SketchPointerEvent } from './SketchCanvas';
+import { dimensionGraphic, formatValue, offsetFor, twoPointDimension } from './dimensionLayout';
+import type { DimensionGraphic } from './dimensionLayout';
+import { DRAW_TOOLS, DrawError, DrawTool, PICK_COUNT, PICK_HINTS, drawShape } from './drawTools';
+import { constraintCaption, definitionCaption, describeConstraint } from './sketchLabels';
+import { useI18n } from '../../app/i18n';
+import type { MessageKey } from '../../app/i18n';
+import {
+  ConstraintProposal,
+  DIMENSION_TYPES,
+  SketchRef,
+  addConstraint,
+  applicableConstraints,
+  cloneSketch,
+  constraintState,
+  cornerLines,
+  definitionState,
+  emptySketch,
+  entityRef,
+  hasValue,
+  highlights,
+  pointRef,
+  refKey,
+  removeItems,
+  toggleConstruction,
+} from './sketchModel';
+import { findSnap, nearestEntity, nearestPoint } from './snap';
+import type { Snap } from './snap';
+import './SketchEditor.css';
+
+export type EditorTool = 'select' | DrawTool | 'dimension' | 'trim' | 'extend' | 'fillet' | 'chamfer' | 'regions';
+
+const isDrawTool = (t: EditorTool): t is DrawTool => (DRAW_TOOLS as string[]).includes(t);
+
+/** Captions sketch.tool.<tool> and hints sketch.hint.<tool> of the tools other than drawing. */
+const EDIT_TOOLS = ['dimension', 'trim', 'extend', 'fillet', 'chamfer', 'regions'] as const;
+
+/**
+ * Dimension text offsets by "<document handle>:<sketch id>": the part file has no place for
+ * them, so they live as long as the page.
+ */
+const TEXT_OFFSETS = new Map<string, Record<number, { x: number; y: number }>>();
+
+/** Pixel radius of snapping and picking. */
+const PICK_PIXELS = 8;
+
+export interface SketchEditorState {
+  featureId: string;
+  tool: EditorTool;
+  definition: string;
+  dof: number;
+  converged: boolean;
+  conflicting: number[];
+  redundant: number[];
+  constraints: { type: string; a: number; b: number; c: number; value: string; driven: boolean; measured: number; state: string }[];
+  points: { x: number; y: number; fixed: boolean; defined: boolean }[];
+  curves: { entity: number; type: string; construction: boolean; defined: boolean }[];
+  regions: { index: number; area: number; selected: boolean }[] | null;
+  profileIssues: string[];
+  selection: string[];
+  message: string | null;
+  pendingDimension: boolean;
+}
+
+export interface SketchEditorTestApi {
+  getState(): SketchEditorState;
+  sketchToClient(x: number, y: number): { x: number; y: number };
+}
+
+declare global {
+  interface Window {
+    bendcoreSketchEditor?: SketchEditorTestApi;
+  }
+}
+
+export interface SketchEditorProps {
+  /** Part document in the WASM worker: solves and edits are asynchronous. */
+  doc: Remote<PartDocumentHandle>;
+  featureId: string;
+  /** Body the sketch is drawn on (shown behind the sketch). */
+  body: KernelMesh | null;
+  /** Leave the sketch keeping the data. */
+  onExit: (data: SketchData) => void;
+  /** Leave the sketch dropping the changes. */
+  onCancel: () => void;
+}
+
+interface PendingDimension {
+  /** data with the dimension as the last constraint (reference while pending) */
+  data: SketchData;
+  k: number;
+  text: string;
+  /** existing dimension being edited (then data is the current data) */
+  existing: boolean;
+  /** place of the text chosen by the click */
+  at: { x: number; y: number } | null;
+}
+
+function errorText(e: unknown): string {
+  if (e && typeof e === 'object' && 'detail' in e) return String((e as { detail: string }).detail);
+  return e instanceof Error ? e.message : String(e);
+}
+
+const SketchEditor: React.FC<SketchEditorProps> = ({ doc, featureId, body, onExit, onCancel }) => {
+  const { t } = useI18n();
+  const [data, setData] = useState<SketchData>(emptySketch);
+  const [solution, setSolution] = useState<SketchSolution | null>(null);
+  const [history, setHistory] = useState<SketchData[]>([]);
+  const [tool, setToolState] = useState<EditorTool>('select');
+  const [picks, setPicksState] = useState<Snap[]>([]);
+  // Picks are read by handlers that run after pending commits (enqueue): the ref is current.
+  const picksRef = useRef<Snap[]>([]);
+  const setPicks = (next: Snap[]) => {
+    picksRef.current = next;
+    setPicksState(next);
+  };
+  const [hover, setHover] = useState<Snap | null>(null);
+  const [preview, setPreview] = useState<SketchSolvedCurve[]>([]);
+  const [selection, setSelection] = useState<SketchRef[]>([]);
+  const [selectedConstraints, setSelectedConstraints] = useState<number[]>([]);
+  const [dimPicks, setDimPicks] = useState<SketchRef[]>([]);
+  const [pending, setPending] = useState<PendingDimension | null>(null);
+  // Text offsets of the dimensions, kept for the page session per document and sketch.
+  const offsetKey = `${doc.remoteId}:${featureId}`;
+  const [offsets, setOffsetsState] = useState<Record<number, { x: number; y: number }>>(() => TEXT_OFFSETS.get(offsetKey) ?? {});
+  const setOffsets = (next: Record<number, { x: number; y: number }> | ((o: Record<number, { x: number; y: number }>) => Record<number, { x: number; y: number }>)) =>
+    setOffsetsState((o) => {
+      const value = typeof next === 'function' ? next(o) : next;
+      TEXT_OFFSETS.set(offsetKey, value);
+      return value;
+    });
+  const [message, setMessage] = useState<string | null>(null);
+  const [construction, setConstruction] = useState(false);
+  const [gridSnap, setGridSnap] = useState(false);
+  const [reference, setReference] = useState(false);
+  const [params, setParams] = useState({
+    filletRadius: '5',
+    chamfer1: '5',
+    chamfer2: '5',
+    offset: '5',
+    stepX: '20',
+    stepY: '0',
+    count: '3',
+    angle: '90',
+  });
+  const [unitsPerPixel, setUnitsPerPixel] = useState(0.2);
+
+  const canvasRef = useRef<SketchCanvasHandle>(null);
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const solutionRef = useRef(solution);
+  solutionRef.current = solution;
+  const dragRef = useRef<{ point: number; active: boolean; last: SketchSolution | null } | null>(null);
+  /** Pointer-move solves (drag, preview): the newest position wins (LatestRunner). */
+  const moveRunner = useRef(new LatestRunner()).current;
+  /** Serialises commits so that each one solves the data the previous one produced. */
+  const commitQueue = useRef<Promise<unknown>>(Promise.resolve());
+
+  /** Solves `next` and makes it the current data (free points move to the solution). */
+  const commit = useCallback(
+    (next: SketchData, record = true): Promise<SketchSolution | null> => {
+      const task = commitQueue.current.then(() => solveAndCommit(next, record));
+      commitQueue.current = task.catch(() => null);
+      return task;
+    },
+    // solveAndCommit reads refs only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [doc, featureId],
+  );
+
+  /** Runs `job` after every pending commit; jobs read dataRef and commit with solveAndCommit. */
+  const enqueue = <T,>(job: () => Promise<T>): Promise<T> => {
+    const task = commitQueue.current.then(job);
+    commitQueue.current = task.catch(() => null);
+    return task;
+  };
+
+  const solveAndCommit = async (next: SketchData, record: boolean): Promise<SketchSolution | null> => {
+    {
+      try {
+        const sol = await doc.solveSketch(featureId, next);
+        // The updater runs at the next render, after dataRef moves on: capture the data now.
+        const previous = dataRef.current;
+        if (record) setHistory((h) => [...h, previous]);
+        dataRef.current = sol.sketch;
+        solutionRef.current = sol;
+        setData(sol.sketch);
+        setSolution(sol);
+        setMessage(null);
+        return sol;
+      } catch (e) {
+        setMessage(errorText(e));
+        return null;
+      }
+    }
+  };
+
+  // Enter: the sketch data of the node.
+  useEffect(() => {
+    let cancelled = false;
+    doc.feature(featureId).then(
+      (f) => {
+        if (cancelled) return;
+        const initial = f.sketch ?? emptySketch();
+        dataRef.current = initial;
+        setData(initial);
+        setHistory([]);
+        void commit(initial, false);
+      },
+      (e: unknown) => !cancelled && setMessage(errorText(e)),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [doc, featureId, commit]);
+
+  const setTool = (next: EditorTool) => {
+    setToolState(next);
+    setPicks([]);
+    setPreview([]);
+    setDimPicks([]);
+    setPending(null);
+    setMessage(null);
+  };
+
+  const marks = useMemo(() => highlights(data, solution), [data, solution]);
+
+  // ------------------------------------------------------------------ edits
+
+  const undoStep = () => {
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    setHistory(history.slice(0, -1));
+    setSelection([]);
+    setSelectedConstraints([]);
+    setOffsets({});
+    void commit(prev, false);
+  };
+
+  const deleteSelection = () => {
+    if (selection.length === 0 && selectedConstraints.length === 0) return;
+    const { data: next, constraintMap } = removeItems(data, selection, selectedConstraints);
+    void commit(next).then((sol) => {
+      if (!sol) return;
+      const moved: Record<number, { x: number; y: number }> = {};
+      for (const [k, o] of Object.entries(offsets)) {
+        const nk = constraintMap[Number(k)];
+        if (nk > 0) moved[nk] = o;
+      }
+      setOffsets(moved);
+      setSelection([]);
+      setSelectedConstraints([]);
+    });
+  };
+
+  /** Runs a kernel editing tool on the current data. */
+  const runTool = (spec: SketchTool): Promise<boolean> =>
+    enqueue(async () => {
+      try {
+        const out = await doc.editSketch(featureId, dataRef.current, spec);
+        // Constraint numbers may change (removed constraints): text offsets are dropped.
+        setOffsets({});
+        setSelection([]);
+        setSelectedConstraints([]);
+        return (await solveAndCommit(out.sketch, true)) !== null;
+      } catch (e) {
+        setMessage(errorText(e));
+        return false;
+      }
+    });
+
+  const numberParam = (key: keyof typeof params, what: MessageKey): number | null => {
+    const v = Number(params[key]);
+    if (!Number.isFinite(v)) {
+      setMessage(t('sketch.needNumber', { what: t(what) }));
+      return null;
+    }
+    return v;
+  };
+
+  /** Adds a dimension as a reference one, lets the kernel measure it and asks for the value. */
+  const startDimension = (p: ConstraintProposal, at: { x: number; y: number } | null) =>
+    enqueue(() => startDimensionNow(p, at));
+
+  const startDimensionNow = async (p: ConstraintProposal, at: { x: number; y: number } | null) => {
+    const next = cloneSketch(dataRef.current);
+    const k = addConstraint(next, p.type, p.a, p.b, p.c, '0', true);
+    try {
+      const sol = await doc.solveSketch(featureId, next, { lite: true });
+      setPending({ data: next, k, text: formatValue(sol.constraintValues[k - 1]), existing: false, at });
+      setMessage(null);
+    } catch (e) {
+      setMessage(errorText(e));
+    }
+  };
+
+  const confirmDimension = async () => {
+    if (!pending) return;
+    const next = cloneSketch(pending.data);
+    const c = next.constraints[pending.k - 1];
+    const makeReference = pending.existing ? Boolean(c.driven) : reference;
+    if (!makeReference) {
+      if (!pending.text.trim()) {
+        setMessage(t('sketch.enterValue'));
+        return;
+      }
+      c.value = pending.text.trim();
+      delete c.driven;
+    }
+    const sol = await commit(next);
+    if (!sol) return;
+    if (pending.at && !pending.existing) {
+      const g = dimensionGraphic(sol.sketch, sol, pending.k, 24 * unitsPerPixel);
+      if (g) setOffsets((o) => ({ ...o, [pending.k]: offsetFor(g, pending.at!) }));
+    }
+    setPending(null);
+    setDimPicks([]);
+  };
+
+  const applyConstraint = (p: ConstraintProposal) => {
+    if (DIMENSION_TYPES.has(p.type)) {
+      void startDimension(p, null);
+      return;
+    }
+    const next = cloneSketch(dataRef.current);
+    let value = '0';
+    if (p.type === 'rotation' && solution) {
+      // Angle from (a - c) to (b - c), the current rotation of a onto b.
+      const [a, b, c] = [solution.points[p.a], solution.points[p.b], solution.points[p.c]];
+      const deg = ((Math.atan2(b.y - c.y, b.x - c.x) - Math.atan2(a.y - c.y, a.x - c.x)) * 180) / Math.PI;
+      value = formatValue(deg);
+    }
+    addConstraint(next, p.type, p.a, p.b, p.c, value);
+    void commit(next).then((sol) => sol && setSelection([]));
+  };
+
+  const toggleDriven = (k: number) => {
+    const next = cloneSketch(dataRef.current);
+    const c = next.constraints[k - 1];
+    if (c.driven) {
+      delete c.driven;
+      // A reference dimension becomes driving at its measured value.
+      c.value = formatValue(solutionRef.current?.constraintValues[k - 1] ?? Number(c.value));
+    } else {
+      c.driven = true;
+    }
+    void commit(next);
+  };
+
+  const toggleRegion = (x: number, y: number) => {
+    const regions = solutionRef.current?.profile?.regions ?? [];
+    // Innermost region whose kernel triangulation contains the point.
+    let hit: (typeof regions)[number] | null = null;
+    for (const r of regions) {
+      for (let t = 0; t + 2 < r.indices.length; t += 3) {
+        const [a, b, c] = [0, 1, 2].map((i) => ({ x: r.positions[r.indices[t + i] * 3], y: r.positions[r.indices[t + i] * 3 + 1] }));
+        const s1 = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+        const s2 = (c.x - b.x) * (y - b.y) - (c.y - b.y) * (x - b.x);
+        const s3 = (a.x - c.x) * (y - c.y) - (a.y - c.y) * (x - c.x);
+        if ((s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0)) {
+          if (!hit || r.depth > hit.depth) hit = r;
+          break;
+        }
+      }
+    }
+    if (!hit) return;
+    const chosen = regions.filter((r) => (r === hit ? !r.selected : r.selected));
+    if (chosen.some((r) => r.selector === null)) {
+      setMessage(t('sketch.regionNoOwnCurve'));
+      return;
+    }
+    if (chosen.length === 0) {
+      setMessage(t('sketch.regionKeepOne'));
+      return;
+    }
+    void commit({ ...cloneSketch(dataRef.current), regions: chosen.map((r) => r.selector as number) });
+  };
+
+  // ------------------------------------------------------------------ pointer
+
+  const hitAt = (e: SketchPointerEvent): SketchRef | null => {
+    const sol = solutionRef.current;
+    if (!sol) return null;
+    const tol = PICK_PIXELS * e.unitsPerPixel;
+    const p = nearestPoint(sol, e.x, e.y, tol);
+    if (p) return pointRef(p.point);
+    const c = nearestEntity(sol, e.x, e.y, tol);
+    return c ? entityRef(c.entity) : null;
+  };
+
+  const snapAt = (e: SketchPointerEvent): Snap =>
+    findSnap(e, dataRef.current, solutionRef.current, {
+      tolerance: PICK_PIXELS * e.unitsPerPixel,
+      reference: picksRef.current.length > 0 ? picksRef.current[picksRef.current.length - 1] : null,
+      grid: gridSnap ? 1 : 0,
+    });
+
+  const positions = () => (solutionRef.current?.points ?? []).map((p) => ({ x: p.x, y: p.y }));
+
+  const finishShape = (all: Snap[]) => {
+    if (!isDrawTool(tool)) return;
+    const drawTool = tool;
+    moveRunner.clear();
+    setPreview([]);
+    void enqueue(async () => {
+      try {
+        const shape = drawShape(dataRef.current, drawTool, all, positions(), { construction });
+        const sol = await solveAndCommit(shape.data, true);
+        setPicks(sol && shape.next ? [shape.next] : []);
+      } catch (e) {
+        if (!(e instanceof DrawError)) throw e;
+        setMessage(t(e.key, e.params));
+        setPicks([]);
+      }
+      setPreview([]);
+    });
+  };
+
+  const onDown = (e: SketchPointerEvent) => {
+    setUnitsPerPixel(e.unitsPerPixel);
+    if (tool !== 'select' || pending) return;
+    const hit = hitAt(e);
+    dragRef.current =
+      hit && hit.kind === 'point' && !solutionRef.current?.points[hit.index]?.fixed
+        ? { point: hit.index, active: false, last: null }
+        : null;
+  };
+
+  const onMove = (e: SketchPointerEvent) => {
+    const drag = dragRef.current;
+    if (drag) {
+      // Drag: the kernel pulls the point and re-solves; the data is committed on release.
+      drag.active = true;
+      const data = dataRef.current;
+      moveRunner.schedule(async () => {
+        try {
+          const sol = await doc.solveSketch(featureId, data, { drag: { point: drag.point, x: e.x, y: e.y }, lite: true });
+          drag.last = sol;
+          solutionRef.current = { ...sol, profile: solutionRef.current?.profile ?? null, intersections: [] };
+          setSolution(solutionRef.current);
+        } catch (err) {
+          setMessage(errorText(err));
+        }
+      });
+      return;
+    }
+    if (!isDrawTool(tool)) {
+      if (hover) setHover(null);
+      return;
+    }
+    const snap = snapAt(e);
+    setHover(snap);
+    const all = [...picksRef.current, snap];
+    const enough = tool === 'spline' ? all.length >= 2 : all.length === PICK_COUNT[tool] && picksRef.current.length > 0;
+    if (!enough) {
+      if (preview.length > 0) setPreview([]);
+      return;
+    }
+    let shape: ReturnType<typeof drawShape>;
+    try {
+      shape = drawShape(dataRef.current, tool, all, positions(), { construction });
+    } catch {
+      // A degenerate tentative shape (cursor on a pick) has no preview.
+      setPreview([]);
+      return;
+    }
+    moveRunner.schedule(async () => {
+      try {
+        const sol = await doc.solveSketch(featureId, shape.data, { lite: true });
+        setPreview(shape.created.map((id) => sol.curves[id - 1]).filter(Boolean));
+      } catch {
+        setPreview([]);
+      }
+    });
+  };
+
+  // A release is handled after pending commits: it picks on the data they produce.
+  const upHandler = useRef<(e: SketchPointerEvent, moved: boolean) => void>(() => undefined);
+  const onUp = (e: SketchPointerEvent, moved: boolean) => {
+    const handler = upHandler;
+    void commitQueue.current.then(() => handler.current(e, moved));
+  };
+  upHandler.current = (e: SketchPointerEvent, moved: boolean) => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (drag?.active) {
+      // The last move is solved before the data is committed.
+      void moveRunner.settled().then(() => drag.last && commit(drag.last.sketch));
+      return;
+    }
+    if (pending) return;
+    if (isDrawTool(tool)) {
+      if (moved) return;
+      const all = [...picksRef.current, snapAt(e)];
+      if (all.length >= PICK_COUNT[tool]) finishShape(all);
+      else setPicks(all);
+      return;
+    }
+    if (moved) return;
+    const hit = hitAt(e);
+    switch (tool) {
+      case 'select': {
+        setSelectedConstraints([]);
+        if (!hit) {
+          if (!e.shift && !e.ctrl) setSelection([]);
+          return;
+        }
+        const key = refKey(hit);
+        const has = selection.some((r) => refKey(r) === key);
+        if (e.shift || e.ctrl) setSelection(has ? selection.filter((r) => refKey(r) !== key) : [...selection, hit]);
+        else setSelection(has && selection.length === 1 ? [] : [hit]);
+        return;
+      }
+      case 'dimension': {
+        if (hit && dimPicks.length < 2 && !dimPicks.some((r) => refKey(r) === refKey(hit))) {
+          setDimPicks([...dimPicks, hit]);
+          return;
+        }
+        if (dimPicks.length === 0) return;
+        const options = applicableConstraints(dataRef.current, dimPicks).filter((p) => DIMENSION_TYPES.has(p.type));
+        let choice = options[0];
+        const pts = dimPicks.filter((r) => r.kind === 'point');
+        const sol = solutionRef.current;
+        if (pts.length === 2 && dimPicks.length === 2 && sol) {
+          const [a, b] = pts.map((r) => sol.points[(r as { index: number }).index]);
+          const type = twoPointDimension(a, b, e, PICK_PIXELS * e.unitsPerPixel);
+          choice = options.find((p) => p.type === type) ?? choice;
+        }
+        // A circle is dimensioned by its diameter, an arc by its radius (as in SolidWorks / КОМПАС).
+        const only = dimPicks.length === 1 && dimPicks[0].kind === 'entity' ? dataRef.current.geometry[dimPicks[0].id - 1] : null;
+        if (only?.type === 'circle') choice = options.find((p) => p.type === 'diameter') ?? choice;
+        if (!choice) {
+          setMessage(t('sketch.noDimension'));
+          setDimPicks([]);
+          return;
+        }
+        void startDimension(choice, { x: e.x, y: e.y });
+        return;
+      }
+      case 'trim':
+      case 'extend':
+        if (hit?.kind === 'entity') void runTool({ name: tool, entity: hit.id, pick: [e.x, e.y] });
+        return;
+      case 'fillet':
+      case 'chamfer': {
+        if (hit?.kind !== 'point') return;
+        const lines = cornerLines(dataRef.current, hit.index);
+        if (!lines) {
+          setMessage(t('sketch.noCorner'));
+          return;
+        }
+        if (tool === 'fillet') {
+          const r = numberParam('filletRadius', 'sketch.what.filletRadius');
+          if (r !== null) void runTool({ name: 'fillet', a: lines[0], b: lines[1], radius: r });
+        } else {
+          const d1 = numberParam('chamfer1', 'sketch.what.chamfer');
+          const d2 = numberParam('chamfer2', 'sketch.what.chamfer');
+          if (d1 !== null && d2 !== null) void runTool({ name: 'chamfer', a: lines[0], b: lines[1], d1, d2 });
+        }
+        return;
+      }
+      case 'regions':
+        toggleRegion(e.x, e.y);
+        return;
+    }
+  };
+
+  const finishChain = () => {
+    if (tool === 'spline' && picksRef.current.length >= 2) finishShape(picksRef.current);
+    else {
+      setPicks([]);
+      setPreview([]);
+    }
+  };
+
+  const keyHandler = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  keyHandler.current = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+    if (e.key === 'Escape') {
+      if (pending) setPending(null);
+      else if (picksRef.current.length > 0 || dimPicks.length > 0) {
+        setPicks([]);
+        setPreview([]);
+        setDimPicks([]);
+      } else setTool('select');
+      return;
+    }
+    if (typing) return;
+    if (e.key === 'Enter') finishChain();
+    else if (e.key === 'Delete' || e.key === 'Backspace') deleteSelection();
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      undoStep();
+    }
+  };
+  useEffect(() => {
+    // Keys act after pending commits (Esc ends the chain the last click extended).
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+      if (!typing && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') e.preventDefault();
+      void commitQueue.current.then(() => keyHandler.current(e));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // ------------------------------------------------------------------ derived view data
+
+  const shown = pending && !pending.existing ? pending.data : data;
+  const dimensions: DimensionGraphic[] = useMemo(() => {
+    if (!solution) return [];
+    const out: DimensionGraphic[] = [];
+    data.constraints.forEach((c, i) => {
+      if (!DIMENSION_TYPES.has(c.type)) return;
+      const g = dimensionGraphic(data, solution, i + 1, 24 * unitsPerPixel, offsets[i + 1]);
+      if (g) out.push(g);
+    });
+    return out;
+  }, [data, solution, offsets, unitsPerPixel]);
+
+  const selectedEntities = useMemo(() => {
+    const s = new Set<number>();
+    for (const r of [...selection, ...dimPicks]) if (r.kind === 'entity') s.add(r.id);
+    return s;
+  }, [selection, dimPicks]);
+  const selectedPoints = useMemo(() => {
+    const s = new Set<number>();
+    for (const r of [...selection, ...dimPicks]) if (r.kind === 'point') s.add(r.index);
+    return s;
+  }, [selection, dimPicks]);
+
+  const proposals = tool === 'select' ? applicableConstraints(data, selection) : [];
+  const selEntities = selection.filter((r) => r.kind === 'entity').map((r) => (r as { id: number }).id);
+  const selPoints = selection.filter((r) => r.kind === 'point').map((r) => (r as { index: number }).index);
+  const definition = solution?.definition ?? 'under-defined';
+  const profile = solution?.profile ?? null;
+
+  // ------------------------------------------------------------------ test API
+
+  const stateRef = useRef<SketchEditorState | null>(null);
+  stateRef.current = {
+    featureId,
+    tool,
+    definition,
+    dof: solution?.dof ?? -1,
+    converged: solution?.converged ?? false,
+    conflicting: solution?.conflicting ?? [],
+    redundant: solution?.redundant ?? [],
+    constraints: data.constraints.map((c, i) => ({
+      type: c.type,
+      a: c.a,
+      b: c.b,
+      c: c.c,
+      value: c.value,
+      driven: Boolean(c.driven),
+      measured: solution?.constraintValues[i] ?? NaN,
+      state: constraintState(i + 1, marks),
+    })),
+    points: solution?.points ?? [],
+    curves: (solution?.curves ?? []).map((c) => ({ entity: c.entity, type: c.type, construction: c.construction, defined: c.defined })),
+    regions: profile ? profile.regions.map((r) => ({ index: r.index, area: r.area, selected: r.selected })) : null,
+    profileIssues: profile ? profile.issues.map((i) => i.kind) : [],
+    selection: selection.map(refKey),
+    message,
+    pendingDimension: pending !== null,
+  };
+  useEffect(() => {
+    window.bendcoreSketchEditor = {
+      getState: () => stateRef.current!,
+      sketchToClient: (x, y) => {
+        if (!canvasRef.current) throw new Error('sketch canvas is not mounted');
+        return canvasRef.current.sketchToClient(x, y);
+      },
+    };
+    return () => {
+      delete window.bendcoreSketchEditor;
+    };
+  }, []);
+
+  // ------------------------------------------------------------------ render
+
+  const hint = isDrawTool(tool)
+    ? t('sketch.toolHint', { tool: t(`sketch.tool.${tool}`), pick: t(PICK_HINTS[tool][Math.min(picks.length, PICK_HINTS[tool].length - 1)]) })
+    : t(`sketch.hint.${tool}`);
+  const pendingGraphic =
+    pending && solution && pending.existing ? dimensions.find((g) => g.constraint === pending.k) ?? null : null;
+  const inputAt = (() => {
+    if (!pending || !canvasRef.current) return null;
+    const p = pending.at ?? pendingGraphic?.text ?? null;
+    return p ? canvasRef.current.sketchToClient(p.x, p.y) : null;
+  })();
+  const paramField = (key: keyof typeof params, text: string) => (
+    <label className="sk-param">
+      <span>{text}</span>
+      <input value={params[key]} data-testid={`sketch-param-${key}`} onChange={(e) => setParams({ ...params, [key]: e.target.value })} />
+    </label>
+  );
+  const toolButton = (k: EditorTool) => (
+    <button
+      type="button"
+      key={k}
+      className={tool === k ? 'sk-active' : ''}
+      data-testid={`tool-${k}`}
+      aria-pressed={tool === k}
+      onClick={() => setTool(k)}
+    >
+      {t(`sketch.tool.${k}`)}
+    </button>
+  );
+  const lastLine = [...selEntities].reverse().find((id) => data.geometry[id - 1]?.type === 'line');
+
+  return (
+    <>
+      <SketchCanvas
+        ref={canvasRef}
+        solution={solution}
+        preview={preview}
+        placement={solution?.placement ?? null}
+        body={body}
+        dimensions={dimensions}
+        curveState={(id) => definitionState(entityRef(id), solution, marks)}
+        pointState={(i) => definitionState(pointRef(i), solution, marks)}
+        constraintClass={(k) => `sk-c-${constraintState(k, marks)}${data.constraints[k - 1]?.driven ? ' sk-driven' : ''}`}
+        selectedEntities={selectedEntities}
+        selectedPoints={selectedPoints}
+        selectedConstraints={new Set(selectedConstraints)}
+        snap={isDrawTool(tool) ? hover : null}
+        showRegions={tool === 'regions' || tool === 'select'}
+        cursor={tool === 'select' ? 'default' : 'crosshair'}
+        onDown={onDown}
+        onMove={onMove}
+        onUp={onUp}
+        onDoubleClick={() => {
+          if (tool === 'line' || tool === 'spline') finishChain();
+        }}
+        onDimensionClick={(k) => {
+          setSelection([]);
+          setSelectedConstraints(selectedConstraints.includes(k) ? [] : [k]);
+        }}
+        onDimensionEdit={(k) => {
+          const c = data.constraints[k - 1];
+          if (!c) return;
+          setPending({
+            data,
+            k,
+            text: c.driven ? formatValue(solution?.constraintValues[k - 1] ?? 0) : c.value,
+            existing: true,
+            at: null,
+          });
+        }}
+        onDimensionMove={(k, x, y) => {
+          if (!solution) return;
+          const g = dimensionGraphic(data, solution, k, 24 * unitsPerPixel);
+          if (g) setOffsets((o) => ({ ...o, [k]: offsetFor(g, { x, y }) }));
+        }}
+      >
+        <div className="sk-hint" data-testid="sketch-hint">
+          {hint}
+        </div>
+        {pending && (
+          <form
+            className="sk-dim-input"
+            style={inputAt ? { position: 'fixed', left: inputAt.x - 50, top: inputAt.y - 14 } : undefined}
+            onSubmit={(e) => {
+              e.preventDefault();
+              void confirmDimension();
+            }}
+          >
+            <input
+              autoFocus
+              value={pending.text}
+              data-testid="dim-input"
+              disabled={pending.existing ? Boolean(shown.constraints[pending.k - 1]?.driven) : reference}
+              aria-label={t('sketch.dimensionExpression', {
+                what: shown.constraints[pending.k - 1] ? constraintCaption(t, shown.constraints[pending.k - 1].type) : t('sketch.dimension'),
+              })}
+              onChange={(e) => setPending({ ...pending, text: e.target.value })}
+              onFocus={(e) => e.target.select()}
+            />
+            <button type="submit" data-testid="dim-ok">
+              {t('sketch.ok')}
+            </button>
+          </form>
+        )}
+      </SketchCanvas>
+      <aside className="pm-right kv-panel sk-panel" data-testid="sketch-panel">
+        <h2>{t('sketch.title', { id: featureId })}</h2>
+        <div
+          className={`sk-status sk-status-${definition}`}
+          data-testid="sketch-status"
+          data-definition={definition}
+          data-dof={solution?.dof ?? ''}
+        >
+          {definitionCaption(t, definition)}
+          {solution ? t('sketch.dof', { dof: solution.dof }) : ''}
+          {solution && !solution.converged ? t('sketch.notConverged') : ''}
+        </div>
+        {message && (
+          <div className="sk-message" role="alert" data-testid="sketch-message">
+            {message}
+          </div>
+        )}
+        <div className="pm-panel-buttons">
+          <button type="button" className="pm-primary" data-testid="sketch-exit" onClick={() => void commitQueue.current.then(() => onExit(dataRef.current))}>
+            {t('sketch.exit')}
+          </button>
+          <button type="button" data-testid="sketch-cancel" onClick={onCancel}>
+            {t('sketch.cancel')}
+          </button>
+          <button type="button" data-testid="sketch-undo" disabled={history.length === 0} onClick={undoStep}>
+            {t('sketch.undoStep')}
+          </button>
+          <button type="button" data-testid="sketch-fit" onClick={() => canvasRef.current?.fit()}>
+            {t('sketch.fit')}
+          </button>
+        </div>
+
+        <fieldset className="pm-group sk-tools">
+          <legend>{t('sketch.drawing')}</legend>
+          {toolButton('select')}
+          {DRAW_TOOLS.map((k) => toolButton(k))}
+          <label className="sk-check">
+            <input type="checkbox" checked={construction} data-testid="sketch-construction" onChange={(e) => setConstruction(e.target.checked)} />
+            {t('sketch.construction')}
+          </label>
+          <label className="sk-check">
+            <input type="checkbox" checked={gridSnap} data-testid="sketch-grid-snap" onChange={(e) => setGridSnap(e.target.checked)} />
+            {t('sketch.gridSnap')}
+          </label>
+        </fieldset>
+
+        <fieldset className="pm-group sk-tools">
+          <legend>{t('sketch.editing')}</legend>
+          {EDIT_TOOLS.map((k) => toolButton(k))}
+          <label className="sk-check">
+            <input type="checkbox" checked={reference} data-testid="sketch-reference" onChange={(e) => setReference(e.target.checked)} />
+            {t('sketch.referenceNew')}
+          </label>
+          {tool === 'fillet' && paramField('filletRadius', t('sketch.filletRadius'))}
+          {tool === 'chamfer' && (
+            <>
+              {paramField('chamfer1', t('sketch.chamfer1'))}
+              {paramField('chamfer2', t('sketch.chamfer2'))}
+            </>
+          )}
+        </fieldset>
+
+        {tool === 'select' && selection.length > 0 && (
+          <fieldset className="pm-group sk-tools" data-testid="sketch-selection">
+            <legend>
+              {t('sketch.selected')} {selPoints.length > 0 ? t('sketch.selectedPoints', { count: selPoints.length }) : ''}{' '}
+              {selEntities.length > 0 ? t('sketch.selectedCurves', { count: selEntities.length }) : ''}
+            </legend>
+            {proposals.map((p) => (
+              <button type="button" key={p.type} data-testid={`constraint-${p.type}`} onClick={() => applyConstraint(p)}>
+                {constraintCaption(t, p.type)}
+              </button>
+            ))}
+            {selEntities.length > 0 && (
+              <button type="button" data-testid="sketch-toggle-construction" onClick={() => void commit(toggleConstruction(data, selEntities))}>
+                {t('sketch.toggleConstruction')}
+              </button>
+            )}
+            <button type="button" data-testid="sketch-delete" onClick={deleteSelection}>
+              {t('sketch.delete')}
+            </button>
+            {selEntities.length > 0 && (
+              <div className="sk-subtools">
+                {paramField('offset', t('sketch.offsetField'))}
+                <button
+                  type="button"
+                  data-testid="sketch-offset"
+                  onClick={() => {
+                    const d = numberParam('offset', 'sketch.what.offset');
+                    if (d !== null) void runTool({ name: 'offset', chain: selEntities, distance: d });
+                  }}
+                >
+                  {t('sketch.offset')}
+                </button>
+                <button
+                  type="button"
+                  data-testid="sketch-mirror"
+                  disabled={lastLine === undefined || selEntities.length < 2}
+                  title={t('sketch.mirrorHint')}
+                  onClick={() =>
+                    lastLine !== undefined && void runTool({ name: 'mirror', entities: selEntities.filter((id) => id !== lastLine), axis: lastLine })
+                  }
+                >
+                  {t('sketch.mirror')}
+                </button>
+                {paramField('stepX', t('sketch.stepX'))}
+                {paramField('stepY', t('sketch.stepY'))}
+                {paramField('count', t('sketch.count'))}
+                <button
+                  type="button"
+                  data-testid="sketch-linear-pattern"
+                  onClick={() => {
+                    const [dx, dy, n] = [numberParam('stepX', 'sketch.what.stepX'), numberParam('stepY', 'sketch.what.stepY'), numberParam('count', 'sketch.what.count')];
+                    if (dx !== null && dy !== null && n !== null) void runTool({ name: 'linear-pattern', entities: selEntities, step: [dx, dy], count: n });
+                  }}
+                >
+                  {t('sketch.linearPattern')}
+                </button>
+                {paramField('angle', t('sketch.angleStep'))}
+                <button
+                  type="button"
+                  data-testid="sketch-circular-pattern"
+                  disabled={selPoints.length !== 1}
+                  title={t('sketch.circularHint')}
+                  onClick={() => {
+                    const [n, a] = [numberParam('count', 'sketch.what.count'), numberParam('angle', 'sketch.what.angle')];
+                    if (n !== null && a !== null) void runTool({ name: 'circular-pattern', entities: selEntities, center: selPoints[0], count: n, angle: a });
+                  }}
+                >
+                  {t('sketch.circularPattern')}
+                </button>
+              </div>
+            )}
+          </fieldset>
+        )}
+
+        {(marks.conflicting.size > 0 || marks.redundant.size > 0) && (
+          <section className="sk-conflicts" data-testid="sketch-conflicts">
+            {marks.conflicting.size > 0 && <h2>{t('sketch.conflicting')}</h2>}
+            <ul>
+              {[...marks.conflicting].sort((a, b) => a - b).map((k) => (
+                <li key={`c${k}`} className="sk-c-conflict" data-testid={`conflict-${k}`}>
+                  <button type="button" onClick={() => setSelectedConstraints([k])}>
+                    #{k} {describeConstraint(data.constraints[k - 1], solution?.constraintValues[k - 1], t)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {marks.redundant.size > 0 && <h2>{t('sketch.redundant')}</h2>}
+            <ul>
+              {[...marks.redundant].sort((a, b) => a - b).map((k) => (
+                <li key={`r${k}`} className="sk-c-redundant" data-testid={`redundant-${k}`}>
+                  <button type="button" onClick={() => setSelectedConstraints([k])}>
+                    #{k} {describeConstraint(data.constraints[k - 1], solution?.constraintValues[k - 1], t)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <section data-testid="sketch-profile">
+          <h2>{t('sketch.profile')}</h2>
+          {!profile && <p className="pm-hint">{t('sketch.profilePending')}</p>}
+          {profile && !profile.hasProfile && <p className="pm-hint">{t('sketch.noProfile')}</p>}
+          {profile?.issues.map((i, k) => (
+            <p key={k} className="sk-issue">
+              {t('sketch.issue', { kind: i.kind, entities: i.entities.join(', '), detail: i.detail })}
+            </p>
+          ))}
+          {profile?.error && <p className="sk-issue">{profile.error}</p>}
+          {profile && profile.regions.length > 0 && (
+            <p>
+              {t('sketch.regions', {
+                count: profile.regions.length,
+                selected: profile.regions.filter((r) => r.selected).length,
+                area: formatValue(profile.regions.filter((r) => r.selected).reduce((s, r) => s + r.area, 0)),
+              })}
+            </p>
+          )}
+        </section>
+
+        <section>
+          <h2>{t('sketch.constraints', { count: data.constraints.length })}</h2>
+          <ul className="sk-constraints" data-testid="sketch-constraints">
+            {data.constraints.map((c, i) => {
+              const k = i + 1;
+              const st = constraintState(k, marks);
+              return (
+                <li
+                  key={k}
+                  className={`sk-c-${st}${selectedConstraints.includes(k) ? ' sk-selected' : ''}`}
+                  data-testid={`constraint-row-${k}`}
+                  data-state={st}
+                  data-type={c.type}
+                >
+                  <button type="button" className="sk-c-name" onClick={() => setSelectedConstraints(selectedConstraints.includes(k) ? [] : [k])}>
+                    #{k} {describeConstraint(c, solution?.constraintValues[i], t)}
+                  </button>
+                  {DIMENSION_TYPES.has(c.type) && (
+                    <label title={t('sketch.drivenHint')}>
+                      <input type="checkbox" checked={Boolean(c.driven)} data-testid={`constraint-driven-${k}`} onChange={() => toggleDriven(k)} />
+                      {t('sketch.driven')}
+                    </label>
+                  )}
+                  {hasValue(c.type) && !c.driven && (
+                    <input
+                      className="sk-c-value"
+                      defaultValue={c.value}
+                      key={`${k}=${c.value}`}
+                      data-testid={`constraint-value-${k}`}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (!v || v === c.value) return;
+                        const next = cloneSketch(data);
+                        next.constraints[i].value = v;
+                        void commit(next);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                      }}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    aria-label={t('sketch.removeConstraint', { k })}
+                    data-testid={`constraint-remove-${k}`}
+                    onClick={() => {
+                      const { data: next, constraintMap } = removeItems(data, [], [k]);
+                      void commit(next).then((sol) => {
+                        if (!sol) return;
+                        const moved: Record<number, { x: number; y: number }> = {};
+                        for (const [key, o] of Object.entries(offsets)) if (constraintMap[Number(key)] > 0) moved[constraintMap[Number(key)]] = o;
+                        setOffsets(moved);
+                        setSelectedConstraints([]);
+                      });
+                    }}
+                  >
+                    ×
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </aside>
+    </>
+  );
+};
+
+export default SketchEditor;

@@ -1,5 +1,7 @@
 #include "bendcore/reporting_ui.hpp"
 
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <ctime>
 #include <algorithm>
@@ -82,12 +84,30 @@ bool ReportingUIManager::exportReport(
     // Generate export folder path
     outFolder = generateExportFolder(request.outputPath, request.reportId);
 
-    // Export each format (stub - actual export happens elsewhere)
-    for (const auto& format : request.formats) {
-        // G-code, PDF, DWG, SVG, JSON, CSV exports would happen here
-        // For now, just log the intent
+    // Файлы пишет reporting::ReportGenerator::exportReport. Он умеет JSON, HTML и CSV;
+    // G-code, PDF, DWG, SVG для отчёта не формируются — такой запрос отклоняется целиком,
+    // до записи чего-либо.
+    struct Target { reporting::ReportGenerator::ExportFormat format; std::string ext; };
+    std::vector<Target> targets;
+    for (const auto& name : request.formats) {
+        if (name == "json") targets.push_back({reporting::ReportGenerator::ExportFormat::JSON, "json"});
+        else if (name == "html") targets.push_back({reporting::ReportGenerator::ExportFormat::HTML, "html"});
+        else if (name == "csv") targets.push_back({reporting::ReportGenerator::ExportFormat::CSV, "csv"});
+        else return false;
     }
+    if (targets.empty()) return false;
 
+    std::error_code ec;
+    std::filesystem::create_directories(outFolder, ec);
+    if (ec) return false;
+    reporting::ReportGenerator generator;
+    for (const auto& t : targets) {
+        std::ofstream out(std::filesystem::path(outFolder) / (request.reportId + "." + t.ext),
+                          std::ios::binary);
+        if (!out) return false;
+        out << generator.exportReport(report, t.format);
+        if (!out) return false;
+    }
     return true;
 }
 
@@ -240,35 +260,6 @@ std::string StandardsUIManager::getComplianceReportHTML(
 
     standards::ComplianceReportGenerator generator;
     return generator.generateHTMLReport(compliance);
-}
-
-// ========== CollaborationUIStubs ==========
-
-CollaborationUIStubs::CollaborationUIStubs() = default;
-CollaborationUIStubs::~CollaborationUIStubs() = default;
-
-std::vector<CollaborationUIStubs::CommentSummary> CollaborationUIStubs::getComments(
-    const std::string& tubeId
-) const {
-    // Stub: returns empty
-    // Full implementation in Phase 26B/C
-    return {};
-}
-
-std::vector<CollaborationUIStubs::VersionSummary> CollaborationUIStubs::getVersions(
-    const std::string& tubeId
-) const {
-    // Stub: returns empty
-    // Full implementation in Phase 26B/C
-    return {};
-}
-
-std::vector<CollaborationUIStubs::ChangeSummary> CollaborationUIStubs::getChanges(
-    const std::string& tubeId
-) const {
-    // Stub: returns empty
-    // Full implementation in Phase 26B/C
-    return {};
 }
 
 // ========== ProductionUIManager ==========

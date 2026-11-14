@@ -21,7 +21,7 @@ protected:
         .wall_thickness = 2.0,       // 2mm стенка
         .bend_angle = 90.0,          // 90 градусов
         .offset_distance = 25.0,     // 25mm смещение
-        .bend_radius = 100.0,        // 100mm радиус
+        .bend_radius = 150.0,        // 150mm радиус (min для Steel = 2.5×OD = 125)
         .material = "Steel"
     };
   }
@@ -32,7 +32,7 @@ protected:
         .wall_thickness = 3.0,
         .bend_angle = 45.0,
         .offset_distance = 50.0,
-        .bend_radius = 150.0,
+        .bend_radius = 320.0,        // min для Stainless Steel = 3.0×OD = 300
         .material = "Stainless Steel"
     };
   }
@@ -53,15 +53,16 @@ TEST_F(ParallelOffsetPerformanceTest, BaselinePerformance) {
   profiler.stop("baseline_calculate");
 
   auto stats = profiler.get_stats("baseline_calculate");
+  const double per_call_ms = stats.total_time_ms / 1000.0;  // one start/stop wraps the whole loop
   std::cout << "\n═════ BASELINE PERFORMANCE ═════\n";
   std::cout << "1000 iterations of ParallelOffset.calculate()\n";
   std::cout << "Total: " << stats.total_time_ms << "ms\n";
-  std::cout << "Average: " << stats.avg_time_ms << "ms per call\n";
+  std::cout << "Average: " << per_call_ms << "ms per call\n";
   std::cout << "Min: " << stats.min_time_ms << "ms\n";
   std::cout << "Max: " << stats.max_time_ms << "ms\n";
 
   // Проверка что не слишком медленно
-  EXPECT_LT(stats.avg_time_ms, 1.0);  // Менее 1ms на одну операцию
+  EXPECT_LT(per_call_ms, 1.0);  // Менее 1ms на одну операцию
 }
 
 // Бенчмарк оптимизированной версии
@@ -79,14 +80,15 @@ TEST_F(ParallelOffsetPerformanceTest, OptimizedPerformance) {
   profiler.stop("optimized_calculate");
 
   auto stats = profiler.get_stats("optimized_calculate");
+  const double per_call_ms = stats.total_time_ms / 1000.0;  // one start/stop wraps the whole loop
   std::cout << "\n═════ OPTIMIZED PERFORMANCE ═════\n";
   std::cout << "1000 iterations of ParallelOffsetOptimized.calculate()\n";
   std::cout << "Total: " << stats.total_time_ms << "ms\n";
-  std::cout << "Average: " << stats.avg_time_ms << "ms per call\n";
+  std::cout << "Average: " << per_call_ms << "ms per call\n";
   std::cout << "Min: " << stats.min_time_ms << "ms\n";
   std::cout << "Max: " << stats.max_time_ms << "ms\n";
 
-  EXPECT_LT(stats.avg_time_ms, 1.0);
+  EXPECT_LT(per_call_ms, 1.0);
 }
 
 // Сравнение производительности
@@ -157,10 +159,10 @@ protected:
         .bend_radius = 150.0,
         .num_bends = 5,
         .distribution = "custom",
-        .custom_bend_positions = {0.2, 0.4, 0.5, 0.7, 0.85},
         .inclination_angle = 30.0,
         .springback_correction = true,
-        .material = "aluminum"
+        .material = "aluminum",
+        .custom_bend_positions = {0.2, 0.4, 0.5, 0.7, 0.85}
     };
   }
 };
@@ -179,14 +181,15 @@ TEST_F(Combined3DOffsetPerformanceTest, BaselinePerformance) {
   profiler.stop("baseline_3d_calculate");
 
   auto stats = profiler.get_stats("baseline_3d_calculate");
+  const double per_call_ms = stats.total_time_ms / 500.0;  // one start/stop wraps the whole loop
   std::cout << "\n═════ BASELINE 3D PERFORMANCE ═════\n";
   std::cout << "500 iterations of Combined3DOffset.calculate()\n";
   std::cout << "Total: " << stats.total_time_ms << "ms\n";
-  std::cout << "Average: " << stats.avg_time_ms << "ms per call\n";
+  std::cout << "Average: " << per_call_ms << "ms per call\n";
   std::cout << "Min: " << stats.min_time_ms << "ms\n";
   std::cout << "Max: " << stats.max_time_ms << "ms\n";
 
-  EXPECT_LT(stats.avg_time_ms, 2.0);  // Менее 2ms на одну операцию
+  EXPECT_LT(per_call_ms, 2.0);  // Менее 2ms на одну операцию
 }
 
 TEST_F(Combined3DOffsetPerformanceTest, OptimizedPerformance) {
@@ -203,14 +206,15 @@ TEST_F(Combined3DOffsetPerformanceTest, OptimizedPerformance) {
   profiler.stop("optimized_3d_calculate");
 
   auto stats = profiler.get_stats("optimized_3d_calculate");
+  const double per_call_ms = stats.total_time_ms / 500.0;  // one start/stop wraps the whole loop
   std::cout << "\n═════ OPTIMIZED 3D PERFORMANCE ═════\n";
   std::cout << "500 iterations of Combined3DOffsetOptimized.calculate()\n";
   std::cout << "Total: " << stats.total_time_ms << "ms\n";
-  std::cout << "Average: " << stats.avg_time_ms << "ms per call\n";
+  std::cout << "Average: " << per_call_ms << "ms per call\n";
   std::cout << "Min: " << stats.min_time_ms << "ms\n";
   std::cout << "Max: " << stats.max_time_ms << "ms\n";
 
-  EXPECT_LT(stats.avg_time_ms, 2.0);
+  EXPECT_LT(per_call_ms, 2.0);
 }
 
 TEST_F(Combined3DOffsetPerformanceTest, ComparisonBaselineVsOptimized) {
@@ -265,12 +269,13 @@ TEST_F(Combined3DOffsetPerformanceTest, StressTestComplexCalculations) {
   profiler.stop("stress_test");
 
   auto stats = profiler.get_stats("stress_test");
+  const double per_call_ms = stats.total_time_ms / 1000.0;  // one start/stop wraps the whole loop
   std::cout << "\n═════ STRESS TEST (complex params) ═════\n";
   std::cout << "1000 iterations with complex parameters\n";
-  std::cout << "Average: " << stats.avg_time_ms << "ms per call\n";
+  std::cout << "Average: " << per_call_ms << "ms per call\n";
   std::cout << "Max: " << stats.max_time_ms << "ms\n";
 
-  EXPECT_LT(stats.avg_time_ms, 3.0);
+  EXPECT_LT(per_call_ms, 3.0);
 }
 
 int main(int argc, char** argv) {

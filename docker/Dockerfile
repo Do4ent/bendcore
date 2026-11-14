@@ -1,6 +1,6 @@
 # Сервис тела трубы (bendcore_server): HTTP на порту 8080, см. src/server/main.cpp.
-# Сборка (из корня репозитория), OCCT — установка в ~/occt-install (см. .github/workflows/wasm.yml):
-#   docker build --build-context occt="$HOME/occt-install" -f docker/Dockerfile -t bendcore-server .
+# Сборка (из корня репозитория), OCCT — установка third_party/occt-install-checked (third_party/build_occt.sh):
+#   docker build --build-context occt="$PWD/third_party/occt-install-checked" -f docker/Dockerfile -t bendcore-server .
 FROM ubuntu:24.04 AS build
 RUN apt-get update && apt-get install -y --no-install-recommends cmake ninja-build g++ libeigen3-dev zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*

@@ -1,16 +1,11 @@
 /**
- * BendCore UI Entry Point
- * React root component for CommandManager Ribbon UI
- *
- * PERF-001: Application Startup Profiling
- * Optimized with lazy loading, code splitting, and performance monitoring
+ * Окно трубного приложения Electron (точка входа webpack.config.js).
+ * Команды вида «раздел.действие» идут в ядро (bendcore_cli) через IPC главного процесса,
+ * импорт STEP — в сервис bendcore_server (ImportDialog, tubeService).
  */
 
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { perfMonitor } from './PerformanceMonitoring';
-import { memoryManager } from './MemoryManagement';
-import { withMemo, SuspenseBoundary } from './ComponentOptimization';
 import RibbonBar from './RibbonBar';
 import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import PropertiesPanel, { SelectedObject } from './PropertiesPanel';
@@ -21,58 +16,11 @@ import ImportDialog, { TubeCandidate } from './ImportDialog';
 import type { ViewportMesh } from './tubeService';
 import './styles.css';
 
-// Mark startup
-perfMonitor.mark('app-startup');
-
-// Lazy load non-critical components
-const M22Integration = lazy(() => import('./M22Integration'));
-const M23Integration = lazy(() => import('./M23Integration'));
-const M24Integration = lazy(() => import('./M24Integration'));
-const M25Integration = lazy(() => import('./M25Integration'));
-
-// Export BendCore Landing UI component
-export { default as BendCoreLanding } from './BendCoreLanding';
-
-export { default as TubeDialog } from './TubeDialog';
-export type { TubeConfig } from './TubeDialog';
-export { default as OffsetCalculatorTab } from './OffsetCalculatorTab';
-export { OffsetTypeSelector } from './OffsetTypeSelector';
-export type { OffsetType } from './OffsetTypeSelector';
-export { OffsetResultsDisplay } from './OffsetResultsDisplay';
-export { OffsetVisualization } from './OffsetVisualization';
-export { ParallelOffsetCalculator } from './ParallelOffsetCalculator';
-export { default as Combined3DOffsetCalculator } from './Combined3DOffsetCalculator';
-
 interface AppProps {
   onCommand?: (commandId: string, args?: Record<string, any>) => void;
 }
 
 const App: React.FC<AppProps> = ({ onCommand }) => {
-  // Performance monitoring
-  React.useEffect(() => {
-    perfMonitor.mark('app-render-start');
-    return () => {
-      const renderTime = perfMonitor.measure('app-render', 'app-render-start');
-      perfMonitor.recordMetric('app-render', renderTime, 'render');
-      console.log(`[PERF] App render time: ${renderTime.toFixed(2)}ms`);
-    };
-  }, []);
-
-  // Memory monitoring
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      const memory = memoryManager.getMemoryUsageMB();
-      console.log(`[PERF] Current memory: ${memory.toFixed(1)}MB`);
-
-      if (memoryManager.isMemoryCritical()) {
-        console.warn('[PERF] Memory critical, performing GC');
-        memoryManager.performGarbageCollection();
-      }
-    }, 30000); // Check every 30 seconds
-
-    return () => clearInterval(interval);
-  }, []);
-
   // Context menu state
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
@@ -134,8 +82,8 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
     const x = e.clientX;
     const y = e.clientY;
 
-    // Generate context menu based on what was clicked
-    // For now, show empty space menu
+    // The shell has no selection model, so the viewport always offers the
+    // empty-space menu (create commands; paste is disabled).
     const actions: ContextMenuAction[] = [
       { id: 'new-tube', label: 'New Tube', icon: '➕', shortcut: 'Ctrl+T', action: () => handleCommand('new-tube') },
       { id: 'new-sketch', label: 'New Sketch', icon: '✏', shortcut: 'Ctrl+Shift+K', action: () => handleCommand('new-sketch') },
@@ -262,38 +210,7 @@ const App: React.FC<AppProps> = ({ onCommand }) => {
 
 // window.electron is declared in src/ui/core/coreClient.ts
 
-// Initialize React root with performance measurement
 const rootElement = document.getElementById('root');
 if (rootElement) {
-  perfMonitor.mark('react-root-creation');
-  const root = ReactDOM.createRoot(rootElement);
-
-  perfMonitor.mark('react-render-start');
-  root.render(<App />);
-  perfMonitor.mark('react-render-end');
-
-  // Measure key startup times
-  const renderTime = perfMonitor.measure('react-render', 'react-render-start', 'react-render-end');
-  const totalStartupTime = perfMonitor.measure('total-startup', 'app-startup', 'react-render-end');
-
-  // Wait for component mount before recording final metrics
-  setTimeout(() => {
-    const memory = memoryManager.getMemoryUsageMB();
-    const report = perfMonitor.generateReport();
-
-    console.log('[PERF] ===== Application Startup Report =====');
-    console.log(`Total startup time: ${totalStartupTime.toFixed(2)}ms`);
-    console.log(`React render time: ${renderTime.toFixed(2)}ms`);
-    console.log(`Current memory: ${memory.toFixed(1)}MB`);
-    console.log(report);
-    console.log('[PERF] =========================================');
-
-    // Store metrics for analysis
-    (window as any).__bendcore_perf = {
-      startupTime: totalStartupTime,
-      renderTime,
-      memory,
-      report,
-    };
-  }, 100);
+  ReactDOM.createRoot(rootElement).render(<App />);
 }

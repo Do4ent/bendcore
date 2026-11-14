@@ -1,0 +1,63 @@
+name: Native C++
+
+# Ядро C++ без OCCT: полная сборка и все тесты (включая GoogleTest-наборы).
+# До появления этого workflow нативные GTest-наборы нигде не собирались,
+# поэтому ошибки компиляции и падения в них оставались незамеченными.
+# Сборка с OCCT — job "occt-native" в qa.yml, ядро WASM — job "kernel-wasm" в wasm.yml.
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  native:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Release (gcc)
+            build_type: Release
+            cxx: g++
+            flags: ""
+          # Optimised so the timing thresholds in perf tests (e.g. batch_check:
+          # 3000 tubes < 10 s) still hold under sanitizers; -O0 overshoots.
+          - name: RelWithDebInfo + ASan/UBSan (gcc)
+            build_type: RelWithDebInfo
+            cxx: g++
+            flags: "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencies (Ninja, Eigen, GTest)
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libeigen3-dev libgtest-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_CXX_FLAGS="${{ matrix.flags }}" \
+            -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.flags }}"
+
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --parallel 2>&1 | tee build.log
+
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure --parallel 4 --timeout 300
+
+      - name: Errors as annotations (on failure)
+        if: failure()
+        shell: bash
+        run: |
+          [ -f build.log ] || exit 0
+          grep -n -E "error:|FAILED|undefined reference" build.log | head -n 20 | \
+            while IFS= read -r line; do echo "::error title=native-build::${line:0:900}"; done

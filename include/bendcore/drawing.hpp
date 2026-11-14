@@ -410,6 +410,10 @@ std::vector<Comment> filter_comments_by_sheet(
     const std::vector<Comment>& comments,
     int sheet_number);
 
+// SHA-256 (FIPS 180-4) of a byte string as 64 lower-case hex digits.
+// Own implementation: the core has no OpenSSL dependency and builds for WASM.
+std::string sha256_hex(const std::string& input);
+
 // Ассоциативность (версионирование и история) ----------
 // Отпечаток пути для детектирования изменений (SHA256)
 struct PathFingerprint {

@@ -39,7 +39,7 @@ class TemplateManagerTest : public ::testing::Test {
  */
 TEST_F(TemplateManagerTest, LoadTemplatesFromJSON) {
   // Use the actual templates.json from data directory
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
 
   bool result = manager.load_templates(templates_path);
   ASSERT_TRUE(result) << "Failed to load templates from " << templates_path;
@@ -61,7 +61,7 @@ TEST_F(TemplateManagerTest, LoadTemplatesFromJSON) {
  * Test 2: Auto-selection for Standard 90° tube (OD=25, Wall=2.0)
  */
 TEST_F(TemplateManagerTest, AutoSelectStandard90Tube) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
   manager.load_templates(templates_path);
 
   const auto& library = manager.get_library();
@@ -82,7 +82,7 @@ TEST_F(TemplateManagerTest, AutoSelectStandard90Tube) {
  * Test 3: Auto-selection for Small-OD tube (OD=12, Wall=1.8)
  */
 TEST_F(TemplateManagerTest, AutoSelectSmallODTube) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
   manager.load_templates(templates_path);
 
   const auto& library = manager.get_library();
@@ -102,7 +102,7 @@ TEST_F(TemplateManagerTest, AutoSelectSmallODTube) {
  * Test 4: Auto-selection for Large Assembly (OD=100, Wall=4.0)
  */
 TEST_F(TemplateManagerTest, AutoSelectLargeAssemblyTube) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
   manager.load_templates(templates_path);
 
   const auto& library = manager.get_library();
@@ -133,7 +133,7 @@ TEST_F(TemplateManagerTest, TemplateCRUDOperations) {
   custom_template.outer_diameter = {20.0, 40.0, 30.0, "mm"};
   custom_template.wall_thickness = {1.5, 2.5, 2.0, "mm"};
   custom_template.length = {100.0, 600.0, 350.0, "mm"};
-  custom_template.compatible_materials = {"steel-1020", "aluminum-6061"};
+  custom_template.recommended_materials = {"steel-1020", "aluminum-6061"};
 
   // Create (Add)
   manager.add_template(custom_template);
@@ -163,7 +163,7 @@ TEST_F(TemplateManagerTest, TemplateCRUDOperations) {
  * Test 6: Custom template creation and persistence
  */
 TEST_F(TemplateManagerTest, CustomTemplatePersistence) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
   manager.load_templates(templates_path);
 
   // Create a custom template
@@ -177,7 +177,7 @@ TEST_F(TemplateManagerTest, CustomTemplatePersistence) {
   custom_template.outer_diameter = {12.0, 48.0, 30.0, "mm"};
   custom_template.wall_thickness = {1.0, 3.0, 2.0, "mm"};
   custom_template.length = {30.0, 900.0, 400.0, "mm"};
-  custom_template.compatible_materials = {};
+  custom_template.recommended_materials = {};
 
   manager.add_template(custom_template);
   manager.set_active_template("custom-persistent");
@@ -207,7 +207,7 @@ TEST_F(TemplateManagerTest, CustomTemplatePersistence) {
  * Test 7: Template export/import
  */
 TEST_F(TemplateManagerTest, TemplateExportImport) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
   manager.load_templates(templates_path);
 
   size_t original_count = manager.get_all_templates().size();
@@ -236,7 +236,7 @@ TEST_F(TemplateManagerTest, TemplateExportImport) {
  * Test 8: Top 3 candidates ranking
  */
 TEST_F(TemplateManagerTest, Top3CandidatesRanking) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
   manager.load_templates(templates_path);
 
   const auto& library = manager.get_library();
@@ -264,7 +264,7 @@ TEST_F(TemplateManagerTest, Top3CandidatesRanking) {
  * Test 9: Constraint violations detection
  */
 TEST_F(TemplateManagerTest, ConstraintViolationsDetection) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
   manager.load_templates(templates_path);
 
   auto std_90 = manager.get_template("std-90");
@@ -290,7 +290,7 @@ TEST_F(TemplateManagerTest, ConstraintViolationsDetection) {
  * Test 10: Recommendations generation
  */
 TEST_F(TemplateManagerTest, RecommendationsGeneration) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
   manager.load_templates(templates_path);
 
   auto std_90 = manager.get_template("std-90");
@@ -341,7 +341,7 @@ TEST(TemplateParameterScoreTest, ParameterScoreAboveRange) {
  * Test with very small/large values
  */
 TEST_F(TemplateManagerTest, EdgeCaseExtremeValues) {
-  const std::string templates_path = "/home/claude/bendcore/data/templates.json";
+  const std::string templates_path = BENDCORE_DATA_DIR "/templates.json";
   manager.load_templates(templates_path);
 
   const auto& library = manager.get_library();

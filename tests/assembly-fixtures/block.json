@@ -1,0 +1,230 @@
+{
+ "features": [
+  {
+   "id": "Profile",
+   "label": "Profile",
+   "links": {},
+   "options": {
+    "plane": "XY"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [
+     {
+      "a": 0,
+      "b": 1,
+      "c": -1,
+      "type": "horizontal",
+      "value": "0"
+     },
+     {
+      "a": 1,
+      "b": 2,
+      "c": -1,
+      "type": "vertical",
+      "value": "0"
+     },
+     {
+      "a": 2,
+      "b": 3,
+      "c": -1,
+      "type": "horizontal",
+      "value": "0"
+     },
+     {
+      "a": 3,
+      "b": 0,
+      "c": -1,
+      "type": "vertical",
+      "value": "0"
+     },
+     {
+      "a": 0,
+      "b": 1,
+      "c": -1,
+      "type": "distance",
+      "value": "80"
+     },
+     {
+      "a": 1,
+      "b": 2,
+      "c": -1,
+      "type": "distance",
+      "value": "60"
+     },
+     {
+      "a": 5,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "10"
+     },
+     {
+      "a": 6,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "5.5"
+     },
+     {
+      "a": 7,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "5.5"
+     }
+    ],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     },
+     {
+      "center": 4,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 5,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 6,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "0"
+     },
+     {
+      "fixed": false,
+      "x": "(0) + 1",
+      "y": "0"
+     },
+     {
+      "fixed": false,
+      "x": "(0) + 1",
+      "y": "(0) + 1"
+     },
+     {
+      "fixed": false,
+      "x": "0",
+      "y": "(0) + 1"
+     },
+     {
+      "fixed": true,
+      "x": "40",
+      "y": "30"
+     },
+     {
+      "fixed": true,
+      "x": "15",
+      "y": "30"
+     },
+     {
+      "fixed": true,
+      "x": "65",
+      "y": "30"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Body",
+   "label": "Body",
+   "links": {
+    "sketch": "Profile"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "20",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  }
+ ],
+ "format": "bendcore-part",
+ "rollback": null,
+ "variables": [],
+ "version": 3
+}

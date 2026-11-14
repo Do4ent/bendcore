@@ -1,0 +1,48 @@
+/* Export dialog and mass properties section (docs/ui/DATA_EXCHANGE.md). */
+
+.ex-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 28, 38, 0.35);
+}
+
+.ex-dialog {
+  min-width: 320px;
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--kv-border, #d8dee6);
+  border-radius: 6px;
+  background: var(--kv-bg, #ffffff);
+  color: var(--kv-fg, #1d2733);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font: 13px system-ui, sans-serif;
+}
+
+.ex-dialog h2 { font-size: 15px; margin: 0 0 12px; }
+
+.ex-row {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.ex-row span { color: var(--kv-muted, #5b6878); }
+.ex-row select, .ex-row input { width: 100%; box-sizing: border-box; }
+.ex-row input[aria-invalid='true'] { outline: 2px solid var(--kv-error-fg, #a11d1d); }
+
+.ex-hint { color: var(--kv-muted, #5b6878); margin: 6px 0; font-size: 12px; }
+.ex-error { color: var(--kv-error-fg, #a11d1d); margin: 6px 0; }
+
+.ex-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.ex-primary { font-weight: 600; }
+
+.ex-mass dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 0; }
+.ex-mass dt { color: var(--kv-muted, #5b6878); }
+.ex-mass dd { margin: 0; word-break: break-word; }
+.ex-mass input { width: 90px; }

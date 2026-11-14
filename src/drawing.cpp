@@ -865,7 +865,7 @@ const char* associativity_name(DrawingAssociativity a) {
 
 // SHA-256 строки (FIPS 180-4), шестнадцатеричная строка из 64 символов. Собственная реализация:
 // ядро не зависит от OpenSSL и собирается под WebAssembly.
-static std::string sha256_string(const std::string& input) {
+std::string sha256_hex(const std::string& input) {
     static const uint32_t K[64] = {
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
         0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -938,7 +938,7 @@ PathFingerprint compute_fingerprint(
     ss << "std:" << static_cast<int>(standard) << "|";
     ss << "fmt:" << format;
 
-    return PathFingerprint{sha256_string(ss.str())};
+    return PathFingerprint{sha256_hex(ss.str())};
 }
 
 std::string iso_8601_now() {
@@ -1456,7 +1456,10 @@ bool sketch_remove_dimension(Sketch2D& sketch, const std::string& dim_id) {
 
 Sketch2D make_sketch(int sheet_number, const std::string& name, const std::string& author) {
     Sketch2D sketch;
-    sketch.id = "sketch_" + std::to_string(static_cast<int>(std::time(nullptr)));
+    // Время в секундах не различает эскизы, созданные в одну секунду; счётчик делает id уникальным.
+    static int sketch_counter = 0;
+    sketch.id = "sketch_" + std::to_string(static_cast<long long>(std::time(nullptr))) + "_" +
+                std::to_string(++sketch_counter);
     sketch.sheet_number = sheet_number;
     sketch.name = name;
     sketch.created_by = author;
