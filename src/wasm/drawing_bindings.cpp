@@ -1514,7 +1514,7 @@ std::string moveDimension(std::uint32_t handle, std::string sheetId, std::string
                 const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), d.view);
                 const an::ModelBinding binding = shownBinding(s);
                 an::AnnotationStyle style;
-                style.font = &requireFont();
+                style.font = s.doc.textMetrics(&requireFont());
                 d.def = take(an::moveDimensionTo(d.def, binding, cv.sheetView, {x, y}, style));
                 return {{"offset", d.def.offset}, {"textShift", d.def.textShift}, {"leaderAngle", d.def.leaderAngleDeg}};
             }
@@ -1618,11 +1618,15 @@ std::string addThreadNote(std::uint32_t handle, std::string sheetId, std::string
         return transaction(s, "addThreadNote", [&]() -> json {
             dd::SheetDef& sd = sheetOf(s, sheetId);
             const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), viewId);
-            if (cv.threads.empty()) throw InputError("view '" + viewId + "' shows no thread");
+            // Thread dimensions are placed on side and end views only (not on axonometry, GOST 2.317).
+            const bool any = std::any_of(cv.threads.begin(), cv.threads.end(),
+                                         [](const an::ThreadImage& t) { return t.aspect != an::ThreadAspect::Oblique; });
+            if (!any) throw InputError("view '" + viewId + "' shows no thread to dimension");
             const dv::Point2 at = point2From(need(j, "at"), "at");
             const an::ThreadImage* best = nullptr;
             double bestD = 1e300;
             for (const an::ThreadImage& t : cv.threads) {
+                if (t.aspect == an::ThreadAspect::Oblique) continue;
                 double d;
                 if (t.aspect == an::ThreadAspect::End) {
                     const dv::Point2 c = cv.sheetView.toSheet(t.majorArc.center);

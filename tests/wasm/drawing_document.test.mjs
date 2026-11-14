@@ -671,7 +671,7 @@ describe('thread dimension', () => {
       assert.equal(drawing.describe().sheets[0].threadNotes[0].text, 'M10×1,25LH-6H');
       drawing.removeAnnotation('S1', r.id);
       assert.equal(drawing.describe().sheets[0].threadNotes.length, 0);
-      // A view without a thread: the isometric does not show threads.
+      // The isometric shows the thread as an ellipse but takes no thread dimension (GOST 2.317).
       const I = drawing.addView('S1', { kind: 'axonometric', axonometry: 'isometric' });
       expectKernelError(() => drawing.addThreadNote('S1', I, { at }), 'InvalidInput', 'no thread on the view');
     } finally {
