@@ -120,7 +120,7 @@ describe('coverage of the kernel messages', () => {
 
   test('every template has a Russian text without kernel English and an English text', () => {
     const latin = /[A-Za-z]{3,}/g;
-    const allowed = new Set(['OCCT', 'DXF', 'INSUNITS', 'ASCII', 'bendcore', 'json', 'step', 'stp', 'brep', 'sketch', 'JSON', 'WebAssembly']);
+    const allowed = new Set(['OCCT', 'DXF', 'INSUNITS', 'ASCII', 'bendcore', 'json', 'step', 'stp', 'brep', 'sketch', 'JSON', 'WebAssembly', 'ISO']);
     for (const [id, pattern] of KERNEL_TEMPLATES) {
       const key = `kernel.msg.${id}` as MessageKey;
       expect([id, key in ru, key in en]).toEqual([id, true, true]);

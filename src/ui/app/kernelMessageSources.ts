@@ -14,7 +14,7 @@
  */
 
 export interface KernelMessageSource {
-  /** ErrorCode name, or "message" for a feature node message */
+  /** ErrorCode name, "message" for a feature node message, "forwarded" for a code passed on */
   code: string;
   /** literal text with {} for each concatenated value */
   skeleton: string;
@@ -212,6 +212,9 @@ export function messagesOfSource(src: string, file: string): KernelMessageSource
   const re = /ErrorCode::(\w+)\s*,/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) add(m[1], m.index, expressionAt(text, re.lastIndex));
+  // A code passed on from another result with a new text: fail(r.error().code, "sweep path: " + ...).
+  const forwarded = /\.error\(\)\.code\s*,/g;
+  while ((m = forwarded.exec(text)) !== null) add('forwarded', m.index, expressionAt(text, forwarded.lastIndex));
   // WASM bindings: failure("Code", text) and InputError(text) (reported as InvalidInput).
   const named = /\bfailure\(\s*"(\w+)"\s*,/g;
   while ((m = named.exec(text)) !== null) add(m[1], m.index, expressionAt(text, named.lastIndex));
