@@ -144,21 +144,22 @@ std::unique_ptr<PartDocument> housing(const Layout& L) {
                                                 {"y", "yA + Lo + 6"}, {"z", "zd"}},
                    {{"face", {b.ref(planarFace(b.shape().shape(), gp::DY(), yd))}}}, {{"end", "through"}}));
     }
-    // Резьбовые отверстия М6 под крышки подшипников (по 4 на каждую) на торце x = +Xb; на торце
-    // x = −Xb — зеркальная копия относительно YZ (копия наследует резьбу). Прямое построение
-    // на грани x = −Xb не выполняется: отверстие (features::hole) берёт нормаль плоскости
-    // GeomLib_IsPlanarSurface без учёта левой СК плоскости и сверлит наружу (README, «Чего не хватило»).
+    // Резьбовые отверстия М6 под крышки подшипников (по 4 на каждую) на обоих торцах бобышек
+    // x = ±Xb. Эскиз на грани: ось x эскиза — глобальная Y, ось y — нормаль × Y, т. е. +Z на
+    // торце x = +Xb и −Z на торце x = −Xb (знак sz).
     {
         const double Xb = b.value("Xb"), Za = b.value("Za");
-        std::vector<std::pair<std::string, std::string>> pts;
-        for (const auto& [yc, r] : std::vector<std::pair<std::string, std::string>>{{"0", "rp"}, {"aw", "rw"}})
-            for (const auto& [sy, sz] : std::vector<std::pair<const char*, const char*>>{{"+", "+"}, {"-", "+"}, {"-", "-"}, {"+", "-"}})
-                pts.push_back({yc + " " + sy + " " + r + " * cos(45)", "Za " + std::string(sz) + " " + r + " * sin(45)"});
-        const TopoDS_Shape face = planarFaceAt(b.shape().shape(), gp::DX(), gp_Pnt(Xb, 0, Za + 30));
-        b.faceSketch("CapTapSketch", face, num(Xb), "0", "0", points(pts));
-        b.add(spec("ThreadedHole", "CapTaps", {{"nominal", "6"}, {"threadLength", "14"}}, {{"face", {b.ref(face)}}},
-                   {{"end", "blind"}}, {{"sketch", "CapTapSketch"}}));
-        b.add(spec("Mirror", "CapTapsMirror", {}, {}, {{"what", "feature"}, {"plane", "YZ"}}, {{"feature", "CapTaps"}}));
+        for (const auto& [id, side] : std::vector<std::pair<std::string, int>>{{"CapTaps", 1}, {"CapTapsLeft", -1}}) {
+            const std::string zs = side > 0 ? "" : "-";
+            std::vector<std::pair<std::string, std::string>> pts;
+            for (const auto& [yc, r] : std::vector<std::pair<std::string, std::string>>{{"0", "rp"}, {"aw", "rw"}})
+                for (const auto& [sy, sz] : std::vector<std::pair<const char*, const char*>>{{"+", "+"}, {"-", "+"}, {"-", "-"}, {"+", "-"}})
+                    pts.push_back({yc + " " + sy + " " + r + " * cos(45)", zs + "(Za " + std::string(sz) + " " + r + " * sin(45))"});
+            const TopoDS_Shape face = planarFaceAt(b.shape().shape(), side * gp::DX(), gp_Pnt(side * Xb, 0, Za + 30));
+            b.faceSketch(id + "Sketch", face, num(side * Xb), "0", "0", points(pts));
+            b.add(spec("ThreadedHole", id, {{"nominal", "6"}, {"threadLength", "14"}}, {{"face", {b.ref(face)}}},
+                       {{"end", "blind"}}, {{"sketch", id + "Sketch"}}));
+        }
         const double rp = b.value("rp"), c = std::cos(kPi / 4);
         for (int side : {1, -1})
             (void)cylinderFaceAt(b.shape().shape(), 2.5, gp_Pnt(0, rp * c, Za + rp * c), gp::DX(),
@@ -343,10 +344,13 @@ std::unique_ptr<PartDocument> wheel(const Layout& L) {
     b.revolve("Body", "Profile", "X");
     b.sketch("KeySketch", "YZ", "0", polygon({{"-bk / 2", "0"}, {"bk / 2", "0"}, {"bk / 2", "db / 2 + t2"}, {"-bk / 2", "db / 2 + t2"}}));
     b.extrude("Keyway", "KeySketch", {{"mode", "cut"}, {"extent", "throughAllBoth"}}, {});
-    // Отверстия — вырезом по эскизу: операция «Отверстие» на торцах тела вращения сверлит наружу
-    // (нормаль плоскости в левой СК, README, «Чего не хватило»).
-    b.sketch("LighteningSketch", "YZ", "0", circles({{"0", "Dh / 2", "dl / 2"}}));
-    b.extrude("Lightening", "LighteningSketch", {{"mode", "cut"}, {"extent", "throughAllBoth"}}, {});
+    // Облегчающее отверстие — операция «Отверстие» насквозь с торца диска x = tw / 2.
+    {
+        const double tw = b.value("tw"), Dh = b.value("Dh");
+        const TopoDS_Shape disc = planarFaceAt(b.shape().shape(), gp::DX(), gp_Pnt(tw / 2, 0, Dh / 2));
+        b.add(spec("Hole", "Lightening", {{"diameter", "dl"}, {"x", "tw / 2"}, {"y", "0"}, {"z", "Dh / 2"}},
+                   {{"face", {b.ref(disc)}}}, {{"end", "through"}}));
+    }
     b.add(spec("CircularPattern", "LighteningPattern", {{"count", "nl"}}, {}, {{"axis", "X"}}, {{"feature", "Lightening"}}));
     const double bw = b.value("bw"), r = b.value("d") / 2, lh = b.value("lh"), rh = b.value("dh") / 2;
     b.chamfer("RimChamfers", {circleEdge(b.shape().shape(), gp_Pnt(-bw / 2, 0, 0), r), circleEdge(b.shape().shape(), gp_Pnt(bw / 2, 0, 0), r)}, "c");
@@ -376,8 +380,12 @@ std::unique_ptr<PartDocument> bearingCap(const std::string& key, double D, doubl
     }
     b.revolve("Body", "Profile", "X");
     const double tc = b.value("tc");
-    b.sketch("ScrewHoleSketch", "YZ", "tc / 2", circles({{"rb * cos(45)", "rb * sin(45)", "dk / 2"}}));
-    b.extrude("ScrewHole", "ScrewHoleSketch", {{"mode", "cut"}, {"extent", "throughAllBoth"}}, {});
+    {
+        const double rb0 = b.value("rb"), c45 = std::cos(kPi / 4);
+        const TopoDS_Shape flange = planarFaceAt(b.shape().shape(), gp::DX(), gp_Pnt(tc, rb0 * c45, rb0 * c45));
+        b.add(spec("Hole", "ScrewHole", {{"diameter", "dk"}, {"x", "tc"}, {"y", "rb * cos(45)"}, {"z", "rb * sin(45)"}},
+                   {{"face", {b.ref(flange)}}}, {{"end", "through"}}));
+    }
     b.add(spec("CircularPattern", "ScrewHoles", {{"count", "4"}}, {}, {{"axis", "X"}}, {{"feature", "ScrewHole"}}));
     b.chamfer("RimChamfer", {circleEdge(b.shape().shape(), gp_Pnt(tc, 0, 0), Dc / 2)}, "c");
     return b.release();

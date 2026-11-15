@@ -1128,8 +1128,8 @@
    "type": "ThreadedHole"
   },
   {
-   "id": "CapTapSketch",
-   "label": "CapTapSketch",
+   "id": "CapTapsSketch",
+   "label": "CapTapsSketch",
    "links": {},
    "options": {
     "contour": "closed",
@@ -1171,42 +1171,42 @@
      {
       "fixed": true,
       "x": "0 + rp * cos(45)",
-      "y": "Za + rp * sin(45)"
+      "y": "(Za + rp * sin(45))"
      },
      {
       "fixed": true,
       "x": "0 - rp * cos(45)",
-      "y": "Za + rp * sin(45)"
+      "y": "(Za + rp * sin(45))"
      },
      {
       "fixed": true,
       "x": "0 - rp * cos(45)",
-      "y": "Za - rp * sin(45)"
+      "y": "(Za - rp * sin(45))"
      },
      {
       "fixed": true,
       "x": "0 + rp * cos(45)",
-      "y": "Za - rp * sin(45)"
+      "y": "(Za - rp * sin(45))"
      },
      {
       "fixed": true,
       "x": "aw + rw * cos(45)",
-      "y": "Za + rw * sin(45)"
+      "y": "(Za + rw * sin(45))"
      },
      {
       "fixed": true,
       "x": "aw - rw * cos(45)",
-      "y": "Za + rw * sin(45)"
+      "y": "(Za + rw * sin(45))"
      },
      {
       "fixed": true,
       "x": "aw - rw * cos(45)",
-      "y": "Za - rw * sin(45)"
+      "y": "(Za - rw * sin(45))"
      },
      {
       "fixed": true,
       "x": "aw + rw * cos(45)",
-      "y": "Za - rw * sin(45)"
+      "y": "(Za - rw * sin(45))"
      }
     ],
     "regions": []
@@ -1218,7 +1218,7 @@
    "id": "CapTaps",
    "label": "CapTaps",
    "links": {
-    "sketch": "CapTapSketch"
+    "sketch": "CapTapsSketch"
    },
    "options": {
     "drillPoint": "true",
@@ -1261,22 +1261,137 @@
    "type": "ThreadedHole"
   },
   {
-   "id": "CapTapsMirror",
-   "label": "CapTapsMirror",
-   "links": {
-    "feature": "CapTaps"
-   },
+   "id": "CapTapsLeftSketch",
+   "label": "CapTapsLeftSketch",
+   "links": {},
    "options": {
-    "merge": "true",
-    "plane": "YZ",
-    "what": "feature"
+    "contour": "closed",
+    "plane": "face"
    },
-   "parameters": {},
+   "parameters": {
+    "offset": "0",
+    "originX": "-64",
+    "originY": "0",
+    "originZ": "0"
+   },
    "references": {
-    "face": []
+    "face": [
+     {
+      "kind": "face",
+      "name": "G[BossPMirror](BossP:Tool.F3)",
+      "signature": {
+       "center": [
+        -64.0,
+        42.90049465262376,
+        78.00000000000001
+       ],
+       "direction": [
+        -1.0,
+        -0.0,
+        -0.0
+       ],
+       "geometry": "Plane",
+       "size": 6149.345054570903
+      }
+     }
+    ],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0 + rp * cos(45)",
+      "y": "-(Za + rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "0 - rp * cos(45)",
+      "y": "-(Za + rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "0 - rp * cos(45)",
+      "y": "-(Za - rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "0 + rp * cos(45)",
+      "y": "-(Za - rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw + rw * cos(45)",
+      "y": "-(Za + rw * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw - rw * cos(45)",
+      "y": "-(Za + rw * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw - rw * cos(45)",
+      "y": "-(Za - rw * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw + rw * cos(45)",
+      "y": "-(Za - rw * sin(45))"
+     }
+    ],
+    "regions": []
    },
    "suppressed": false,
-   "type": "Mirror"
+   "type": "Sketch"
+  },
+  {
+   "id": "CapTapsLeft",
+   "label": "CapTapsLeft",
+   "links": {
+    "sketch": "CapTapsLeftSketch"
+   },
+   "options": {
+    "drillPoint": "true",
+    "end": "blind",
+    "hand": "right"
+   },
+   "parameters": {
+    "drillDepth": "0",
+    "drillDiameter": "0",
+    "nominal": "6",
+    "pitch": "0",
+    "threadLength": "14",
+    "x": "0",
+    "y": "0",
+    "z": "0"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "G[BossPMirror](BossP:Tool.F3)",
+      "signature": {
+       "center": [
+        -64.0,
+        42.90049465262376,
+        78.00000000000001
+       ],
+       "direction": [
+        -1.0,
+        -0.0,
+        -0.0
+       ],
+       "geometry": "Plane",
+       "size": 6149.345054570903
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "ThreadedHole"
   },
   {
    "id": "BoltSketch",

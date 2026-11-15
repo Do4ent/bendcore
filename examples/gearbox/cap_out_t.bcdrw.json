@@ -9,7 +9,7 @@
    "material": "СЧ 15 ГОСТ 1412-85",
    "name": "Крышка подшипника сквозная"
   },
-  "resultHash": "04de86dc556a88e3",
+  "resultHash": "b4c37dc760ca9dd7",
   "revision": 1
  },
  "settings": {
@@ -312,16 +312,16 @@
        "anchor": "center",
        "ref": {
         "kind": "edge",
-        "name": "G[ScrewHole](ScrewHoleSketch:E1);G1",
+        "name": "E(F(G[Body](Profile:V2_3)|G[Body](Profile:V3_4))|ScrewHole:Wall)",
         "signature": {
          "center": [
           0.0,
-          26.16295090390229,
-          26.162950903902264
+          26.162950903902264,
+          26.16295090390225
          ],
          "direction": [
           1.0,
-          -0.0,
+          0.0,
           -0.0
          ],
          "geometry": "Circle",
