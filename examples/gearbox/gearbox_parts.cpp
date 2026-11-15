@@ -111,15 +111,11 @@ std::unique_ptr<PartDocument> housing(const Layout& L) {
                {{"direction", "inward"}}));
     b.sketch("FlangeSketch", "XY", "H", frame("-Xf", "y0", "Xf", "y1", "-xi", "yi0", "xi", "yi1"));
     b.extrude("Flange", "FlangeSketch", {{"reversed", "true"}}, {{"distance", "tf"}});
-    // Бобышки подшипников: с торца x = Xb внутрь до xe, зеркально относительно YZ.
-    // (Окружности бобышек пересекаются — эскиз не допускает пересечений кривых, поэтому по
-    // одной бобышке на эскиз.)
-    for (const auto& [id, y, R] : std::vector<std::tuple<std::string, std::string, std::string>>{
-             {"BossP", "0", "Rp"}, {"BossW", "aw", "Rw"}}) {
-        b.sketch(id + "Sketch", "YZ", "Xb", circles({{y, "Za", R}}));
-        b.extrude(id, id + "Sketch", {{"reversed", "true"}}, {{"distance", "Xb - xe"}});
-        b.add(spec("Mirror", id + "Mirror", {}, {}, {{"what", "feature"}, {"plane", "YZ"}}, {{"feature", id}}));
-    }
+    // Бобышки подшипников: с торца x = Xb внутрь до xe, зеркально относительно YZ. Окружности
+    // бобышек пересекаются — один эскиз, область по умолчанию — их объединение.
+    b.sketch("BossSketch", "YZ", "Xb", circles({{"0", "Za", "Rp"}, {"aw", "Za", "Rw"}}));
+    b.extrude("Bosses", "BossSketch", {{"reversed", "true"}}, {{"distance", "Xb - xe"}});
+    b.add(spec("Mirror", "BossesMirror", {}, {}, {{"what", "feature"}, {"plane", "YZ"}}, {{"feature", "Bosses"}}));
     // Рёбра жёсткости под бобышками (в плоскостях осей валов), зеркально.
     for (const auto& [id, y, R] : std::vector<std::tuple<std::string, std::string, std::string>>{
              {"RibP", "0", "Rp"}, {"RibW", "aw", "Rw"}}) {

@@ -11,6 +11,7 @@
 
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
 #include <BRepLProp_SLProps.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
@@ -293,7 +294,11 @@ TEST(ModelingSketchProfile, InvalidTopologyIsReported) {
     std::vector<SketchCurve> branching;
     addRect(branching, 1, 0, 0, 10, 10);
     branching.push_back({5, LineSegment2d{{0, 0}, {10, 10}}, false});
-    auto issues = checkSketchCurves(branching);
+    // Strict check (splitAtIntersections = false); by default such sketches are split into
+    // regions (CrossingCurves* tests).
+    ProfileOptions strict;
+    strict.splitAtIntersections = false;
+    auto issues = checkSketchCurves(branching, strict);
     EXPECT_TRUE(hasIssue(issues, ProfileIssueKind::Branching, {1, 4, 5})) << issues.size();
     EXPECT_TRUE(hasIssue(issues, ProfileIssueKind::Branching, {2, 3, 5}));
 
@@ -301,7 +306,7 @@ TEST(ModelingSketchProfile, InvalidTopologyIsReported) {
     std::vector<SketchCurve> crossing;
     addRect(crossing, 1, 0, 0, 10, 10);
     addRect(crossing, 5, 5, 5, 10, 10);
-    issues = checkSketchCurves(crossing);
+    issues = checkSketchCurves(crossing, strict);
     EXPECT_TRUE(hasIssue(issues, ProfileIssueKind::Intersection, {2, 5}));
     EXPECT_TRUE(hasIssue(issues, ProfileIssueKind::Intersection, {3, 8}));
     EXPECT_EQ(issues.size(), 2u);
@@ -560,4 +565,166 @@ TEST(ModelingSketchPath, ClosedChainAndErrors) {
                                  {3, LineSegment2d{{10, 0}, {10, 10}}, false}};
     EXPECT_FALSE(buildSketchPath(xy(), tee).ok());
     EXPECT_FALSE(buildSketchPath(xy(), {}).ok());
+}
+
+// ---------------------------------------------------------------- crossing curves (arrangement)
+
+namespace {
+
+// Area of the lens (intersection) of two discs: radii r1, r2, centre distance d.
+double lensArea(double r1, double r2, double d) {
+    const double a1 = std::acos((d * d + r1 * r1 - r2 * r2) / (2 * d * r1));
+    const double a2 = std::acos((d * d + r2 * r2 - r1 * r1) / (2 * d * r2));
+    const double k = std::sqrt((-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2));
+    return r1 * r1 * a1 + r2 * r2 * a2 - 0.5 * k;
+}
+
+std::size_t partsOf(const SketchProfile& p, SketchEntityId id) {
+    std::size_t n = 0;
+    for (const ProfileEdge& e : p.edges()) n += e.entity == id;
+    return n;
+}
+
+}  // namespace
+
+TEST(ModelingSketchProfile, CrossingCirclesLensArea) {
+    double r1 = 10, r2 = 7, d = 12;
+    const std::vector<SketchCurve> curves{{1, Circle2d{{0, 0}, r1}, false}, {2, Circle2d{{d, 0}, r2}, false}};
+    EXPECT_TRUE(checkSketchCurves(curves).empty());
+    auto built = SketchProfile::build(xy(), curves);
+    ASSERT_TRUE(built.ok()) << built.error().message;
+    const SketchProfile& p = built.value();
+    const double lens = lensArea(r1, r2, d);
+    // Three regions (two crescents and the lens), one outline of the pair.
+    ASSERT_EQ(p.regions().size(), 3u);
+    ASSERT_EQ(p.loops().size(), 4u);
+    EXPECT_EQ(partsOf(p, 1), 2u);
+    EXPECT_EQ(partsOf(p, 2), 2u);
+    for (const ProfileEdge& e : p.edges()) EXPECT_EQ(e.partCount, 2u);
+    // The lens: the region at its centre, area by the closed formula.
+    const double xm = (d * d + r1 * r1 - r2 * r2) / (2 * d);  // radical line
+    auto lensRegion = p.regionAt({xm, 0.0});
+    ASSERT_TRUE(lensRegion.has_value());
+    EXPECT_NEAR(p.regions()[*lensRegion].area, lens, 1e-9 * lens);
+    auto lensFace = p.makeFacesAt({{xm, 0.0}});
+    ASSERT_TRUE(lensFace.ok());
+    EXPECT_NEAR(area(lensFace.value()), lens, 1e-6 * lens);
+    // Crescents: disc minus lens.
+    auto left = p.regionAt({-r1 + 1, 0});
+    auto right = p.regionAt({d + r2 - 1, 0});
+    ASSERT_TRUE(left && right);
+    EXPECT_NEAR(p.regions()[*left].area, kPi * r1 * r1 - lens, 1e-9 * lens);
+    EXPECT_NEAR(p.regions()[*right].area, kPi * r2 * r2 - lens, 1e-9 * lens);
+    // Same depth: the material is the union, one merged face.
+    EXPECT_EQ(p.materialRegions().size(), 3u);
+    for (const ProfileRegion& r : p.regions()) EXPECT_EQ(r.depth, 0);
+    const double uni = kPi * (r1 * r1 + r2 * r2) - lens;
+    EXPECT_NEAR(p.loops()[3].area, uni, 1e-9 * uni);  // outline loop
+    auto groups = p.makeFaceGroups(p.materialRegions());
+    ASSERT_TRUE(groups.ok()) << groups.error().message;
+    ASSERT_EQ(groups.value().size(), 1u);
+    EXPECT_EQ(groups.value().front().regions.size(), 3u);
+    EXPECT_NEAR(area(groups.value().front().face), uni, 1e-6 * uni);
+    EXPECT_TRUE(BRepCheck_Analyzer(groups.value().front().face).IsValid());
+    // Merged boundary: the two outer arcs only.
+    int edges = 0;
+    for (TopExp_Explorer ex(groups.value().front().face, TopAbs_EDGE); ex.More(); ex.Next()) ++edges;
+    EXPECT_EQ(edges, 2);
+    // Lens + one crescent: the whole first disc.
+    auto disc = p.makeFaces({*lensRegion, *left});
+    ASSERT_TRUE(disc.ok()) << disc.error().message;
+    EXPECT_NEAR(area(disc.value()), kPi * r1 * r1, 1e-6 * lens);
+    // Every edge maps back to its entity and part.
+    for (const ProfileEdge& e : p.edges()) {
+        auto back = p.edgeOf(e.edge);
+        ASSERT_TRUE(back.has_value());
+        EXPECT_EQ(back->entity, e.entity);
+        EXPECT_EQ(back->part, e.part);
+    }
+}
+
+TEST(ModelingSketchProfile, CrossingCurvesRegions) {
+    // Rectangle with a diagonal (branching nodes): two triangles.
+    std::vector<SketchCurve> diag;
+    addRect(diag, 1, 0, 0, 10, 10);
+    diag.push_back({5, LineSegment2d{{0, 0}, {10, 10}}, false});
+    auto a = SketchProfile::build(xy(), diag);
+    ASSERT_TRUE(a.ok()) << a.error().message;
+    ASSERT_EQ(a.value().regions().size(), 2u);
+    for (const auto& r : a.value().regions()) EXPECT_NEAR(r.area, 50.0, 1e-9);
+    auto whole = a.value().makeMaterialFaces();
+    ASSERT_TRUE(whole.ok());
+    EXPECT_NEAR(area(whole.value()), 100.0, 1e-9);
+
+    // Two crossing rectangles: 75 + 25 + 75; the union 175.
+    std::vector<SketchCurve> crossing;
+    addRect(crossing, 1, 0, 0, 10, 10);
+    addRect(crossing, 5, 5, 5, 10, 10);
+    auto b = SketchProfile::build(xy(), crossing);
+    ASSERT_TRUE(b.ok()) << b.error().message;
+    ASSERT_EQ(b.value().regions().size(), 3u);
+    std::vector<double> areas;
+    for (const auto& r : b.value().regions()) areas.push_back(r.area);
+    std::sort(areas.begin(), areas.end());
+    EXPECT_NEAR(areas[0], 25.0, 1e-9);
+    EXPECT_NEAR(areas[1], 75.0, 1e-9);
+    EXPECT_NEAR(areas[2], 75.0, 1e-9);
+    auto u = b.value().makeMaterialFaces();
+    ASSERT_TRUE(u.ok()) << u.error().message;
+    EXPECT_NEAR(area(u.value()), 175.0, 1e-9);
+    EXPECT_EQ(partsOf(b.value(), 2), 2u);  // x = 10 is cut by y = 5 at (10, 5)
+    EXPECT_EQ(partsOf(b.value(), 4), 1u);
+
+    // Chord with its ends on a circle: two circular segments.
+    const double R = 10, h = 4;  // chord at y = h
+    const double half = std::sqrt(R * R - h * h);
+    auto c = SketchProfile::build(xy(), {{1, Circle2d{{0, 0}, R}, false},
+                                         {2, LineSegment2d{{-half, h}, {half, h}}, false}});
+    ASSERT_TRUE(c.ok()) << c.error().message;
+    ASSERT_EQ(c.value().regions().size(), 2u);
+    const double cap = R * R * std::acos(h / R) - h * half;
+    auto top = c.value().regionAt({0, h + 1});
+    ASSERT_TRUE(top.has_value());
+    EXPECT_NEAR(c.value().regions()[*top].area, cap, 1e-9 * cap);
+
+    // Crossing circles inside a rectangle: the rectangle region has the outline of the pair as
+    // its hole; the circles' regions are one level deeper.
+    std::vector<SketchCurve> nested;
+    addRect(nested, 1, -30, -30, 70, 60);
+    nested.push_back({5, Circle2d{{0, 0}, 10}, false});
+    nested.push_back({6, Circle2d{{12, 0}, 7}, false});
+    auto n = SketchProfile::build(xy(), nested);
+    ASSERT_TRUE(n.ok()) << n.error().message;
+    ASSERT_EQ(n.value().regions().size(), 4u);
+    const double uni = kPi * (100 + 49) - lensArea(10, 7, 12);
+    auto plate = n.value().regionAt({-25, -25});
+    ASSERT_TRUE(plate.has_value());
+    EXPECT_EQ(n.value().regions()[*plate].holeLoops.size(), 1u);
+    EXPECT_NEAR(n.value().regions()[*plate].area, 70 * 60 - uni, 1e-6);
+    EXPECT_EQ(n.value().materialRegions(), std::vector<std::size_t>{*plate});
+    for (std::size_t r = 0; r < n.value().regions().size(); ++r)
+        if (r != *plate) EXPECT_EQ(n.value().regions()[r].depth, 1);
+
+    // Circles touching outside at (10, 0): two discs, a compound of two faces (no shared part).
+    auto t = SketchProfile::build(xy(), {{1, Circle2d{{0, 0}, 10}, false}, {2, Circle2d{{15, 0}, 5}, false}});
+    ASSERT_TRUE(t.ok()) << t.error().message;
+    ASSERT_EQ(t.value().regions().size(), 2u);
+    auto big = t.value().regionAt({0, 0});
+    auto small = t.value().regionAt({15, 0});
+    ASSERT_TRUE(big && small);
+    EXPECT_NEAR(t.value().regions()[*big].area, kPi * 100, 1e-7);
+    EXPECT_NEAR(t.value().regions()[*small].area, kPi * 25, 1e-7);
+    auto both = t.value().makeFaceGroups(t.value().materialRegions());
+    ASSERT_TRUE(both.ok()) << both.error().message;
+    EXPECT_EQ(both.value().size(), 2u);
+    // Touching inside: the rest of the big disc would touch itself at (10, 0) — Unsupported.
+    auto inside = SketchProfile::build(xy(), {{1, Circle2d{{0, 0}, 10}, false}, {2, Circle2d{{5, 0}, 5}, false}});
+    ASSERT_FALSE(inside.ok());
+    EXPECT_EQ(inside.error().code, ErrorCode::Unsupported);
+    EXPECT_NE(inside.error().message.find("touches itself"), std::string::npos) << inside.error().message;
+
+    // A line across a circle with free ends stays an open contour.
+    auto open = SketchProfile::build(xy(), {{1, Circle2d{{0, 0}, 10}, false}, {2, LineSegment2d{{-20, 0}, {20, 0}}, false}});
+    ASSERT_FALSE(open.ok());
+    EXPECT_NE(open.error().message.find("open contour"), std::string::npos) << open.error().message;
 }

@@ -5,7 +5,7 @@
    "color": null,
    "faceColors": [],
    "fingerprint": {
-    "area": 273420.6071217686,
+    "area": 273420.607144775,
     "box": [
      -73.0,
      -83.0,
@@ -14,10 +14,10 @@
      190.0,
      125.0
     ],
-    "edges": 311,
+    "edges": 309,
     "faces": 112,
-    "vertices": 204,
-    "volume": 1462349.8786778077
+    "vertices": 202,
+    "volume": 1462349.8790437556
    },
    "id": 1,
    "kind": "part",

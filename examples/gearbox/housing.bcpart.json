@@ -434,8 +434,8 @@
    "type": "Extrude"
   },
   {
-   "id": "BossPSketch",
-   "label": "BossPSketch",
+   "id": "BossSketch",
+   "label": "BossSketch",
    "links": {},
    "options": {
     "contour": "closed",
@@ -459,97 +459,9 @@
       "c": -1,
       "type": "radius",
       "value": "Rp"
-     }
-    ],
-    "geometry": [
+     },
      {
-      "center": 0,
-      "construction": false,
-      "counterClockwise": true,
-      "end": -1,
-      "projection": -1,
-      "radius": "1",
-      "start": -1,
-      "type": "circle"
-     }
-    ],
-    "points": [
-     {
-      "fixed": true,
-      "x": "0",
-      "y": "Za"
-     }
-    ],
-    "regions": []
-   },
-   "suppressed": false,
-   "type": "Sketch"
-  },
-  {
-   "id": "BossP",
-   "label": "BossP",
-   "links": {
-    "sketch": "BossPSketch"
-   },
-   "options": {
-    "draftDirection": "inward",
-    "extent": "blind",
-    "mode": "boss",
-    "reversed": "true",
-    "thin": "none"
-   },
-   "parameters": {
-    "distance": "Xb - xe",
-    "distance2": "0",
-    "draftAngle": "0",
-    "thickness": "1"
-   },
-   "references": {
-    "limit": []
-   },
-   "suppressed": false,
-   "type": "Extrude"
-  },
-  {
-   "id": "BossPMirror",
-   "label": "BossPMirror",
-   "links": {
-    "feature": "BossP"
-   },
-   "options": {
-    "merge": "true",
-    "plane": "YZ",
-    "what": "feature"
-   },
-   "parameters": {},
-   "references": {
-    "face": []
-   },
-   "suppressed": false,
-   "type": "Mirror"
-  },
-  {
-   "id": "BossWSketch",
-   "label": "BossWSketch",
-   "links": {},
-   "options": {
-    "contour": "closed",
-    "plane": "YZ"
-   },
-   "parameters": {
-    "offset": "Xb",
-    "originX": "0",
-    "originY": "0",
-    "originZ": "0"
-   },
-   "references": {
-    "face": [],
-    "projected": []
-   },
-   "sketch": {
-    "constraints": [
-     {
-      "a": 1,
+      "a": 2,
       "b": -1,
       "c": -1,
       "type": "radius",
@@ -566,9 +478,24 @@
       "radius": "1",
       "start": -1,
       "type": "circle"
+     },
+     {
+      "center": 1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
      }
     ],
     "points": [
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "Za"
+     },
      {
       "fixed": true,
       "x": "aw",
@@ -581,10 +508,10 @@
    "type": "Sketch"
   },
   {
-   "id": "BossW",
-   "label": "BossW",
+   "id": "Bosses",
+   "label": "Bosses",
    "links": {
-    "sketch": "BossWSketch"
+    "sketch": "BossSketch"
    },
    "options": {
     "draftDirection": "inward",
@@ -606,10 +533,10 @@
    "type": "Extrude"
   },
   {
-   "id": "BossWMirror",
-   "label": "BossWMirror",
+   "id": "BossesMirror",
+   "label": "BossesMirror",
    "links": {
-    "feature": "BossW"
+    "feature": "Bosses"
    },
    "options": {
     "merge": "true",
@@ -1145,12 +1072,12 @@
     "face": [
      {
       "kind": "face",
-      "name": "BossP:Tool.F3",
+      "name": "BossSketch:R1.0_2.0+R1.1_2.0+R1.1_2.1",
       "signature": {
        "center": [
         64.0,
-        42.90049465262375,
-        78.00000000000001
+        42.90049465248683,
+        78.0
        ],
        "direction": [
         1.0,
@@ -1158,7 +1085,7 @@
         0.0
        ],
        "geometry": "Plane",
-       "size": 6149.345054570903
+       "size": 6149.345054589937
       }
      }
     ],
@@ -1239,12 +1166,12 @@
     "face": [
      {
       "kind": "face",
-      "name": "BossP:Tool.F3",
+      "name": "BossSketch:R1.0_2.0+R1.1_2.0+R1.1_2.1",
       "signature": {
        "center": [
         64.0,
-        42.90049465262375,
-        78.00000000000001
+        42.90049465248683,
+        78.0
        ],
        "direction": [
         1.0,
@@ -1252,7 +1179,7 @@
         0.0
        ],
        "geometry": "Plane",
-       "size": 6149.345054570903
+       "size": 6149.345054589937
       }
      }
     ]
@@ -1278,12 +1205,12 @@
     "face": [
      {
       "kind": "face",
-      "name": "G[BossPMirror](BossP:Tool.F3)",
+      "name": "G[BossesMirror](BossSketch:R1.0_2.0+R1.1_2.0+R1.1_2.1)",
       "signature": {
        "center": [
         -64.0,
-        42.90049465262376,
-        78.00000000000001
+        42.90049465248683,
+        78.0
        ],
        "direction": [
         -1.0,
@@ -1291,7 +1218,7 @@
         -0.0
        ],
        "geometry": "Plane",
-       "size": 6149.345054570903
+       "size": 6149.345054589937
       }
      }
     ],
@@ -1372,12 +1299,12 @@
     "face": [
      {
       "kind": "face",
-      "name": "G[BossPMirror](BossP:Tool.F3)",
+      "name": "G[BossesMirror](BossSketch:R1.0_2.0+R1.1_2.0+R1.1_2.1)",
       "signature": {
        "center": [
         -64.0,
-        42.90049465262376,
-        78.00000000000001
+        42.90049465248683,
+        78.0
        ],
        "direction": [
         -1.0,
@@ -1385,7 +1312,7 @@
         -0.0
        ],
        "geometry": "Plane",
-       "size": 6149.345054570903
+       "size": 6149.345054589937
       }
      }
     ]
