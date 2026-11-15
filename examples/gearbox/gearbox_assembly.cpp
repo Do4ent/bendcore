@@ -72,7 +72,7 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
     return guard([&]() -> Result<Gearbox> {
         Gearbox g;
         g.doc = std::make_shared<AssemblyDocument>("Редуктор цилиндрический");
-        take(g.doc->setProperties(g.doc->root(), {"РЦ.080.00.000", "Редуктор цилиндрический", "", std::nullopt}), "root properties");
+        take(g.doc->setProperties(g.doc->root(), {"РЦ.080.00.000", "Редуктор цилиндрический", "", std::nullopt, std::nullopt}), "root properties");
 
         std::map<std::string, const modeling::PartDocument*> sources;
         for (const auto& p : parts) sources[p.file] = p.doc.get();
@@ -83,7 +83,7 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
             return partDataFromDocument(*it->second);
         };
         for (const auto& p : parts)
-            g.defs[p.key] = take(g.doc->addPartFromSource(p.key, p.file, resolver, {p.designation, p.name, p.material, p.density}),
+            g.defs[p.key] = take(g.doc->addPartFromSource(p.key, p.file, resolver, {p.designation, p.name, p.material, p.density, std::nullopt}),
                                  "part " + p.key);
         for (const auto& s : standard)
         {

@@ -202,9 +202,9 @@ double var(const PartEntry& p, const char* name) {
 }
 
 const std::vector<std::string> kShaftRequirements = {
-    "1. 235…262 HB.",
-    "2. Неуказанные предельные отклонения размеров: валов h14, остальных ±IT14/2.",
-    "3. Неуказанные радиусы скруглений 0,5 мм; фаски 1×45°.",
+    "235...262 HB.",
+    "Неуказанные предельные отклонения размеров: валов h14, остальных ±IT14/2.",
+    "Неуказанные радиусы скруглений 0,5 мм; фаски 1×45°.",
 };
 
 // ---------------------------------------------------------------- вал
@@ -242,7 +242,7 @@ void shaftOutSheet(DrawingDocument& d, const PartEntry& p) {
     s.tolerance("T3", "F", seatL, GeometricCharacteristic::Cylindricity, "0,005", {}, 0.2);
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::MaterialRemoval, "Ra", "6,3", "", 2.5};
     sd.technicalRequirements = kShaftRequirements;
-    sd.technicalRequirements.push_back("4. Шпоночные пазы: глубина t1 = 5 (⌀35) и 4 (⌀25), длина 32 — по ГОСТ 23360-78.");
+    sd.technicalRequirements.push_back("Шпоночные пазы: глубина t1 = 5 (⌀35) и 4 (⌀25), длина 32 — по ГОСТ 23360-78.");
 }
 
 // ---------------------------------------------------------------- вал-шестерня
@@ -277,9 +277,9 @@ void shaftInSheet(DrawingDocument& d, const PartEntry& p) {
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::MaterialRemoval, "Ra", "6,3", "", 2.5};
     sd.technicalRequirements = kShaftRequirements;
     sd.technicalRequirements.push_back(
-        "4. Венец показан делительным цилиндром d = 40 (зубья не моделируются): m = 2, z = 20, α = 20°, x = 0, da = 44h11, "
+        "Венец показан делительным цилиндром d = 40 (зубья не моделируются): m = 2, z = 20, угол профиля 20°, x = 0, da = 44h11, "
         "df = 35, степень точности 8-B ГОСТ 1643-81.");
-    sd.technicalRequirements.push_back("5. Шпоночный паз: t1 = 3,5, длина 28 — по ГОСТ 23360-78.");
+    sd.technicalRequirements.push_back("Шпоночный паз: t1 = 3,5, длина 28 — по ГОСТ 23360-78.");
 }
 
 // ---------------------------------------------------------------- колесо
@@ -309,12 +309,12 @@ void wheelSheet(DrawingDocument& d, const PartEntry& p) {
     s.tolerance("T1", "F", rimFace, GeometricCharacteristic::CircularRunout, "0,03", {"А"}, 0.7);
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::MaterialRemoval, "Ra", "6,3", "", 2.5};
     sd.technicalRequirements = {
-        "1. 235…262 HB.",
-        "2. Венец показан делительным цилиндром d = 120 (зубья не моделируются): m = 2, z = 60, α = 20°, x = 0, da = 124h11, "
+        "235...262 HB.",
+        "Венец показан делительным цилиндром d = 120 (зубья не моделируются): m = 2, z = 60, угол профиля 20°, x = 0, da = 124h11, "
         "df = 115, степень точности 8-B ГОСТ 1643-81.",
-        "3. Паз ступицы: t2 = 3,3 (размер 38,3+0,2) по ГОСТ 23360-78.",
-        "4. Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
-        "5. Облегчающие отверстия: 6 отв. ⌀16 на ⌀78.",
+        "Паз ступицы: t2 = 3,3 (размер 38,3+0,2) по ГОСТ 23360-78.",
+        "Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
+        "Облегчающие отверстия: 6 отв. ⌀16 на ⌀78.",
     };
 }
 
@@ -345,10 +345,10 @@ void capSheet(DrawingDocument& d, const PartEntry& p) {
     s.tolerance("T1", "F", face, GeometricCharacteristic::Perpendicularity, "0,03", {"А"}, 0.3);
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::NoMaterialRemoval, "", "", "", 2.5};
     sd.technicalRequirements = {
-        "1. Отливка по ГОСТ 26645-85, класс точности 9-0-0-9.",
-        "2. Неуказанные литейные радиусы 2…3 мм.",
-        "3. Отверстия ⌀7 — на окружности ⌀74, позиционный допуск ⌀0,2.",
-        "4. Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
+        "Отливка по ГОСТ 26645-85, класс точности 9-0-0-9.",
+        "Неуказанные литейные радиусы 2...3 мм.",
+        "Отверстия ⌀7 — на окружности ⌀74, позиционный допуск ⌀0,2.",
+        "Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
     };
 }
 
@@ -361,7 +361,7 @@ void housingSheet(DrawingDocument& d, const PartEntry& p, const Layout& L) {
     ViewDef t = view("T", ViewKind::Projected, "F", views::SheetSide::Below);
     ViewDef l = view("L", ViewKind::Projected, "F", views::SheetSide::RightOf);
     f.hidden = t.hidden = l.hidden = false;  // невидимый контур литого корпуса не выводится (читаемость)
-    sd.views = {f, t, l, section("A", {0, 0, 1}, {1, 0, 0}, {0, 0, L.axisHeight}, "F", views::SectionKind::Cut)};
+    sd.views = {f, t, l, section("A", {0, 0, 1}, {1, 0, 0}, {0, 0, L.axisHeight + 2}, "F", views::SectionKind::Cut)};
     Sheet s(sd, m);
     const double Za = L.axisHeight, H = L.joint, aw = L.aw(), Xb = L.boss, hb = var(p, "hb"), Xf = var(p, "Xf"), y0 = var(p, "y0"),
                  y1 = var(p, "y1"), rf = var(p, "rf"), xp = var(p, "Wo") / 2 + var(p, "ep"), yp0 = var(p, "yA") - var(p, "ep");
@@ -390,11 +390,11 @@ void housingSheet(DrawingDocument& d, const PartEntry& p, const Layout& L) {
     s.tolerance("T1", "F", joint, GeometricCharacteristic::Parallelism, "0,05", {"А"}, 0.7);
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::NoMaterialRemoval, "", "", "", 2.5};
     sd.technicalRequirements = {
-        "1. Отливка по ГОСТ 26645-85, класс точности 9-0-0-9. Формовочные уклоны 1°.",
-        "2. Неуказанные литейные радиусы 3…5 мм.",
-        "3. Отверстия под подшипники обрабатывать совместно с крышкой корпуса не требуется (разъём выше осей).",
-        "4. Резьбовые отверстия М6-6H глубиной 14 — 8 шт. (по 4 на торцах бобышек), сливное М16×1,5-6H.",
-        "5. Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
+        "Отливка по ГОСТ 26645-85, класс точности 9-0-0-9. Формовочные уклоны 1°.",
+        "Неуказанные литейные радиусы 3...5 мм.",
+        "Отверстия под подшипники обрабатывать совместно с крышкой корпуса не требуется (разъём выше осей).",
+        "Резьбовые отверстия М6-6H глубиной 14 — 8 шт. (по 4 на торцах бобышек), сливное М16×1,5-6H.",
+        "Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
     };
 }
 
@@ -423,10 +423,10 @@ void coverSheet(DrawingDocument& d, const PartEntry& p) {
     s.tolerance("T1", "F", joint, GeometricCharacteristic::Flatness, "0,05", {}, 0.5);
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::NoMaterialRemoval, "", "", "", 2.5};
     sd.technicalRequirements = {
-        "1. Отливка по ГОСТ 26645-85, класс точности 9-0-0-9. Формовочные уклоны 1°.",
-        "2. Неуказанные литейные радиусы 3…5 мм.",
-        "3. Отверстия под штифты 2 отв. ⌀8H7 сверлить совместно с корпусом.",
-        "4. Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
+        "Отливка по ГОСТ 26645-85, класс точности 9-0-0-9. Формовочные уклоны 1°.",
+        "Неуказанные литейные радиусы 3...5 мм.",
+        "Отверстия под штифты 2 отв. ⌀8H7 сверлить совместно с корпусом.",
+        "Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
     };
 }
 
@@ -443,28 +443,34 @@ void assemblySheet(DrawingDocument& d, const Gearbox& g, const Layout& L) {
     sd.format = {GostFormat::A1, 1, Orientation::Landscape};
     sd.title = title();
     const double Za = L.axisHeight, aw = L.aw();
-    ViewDef f = view("F", ViewKind::Base), t = view("T", ViewKind::Projected, "F", views::SheetSide::Below);
-    f.hidden = t.hidden = false;
-    ViewDef a = section("A", {0, 0, 1}, {1, 0, 0}, {0, 0, L.axisHeight}, "F", views::SectionKind::Cut);
+    // Главный вид и разрез А–А по осям валов на месте вида сверху (в проекционной связи) —
+    // основные изображения; разрезы Б–Б (по оси колеса), В–В (по штифту), Г–Г (по оси
+    // вала-шестерни) — 1:2,5 колонкой справа, их секущие плоскости обозначены на разрезе А–А.
+    ViewDef f = view("F", ViewKind::Base);
+    f.hidden = false;
+    ViewDef a = section("A", {0, 0, 1}, {1, 0, 0}, {0, 0, Za}, "F", views::SectionKind::Cut);
+    a.parent = "F";
+    a.side = views::SheetSide::Below;
     a.autoBalloons = true;
-    ViewDef b = section("B", {0, -1, 0}, {1, 0, 0}, {0, aw, 0}, "T", views::SectionKind::Cut);
-    ViewDef c = section("C", {0, -1, 0}, {1, 0, 0}, {0, -68, 0}, "T", views::SectionKind::Cut);
-    ViewDef dv = section("D", {0, -1, 0}, {1, 0, 0}, {0, 0, 0}, "T", views::SectionKind::Cut);
-    sd.views = {f, t, a, b, c, dv};
+    ViewDef b = section("B", {0, -1, 0}, {1, 0, 0}, {0, aw, 0}, "A", views::SectionKind::Cut);
+    ViewDef c = section("C", {0, -1, 0}, {1, 0, 0}, {0, -68, 0}, "A", views::SectionKind::Cut);
+    ViewDef dv = section("D", {0, -1, 0}, {1, 0, 0}, {0, 0, 0}, "A", views::SectionKind::Cut);
+    b.scale = c.scale = dv.scale = views::ScaleRatio{2, 5};
+    sd.views = {f, a, b, c, dv};
     Sheet s(sd, m);
     const double H = L.joint + L.gasket;
-    // Концы валов (вершины шва фасок), верх заливной пробки, низ опорной плиты, углы фланца крышки.
+    // Концы валов (вершины шва фасок), верх заливной пробки, опорная плита.
     const auto inEnd = s.v(-110, 0, Za + 9), outEnd = s.v(112, aw, Za + 11.5);
     s.dim("Lx", "F", DimensionType::Horizontal, {inEnd, outEnd}, -40);
     s.dim("Hz", "F", DimensionType::Vertical, {s.v(-73, -78, -14), s.v(22 / std::sqrt(3.0), 40, H + 40 + 12)}, 30);
-    s.dim("Ly", "T", DimensionType::Vertical, {s.v(-52, -83, H + 12), s.v(-52, 190, H + 12)}, 30);
-    s.dim("aw", "T", DimensionType::Vertical, {inEnd, outEnd}, -20).def.textOverride = "<>±0,03";
+    s.dim("Ly", "A", DimensionType::Vertical, {s.v(-73, -78, -14), s.v(-73, 185, -14)}, 30);
+    s.dim("aw", "A", DimensionType::Vertical, {inEnd, outEnd}, -20).def.textOverride = "<>±0,03";
     sd.technicalRequirements = {
-        "1. * Размеры для справок.",
-        "2. Плоскость разъёма покрыть герметиком; прокладку ставить на герметик.",
-        "3. Валы должны проворачиваться от руки плавно, без заеданий.",
-        "4. Залить масло И-Г-А-46 ГОСТ 17479.4-87 до уровня, при котором колесо погружено на высоту зуба.",
-        "5. Зубчатые венцы показаны делительными цилиндрами, подшипники — упрощёнными кольцами d×D×B.",
+        "* Размеры для справок.",
+        "Плоскость разъёма покрыть герметиком; прокладку ставить на герметик.",
+        "Валы должны проворачиваться от руки плавно, без заеданий.",
+        "Залить масло И-Г-А-46 ГОСТ 17479.4-87 до уровня, при котором колесо погружено на высоту зуба.",
+        "Зубчатые венцы показаны делительными цилиндрами, подшипники — упрощёнными кольцами d×D×B.",
     };
     d.sheets().push_back(std::move(sd));
 }
@@ -537,37 +543,52 @@ Result<UpdateSummary> updateDrawings(DrawingSet& set, const std::vector<PartEntr
         // Г–Г (по оси вала-шестерни), вид сверху.
         std::map<std::string, std::pair<const ComputedView*, double>> views;  // вид → (вид, следующая полка y)
         for (const auto& v : cs.views) views[v.id] = {&v, v.sheetView.sheetBounds().maxY};
-        int k = 0;
         // Кандидаты — видимые прямые линии детали по убыванию длины; ссылка на линию, совпадающую
-        // с линией соседней детали, неоднозначна (позиция висячая) — берётся следующая.
-        std::vector<std::vector<std::uint32_t>> candidates;
+        // с линией соседней детали, неоднозначна (позиция висячая) — берётся следующая. Полки
+        // колонной слева от вида в порядке высоты точек выносок (меньше пересечений линий-выносок).
+        struct Pending {
+            std::string view;
+            double targetY = 0;
+            std::vector<std::uint32_t> edges;
+        };
+        std::vector<Pending> pending;
         for (assembly_v2::DefinitionId def : missing) {
-            for (const char* vid : {"F", "B", "C", "D", "T"}) {
+            for (const char* vid : {"F", "B", "C", "D"}) {
                 auto it = views.find(vid);
                 if (it == views.end()) continue;
                 const ComputedView* cv = it->second.first;
-                std::vector<std::pair<double, std::uint32_t>> edges;
+                std::vector<std::tuple<double, std::uint32_t, double>> edges;
                 for (const views::ViewEdge& e : cv->sheetView.view.edges) {
                     if (e.visibility != views::Visibility::Visible || !e.edgeIndex || *e.edgeIndex >= m.value().edgeOwner.size()) continue;
                     if (m.value().edgeOwner[*e.edgeIndex] != def) continue;
                     const auto* l = std::get_if<LineSeg>(&e.curve);
                     if (!l) continue;
-                    edges.push_back({std::hypot(l->b.x - l->a.x, l->b.y - l->a.y), *e.edgeIndex});
+                    const Point2 mid = cv->sheetView.toSheet(Point2{(l->a.x + l->b.x) / 2, (l->a.y + l->b.y) / 2});
+                    edges.push_back({std::hypot(l->b.x - l->a.x, l->b.y - l->a.y), *e.edgeIndex, mid.y});
                 }
                 if (edges.empty()) continue;
-                std::sort(edges.begin(), edges.end(), [](const auto& x, const auto& z) { return x.first > z.first; });
-                std::vector<std::uint32_t> c;
-                for (const auto& [len, idx] : edges)
-                    if (std::find(c.begin(), c.end(), idx) == c.end()) c.push_back(idx);
-                candidates.push_back(std::move(c));
-                BalloonItem item;
-                item.id = "P" + std::to_string(++k);
-                item.view = vid;
-                item.at = Point2{cv->sheetView.sheetBounds().minX - 25.0, it->second.second};
-                it->second.second -= 10.0;
-                set.assembly.sheets()[0].balloons.push_back(item);
+                std::sort(edges.begin(), edges.end(), [](const auto& x, const auto& z) { return std::get<0>(x) > std::get<0>(z); });
+                Pending pd{vid, std::get<2>(edges.front()), {}};
+                for (const auto& [len, idx, y] : edges)
+                    if (std::find(pd.edges.begin(), pd.edges.end(), idx) == pd.edges.end()) pd.edges.push_back(idx);
+                pending.push_back(std::move(pd));
                 break;
             }
+        }
+        std::stable_sort(pending.begin(), pending.end(), [](const Pending& x, const Pending& z) {
+            return x.view != z.view ? x.view < z.view : x.targetY > z.targetY;
+        });
+        std::vector<std::vector<std::uint32_t>> candidates;
+        int k = 0;
+        for (Pending& pd : pending) {
+            auto& slot = views[pd.view];
+            BalloonItem item;
+            item.id = "P" + std::to_string(++k);
+            item.view = pd.view;
+            item.at = Point2{slot.first->sheetView.sheetBounds().minX - 25.0, slot.second};
+            slot.second -= 10.0;
+            set.assembly.sheets()[0].balloons.push_back(item);
+            candidates.push_back(std::move(pd.edges));
         }
         {
             std::vector<std::size_t> pick(candidates.size(), 0);
