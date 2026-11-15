@@ -86,8 +86,8 @@ std::unique_ptr<PartDocument> housing(const Layout& L) {
     b.var("Rw", 45);    // бобышка подшипника колеса
     b.var("Dp", 52);    // отверстие под подшипник 205
     b.var("Dw", 62);    // отверстие под подшипник 206
-    b.var("rp", 33);    // окружность резьбовых отверстий крышки подшипника шестерни
-    b.var("rw", 38);
+    b.var("rp", 32);    // окружность резьбовых отверстий крышки подшипника шестерни
+    b.var("rw", 37);
     b.var("hb", 14);    // опорная плита
     b.var("ep", 25);
     b.var("dm", 14);    // отверстия под фундаментные болты
@@ -457,13 +457,13 @@ Result<std::vector<PartEntry>> buildParts(const Layout& L) {
         v.push_back(entry("shaft_out", "РЦ.080.00.004", "Вал", steel45, 7850, outputShaft(L)));
         v.push_back(entry("wheel", "РЦ.080.00.005", "Колесо зубчатое", steel45, 7850, wheel(L)));
         v.push_back(entry("cap_in_t", "РЦ.080.00.006", "Крышка подшипника сквозная", "СЧ 15 ГОСТ 1412-85", 7200,
-                          bearingCap("cap_in_t", 52, 80, 33, 24.0, L)));
+                          bearingCap("cap_in_t", 52, 74, 32, 24.0, L)));
         v.push_back(entry("cap_in_b", "РЦ.080.00.007", "Крышка подшипника глухая", "СЧ 15 ГОСТ 1412-85", 7200,
-                          bearingCap("cap_in_b", 52, 80, 33, std::nullopt, L)));
+                          bearingCap("cap_in_b", 52, 74, 32, std::nullopt, L)));
         v.push_back(entry("cap_out_b", "РЦ.080.00.008", "Крышка подшипника глухая", "СЧ 15 ГОСТ 1412-85", 7200,
-                          bearingCap("cap_out_b", 62, 90, 38, std::nullopt, L)));
+                          bearingCap("cap_out_b", 62, 84, 37, std::nullopt, L)));
         v.push_back(entry("cap_out_t", "РЦ.080.00.009", "Крышка подшипника сквозная", "СЧ 15 ГОСТ 1412-85", 7200,
-                          bearingCap("cap_out_t", 62, 90, 38, 30.0, L)));
+                          bearingCap("cap_out_t", 62, 84, 37, 30.0, L)));
         v.push_back(entry("spacer", "РЦ.080.00.010", "Втулка распорная", "Сталь 20 ГОСТ 1050-2013", 7850, spacer()));
         v.push_back(entry("gasket", "РЦ.080.00.011", "Прокладка", "Паронит ПОН-Б ГОСТ 481-80", 1800, flangeGasket(L)));
         v.push_back(entry("plug", "РЦ.080.00.012", "Пробка М16×1,5", "Сталь 20 ГОСТ 1050-2013", 7850, plug()));
