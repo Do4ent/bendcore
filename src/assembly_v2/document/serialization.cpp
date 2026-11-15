@@ -574,7 +574,7 @@ Result<std::string> AssemblyDocument::toJson(const SaveOptions& options) const {
                 j["faceColors"] = std::move(fc);
                 if (!d.shape.IsNull()) {
                     j["fingerprint"] = fingerprintJson(d);
-                    if (options.embedGeometry) {
+                    if (options.embedGeometry && (options.embedSourcedGeometry || d.source.empty())) {
                         auto bytes = kernel::writeBrepBinary(kernel::Shape(d.shape));
                         if (!bytes) return Error{bytes.error().code, "part '" + d.name + "': " + bytes.error().message};
                         j["brep"] = base64Encode(bytes.value());
