@@ -7,6 +7,7 @@ add_library(bendcore_gearbox_example STATIC
   examples/gearbox/gearbox_support.cpp
   examples/gearbox/gearbox_parts.cpp
   examples/gearbox/gearbox_assembly.cpp
+  examples/gearbox/gearbox_drawings.cpp
 )
 target_include_directories(bendcore_gearbox_example PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/examples/gearbox)
 target_link_libraries(bendcore_gearbox_example PUBLIC bendcore_drawing_document bendcore_fasteners)
