@@ -6,6 +6,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <BRepCheck_Analyzer.hxx>
+
 using namespace bendcore::modeling;
 using namespace bendcore::modeling::testutil;
 
@@ -432,4 +434,93 @@ TEST(ModelingDocumentSketch, InvalidNewConstraintsAreReported) {
     doc.rebuild();
     EXPECT_NE(messages(info(doc, "Bad")).find("sketch constraint 1 (tangent)"), std::string::npos) << messages(info(doc, "Bad"));
     EXPECT_NE(messages(info(doc, "BadRef")).find("only a dimension"), std::string::npos) << messages(info(doc, "BadRef"));
+}
+
+namespace {
+
+double lensArea(double r1, double r2, double d) {
+    const double a1 = std::acos((d * d + r1 * r1 - r2 * r2) / (2 * d * r1));
+    const double a2 = std::acos((d * d + r2 * r2 - r1 * r1) / (2 * d * r2));
+    const double k = std::sqrt((-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2));
+    return r1 * r1 * a1 + r2 * r2 * a2 - 0.5 * k;
+}
+
+// Cylindrical face of radius r with its axis along Z through (cx, 0).
+TopoDS_Shape cylinderFace(const TopoDS_Shape& shape, double r, double cx) {
+    for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
+        BRepAdaptor_Surface a(TopoDS::Face(ex.Current()));
+        if (a.GetType() != GeomAbs_Cylinder) continue;
+        const gp_Cylinder c = a.Cylinder();
+        if (std::abs(c.Radius() - r) < 1e-7 && std::abs(c.Location().X() - cx) < 1e-7 && std::abs(c.Location().Y()) < 1e-7)
+            return ex.Current();
+    }
+    return {};
+}
+
+}  // namespace
+
+// Two crossing circles in one sketch: the default (material) selection is their union, one
+// face; the parts of the circles are named "<entity>.<part>". Dependent operations (a boss on
+// the top face, a fillet on the vertical edge from a crossing point) survive changing the radius.
+TEST(ModelingDocumentSketch, CrossingCirclesUnionAndRebuild) {
+    PartDocument doc(partRegistry());
+    setVar(doc, "R", 10);
+    SketchBuilder b;
+    b.fixedCircle("0", "0", "R");
+    b.fixedCircle("12", "0", "7");
+    add(doc, sketchOn("Profile", "XY", b.build()));
+    add(doc, extrudeOf("Body", "Profile", "10"));
+    doc.rebuild();
+    NamedShape s = doc.finalShape();
+    ASSERT_FALSE(s.isNull()) << messages(info(doc, "Profile")) << messages(info(doc, "Body"));
+    const double union10 = (kPi * (100 + 49) - lensArea(10, 7, 12)) * 10;
+    EXPECT_NEAR(volume(s.shape()), union10, 1e-6 * union10);
+    // Side walls: the outer arcs only (part 0 of circle 1 from its first crossing, part 1 of circle 2).
+    EXPECT_EQ(nameOf(s, ElementKind::Face, cylinderFace(s.shape(), 10, 0)), "G[Body](Profile:E1.0)");
+    EXPECT_EQ(nameOf(s, ElementKind::Face, cylinderFace(s.shape(), 7, 12)), "G[Body](Profile:E2.1)");
+    int cylinders = 0;
+    for (const auto& c : cylinderFaces(s.shape())) cylinders += c.radius > 0;
+    EXPECT_EQ(cylinders, 2) << "the arcs inside the other circle are not on the body";
+    const std::string top = nameOf(s, ElementKind::Face, planarFace(s.shape(), gp::DZ(), 10));
+    // The top cap: the merged regions (crescent of circle 1, lens, crescent of circle 2).
+    EXPECT_EQ(top, "G[Body](Profile:R1.0_2.0+R1.1_2.0+R1.1_2.1)");
+
+    // Boss on the top face and a fillet on the edge through a crossing point.
+    FeatureSpec sk;
+    sk.type = "Sketch";
+    sk.id = "BossSketch";
+    sk.options = {{"plane", "face"}};
+    sk.parameters = {{"originX", "-5"}, {"originY", "0"}, {"originZ", "10"}};
+    sk.references["face"] = {refTo(s, planarFace(s.shape(), gp::DZ(), 10))};
+    sk.sketch = centredCircle("2");
+    add(doc, sk);
+    add(doc, extrudeOf("Boss", "BossSketch", "5", {{"mode", "boss"}}));
+    doc.rebuild();
+    ASSERT_EQ(info(doc, "Boss").state, FeatureState::Ok) << messages(info(doc, "Boss"));
+    // The vertical edge through the upper crossing point (generated from the split vertex).
+    const double xm = (144 + 100 - 49) / 24.0, ym = std::sqrt(100 - xm * xm);
+    const TopoDS_Shape crossingEdge = singleLine(doc.finalShape().shape(), 2, xm, ym);
+    EXPECT_EQ(nameOf(doc.finalShape(), ElementKind::Edge, crossingEdge), "G[Body](Profile:V1.0_2.1;D2)");
+    add(doc, {"Fillet", "Round", "", {{"radius", "1"}}, {{"edges", {refTo(doc.finalShape(), crossingEdge)}}}, {}, false});
+    for (double r : {11.0, 9.0, 10.0}) {
+        setVar(doc, "R", r);
+        doc.rebuild();
+        for (const char* id : {"BossSketch", "Boss", "Round"}) {
+            const FeatureInfo fi = info(doc, id);
+            ASSERT_EQ(fi.state, FeatureState::Ok) << id << " R = " << r << "\n" << messages(fi);
+            for (const auto& rep : fi.referenceReports) EXPECT_EQ(rep.resolution.method, ResolveMethod::Exact) << id << " R = " << r;
+        }
+        const TopoDS_Shape body = doc.finalShape().shape();
+        EXPECT_TRUE(BRepCheck_Analyzer(body).IsValid()) << "R = " << r;
+        // The fillet of the concave edge adds material: more than the union with the boss, less
+        // than a 1 x 1 x 10 square prism in the corner.
+        const double full = (kPi * (r * r + 49) - lensArea(r, 7, 12)) * 10 + kPi * 4 * 5;
+        const double v = volume(body);
+        EXPECT_GT(v, full + 1e-6) << "R = " << r;
+        EXPECT_LT(v, full + 10.0) << "R = " << r;
+        const double x = (144 + r * r - 49) / 24.0;
+        EXPECT_TRUE(linesAlong(body, 2, x, std::sqrt(r * r - x * x)).empty()) << "the crossing edge is filleted, R = " << r;
+        EXPECT_TRUE(hasCylinder(body, 2, 2, -5, 0)) << "boss stays at (-5, 0), R = " << r;
+        EXPECT_FALSE(cylinderFace(body, r, 0).IsNull()) << "big arc wall follows R = " << r;
+    }
 }

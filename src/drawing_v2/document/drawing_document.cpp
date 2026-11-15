@@ -143,13 +143,11 @@ SheetRegions computeRegions(const Sheet& sheet, const SheetDef& def, const Drawi
     r.title = {r.frame.x1 - 185.0, r.frame.y0, r.frame.x1, r.frame.y0 + 55.0};
     double trTop = r.title.y1;
     if (!def.technicalRequirements.empty()) {
-        std::size_t lines = 0;
-        const bool numbered = def.technicalRequirements.size() > 1;
-        for (const std::string& item : def.technicalRequirements) {
-            auto w = annotations::wrapText(numbered ? "1. " + item : item, 185.0, 5.0, style);
-            lines += w ? w.value().size() : 1;
-        }
-        trTop += 10.0 + double(lines) * 1.7 * 5.0 + 5.0;
+        // Те же строки, что выведет addTechnicalRequirements (параметры по умолчанию).
+        const annotations::TechnicalRequirementsOptions to;
+        auto w = annotations::technicalRequirementsLines(def.technicalRequirements, to, style);
+        const std::size_t lines = w ? w.value().size() : def.technicalRequirements.size();
+        trTop += to.gapAboveTitle + double(lines) * to.lineSpacingFactor * to.textHeight + to.textHeight;
     }
     if (def.partsList) trTop += 8.0 * 9.0;  // перечень ISO 7573: заголовок + строки (оценка)
     const double m = st.margin;

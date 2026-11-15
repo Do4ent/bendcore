@@ -365,6 +365,41 @@ TEST(E2EProductGearbox, DrawingsAreAssociative) {
     EXPECT_NEAR(value("L"), 172.0, 1e-9);
 }
 
+// Технические требования листа корпуса: строки перенесены по начертанию шрифта ГОСТ 2.304
+// (наклон 75°, толщина линии) и не доходят до рамки; «(по 4 на торцах бобышек)» прежде
+// выходила на линию рамки.
+TEST(E2EProductGearbox, TechnicalRequirementsInsideFrame) {
+    Product& p = product();
+    const dd::DrawingDocument* housing = nullptr;
+    for (const auto& pd : p.set.parts)
+        if (pd.key == "housing") housing = &pd.doc;
+    ASSERT_NE(housing, nullptr);
+    auto sheets = housing->render(nullptr);
+    ASSERT_TRUE(sheets.ok()) << sheets.error().message;
+    const auto& d = sheets.value().front();
+    const double frameRight = d.sheet().widthMm - 5.0, fieldLeft = frameRight - 185.0;
+    auto lines = bendcore::drawing_v2::annotations::technicalRequirementsLines(housing->sheets()[0].technicalRequirements);
+    ASSERT_TRUE(lines.ok());
+    const std::set<std::string> tt(lines.value().begin(), lines.value().end());
+    std::size_t found = 0;
+    bool bossLine = false;
+    for (const auto& e : d.entities()) {
+        const auto* t = std::get_if<bendcore::drawing_v2::Text>(&e.geometry);
+        if (!t || !tt.count(t->utf8)) continue;
+        ++found;
+        bossLine |= t->utf8.find("бобышек") != std::string::npos;
+        auto lay = bendcore::drawing_v2::gostStrokeFont().layout(*t);
+        ASSERT_TRUE(lay.ok());
+        double lo = 1e300, hi = -1e300;
+        for (const auto& s : lay.value().strokes)
+            for (const auto& q : s) lo = std::min(lo, q.x), hi = std::max(hi, q.x);
+        EXPECT_GE(lo - lay.value().lineWidth / 2, fieldLeft - 1e-9) << t->utf8;
+        EXPECT_LE(hi + lay.value().lineWidth / 2, frameRight - 1.0 + 1e-9) << t->utf8;
+    }
+    EXPECT_EQ(found, lines.value().size());
+    EXPECT_TRUE(bossLine);
+}
+
 // Записанные файлы открываются в bendcore: документы деталей (тот же объём), сборка (источники
 // загружены, те же положения и степени свободы), чертежи (обновление по файлам — без висячих
 // размеров, те же значения), спецификация, STEP сборки (72 детали) и деталей, DXF, PDF.

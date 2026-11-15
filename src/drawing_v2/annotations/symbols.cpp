@@ -354,18 +354,57 @@ Result<SymbolGeometry> leaderNote(Point2 target, Point2 knee, const std::string&
 
 // --- Технические требования ---
 
+Result<InkExtent> textInkExtent(const std::string& text, double h, bool slanted, const AnnotationStyle& st) {
+    if (!(h > 0)) return invalid("text ink: height must be > 0");
+    const GostStrokeFont& stroke = gostStrokeFont();
+    if (st.font == nullptr || st.font == static_cast<const TextMetrics*>(&stroke)) {
+        Text t;
+        t.utf8 = text;
+        t.height = h;
+        t.slanted = slanted;
+        auto lay = stroke.layout(t);
+        if (!lay) return lay.error();
+        InkExtent e;
+        bool any = false;
+        for (const auto& line : lay.value().strokes)
+            for (const Point2& p : line) {
+                if (!any) e.left = e.right = p.x;
+                e.left = std::min(e.left, p.x);
+                e.right = std::max(e.right, p.x);
+                any = true;
+            }
+        if (!any) return InkExtent{0.0, lay.value().width};
+        // Линия знака толщиной d = h/10 выходит за ось на d/2.
+        e.left -= lay.value().lineWidth / 2.0;
+        e.right += lay.value().lineWidth / 2.0;
+        return e;
+    }
+    const double k = slanted ? std::tan((90.0 - kGostTextSlantDeg) * kPi / 180.0) : 0.0;
+    return InkExtent{0.0, textWidth(text, h, st) + k * h};
+}
+
 Result<std::vector<std::string>> wrapText(const std::string& text, double width, double h,
-                                          const AnnotationStyle& st) {
+                                          const AnnotationStyle& st, std::optional<bool> inkSlanted) {
     std::istringstream is(text);
     std::vector<std::string> words;
     for (std::string w; is >> w;) words.push_back(w);
     if (words.empty()) return invalid("wrap: empty text");
+    auto measure = [&](const std::string& s) -> Result<double> {
+        if (!inkSlanted) return textWidth(s, h, st);
+        auto e = textInkExtent(s, h, *inkSlanted, st);
+        if (!e) return e.error();
+        return e.value().right;  // от точки начала строки до правой кромки начертания
+    };
     std::vector<std::string> lines;
     std::string cur;
     for (const auto& w : words) {
-        if (textWidth(w, h, st) > width) return invalid("wrap: word wider than the column: " + w);
+        auto ww = measure(w);
+        if (!ww) return ww.error();
+        if (ww.value() > width) return invalid("wrap: word wider than the column: " + w);
         const std::string cand = cur.empty() ? w : cur + " " + w;
-        if (textWidth(cand, h, st) <= width) {
+        auto wc = measure(cand);
+        if (!wc) return wc.error();
+        if (wc.value() <= width) {
             cur = cand;
         } else {
             lines.push_back(cur);
@@ -376,30 +415,82 @@ Result<std::vector<std::string>> wrapText(const std::string& text, double width,
     return lines;
 }
 
+namespace {
+
+struct WrappedRequirements {
+    std::vector<std::string> lines;
+    std::vector<InkExtent> ink;
+    double shift = 0.0;  // точка начала строк правее левой границы поля на shift
+};
+
+// Перенос пунктов: начертание [shift + left, shift + right] каждой строки в [0, width − clearance].
+// shift — наибольший вынос начертания левее точки начала (линия знака d/2, наклонный выносной
+// элемент); он зависит от строк, поэтому перенос повторяется, пока shift не перестанет расти.
+Result<WrappedRequirements> wrapRequirements(const std::vector<std::string>& items, const TechnicalRequirementsOptions& o,
+                                             const AnnotationStyle& st) {
+    if (items.empty()) return invalid("technical requirements: no items");
+    if (o.width <= 0 || o.width > 185.0 + 1e-9) return invalid("GOST 2.316: column width must be 0..185 mm");
+    if (!(o.rightClearance >= 0 && o.rightClearance < o.width))
+        return invalid("technical requirements: right clearance must be in [0, width)");
+    for (std::size_t i = 0; i < items.size(); ++i)
+        if (items[i].empty()) return invalid("technical requirements: empty item " + std::to_string(i + 1));
+    const bool single = items.size() == 1;  // один пункт не нумеруется
+    WrappedRequirements w;
+    for (int pass = 0; pass < 8; ++pass) {
+        WrappedRequirements next;
+        next.shift = w.shift;
+        const double avail = o.width - o.rightClearance - w.shift;
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            const std::string text = single ? items[i] : std::to_string(i + 1) + ". " + items[i];
+            auto lines = wrapText(text, avail, o.textHeight, st, st.slantedText);
+            if (!lines)
+                return Error{lines.error().code, "technical requirements, item " + std::to_string(i + 1) + ": " + lines.error().message};
+            next.lines.insert(next.lines.end(), lines.value().begin(), lines.value().end());
+        }
+        double need = 0.0;
+        for (const auto& l : next.lines) {
+            auto e = textInkExtent(l, o.textHeight, st.slantedText, st);
+            if (!e) return e.error();
+            need = std::max(need, -e.value().left);
+            next.ink.push_back(e.value());
+        }
+        w = std::move(next);
+        if (need <= w.shift + 1e-12) return w;
+        w.shift = need;
+    }
+    return Error{ErrorCode::OperationFailed, "technical requirements: line wrapping did not converge"};
+}
+
+}  // namespace
+
+Result<std::vector<std::string>> technicalRequirementsLines(const std::vector<std::string>& items,
+                                                            const TechnicalRequirementsOptions& o,
+                                                            const AnnotationStyle& st) {
+    auto w = wrapRequirements(items, o, st);
+    if (!w) return w.error();
+    return std::move(w).value().lines;
+}
+
 Result<TechnicalRequirementsLayout> addTechnicalRequirements(Drawing& d, const TitleBlockLayout& layout,
                                                              const std::vector<std::string>& items,
                                                              const TechnicalRequirementsOptions& o,
                                                              const AnnotationStyle& st) {
-    if (items.empty()) return invalid("technical requirements: no items");
-    if (o.width <= 0 || o.width > 185.0 + 1e-9) return invalid("GOST 2.316: column width must be 0..185 mm");
+    auto wrapped = wrapRequirements(items, o, st);
+    if (!wrapped) return wrapped.error();
+    const WrappedRequirements& w = wrapped.value();
     TechnicalRequirementsLayout out;
-    const bool single = items.size() == 1;  // один пункт не нумеруется
-    for (std::size_t i = 0; i < items.size(); ++i) {
-        if (items[i].empty()) return invalid("technical requirements: empty item " + std::to_string(i + 1));
-        const std::string text = single ? items[i] : std::to_string(i + 1) + ". " + items[i];
-        auto lines = wrapText(text, o.width, o.textHeight, st);
-        if (!lines) return lines.error();
-        out.lines.insert(out.lines.end(), lines.value().begin(), lines.value().end());
-    }
+    out.lines = w.lines;
     const double pitch = o.lineSpacingFactor * o.textHeight;
     const double x0 = layout.titleBlock.x0, y0 = layout.titleBlock.y1 + o.gapAboveTitle;
     const double top = y0 + double(out.lines.size() - 1) * pitch + o.textHeight;
     if (top > layout.frame.y1) return invalid("technical requirements do not fit above the title block");
     out.box = {x0, y0, x0 + o.width, top};
+    out.textX = x0 + w.shift;
+    for (const auto& e : w.ink) out.inkRight.push_back(out.textX + e.right);
     if (auto s = ensureLayer(d, st.layer, st.layerColor); !s) return s.error();
     for (std::size_t i = 0; i < out.lines.size(); ++i) {
         Text t;
-        t.position = {x0, y0 + double(out.lines.size() - 1 - i) * pitch};
+        t.position = {out.textX, y0 + double(out.lines.size() - 1 - i) * pitch};
         t.utf8 = out.lines[i];
         t.height = o.textHeight;
         t.slanted = st.slantedText;

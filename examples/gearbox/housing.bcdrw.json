@@ -9,7 +9,7 @@
    "material": "СЧ 20 ГОСТ 1412-85",
    "name": "Корпус"
   },
-  "resultHash": "3ba7a2f698fa4c78",
+  "resultHash": "da6a41b3ef86dfa4",
   "revision": 1
  },
  "settings": {
@@ -696,7 +696,7 @@
     {
      "face": {
       "kind": "face",
-      "name": "G[CapTapsMirror](CapTaps:Tool.F9)",
+      "name": "CapTapsLeft:H3.Wall",
       "signature": {
        "center": [
         -55.5,
@@ -705,8 +705,8 @@
        ],
        "direction": [
         1.0,
-        -0.0,
-        -0.0
+        0.0,
+        0.0
        ],
        "geometry": "Cylinder",
        "hasDirection": true,

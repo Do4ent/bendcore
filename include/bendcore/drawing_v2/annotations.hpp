@@ -128,26 +128,51 @@ Result<SymbolGeometry> leaderNote(Point2 target, Point2 knee, const std::string&
 
 struct TechnicalRequirementsOptions {
     double textHeight = 5.0;      // 3,5 или 5 (ГОСТ 2.304)
-    double width = 185.0;         // не шире основной надписи
+    double width = 185.0;         // поле над основной надписью, не шире её (ГОСТ 2.316)
     double gapAboveTitle = 10.0;  // от основной надписи до текста
     double lineSpacingFactor = 1.7;  // расстояние между основаниями строк, в h
+    // Зазор между начертанием строки и правой границей поля: граница поля шириной 185 мм
+    // совпадает с внутренней кромкой рамки, линия рамки (s до 1,4 мм) знак касаться не должен.
+    double rightClearance = 1.0;
 };
 
 struct TechnicalRequirementsLayout {
-    Rect box;
+    Rect box;                        // поле: x0 основной надписи … x0 + width
     std::vector<std::string> lines;  // строки после переноса (с номерами пунктов)
+    double textX = 0.0;              // точка начала строк (левая кромка начертания не левее box.x0)
+    std::vector<double> inkRight;    // правая кромка начертания каждой строки, мм листа
 };
 
-// Нумерованный текст над основной надписью: «1. …», перенос по словам по ширине (шрифт стиля
-// или оценка ширины типа Б). Ошибки: пустой пункт; слово шире колонки; текст выше рамки.
+// Горизонтальные границы начертания строки относительно точки начала (основание, левый край):
+// для шрифта ГОСТ 2.304 (style.font == nullptr или gostStrokeFont()) — точно по линиям знаков
+// с наклоном 75° и толщиной линии d = h/10; для другого шрифта — ширина по метрикам плюс
+// вынос наклона h·tg 15°.
+struct InkExtent {
+    double left = 0.0;
+    double right = 0.0;
+};
+Result<InkExtent> textInkExtent(const std::string& text, double h, bool slanted, const AnnotationStyle& style);
+
+// Строки технических требований после переноса: пункты «1. …» (один пункт не нумеруется),
+// перенос по словам так, что начертание строки (textInkExtent) помещается в поле шириной
+// width − rightClearance. Ошибки: нет пунктов, пустой пункт, слово шире поля, ширина вне 0…185.
+Result<std::vector<std::string>> technicalRequirementsLines(const std::vector<std::string>& items,
+                                                            const TechnicalRequirementsOptions& options = {},
+                                                            const AnnotationStyle& style = {});
+
+// Нумерованный текст над основной надписью: строки technicalRequirementsLines; левая кромка
+// начертания — x0 основной надписи, правая — не дальше x0 + width − rightClearance.
+// Ошибки: как у technicalRequirementsLines; текст выше рамки.
 Result<TechnicalRequirementsLayout> addTechnicalRequirements(Drawing& drawing, const TitleBlockLayout& layout,
                                                              const std::vector<std::string>& items,
                                                              const TechnicalRequirementsOptions& options = {},
                                                              const AnnotationStyle& style = {});
 
-// Перенос строки по словам: ширина строк ≤ width при высоте h.
+// Перенос строки по словам: ширина строк по метрикам шрифта (estimateTextWidth) ≤ width при
+// высоте h. inkSlanted задан — мерится правая кромка начертания (textInkExtent) с этим наклоном
+// от точки начала строки.
 Result<std::vector<std::string>> wrapText(const std::string& text, double width, double h,
-                                          const AnnotationStyle& style);
+                                          const AnnotationStyle& style, std::optional<bool> inkSlanted = std::nullopt);
 
 // --- Номера позиций ГОСТ 2.109-73 / ISO 6433 ---
 

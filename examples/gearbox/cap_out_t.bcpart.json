@@ -143,81 +143,50 @@
    "type": "Revolve"
   },
   {
-   "id": "ScrewHoleSketch",
-   "label": "ScrewHoleSketch",
-   "links": {},
-   "options": {
-    "contour": "closed",
-    "plane": "YZ"
-   },
-   "parameters": {
-    "offset": "tc / 2",
-    "originX": "0",
-    "originY": "0",
-    "originZ": "0"
-   },
-   "references": {
-    "face": [],
-    "projected": []
-   },
-   "sketch": {
-    "constraints": [
-     {
-      "a": 1,
-      "b": -1,
-      "c": -1,
-      "type": "radius",
-      "value": "dk / 2"
-     }
-    ],
-    "geometry": [
-     {
-      "center": 0,
-      "construction": false,
-      "counterClockwise": true,
-      "end": -1,
-      "projection": -1,
-      "radius": "1",
-      "start": -1,
-      "type": "circle"
-     }
-    ],
-    "points": [
-     {
-      "fixed": true,
-      "x": "rb * cos(45)",
-      "y": "rb * sin(45)"
-     }
-    ],
-    "regions": []
-   },
-   "suppressed": false,
-   "type": "Sketch"
-  },
-  {
    "id": "ScrewHole",
    "label": "ScrewHole",
-   "links": {
-    "sketch": "ScrewHoleSketch"
-   },
+   "links": {},
    "options": {
-    "draftDirection": "inward",
-    "extent": "throughAllBoth",
-    "mode": "cut",
-    "reversed": "false",
-    "thin": "none"
+    "drillPoint": "true",
+    "end": "through",
+    "type": "simple"
    },
    "parameters": {
-    "distance": "10",
-    "distance2": "0",
-    "draftAngle": "0",
-    "thickness": "1"
+    "cbDepth": "3",
+    "cbDiameter": "10",
+    "csAngle": "90",
+    "csDiameter": "10",
+    "depth": "10",
+    "diameter": "dk",
+    "drillAngle": "118",
+    "x": "tc",
+    "y": "rb * cos(45)",
+    "z": "rb * sin(45)"
    },
    "references": {
-    "limit": []
+    "face": [
+     {
+      "kind": "face",
+      "name": "F(G[Body](Profile:V4_5)|G[Body](Profile:V5_6))",
+      "signature": {
+       "center": [
+        8.0,
+        5.6049310020322405e-15,
+        7.105427357601002e-15
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Plane",
+       "size": 4834.911093874691
+      }
+     }
+    ]
    },
    "suppressed": false,
-   "type": "Extrude"
+   "type": "Hole"
   },
   {
    "id": "ScrewHoles",

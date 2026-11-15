@@ -5,11 +5,13 @@
 
 #include <bendcore/modeling/reference_geometry.hpp>
 
+#include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Compound.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -702,12 +704,43 @@ private:
         return out;
     }
 
-    // Faces of the selected regions with names from the sketch entities.
+    // Faces of the selected regions with names from the sketch entities. A part of an entity
+    // split by crossing curves is named "<id>.<part>" (ProfileEdge::part), an unsplit entity "<id>".
     static Result<NamedShape> nameFaces(const std::string& sketchId, const SketchProfile& profile,
                                         const std::vector<std::size_t>& regions) {
-        auto shape = profile.makeFaces(regions);
-        if (!shape) return shape.error();
-        const TopoDS_Shape& s = shape.value();
+        auto groups = profile.makeFaceGroups(regions);
+        if (!groups) return groups.error();
+        // The same faces as SketchProfile::makeFaces (merged faces are built once).
+        TopoDS_Shape s;
+        if (groups.value().size() == 1) {
+            s = groups.value().front().face;
+        } else {
+            BRep_Builder builder;
+            TopoDS_Compound compound;
+            builder.MakeCompound(compound);
+            for (const ProfileFace& f : groups.value()) builder.Add(compound, f.face);
+            s = compound;
+        }
+        std::map<SketchEntityId, std::uint32_t> partCount;
+        for (const ProfileEdge& e : profile.edges()) partCount[e.entity] = e.partCount;
+        auto label = [&](SketchEntityId id, std::uint32_t part) {
+            return partCount[id] > 1 ? std::to_string(id) + "." + std::to_string(part) : std::to_string(id);
+        };
+        // Region: R<smallest entity> when no entity of its outer loop is split, else R<labels of
+        // its parts, ascending, joined by "_">; merged regions: their names joined by "+".
+        auto regionName = [&](std::size_t r) {
+            const ProfileLoop& loop = profile.loops()[profile.regions()[r].outerLoop];
+            bool split = false;
+            for (SketchEntityId id : loop.entities) split |= partCount[id] > 1;
+            if (!split) return "R" + std::to_string(*std::min_element(loop.entities.begin(), loop.entities.end()));
+            std::vector<std::pair<SketchEntityId, std::uint32_t>> parts;
+            for (std::size_t k = 0; k < loop.entities.size(); ++k) parts.push_back({loop.entities[k], loop.parts[k]});
+            std::sort(parts.begin(), parts.end());
+            parts.erase(std::unique(parts.begin(), parts.end()), parts.end());
+            std::string name = "R";
+            for (std::size_t k = 0; k < parts.size(); ++k) name += (k ? "_" : "") + label(parts[k].first, parts[k].second);
+            return name;
+        };
         std::array<std::vector<ElementRecord>, 3> records;
         auto record = [&](const TopoDS_Shape& el, std::string name) -> Result<ElementRecord> {
             auto sig = computeSignature(el);
@@ -727,12 +760,9 @@ private:
         std::vector<Point2> where[3];
         for (int i = 1; i <= faces.Extent(); ++i) {
             std::string name;
-            for (std::size_t r : regions) {
-                const ProfileRegion& reg = profile.regions()[r];
-                if (reg.face.IsSame(faces.FindKey(i))) {
-                    const auto& ents = profile.loops()[reg.outerLoop].entities;
-                    name = "R" + std::to_string(*std::min_element(ents.begin(), ents.end()));
-                }
+            for (const ProfileFace& f : groups.value()) {
+                if (!f.face.IsSame(faces.FindKey(i))) continue;
+                for (std::size_t k = 0; k < f.regions.size(); ++k) name += (k ? "+" : "") + regionName(f.regions[k]);
             }
             if (name.empty()) return Error{ErrorCode::OperationFailed, "sketch region face lost while building the profile"};
             names[0].push_back(name);
@@ -742,21 +772,31 @@ private:
         TopTools_IndexedDataMapOfShapeListOfShape vertexEdges;
         TopExp::MapShapesAndAncestors(s, TopAbs_VERTEX, TopAbs_EDGE, vertexEdges);
         for (int i = 1; i <= edges.Extent(); ++i) {
-            auto id = profile.entityOf(edges.FindKey(i));
-            if (!id) return Error{ErrorCode::OperationFailed, "profile edge without a sketch entity"};
-            names[1].push_back("E" + std::to_string(*id));
+            auto pe = profile.edgeOf(edges.FindKey(i));
+            if (!pe) return Error{ErrorCode::OperationFailed, "profile edge without a sketch entity"};
+            names[1].push_back("E" + label(pe->entity, pe->part));
             where[1].push_back(profile.placement().toLocal(BRep_Tool::Pnt(TopExp::FirstVertex(TopoDS::Edge(edges.FindKey(i))))));
         }
         for (int i = 1; i <= vertices.Extent(); ++i) {
-            std::set<SketchEntityId> ids;
+            std::set<std::pair<SketchEntityId, std::uint32_t>> ids;
+            bool split = false;
             const int k = vertexEdges.FindIndex(vertices.FindKey(i));
             if (k > 0) {
                 for (const TopoDS_Shape& e : vertexEdges.FindFromIndex(k)) {
-                    if (auto id = profile.entityOf(e)) ids.insert(*id);
+                    if (auto pe = profile.edgeOf(e)) {
+                        ids.insert({pe->entity, pe->part});
+                        split |= pe->partCount > 1;
+                    }
                 }
             }
+            // Unsplit: V<entity ids>; at a split point: V<labels of the parts meeting there>.
             std::string name = "V";
-            for (SketchEntityId id : ids) name += (name.size() > 1 ? "_" : "") + std::to_string(id);
+            std::set<std::string> seen;
+            for (const auto& [id, part] : ids) {
+                const std::string t = split ? label(id, part) : std::to_string(id);
+                if (!seen.insert(t).second) continue;
+                name += (name.size() > 1 ? "_" : "") + t;
+            }
             names[2].push_back(name);
             where[2].push_back(profile.placement().toLocal(BRep_Tool::Pnt(TopoDS::Vertex(vertices.FindKey(i)))));
         }

@@ -156,8 +156,8 @@ enum class ProfileIssueKind {
     DuplicateId,       // two curves with the same id
     Degenerate,        // zero length or radius, inconsistent arc, invalid B-spline data
     OpenContour,       // chain of curves with a free end
-    Branching,         // more than two curve ends meet at one point
-    Intersection,      // two curves cross or touch away from a shared end point
+    Branching,         // more than two curve ends meet at one point (strict check only)
+    Intersection,      // two curves cross or touch away from a shared end point (strict check only)
     Overlap,           // two curves share a piece of length
     SelfIntersection,  // a curve crosses itself
     Empty,             // no profile (non-construction) curves at all
@@ -175,9 +175,15 @@ struct ProfileIssue {
 struct ProfileOptions {
     // End points closer than this are joined; also the intersection tolerance (mm).
     double tolerance = 1e-6;
+    // true: curves that cross or touch each other, and nodes where more than two curve ends
+    // meet, are split at those points into parts, and the profile is the planar arrangement of
+    // the parts (docs/modeling/SKETCH_PROFILE.md, "Пересекающиеся кривые"). false: strict
+    // check, such sketches are reported as Intersection / Branching.
+    bool splitAtIntersections = true;
 };
 
-// Checks the profile curves (construction curves are ignored); empty result = valid.
+// Checks the profile curves (construction curves are ignored); empty result = valid for
+// SketchProfile::build with the same options.
 std::vector<ProfileIssue> checkSketchCurves(const std::vector<SketchCurve>& curves,
                                             const ProfileOptions& options = {});
 
@@ -185,14 +191,22 @@ std::vector<ProfileIssue> checkSketchCurves(const std::vector<SketchCurve>& curv
 // Profile
 // ---------------------------------------------------------------------------------------------
 
+// One edge per part of a profile entity, shared by every wire that uses it. An entity that no
+// other curve crosses is one part (part 0, partCount 1); an entity split at k points is
+// partCount parts numbered along the curve from its start (a closed curve: from the first
+// split point after its parameter origin).
 struct ProfileEdge {
     SketchEntityId entity = 0;
-    TopoDS_Edge edge;  // one edge per profile entity, shared by every wire that uses it
+    TopoDS_Edge edge;
+    std::uint32_t part = 0;
+    std::uint32_t partCount = 1;
 };
 
-// Simple closed contour.
+// Simple closed contour: the boundary of one face of the arrangement (a region), or the outer
+// outline of a group of crossing curves that bounds several regions.
 struct ProfileLoop {
-    std::vector<SketchEntityId> entities;  // in traversal order, starting at the smallest id
+    std::vector<SketchEntityId> entities;  // in traversal order, starting at the smallest (id, part)
+    std::vector<std::uint32_t> parts;      // part of each entity (ProfileEdge::part)
     TopoDS_Wire wire;                      // counter-clockwise seen from the sketch normal
     double area = 0.0;                     // enclosed area, > 0
     int parent = -1;                       // innermost loop that contains this one, -1 = none
@@ -200,14 +214,22 @@ struct ProfileLoop {
     std::vector<std::size_t> children;     // loops whose parent is this loop
 };
 
-// Region bounded by loop `outerLoop` from outside and by its child loops from inside. Region i is
-// bounded by loop i, so there are as many regions as loops.
+// Region bounded by loop `outerLoop` from outside and by the outlines of the curve groups
+// directly inside it. Region i is bounded by loop i; loops after the last region are outlines
+// of groups of crossing curves (each such group bounds several regions). Without crossings
+// there are as many regions as loops.
 struct ProfileRegion {
     std::size_t outerLoop = 0;
     std::vector<std::size_t> holeLoops;
     TopoDS_Face face;  // planar, normal = sketch normal
     double area = 0.0;
     int depth = 0;     // depth of the outer loop: 0 outer contour, 1 hole, 2 island, ...
+};
+
+// Face of a region selection: selected regions that share an edge are merged into one face.
+struct ProfileFace {
+    TopoDS_Face face;                  // a region's own face when it is not merged with another
+    std::vector<std::size_t> regions;  // ascending
 };
 
 class SketchProfile {
@@ -225,16 +247,24 @@ public:
 
     // Sketch entity an edge (or an edge sharing its TShape) was made from.
     std::optional<SketchEntityId> entityOf(const TopoDS_Shape& edge) const;
+    // Entity and part of an edge.
+    std::optional<ProfileEdge> edgeOf(const TopoDS_Shape& edge) const;
 
     // Innermost region strictly containing the point; nullopt when outside every loop or on a
     // boundary.
     std::optional<std::size_t> regionAt(const Point2& point) const;
 
     // Regions of even depth: outer contours and islands (the usual "material" of a profile).
+    // Regions of crossing curves (lens and the rest of two overlapping circles) share the depth
+    // of their group, so the material of overlapping contours is their union.
     std::vector<std::size_t> materialRegions() const;
 
-    // Face (one region) or compound of faces (several). Errors: empty selection, index out of
-    // range, duplicate index, point outside every region.
+    // Faces of the selection: regions that share an edge (parts of crossing curves) are merged
+    // into one face; the others keep their own face. Order: by the first selected region of each
+    // face. Errors: empty selection, index out of range, duplicate index.
+    Result<std::vector<ProfileFace>> makeFaceGroups(const std::vector<std::size_t>& regionIndices) const;
+    // Face (one face of makeFaceGroups) or compound of faces (several). Errors: as
+    // makeFaceGroups; point outside every region.
     Result<TopoDS_Shape> makeFaces(const std::vector<std::size_t>& regionIndices) const;
     Result<TopoDS_Shape> makeFacesAt(const std::vector<Point2>& points) const;
     Result<TopoDS_Shape> makeMaterialFaces() const;
@@ -246,6 +276,12 @@ private:
     std::vector<ProfileLoop> loops_;
     std::vector<ProfileRegion> regions_;
     std::vector<ProfileEdge> edges_;
+    // Half-edges of the arrangement: 2k = part k from its start node to its end node, 2k + 1 the
+    // reverse. Face (region index, -1 = outline of a group) and successor along that face.
+    std::vector<TopoDS_Edge> partEdges_;
+    std::vector<double> partArea_;  // integral of x dy along part k (start to end)
+    std::vector<int> halfFace_;
+    std::vector<int> halfNext_;
 };
 
 // ---------------------------------------------------------------------------------------------

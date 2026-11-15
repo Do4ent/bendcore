@@ -2,6 +2,10 @@
 
 #include "features_test_util.hpp"
 
+#include <BRepBuilderAPI_Transform.hxx>
+#include <BRepPrimAPI_MakeRevol.hxx>
+#include <gp_Trsf.hxx>
+
 #include <gtest/gtest.h>
 
 using namespace ft;
@@ -121,4 +125,107 @@ TEST(Hole, InvalidInputsAreRejected) {
     const TopoDS_Shape other = box(10, 10, 10);
     const TopoDS_Face foreign = planeFaceAt(other, 2, 10);
     EXPECT_FALSE(hole(p.body, foreign, gp_Pnt(5, 5, 10), hp).ok());
+}
+
+namespace {
+
+// Внешняя нормаль плоской грани, вычисленная независимо от hole(): от центра масс тела к
+// центру грани (для выпуклого тела направлена из материала).
+gp_Dir outwardFromCentroid(const TopoDS_Shape& body, const TopoDS_Face& f) {
+    GProp_GProps g;
+    BRepGProp::VolumeProperties(body, g);
+    BRepAdaptor_Surface a(f, false);
+    gp_Dir n = a.Plane().Axis().Direction();
+    if (gp_Vec(g.CentreOfMass(), faceCentroid(f)).Dot(gp_Vec(n)) < 0) n.Reverse();
+    return n;
+}
+
+// Глухое отверстие без конуса на каждой плоской грани тела: удалённый объём π r² h (сверлит
+// внутрь, а не наружу, где удалённый объём был бы 0) и явное направление «внутрь» принимается,
+// «наружу» — отклоняется. Возвращает число граней с левой СК плоскости.
+int checkEveryPlanarFace(const TopoDS_Shape& body) {
+    const double v0 = volume(body);
+    HoleParams hp;
+    hp.diameter = 6;
+    hp.depth = 8;
+    hp.drillPoint = false;
+    int leftHanded = 0;
+    for (TopExp_Explorer ex(body, TopAbs_FACE); ex.More(); ex.Next()) {
+        const TopoDS_Face f = TopoDS::Face(ex.Current());
+        BRepAdaptor_Surface a(f, false);
+        if (a.GetType() != GeomAbs_Plane) continue;
+        if (!a.Plane().Position().Direct()) ++leftHanded;
+        const gp_Pnt c = faceCentroid(f);
+        auto r = hole(body, f, c, hp);
+        EXPECT_TRUE(r.ok()) << (r.ok() ? "" : r.error().message);
+        if (!r.ok()) continue;
+        EXPECT_TRUE(valid(r.value().shape));
+        EXPECT_NEAR(v0 - volume(r.value().shape), kPi * 9 * 8, 1e-6) << "face centre " << c.X() << " " << c.Y() << " " << c.Z();
+        const gp_Dir out = outwardFromCentroid(body, f);
+        auto explicitIn = hole(body, f, c, hp, out.Reversed());
+        EXPECT_TRUE(explicitIn.ok()) << (explicitIn.ok() ? "" : explicitIn.error().message);
+        if (explicitIn.ok()) EXPECT_NEAR(v0 - volume(explicitIn.value().shape), kPi * 9 * 8, 1e-6);
+        auto explicitOut = hole(body, f, c, hp, out);
+        EXPECT_FALSE(explicitOut.ok());
+    }
+    return leftHanded;
+}
+
+}  // namespace
+
+TEST(Hole, DrillsInwardOnLeftHandedPlaneFaces) {
+    // Зеркальное отражение коробки: плоскости граней получают левую СК (Du x Dv = -ось);
+    // раньше нормаль бралась по оси gp_Pln, и отверстие строилось снаружи тела.
+    gp_Trsf mirror;
+    mirror.SetMirror(gp_Ax2(gp::Origin(), gp::DX()));
+    const TopoDS_Shape mirrored = BRepBuilderAPI_Transform(box(100, 100, 50), mirror, true).Shape();
+    ASSERT_TRUE(valid(mirrored));
+    EXPECT_EQ(checkEveryPlanarFace(mirrored), 6);
+    // Без отражения (правая СК, часть граней REVERSED) — то же.
+    EXPECT_EQ(checkEveryPlanarFace(box(100, 100, 50)), 0);
+}
+
+TEST(Hole, DrillsInwardOnRevolvedEndFaces) {
+    // Цилиндр вращением прямоугольника XZ вокруг Z: торцы — плоскости, построенные вращением.
+    const TopoDS_Face profile =
+        BRepBuilderAPI_MakeFace(BRepBuilderAPI_MakePolygon(gp_Pnt(0, 0, 0), gp_Pnt(30, 0, 0), gp_Pnt(30, 0, 40),
+                                                           gp_Pnt(0, 0, 40), true)
+                                    .Wire(),
+                                true)
+            .Face();
+    const TopoDS_Shape cyl = BRepPrimAPI_MakeRevol(profile, gp_Ax1(gp::Origin(), gp::DZ())).Shape();
+    ASSERT_TRUE(valid(cyl));
+    checkEveryPlanarFace(cyl);
+    // Сквозное отверстие с торца: удалён цилиндр на всю высоту.
+    const TopoDS_Face top = planeFaceAt(cyl, 2, 40);
+    ASSERT_FALSE(top.IsNull());
+    HoleParams hp;
+    hp.diameter = 10;
+    hp.end = HoleEnd::Through;
+    auto r = hole(cyl, top, gp_Pnt(12, 0, 40), hp);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_NEAR(volume(cyl) - volume(r.value().shape), kPi * 25 * 40, 1e-5);
+}
+
+TEST(Hole, ThreadedHoleDrillsInwardOnLeftHandedFace) {
+    gp_Trsf mirror;
+    mirror.SetMirror(gp_Ax2(gp::Origin(), gp::DZ()));
+    const TopoDS_Shape body = BRepBuilderAPI_Transform(box(40, 40, 20), mirror, true).Shape();  // z ∈ [-20, 0]
+    const TopoDS_Face top = planeFaceAt(body, 2, 0.0);
+    ASSERT_FALSE(top.IsNull());
+    ASSERT_FALSE(BRepAdaptor_Surface(top, false).Plane().Position().Direct());
+    ThreadedHoleParams tp;
+    auto th = metricCoarse(6);
+    ASSERT_TRUE(th.ok());
+    tp.thread = th.value();
+    tp.end = ThreadEnd::Blind;
+    tp.threadLength = 10;
+    tp.drillDepth = 12;
+    tp.drillPoint = false;
+    auto r = threadedHole(body, top, gp_Pnt(20, 20, 0), tp);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const double d = tapDrillDiameter(tp.thread);  // 5,0 для М6
+    EXPECT_NEAR(volume(body) - volume(r.value().shape), kPi * d * d / 4 * 12, 1e-6);
+    ASSERT_FALSE(r.value().threads.empty());
+    EXPECT_NEAR(r.value().threads.front().thread.direction.Z(), -1.0, 1e-9);
 }
