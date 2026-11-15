@@ -1,0 +1,555 @@
+{
+ "format": "bendcore-drawing",
+ "model": {
+  "kind": "part",
+  "path": "cover.bcpart.json",
+  "properties": {
+   "density": 7200.0,
+   "designation": "РЦ.080.00.002",
+   "material": "СЧ 20 ГОСТ 1412-85",
+   "name": "Крышка корпуса"
+  },
+  "resultHash": "601e38df2ebdaf74",
+  "revision": 1
+ },
+ "settings": {
+  "lineThickness": 0.5,
+  "margin": 15.0,
+  "maxScale": [
+   5,
+   1
+  ],
+  "projection": "firstAngle",
+  "reducedAxonometry": true,
+  "textFont": "gost2304",
+  "viewGap": 30.0
+ },
+ "sheets": [
+  {
+   "datums": [
+    {
+     "at": 0.3,
+     "edge": {
+      "kind": "edge",
+      "name": "FlangeSketch:E1",
+      "signature": {
+       "center": [
+        3.552713678800501e-15,
+        -83.0,
+        0.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 104.0
+      }
+     },
+     "id": "DA",
+     "letter": "А",
+     "view": "F"
+    }
+   ],
+   "dimensions": [
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "V(FlangeSketch:R1|G[FlangeRounds](G[Flange](FlangeSketch:V1_4))|G[Flange](FlangeSketch:E1))",
+        "signature": {
+         "center": [
+          -52.0,
+          -83.0,
+          0.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "V(G[FlangeRounds](G[Flange](FlangeSketch:V1_4))|G[Flange](FlangeSketch:E1)|G[Flange](FlangeSketch:R1))",
+        "signature": {
+         "center": [
+          -52.0,
+          -83.0,
+          12.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "tf",
+     "lastValue": 12.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 10.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "vertical",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "edge",
+        "name": "E(BoltHoles:H1.Wall|G[Flange](FlangeSketch:R1))",
+        "signature": {
+         "center": [
+          -40.00000000000003,
+          -68.00000000000001,
+          12.000000000000002
+         ],
+         "direction": [
+          0.0,
+          -0.0,
+          1.0
+         ],
+         "geometry": "Circle",
+         "hasDirection": true,
+         "radius": 5.5,
+         "size": 34.55751918948772
+        }
+       }
+      },
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "edge",
+        "name": "E(BoltHoles:H2.Wall|G[Flange](FlangeSketch:R1))",
+        "signature": {
+         "center": [
+          39.99999999999998,
+          -68.00000000000001,
+          12.000000000000002
+         ],
+         "direction": [
+          0.0,
+          -0.0,
+          1.0
+         ],
+         "geometry": "Circle",
+         "hasDirection": true,
+         "radius": 5.5,
+         "size": 34.55751918948772
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "bx",
+     "lastValue": 80.0,
+     "leaderAngleDeg": 45.0,
+     "offset": -22.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "horizontal",
+     "view": "T"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "edge",
+        "name": "E(BoltHoles:H2.Wall|G[Flange](FlangeSketch:R1))",
+        "signature": {
+         "center": [
+          39.99999999999998,
+          -68.00000000000001,
+          12.000000000000002
+         ],
+         "direction": [
+          0.0,
+          -0.0,
+          1.0
+         ],
+         "geometry": "Circle",
+         "hasDirection": true,
+         "radius": 5.5,
+         "size": 34.55751918948772
+        }
+       }
+      },
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "edge",
+        "name": "E(BoltHoles:H3.Wall|G[Flange](FlangeSketch:R1))",
+        "signature": {
+         "center": [
+          39.99999999999998,
+          175.00000000000006,
+          12.000000000000002
+         ],
+         "direction": [
+          0.0,
+          -0.0,
+          1.0
+         ],
+         "geometry": "Circle",
+         "hasDirection": true,
+         "radius": 5.5,
+         "size": 34.55751918948772
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "by",
+     "lastValue": 243.0,
+     "leaderAngleDeg": 45.0,
+     "offset": -30.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "vertical",
+     "view": "T"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "edge",
+        "name": "E(BoltHoles:H3.Wall|G[Flange](FlangeSketch:R1))",
+        "signature": {
+         "center": [
+          39.99999999999998,
+          175.00000000000006,
+          12.000000000000002
+         ],
+         "direction": [
+          0.0,
+          -0.0,
+          1.0
+         ],
+         "geometry": "Circle",
+         "hasDirection": true,
+         "radius": 5.5,
+         "size": 34.55751918948772
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "db",
+     "lastValue": 11.0,
+     "leaderAngleDeg": 60.0,
+     "offset": 0.0,
+     "offsetFrom": [],
+     "prefix": "4 отв. ",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "diameter",
+     "view": "T"
+    }
+   ],
+   "format": {
+    "base": "A2",
+    "multiplier": 1,
+    "orientation": "landscape"
+   },
+   "id": "S1",
+   "partsList": false,
+   "roughness": [
+    {
+     "at": 0.7,
+     "edge": {
+      "kind": "edge",
+      "name": "FlangeSketch:E1",
+      "signature": {
+       "center": [
+        3.552713678800501e-15,
+        -83.0,
+        0.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 104.0
+      }
+     },
+     "id": "Ra1",
+     "spec": {
+      "heightFactor": 2.5,
+      "method": "materialRemoval",
+      "parameter": "Ra",
+      "process": "",
+      "value": "3,2"
+     },
+     "view": "F"
+    }
+   ],
+   "roughnessRemainder": {
+    "heightFactor": 2.5,
+    "method": "noMaterialRemoval",
+    "parameter": "",
+    "process": "",
+    "value": ""
+   },
+   "scale": null,
+   "technicalRequirements": [
+    "Отливка по ГОСТ 26645-85, класс точности 9-0-0-9. Формовочные уклоны 1°.",
+    "Неуказанные литейные радиусы 3...5 мм.",
+    "Отверстия под штифты 2 отв. ⌀8H7 сверлить совместно с корпусом.",
+    "Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2."
+   ],
+   "threadNotes": [
+    {
+     "face": {
+      "kind": "face",
+      "name": "FillerTap:Wall",
+      "signature": {
+       "center": [
+        0.0,
+        40.0,
+        36.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Cylinder",
+       "hasDirection": true,
+       "radius": 7.25,
+       "size": 364.424747816416
+      }
+     },
+     "id": "TH1",
+     "leaderAngleDeg": 45.0,
+     "offset": 10.0,
+     "textShift": 0.0,
+     "toleranceField": "6H",
+     "view": "T"
+    }
+   ],
+   "title": {
+    "approver": {
+     "date": "",
+     "surname": ""
+    },
+    "checker": {
+     "date": "",
+     "surname": ""
+    },
+    "designation": "",
+    "developer": {
+     "date": "11.26",
+     "surname": "bendcore"
+    },
+    "litera": "",
+    "mass": "",
+    "material": "",
+    "name": "",
+    "normControl": {
+     "date": "",
+     "surname": ""
+    },
+    "organization": "bendcore",
+    "techControl": {
+     "date": "",
+     "surname": ""
+    }
+   },
+   "tolerances": [
+    {
+     "at": 0.5,
+     "characteristic": "flatness",
+     "datums": [],
+     "diameterZone": false,
+     "edge": {
+      "kind": "edge",
+      "name": "FlangeSketch:E1",
+      "signature": {
+       "center": [
+        3.552713678800501e-15,
+        -83.0,
+        0.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 104.0
+      }
+     },
+     "id": "T1",
+     "tolerance": "0,05",
+     "view": "F"
+    }
+   ],
+   "views": [
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "hidden": false,
+     "id": "F",
+     "kind": "base",
+     "letter": "",
+     "markView": "",
+     "method": "exact",
+     "parent": "",
+     "planePoint": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": null,
+     "sectionKind": "cut",
+     "side": null,
+     "threads": true,
+     "toward": [
+      0.0,
+      -1.0,
+      0.0
+     ]
+    },
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "hidden": false,
+     "id": "T",
+     "kind": "projected",
+     "letter": "",
+     "markView": "",
+     "method": "exact",
+     "parent": "F",
+     "planePoint": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": null,
+     "sectionKind": "cut",
+     "side": "below",
+     "threads": true,
+     "toward": [
+      0.0,
+      -1.0,
+      0.0
+     ]
+    },
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "hidden": false,
+     "id": "L",
+     "kind": "projected",
+     "letter": "",
+     "markView": "",
+     "method": "exact",
+     "parent": "F",
+     "planePoint": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": null,
+     "sectionKind": "cut",
+     "side": "rightOf",
+     "threads": true,
+     "toward": [
+      0.0,
+      -1.0,
+      0.0
+     ]
+    }
+   ]
+  }
+ ],
+ "version": 2
+}

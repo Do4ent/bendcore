@@ -1,0 +1,621 @@
+{
+ "features": [
+  {
+   "id": "Profile",
+   "label": "Profile",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XZ"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 4,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 5,
+      "projection": -1,
+      "radius": "1",
+      "start": 4,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 6,
+      "projection": -1,
+      "radius": "1",
+      "start": 5,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 7,
+      "projection": -1,
+      "radius": "1",
+      "start": 6,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 8,
+      "projection": -1,
+      "radius": "1",
+      "start": 7,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 9,
+      "projection": -1,
+      "radius": "1",
+      "start": 8,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 10,
+      "projection": -1,
+      "radius": "1",
+      "start": 9,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 11,
+      "projection": -1,
+      "radius": "1",
+      "start": 10,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 11,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "-lh / 2",
+      "y": "db / 2"
+     },
+     {
+      "fixed": true,
+      "x": "lh / 2",
+      "y": "db / 2"
+     },
+     {
+      "fixed": true,
+      "x": "lh / 2",
+      "y": "dh / 2"
+     },
+     {
+      "fixed": true,
+      "x": "tw / 2",
+      "y": "dh / 2"
+     },
+     {
+      "fixed": true,
+      "x": "tw / 2",
+      "y": "dr / 2"
+     },
+     {
+      "fixed": true,
+      "x": "bw / 2",
+      "y": "dr / 2"
+     },
+     {
+      "fixed": true,
+      "x": "bw / 2",
+      "y": "d / 2"
+     },
+     {
+      "fixed": true,
+      "x": "-bw / 2",
+      "y": "d / 2"
+     },
+     {
+      "fixed": true,
+      "x": "-bw / 2",
+      "y": "dr / 2"
+     },
+     {
+      "fixed": true,
+      "x": "-tw / 2",
+      "y": "dr / 2"
+     },
+     {
+      "fixed": true,
+      "x": "-tw / 2",
+      "y": "dh / 2"
+     },
+     {
+      "fixed": true,
+      "x": "-lh / 2",
+      "y": "dh / 2"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Body",
+   "label": "Body",
+   "links": {
+    "sketch": "Profile"
+   },
+   "options": {
+    "axis": "X",
+    "extent": "full",
+    "mode": "boss",
+    "reversed": "false"
+   },
+   "parameters": {
+    "angle": "360",
+    "angle2": "0",
+    "axisEntity": "0"
+   },
+   "references": {
+    "axisEdge": []
+   },
+   "suppressed": false,
+   "type": "Revolve"
+  },
+  {
+   "id": "KeySketch",
+   "label": "KeySketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "YZ"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "-bk / 2",
+      "y": "0"
+     },
+     {
+      "fixed": true,
+      "x": "bk / 2",
+      "y": "0"
+     },
+     {
+      "fixed": true,
+      "x": "bk / 2",
+      "y": "db / 2 + t2"
+     },
+     {
+      "fixed": true,
+      "x": "-bk / 2",
+      "y": "db / 2 + t2"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Keyway",
+   "label": "Keyway",
+   "links": {
+    "sketch": "KeySketch"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "throughAllBoth",
+    "mode": "cut",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "10",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "LighteningSketch",
+   "label": "LighteningSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "YZ"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [
+     {
+      "a": 1,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "dl / 2"
+     }
+    ],
+    "geometry": [
+     {
+      "center": 0,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "Dh / 2"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Lightening",
+   "label": "Lightening",
+   "links": {
+    "sketch": "LighteningSketch"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "throughAllBoth",
+    "mode": "cut",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "10",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "LighteningPattern",
+   "label": "LighteningPattern",
+   "links": {
+    "feature": "Lightening"
+   },
+   "options": {
+    "axis": "X",
+    "spacing": "equal"
+   },
+   "parameters": {
+    "angle": "360",
+    "count": "nl"
+   },
+   "references": {
+    "axisEdge": [],
+    "axisFace": []
+   },
+   "suppressed": false,
+   "type": "CircularPattern"
+  },
+  {
+   "id": "RimChamfers",
+   "label": "RimChamfers",
+   "links": {},
+   "options": {
+    "type": "equal"
+   },
+   "parameters": {
+    "angle": "45",
+    "distance": "c",
+    "distance2": "1"
+   },
+   "references": {
+    "edges": [
+     {
+      "kind": "edge",
+      "name": "G[Body](Profile:V7_8)",
+      "signature": {
+       "center": [
+        -16.0,
+        1.8947806286936005e-15,
+        2.8042753304665284e-13
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        -0.0
+       ],
+       "geometry": "Circle",
+       "radius": 60.0,
+       "size": 376.9911184307752
+      }
+     },
+     {
+      "kind": "edge",
+      "name": "G[Body](Profile:V6_7)",
+      "signature": {
+       "center": [
+        16.0,
+        1.8947806286936005e-15,
+        2.8042753304665284e-13
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        -0.0
+       ],
+       "geometry": "Circle",
+       "radius": 60.0,
+       "size": 376.9911184307752
+      }
+     }
+    ],
+    "face": []
+   },
+   "suppressed": false,
+   "type": "Chamfer"
+  },
+  {
+   "id": "HubChamfers",
+   "label": "HubChamfers",
+   "links": {},
+   "options": {
+    "type": "equal"
+   },
+   "parameters": {
+    "angle": "45",
+    "distance": "1",
+    "distance2": "1"
+   },
+   "references": {
+    "edges": [
+     {
+      "kind": "edge",
+      "name": "G[Body](Profile:V11_12)",
+      "signature": {
+       "center": [
+        -20.000000000000007,
+        -7.612957883143933e-16,
+        1.3145040611561856e-13
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        -0.0
+       ],
+       "geometry": "Circle",
+       "radius": 28.0,
+       "size": 175.92918860102836
+      }
+     },
+     {
+      "kind": "edge",
+      "name": "G[Body](Profile:V2_3)",
+      "signature": {
+       "center": [
+        20.000000000000007,
+        -7.612957883143933e-16,
+        1.3145040611561856e-13
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        -0.0
+       ],
+       "geometry": "Circle",
+       "radius": 28.0,
+       "size": 175.92918860102836
+      }
+     }
+    ],
+    "face": []
+   },
+   "suppressed": false,
+   "type": "Chamfer"
+  }
+ ],
+ "format": "bendcore-part",
+ "rollback": null,
+ "variables": [
+  {
+   "expression": "120",
+   "name": "d"
+  },
+  {
+   "expression": "32",
+   "name": "bw"
+  },
+  {
+   "expression": "96",
+   "name": "dr"
+  },
+  {
+   "expression": "10",
+   "name": "tw"
+  },
+  {
+   "expression": "56",
+   "name": "dh"
+  },
+  {
+   "expression": "40",
+   "name": "lh"
+  },
+  {
+   "expression": "35",
+   "name": "db"
+  },
+  {
+   "expression": "10",
+   "name": "bk"
+  },
+  {
+   "expression": "3.2999999999999998",
+   "name": "t2"
+  },
+  {
+   "expression": "78",
+   "name": "Dh"
+  },
+  {
+   "expression": "16",
+   "name": "dl"
+  },
+  {
+   "expression": "6",
+   "name": "nl"
+  },
+  {
+   "expression": "1.5",
+   "name": "c"
+  }
+ ],
+ "version": 3
+}

@@ -10,6 +10,8 @@
 #include <bendcore/modeling/basic_features.hpp>
 #include <bendcore/modeling/part_document.hpp>
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -168,6 +170,40 @@ TEST(AssemblyDocumentIo, ShaftInBushingRoundTrip) {
         // Сохранение загруженного документа даёт тот же текст.
         EXPECT_TRUE(d.removeOccurrence(extra.value()).ok());
     }
+}
+
+// embedSourcedGeometry = false: деталь с источником пишется только ссылкой (без "brep"), деталь без
+// источника (подкладка — форма напрямую) встраивается; загрузка восстанавливает обе и положения.
+TEST(AssemblyDocumentIo, EmbedOnlyPartsWithoutSource) {
+    ShaftFiles m("shaft_embed_unsourced");
+    const DefinitionId padDef = m.doc.addPart("Подкладка", {box(-30, -30, -5, 60, 60, 5), nullptr}, {"ВТ-003", "Подкладка", "", 7850}).value();
+    const OccurrenceId pad = m.doc.addOccurrence(padDef, Transform::identity()).value();
+    ASSERT_TRUE(m.doc.setFixed(pad, true).ok());
+    SaveOptions opt;
+    opt.embedSourcedGeometry = false;
+    const std::string text = m.doc.toJson(opt).value();
+    const auto j = nlohmann::json::parse(text);
+    int embedded = 0, referenced = 0;
+    for (const auto& d : j.at("definitions")) {
+        if (d.contains("source")) {
+            ++referenced;
+            EXPECT_FALSE(d.contains("brep")) << d.at("name");
+        } else if (d.at("kind") == "part") {
+            ++embedded;
+            EXPECT_TRUE(d.contains("brep")) << d.at("name");
+        }
+    }
+    EXPECT_EQ(referenced, 2);
+    EXPECT_EQ(embedded, 1);
+    EXPECT_LT(text.size(), m.doc.toJson().value().size());
+    auto loaded = AssemblyDocument::fromJson(text, m.options());
+    ASSERT_TRUE(loaded.ok()) << loaded.error().message;
+    EXPECT_EQ(sourceOf(loaded.value().report, padDef)->status, SourceStatus::Embedded);
+    EXPECT_EQ(sourceOf(loaded.value().report, m.shaftDef)->status, SourceStatus::Loaded);
+    EXPECT_NEAR(std::abs(bendcore::kernel::Shape(loaded.value().document.definition(padDef).shape).volumeProperties().value().volume), 60.0 * 60 * 5,
+                1e-6);
+    ASSERT_TRUE(loaded.value().document.solve().ok());
+    expectShaftSeated(loaded.value().document, m.s);
 }
 
 // Кривошип: палец основания, рычаг с отверстием (соосность + торец), угол 30° — 0 степеней

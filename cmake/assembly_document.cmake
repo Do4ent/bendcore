@@ -42,3 +42,5 @@ foreach(_t mates patterns interference bom exchange io history)
     BENDCORE_ASSEMBLY_TEST_TMP="${CMAKE_CURRENT_BINARY_DIR}/assembly_document_tmp")
   bendcore_add_test(assembly_document_${_t} test_assembly_document_${_t})
 endforeach()
+# nlohmann/json (MIT) — разбор сохранённого файла в тесте формата.
+target_include_directories(test_assembly_document_io SYSTEM PRIVATE "${BENDCORE_ASSEMBLY_DOC_ROOT}/third_party")
