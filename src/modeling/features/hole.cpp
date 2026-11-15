@@ -7,7 +7,9 @@
 #include <BRepClass_FaceClassifier.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
 #include <BRep_Tool.hxx>
+#include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <GeomLib_IsPlanarSurface.hxx>
+#include <Geom_Surface.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
@@ -25,6 +27,24 @@ using namespace detail;
 namespace {
 
 bool pos(double v) { return std::isfinite(v) && v > 0.0; }
+
+// Внешняя (из материала) нормаль грани тела в точке на ней.
+Result<gp_Dir> surfaceOutwardNormal(const TopoDS_Face& placed, const gp_Pnt& point) {
+    const opencascade::handle<Geom_Surface> surf = BRep_Tool::Surface(placed);
+    if (surf.IsNull()) return Error{ErrorCode::InvalidInput, "hole face has no surface"};
+    GeomAPI_ProjectPointOnSurf proj(point, surf);
+    if (proj.NbPoints() == 0) return Error{ErrorCode::OperationFailed, "hole point cannot be projected on the face surface"};
+    double u = 0.0, v = 0.0;
+    proj.LowerDistanceParameters(u, v);
+    gp_Pnt p;
+    gp_Vec du, dv;
+    surf->D1(u, v, p, du, dv);
+    const gp_Vec n = du.Crossed(dv);
+    if (n.Magnitude() < 1e-12) return Error{ErrorCode::InvalidInput, "hole face surface is singular at the point"};
+    gp_Dir out(n);
+    if (placed.Orientation() == TopAbs_REVERSED) out.Reverse();
+    return out;
+}
 
 }  // namespace
 
@@ -69,8 +89,12 @@ Result<FeatureResult> hole(const TopoDS_Shape& target, const TopoDS_Face& face, 
         BRepClass_FaceClassifier cls(placed, point, 1e-6);
         if (cls.State() != TopAbs_IN) return Error{ErrorCode::InvalidInput, "hole point is outside the face"};
 
-        gp_Dir outward = pln.Axis().Direction();
-        if (placed.Orientation() == TopAbs_REVERSED) outward.Reverse();
+        // Внешняя нормаль — параметрическая нормаль поверхности Du x Dv в точке с учётом
+        // ориентации грани в теле. Ось gp_Pln с ней не совпадает у левой СК плоскости
+        // (Du x Dv = -ось): торцы тел вращения, зеркальные грани, грани после булевых операций.
+        auto outwardAt = surfaceOutwardNormal(placed, point);
+        if (!outwardAt) return outwardAt.error();
+        const gp_Dir outward = outwardAt.value();
         const gp_Dir dir = direction ? *direction : outward.Reversed();
         if (!(dir.Dot(outward) < -1e-6)) return Error{ErrorCode::InvalidInput, "hole direction must point into the material"};
 
