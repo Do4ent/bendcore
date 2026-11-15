@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -195,4 +196,89 @@ TEST(AnnotationsSymbols, TechnicalRequirementsAboveTitleBlock) {
     auto single = wrapText("Один пункт", 185, 5, st);
     ASSERT_TRUE(single.ok());
     EXPECT_EQ(single.value().size(), 1u);
+}
+
+namespace {
+
+// Горизонтальные границы начертания выведенного текста — по линиям шрифта ГОСТ 2.304, как их
+// выводят PDF/DXF/SVG (gostStrokeFont().layout), с толщиной линии d = h/10.
+std::pair<double, double> drawnInk(const Text& t) {
+    auto lay = gostStrokeFont().layout(t);
+    EXPECT_TRUE(lay.ok());
+    double lo = 1e300, hi = -1e300;
+    for (const auto& s : lay.value().strokes)
+        for (const auto& p : s) {
+            lo = std::min(lo, p.x);
+            hi = std::max(hi, p.x);
+        }
+    return {lo - lay.value().lineWidth / 2, hi + lay.value().lineWidth / 2};
+}
+
+}  // namespace
+
+// Перенос по начертанию: ни одна строка не выходит за поле 185 мм над основной надписью и не
+// касается рамки (у правой кромки основной надписи поле совпадает с рамкой). Пункт с листа
+// корпуса редуктора по ширине знаков помещался до слова «на», а наклон 75° и толщина линии
+// доводили «на» до линии рамки.
+TEST(AnnotationsSymbols, TechnicalRequirementsInkStaysInsideTheField) {
+    Drawing d = Drawing::create(gostSheet(GostFormat::A1, 1, Orientation::Landscape).value()).value();
+    auto lay = addFrameAndTitleBlock(d, TitleBlockData{});
+    ASSERT_TRUE(lay.ok());
+    const double x0 = lay.value().titleBlock.x0;
+    ASSERT_NEAR(lay.value().titleBlock.x1 - x0, 185.0, 1e-9);
+    ASSERT_NEAR(lay.value().titleBlock.x1, lay.value().frame.x1, 1e-9);  // поле доходит до рамки
+    const std::string item4 = "Резьбовые отверстия М6-6H глубиной 14 — 8 шт. (по 4 на торцах бобышек), сливное М16×1,5-6H.";
+    // Воспроизведение: перенос по ширине знаков (без наклона и толщины линии) доводит строку до
+    // линии рамки (толщина s = 0,5 мм по умолчанию листа, половина линии — внутри поля).
+    auto old = wrapText("4. " + item4, 185.0, 5.0, AnnotationStyle{});
+    ASSERT_TRUE(old.ok());
+    Text oldFirst;
+    oldFirst.position = {x0, 0};
+    oldFirst.utf8 = old.value().front();
+    oldFirst.height = 5.0;
+    EXPECT_GT(drawnInk(oldFirst).second, lay.value().frame.x1 - 0.5 / 2) << oldFirst.utf8;
+
+    const std::vector<std::string> items = {
+        "Отливка по ГОСТ 26645-85, класс точности 9-0-0-9. Формовочные уклоны 1°.",
+        "Неуказанные литейные радиусы 3...5 мм.",
+        "Отверстия под подшипники обрабатывать совместно с крышкой корпуса не требуется (разъём выше осей).",
+        item4,
+        "Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
+        "Очень длинный пункт технических требований, который заведомо не помещается в одну строку поля шириной "
+        "сто восемьдесят пять миллиметров и должен переноситься по словам несколько раз подряд без выхода за рамку."};
+    TechnicalRequirementsOptions to;
+    auto r = addTechnicalRequirements(d, lay.value(), items, to);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    std::size_t longFirst = 0, longLast = 0;
+    for (std::size_t i = 0; i < r.value().lines.size(); ++i) {
+        if (r.value().lines[i].find("Очень") != std::string::npos) longFirst = i;
+        if (r.value().lines[i].find("рамку.") != std::string::npos) longLast = i;
+    }
+    EXPECT_GE(longLast, longFirst + 1);  // длинный пункт перенесён
+    std::size_t texts = 0;
+    for (const auto& e : d.entities()) {
+        const auto* t = std::get_if<Text>(&e.geometry);
+        if (!t || e.layer != "DIM") continue;
+        ++texts;
+        const auto [lo, hi] = drawnInk(*t);
+        EXPECT_GE(lo, x0 - 1e-9) << t->utf8;
+        EXPECT_LE(hi, x0 + 185.0 - to.rightClearance + 1e-9) << t->utf8;
+        EXPECT_LT(hi, lay.value().frame.x1) << t->utf8;
+    }
+    EXPECT_EQ(texts, r.value().lines.size());
+    // Первая строка пункта 4 короче прежней (последнее слово «на» перенесено).
+    std::string first4;
+    for (const auto& l : r.value().lines)
+        if (l.rfind("4. ", 0) == 0) first4 = l;
+    ASSERT_FALSE(first4.empty());
+    EXPECT_LT(first4.size(), oldFirst.utf8.size());
+    EXPECT_EQ(oldFirst.utf8.rfind(first4, 0), 0u);
+    // Те же строки — у technicalRequirementsLines (по ним лист резервирует высоту).
+    auto lines = technicalRequirementsLines(items, to);
+    ASSERT_TRUE(lines.ok());
+    EXPECT_EQ(lines.value(), r.value().lines);
+    // Слово шире поля — ошибка с номером пункта.
+    auto wide = technicalRequirementsLines({"Ок", std::string(60, 'W')}, to);
+    ASSERT_FALSE(wide.ok());
+    EXPECT_NE(wide.error().message.find("item 2"), std::string::npos);
 }
