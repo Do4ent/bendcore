@@ -1,0 +1,182 @@
+{
+ "features": [
+  {
+   "id": "Ring",
+   "label": "Ring",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "YZ"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [
+     {
+      "a": 1,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "D / 2"
+     },
+     {
+      "a": 2,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "d / 2"
+     }
+    ],
+    "geometry": [
+     {
+      "center": 0,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "0"
+     },
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "0"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Body",
+   "label": "Body",
+   "links": {
+    "sketch": "Ring"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "l",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "Chamfers",
+   "label": "Chamfers",
+   "links": {},
+   "options": {
+    "type": "equal"
+   },
+   "parameters": {
+    "angle": "45",
+    "distance": "c",
+    "distance2": "1"
+   },
+   "references": {
+    "edges": [
+     {
+      "kind": "edge",
+      "name": "Ring:E1",
+      "signature": {
+       "center": [
+        0.0,
+        9.981433669010931e-14,
+        5.075305255429287e-16
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        -0.0
+       ],
+       "geometry": "Circle",
+       "radius": 21.0,
+       "size": 131.94689145077132
+      }
+     },
+     {
+      "kind": "edge",
+      "name": "G[Body](Ring:E1)",
+      "signature": {
+       "center": [
+        24.0,
+        9.981433669010931e-14,
+        5.075305255429287e-16
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        -0.0
+       ],
+       "geometry": "Circle",
+       "radius": 21.0,
+       "size": 131.94689145077132
+      }
+     }
+    ],
+    "face": []
+   },
+   "suppressed": false,
+   "type": "Chamfer"
+  }
+ ],
+ "format": "bendcore-part",
+ "rollback": null,
+ "variables": [
+  {
+   "expression": "42",
+   "name": "D"
+  },
+  {
+   "expression": "35",
+   "name": "d"
+  },
+  {
+   "expression": "24",
+   "name": "l"
+  },
+  {
+   "expression": "0.5",
+   "name": "c"
+  }
+ ],
+ "version": 3
+}

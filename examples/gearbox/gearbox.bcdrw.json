@@ -1,0 +1,932 @@
+{
+ "format": "bendcore-drawing",
+ "model": {
+  "kind": "assembly",
+  "path": "gearbox.bcasm.json",
+  "properties": {
+   "density": null,
+   "designation": "",
+   "material": "",
+   "name": ""
+  },
+  "resultHash": "5316c564efe4fc4f",
+  "revision": 1
+ },
+ "settings": {
+  "lineThickness": 0.5,
+  "margin": 15.0,
+  "maxScale": [
+   5,
+   1
+  ],
+  "projection": "firstAngle",
+  "reducedAxonometry": true,
+  "textFont": "gost2304",
+  "viewGap": 30.0
+ },
+ "sheets": [
+  {
+   "balloons": [
+    {
+     "at": [
+      670.35,
+      535.0833333333334
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        -11.0,
+        -68.0,
+        125.5
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 21.799999999999997
+      }
+     },
+     "id": "P1",
+     "view": "B"
+    },
+    {
+     "at": [
+      670.35,
+      525.0833333333334
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        8.881784197001252e-16,
+        75.0,
+        98.5
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 22.0
+      }
+     },
+     "id": "P2",
+     "view": "B"
+    },
+    {
+     "at": [
+      670.35,
+      515.0833333333334
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        -60.0,
+        80.00000000000007,
+        78.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "radius": 15.0,
+       "size": 94.2477796076938
+      }
+     },
+     "id": "P3",
+     "view": "B"
+    },
+    {
+     "at": [
+      670.35,
+      265.81666666666666
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        60.0,
+        5.940137270954438e-14,
+        78.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "radius": 12.5,
+       "size": 78.53981633974482
+      }
+     },
+     "id": "P4",
+     "view": "D"
+    },
+    {
+     "at": [
+      203.25,
+      544.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        6.203584654520877e-14,
+        40.0,
+        168.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "radius": 13.0,
+       "size": 81.6814089933346
+      }
+     },
+     "id": "P5",
+     "view": "F"
+    },
+    {
+     "at": [
+      203.25,
+      534.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        40.00000000000004,
+        -68.0,
+        147.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "radius": 8.075,
+       "size": 50.736721355475154
+      }
+     },
+     "id": "P6",
+     "view": "F"
+    },
+    {
+     "at": [
+      203.25,
+      524.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        -39.99999999999995,
+        -68.0,
+        140.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "radius": 10.5,
+       "size": 65.97344572538566
+      }
+     },
+     "id": "P7",
+     "view": "F"
+    },
+    {
+     "at": [
+      203.25,
+      514.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        3.552713678800501e-15,
+        -83.0,
+        138.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 104.0
+      }
+     },
+     "id": "P8",
+     "view": "F"
+    },
+    {
+     "at": [
+      203.25,
+      504.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        -62.0,
+        -73.0,
+        125.5
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 1.0
+      }
+     },
+     "id": "P9",
+     "view": "F"
+    },
+    {
+     "at": [
+      203.25,
+      494.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        -67.5,
+        80.0,
+        120.0
+       ],
+       "direction": [
+        1.0,
+        -1.2246467991473532e-16,
+        -0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 7.0
+      }
+     },
+     "id": "P10",
+     "view": "F"
+    },
+    {
+     "at": [
+      203.25,
+      484.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        40.00000000000004,
+        -68.0,
+        103.0
+       ],
+       "direction": [
+        -0.0,
+        -0.0,
+        1.0
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "radius": 8.075,
+       "size": 50.736721355475154
+      }
+     },
+     "id": "P11",
+     "view": "F"
+    },
+    {
+     "at": [
+      203.25,
+      474.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        92.0,
+        76.0,
+        93.5
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 24.0
+      }
+     },
+     "id": "P12",
+     "view": "F"
+    },
+    {
+     "at": [
+      203.25,
+      464.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        -91.0,
+        -3.0,
+        90.5
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 22.0
+      }
+     },
+     "id": "P13",
+     "view": "F"
+    },
+    {
+     "at": [
+      203.25,
+      454.5
+     ],
+     "edge": {
+      "kind": "edge",
+      "name": "",
+      "signature": {
+       "center": [
+        71.0,
+        -1.536308617859676e-15,
+        78.00000000000017
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        -0.0
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "radius": 37.0,
+       "size": 232.4778563656447
+      }
+     },
+     "id": "P14",
+     "view": "F"
+    }
+   ],
+   "datums": [],
+   "dimensions": [
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "",
+        "signature": {
+         "center": [
+          -110.0,
+          0.0,
+          87.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "",
+        "signature": {
+         "center": [
+          112.0,
+          80.0,
+          89.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "Lx",
+     "lastValue": 222.0,
+     "leaderAngleDeg": 45.0,
+     "offset": -40.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "horizontal",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "",
+        "signature": {
+         "center": [
+          -73.0,
+          -78.0,
+          -14.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "",
+        "signature": {
+         "center": [
+          12.701705922171767,
+          40.0,
+          178.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "Hz",
+     "lastValue": 192.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 30.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "vertical",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "",
+        "signature": {
+         "center": [
+          -73.0,
+          -78.0,
+          -14.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "",
+        "signature": {
+         "center": [
+          -73.0,
+          185.0,
+          -14.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "Ly",
+     "lastValue": 263.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 30.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "vertical",
+     "view": "A"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "",
+        "signature": {
+         "center": [
+          -110.0,
+          0.0,
+          87.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "",
+        "signature": {
+         "center": [
+          112.0,
+          80.0,
+          89.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "aw",
+     "lastValue": 80.0,
+     "leaderAngleDeg": 45.0,
+     "offset": -20.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": "<>±0,03",
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "vertical",
+     "view": "A"
+    }
+   ],
+   "format": {
+    "base": "A1",
+    "multiplier": 1,
+    "orientation": "landscape"
+   },
+   "id": "S1",
+   "partsList": false,
+   "roughness": [],
+   "roughnessRemainder": null,
+   "scale": null,
+   "technicalRequirements": [
+    "* Размеры для справок.",
+    "Плоскость разъёма покрыть герметиком; прокладку ставить на герметик.",
+    "Валы должны проворачиваться от руки плавно, без заеданий.",
+    "Залить масло И-Г-А-46 ГОСТ 17479.4-87 до уровня, при котором колесо погружено на высоту зуба.",
+    "Зубчатые венцы показаны делительными цилиндрами, подшипники — упрощёнными кольцами d×D×B."
+   ],
+   "title": {
+    "approver": {
+     "date": "",
+     "surname": ""
+    },
+    "checker": {
+     "date": "",
+     "surname": ""
+    },
+    "designation": "",
+    "developer": {
+     "date": "11.26",
+     "surname": "bendcore"
+    },
+    "litera": "",
+    "mass": "",
+    "material": "",
+    "name": "",
+    "normControl": {
+     "date": "",
+     "surname": ""
+    },
+    "organization": "bendcore",
+    "techControl": {
+     "date": "",
+     "surname": ""
+    }
+   },
+   "tolerances": [],
+   "views": [
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "hidden": false,
+     "id": "F",
+     "kind": "base",
+     "letter": "",
+     "markView": "",
+     "method": "exact",
+     "parent": "",
+     "planePoint": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": null,
+     "sectionKind": "cut",
+     "side": null,
+     "threads": true,
+     "toward": [
+      0.0,
+      -1.0,
+      0.0
+     ]
+    },
+    {
+     "autoBalloons": true,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "hidden": false,
+     "id": "A",
+     "kind": "section",
+     "letter": "",
+     "markView": "F",
+     "method": "exact",
+     "parent": "F",
+     "planePoint": [
+      0.0,
+      0.0,
+      78.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": null,
+     "sectionKind": "cut",
+     "side": "below",
+     "threads": true,
+     "toward": [
+      0.0,
+      0.0,
+      1.0
+     ]
+    },
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "hidden": false,
+     "id": "B",
+     "kind": "section",
+     "letter": "",
+     "markView": "A",
+     "method": "exact",
+     "parent": "",
+     "planePoint": [
+      0.0,
+      80.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": [
+      2,
+      5
+     ],
+     "sectionKind": "cut",
+     "side": null,
+     "threads": true,
+     "toward": [
+      0.0,
+      -1.0,
+      0.0
+     ]
+    },
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "hidden": false,
+     "id": "C",
+     "kind": "section",
+     "letter": "",
+     "markView": "A",
+     "method": "exact",
+     "parent": "",
+     "planePoint": [
+      0.0,
+      -68.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": [
+      2,
+      5
+     ],
+     "sectionKind": "cut",
+     "side": null,
+     "threads": true,
+     "toward": [
+      0.0,
+      -1.0,
+      0.0
+     ]
+    },
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "hidden": false,
+     "id": "D",
+     "kind": "section",
+     "letter": "",
+     "markView": "A",
+     "method": "exact",
+     "parent": "",
+     "planePoint": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": [
+      2,
+      5
+     ],
+     "sectionKind": "cut",
+     "side": null,
+     "threads": true,
+     "toward": [
+      0.0,
+      -1.0,
+      0.0
+     ]
+    }
+   ]
+  }
+ ],
+ "version": 2
+}
