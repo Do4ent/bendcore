@@ -160,7 +160,9 @@ std::unique_ptr<PartDocument> housing(const Layout& L) {
                    {{"end", "blind"}}, {{"sketch", "CapTapSketch"}}));
         b.add(spec("Mirror", "CapTapsMirror", {}, {}, {{"what", "feature"}, {"plane", "YZ"}}, {{"feature", "CapTaps"}}));
         const double rp = b.value("rp"), c = std::cos(kPi / 4);
-        for (int side : {1, -1}) (void)cylinderFace(b.shape().shape(), 2.5, gp_Pnt(side * Xb, rp * c, Za + rp * c), gp::DX());
+        for (int side : {1, -1})
+            (void)cylinderFaceAt(b.shape().shape(), 2.5, gp_Pnt(0, rp * c, Za + rp * c), gp::DX(),
+                                 gp_Pnt(side * (Xb - 5), rp * c, Za + rp * c + 2.5));
     }
     // Отверстия фланца разъёма: болты и штифты.
     {
@@ -178,8 +180,8 @@ std::unique_ptr<PartDocument> housing(const Layout& L) {
         b.faceSketch("MountSketch", bottom, "0", "0", "-hb",
                      points({{"-(" + ux + ")", "-(" + y0 + ")"}, {ux, "-(" + y0 + ")"}, {ux, "-(" + y1 + ")"}, {"-(" + ux + ")", "-(" + y1 + ")"}}));
         b.add(spec("Hole", "MountHoles", {{"diameter", "dm"}}, {{"face", {b.ref(bottom)}}}, {{"end", "through"}}, {{"sketch", "MountSketch"}}));
-        (void)cylinderFace(b.shape().shape(), 7, gp_Pnt(b.value("Wo") / 2 + b.value("ep") - 12, b.value("yA") - b.value("ep") + 12, 0),
-                           gp::DZ());
+        const double mx = b.value("Wo") / 2 + b.value("ep") - 12, my = b.value("yA") - b.value("ep") + 12;
+        (void)cylinderFaceAt(b.shape().shape(), 7, gp_Pnt(mx, my, 0), gp::DZ(), gp_Pnt(mx + 7, my, -7));
     }
     filletFlangeCorners(b, "FlangeRounds", L.joint - b.value("tf"), L.joint);
     return b.release();
@@ -341,9 +343,10 @@ std::unique_ptr<PartDocument> wheel(const Layout& L) {
     b.revolve("Body", "Profile", "X");
     b.sketch("KeySketch", "YZ", "0", polygon({{"-bk / 2", "0"}, {"bk / 2", "0"}, {"bk / 2", "db / 2 + t2"}, {"-bk / 2", "db / 2 + t2"}}));
     b.extrude("Keyway", "KeySketch", {{"mode", "cut"}, {"extent", "throughAllBoth"}}, {});
-    const double tw = b.value("tw"), Dh = b.value("Dh");
-    b.add(spec("Hole", "Lightening", {{"diameter", "dl"}, {"x", "tw / 2"}, {"y", "0"}, {"z", "Dh / 2"}},
-               {{"face", {b.ref(planarFaceAt(b.shape().shape(), gp::DX(), gp_Pnt(tw / 2, 0, Dh / 2)))}}}, {{"end", "through"}}));
+    // Отверстия — вырезом по эскизу: операция «Отверстие» на торцах тела вращения сверлит наружу
+    // (нормаль плоскости в левой СК, README, «Чего не хватило»).
+    b.sketch("LighteningSketch", "YZ", "0", circles({{"0", "Dh / 2", "dl / 2"}}));
+    b.extrude("Lightening", "LighteningSketch", {{"mode", "cut"}, {"extent", "throughAllBoth"}}, {});
     b.add(spec("CircularPattern", "LighteningPattern", {{"count", "nl"}}, {}, {{"axis", "X"}}, {{"feature", "Lightening"}}));
     const double bw = b.value("bw"), r = b.value("d") / 2, lh = b.value("lh"), rh = b.value("dh") / 2;
     b.chamfer("RimChamfers", {circleEdge(b.shape().shape(), gp_Pnt(-bw / 2, 0, 0), r), circleEdge(b.shape().shape(), gp_Pnt(bw / 2, 0, 0), r)}, "c");
@@ -372,9 +375,9 @@ std::unique_ptr<PartDocument> bearingCap(const std::string& key, double D, doubl
                                  {"tc", "Dc / 2"}, {"tc", "0"}}));
     }
     b.revolve("Body", "Profile", "X");
-    const double tc = b.value("tc"), c45 = std::cos(kPi / 4);
-    b.add(spec("Hole", "ScrewHole", {{"diameter", "dk"}, {"x", "tc"}, {"y", "rb * cos(45)"}, {"z", "rb * sin(45)"}},
-               {{"face", {b.ref(planarFaceAt(b.shape().shape(), gp::DX(), gp_Pnt(tc, rb * c45, rb * c45)))}}}, {{"end", "through"}}));
+    const double tc = b.value("tc");
+    b.sketch("ScrewHoleSketch", "YZ", "tc / 2", circles({{"rb * cos(45)", "rb * sin(45)", "dk / 2"}}));
+    b.extrude("ScrewHole", "ScrewHoleSketch", {{"mode", "cut"}, {"extent", "throughAllBoth"}}, {});
     b.add(spec("CircularPattern", "ScrewHoles", {{"count", "4"}}, {}, {{"axis", "X"}}, {{"feature", "ScrewHole"}}));
     b.chamfer("RimChamfer", {circleEdge(b.shape().shape(), gp_Pnt(tc, 0, 0), Dc / 2)}, "c");
     return b.release();
