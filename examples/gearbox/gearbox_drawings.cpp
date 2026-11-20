@@ -488,7 +488,7 @@ void assemblySheet(DrawingDocument& d, const Gearbox& g, const Layout& L) {
     const double Za = L.axisHeight, aw = L.aw();
     // Главный вид и разрез А–А по осям валов на месте вида сверху (в проекционной связи) —
     // основные изображения; разрезы Б–Б (по оси колеса), В–В (по штифту), Г–Г (по оси
-    // вала-шестерни) — 1:2,5 колонкой справа, их секущие плоскости обозначены на разрезе А–А.
+    // вала-шестерни) — 1:2,5 колонкой справа (Б–Б затем — 1:1 на свободном месте, updateDrawings), их секущие плоскости обозначены на разрезе А–А.
     ViewDef f = view("F", ViewKind::Base);
     f.hidden = false;
     ViewDef a = section("A", {0, 0, 1}, {1, 0, 0}, {0, 0, Za}, "F", views::SectionKind::Cut);
@@ -577,6 +577,65 @@ Result<UpdateSummary> updateDrawings(DrawingSet& set, const std::vector<PartEntr
     if (!su.ok()) return Error{su.error().code, "specification: " + su.error().message};
     auto r = set.assembly.update(m.value(), cache, set.specification.specification());
     if (!r.ok()) return Error{r.error().code, "gearbox.bcdrw.json: " + r.error().message};
+    // Разрез Б–Б (по оси колеса) — в масштабе 1:1 на свободном месте листа: проекционная группа
+    // (главный вид и разрез А–А) сдвигается к левому краю поля, затем перебором центров с шагом
+    // 5 мм ищется место для изображения с надписью (10 мм до соседних изображений, основная
+    // надпись и технические требования над ней заняты). Один раз: положения сохраняются в файле.
+    {
+        SheetDef& sd = set.assembly.sheets()[0];
+        auto def = [&](const std::string& id) -> ViewDef* {
+            for (ViewDef& v : sd.views)
+                if (v.id == id) return &v;
+            return nullptr;
+        };
+        auto computed = [&](const std::string& id) -> const ComputedView* {
+            for (const ComputedView& v : set.assembly.computedSheets()[0].views)
+                if (v.id == id) return &v;
+            return nullptr;
+        };
+        ViewDef* bd = def("B");
+        if (bd && !bd->position && computed("F") && computed("A") && computed("B")) {
+            views::Box2 g = computed("F")->sheetView.sheetBounds();
+            const views::Box2 ab = computed("A")->sheetView.sheetBounds();
+            g.add({ab.minX, ab.minY});
+            g.add({ab.maxX, ab.maxY + 14.0});
+            def("F")->position = Point2{20 + 15 + g.width() / 2, 0.5 * (g.minY + g.maxY)};
+            r = set.assembly.update(m.value(), cache, set.specification.specification());
+            if (!r.ok()) return Error{r.error().code, "gearbox.bcdrw.json: " + r.error().message};
+            struct Box4 {
+                double x0, y0, x1, y1;
+            };
+            const ComputedSheet& cs = set.assembly.computedSheets()[0];
+            const double W = cs.sheet.widthMm, H = cs.sheet.heightMm;
+            const views::Box2 vb = computed("B")->sheetView.view.bounds;
+            const double w = vb.width(), h = vb.height();
+            std::vector<Box4> busy;
+            for (const ComputedView& v : cs.views) {
+                if (v.id == "B") continue;
+                const views::Box2 q = v.sheetView.sheetBounds();
+                const double room = v.kind == ViewKind::Section || v.kind == ViewKind::Detail ? 14.0 : 0.0;
+                busy.push_back({q.minX, q.minY, q.maxX, q.maxY + room});
+            }
+            busy.push_back({W - 5 - 185, 5, W - 5, 5 + 55 + 110});
+            std::optional<Point2> spot;
+            for (double cy = H - 15 - (h + 14) / 2; cy >= 15 + (h + 14) / 2 && !spot; cy -= 5)
+                for (double cx = 30 + w / 2; cx <= W - 15 - w / 2 && !spot; cx += 5) {
+                    const Box4 q{cx - w / 2 - 10, cy - (h + 14) / 2 - 10, cx + w / 2 + 10, cy + (h + 14) / 2 + 10};
+                    if (std::none_of(busy.begin(), busy.end(), [&](const Box4& o) {
+                            return q.x0 < o.x1 && o.x0 < q.x1 && q.y0 < o.y1 && o.y0 < q.y1;
+                        }))
+                        spot = Point2{cx, cy};
+                }
+            if (spot) {
+                bd->scale = views::ScaleRatio{1, 1};
+                bd->position = *spot;
+                r = set.assembly.update(m.value(), cache, set.specification.specification());
+                if (!r.ok()) return Error{r.error().code, "gearbox.bcdrw.json: " + r.error().message};
+            } else {
+                out.warnings.push_back("gearbox.bcdrw.json: no free space for section B-B at 1:1");
+            }
+        }
+    }
     // Составные части, не видимые в разрезе А–А (крышка корпуса, прокладка, штифты, болты
     // фланца, заливная пробка), получают ручные позиции на главном виде: полки — колонной слева
     // от вида, шаг 10 мм (ГОСТ 2.109). Один раз: ручные позиции сохраняются в файле.
