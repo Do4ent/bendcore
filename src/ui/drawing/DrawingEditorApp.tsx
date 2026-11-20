@@ -980,6 +980,7 @@ export default function DrawingEditorApp({
                     <label>
                       {t('drawing.viewScale')}
                       <select
+                        data-testid="view-scale"
                         value={selected.scale ? selected.scale.ratio.join(':') : ''}
                         onChange={(e) => {
                           const scale = scaleOf(e.target.value);
@@ -1169,7 +1170,7 @@ export default function DrawingEditorApp({
                 {tool === 'section' && (
                   <label>
                     {t('drawing.sectionSide')}
-                    <select value={sectionSide} onChange={(e) => setSectionSide(e.target.value)}>
+                    <select value={sectionSide} data-testid="section-side" onChange={(e) => setSectionSide(e.target.value)}>
                       {SHEET_SIDES.map((s) => (
                         <option key={s} value={s}>{t(`drawing.sectionAt.${s}`)}</option>
                       ))}
