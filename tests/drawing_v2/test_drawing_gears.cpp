@@ -152,7 +152,7 @@ TEST(DrawingGears, CommonNormalAndTable) {
     EXPECT_EQ(zn, 3);
     s.teeth = 60;
     s.module = 2;
-    EXPECT_NEAR(an::commonNormalLength(s, zn), 40.0583, 5e-5);
+    EXPECT_NEAR(an::commonNormalLength(s, zn), 40.05837, 5e-5);
     EXPECT_EQ(zn, 7);
     // Смещение увеличивает W на 2x·m·sin α.
     s.shift = 0.3;
@@ -234,7 +234,13 @@ TEST(DrawingGears, CommonNormalAndTable) {
     EXPECT_TRUE(has("РЦ.080.00.003"));
     // Длинное наименование не помещается в 61 мм шрифтом 3,5 и 2,5 — переносится на две строки.
     EXPECT_FALSE(has("Обозначение чертежа сопряжённого колеса"));
-    EXPECT_TRUE(has("Обозначение чертежа"));
+    const bool split = std::any_of(texts.begin(), texts.end(), [](const std::string& t) {
+        return t.rfind("Обозначение чертежа", 0) == 0;
+    }) && std::any_of(texts.begin(), texts.end(), [](const std::string& t) {
+        const std::string tail = "колеса";
+        return t.size() > tail.size() && t.compare(t.size() - tail.size(), tail.size(), tail) == 0;
+    });
+    EXPECT_TRUE(split);
     // Основные линии: рамка таблицы (2 горизонтали + 4 вертикали) + 2 границы частей.
     EXPECT_EQ(thick, 8);
     // Таблица выше рамки — ошибка.
