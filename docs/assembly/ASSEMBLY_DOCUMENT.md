@@ -280,7 +280,9 @@ P_i = P_ref · L_i · P_ref⁻¹ · P_seed
 
 Деталь задаётся источником (`source` — относительный путь к документу детали `.json`,
 STEP или BRep) и/или встроенным BRep (`brep`, base64 бинарного BinTools, с картой имён
-`elementMap` — записи `NamedShape::fromRecords`). При `embedGeometry = false` пишется только
+`elementMap` — записи `NamedShape::fromRecords` с атрибутами элементов `attributes` — пары
+[ключ, значение]: «bearing.*», «key.*», «thread.*», «gear.*» — и именами тел `bodies`; файлы без
+этих полей читаются как прежде). При `embedGeometry = false` пишется только
 источник. `embedSourcedGeometry = false` (при `embedGeometry = true`) — встраиваются только детали без
 источника (крепёж библиотеки, формы, заданные напрямую), детали с источником пишутся ссылкой: так
 сохраняется сборка редуктора `examples/gearbox/` (тест `EmbedOnlyPartsWithoutSource`). Числа — `double` с 17 значащими цифрами, кватернион положения — как есть, поэтому

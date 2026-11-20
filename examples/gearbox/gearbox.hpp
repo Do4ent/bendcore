@@ -55,15 +55,16 @@ struct PartEntry {
 Result<std::vector<PartEntry>> buildParts(const Layout& layout = {});
 const PartEntry* findPart(const std::vector<PartEntry>& parts, const std::string& key);
 
-// Стандартные изделия, которых нет в bendcore_fasteners: подшипники ГОСТ 8338 (упрощённое тело
-// d×D×B — размеры из памяти, требуют сверки) и шпонки ГОСТ 23360 (исполнение 1, без фасок).
+// Стандартные изделия из каталогов библиотеки bendcore_fasteners, кроме крепежа: подшипники
+// шариковые ГОСТ 8338 (кольца с дорожками качения и шарики, атрибуты «bearing.*») и шпонки
+// призматические ГОСТ 23360 (исполнение 1, фаски s). Встраиваются в документ сборки, как крепёж.
 struct StandardPart {
-    std::string key;
-    std::string name;  // полное обозначение для графы «Наименование» (графа «Обозначение» пустая)
-    std::string material;
-    double density = 7850.0;
-    std::unique_ptr<modeling::PartDocument> doc;
-    double formulaVolume = 0.0;  // мм³ — объём по формуле из размеров (проверка массы)
+    std::string key;                    // «bearing205», «key10»
+    std::string name;                   // полное обозначение для графы «Наименование» (графа «Обозначение» пустая)
+    assembly_v2::PartData data;         // модель библиотеки
+    assembly_v2::PartProperties properties;
+    std::vector<std::pair<std::string, double>> dimensions;  // размеры модели (d, D, B … / b, h, l, s …)
+    double dimension(const std::string& key) const;
 };
 Result<std::vector<StandardPart>> buildStandardParts(const Layout& layout = {});
 
@@ -128,7 +129,7 @@ struct KitOptions {
     bool pdf = true;
 };
 Result<KitFiles> writeKit(const std::string& directory, const std::vector<PartEntry>& parts,
-                          const std::vector<StandardPart>& standard, const Gearbox& gearbox, const DrawingSet& set,
+                          const Gearbox& gearbox, const DrawingSet& set,
                           const KitOptions& options = {});
 
 }  // namespace bendcore::examples::gearbox

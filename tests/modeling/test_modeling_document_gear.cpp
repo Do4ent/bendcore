@@ -36,6 +36,19 @@ double profileArea(const GearSpec& s) {
     return s.teeth * std::abs(a);
 }
 
+// Объём фаски c × 45° по кромке вершин на одном торце: z·∫ (r − ra + c)·2ψ(r)·r dr,
+// ψ(r) = π/(2z) + inv αt − inv α(r) (прямой зуб, x = 0), Симпсон по r ∈ [ra − c, ra].
+double chamferVolume(const GearSpec& s, double c) {
+    const GearGeometry g = gearGeometry(s).value();
+    const double ra = g.da / 2, rb = g.db / 2;
+    const auto inv = [](double a) { return std::tan(a) - a; };
+    const auto f = [&](double r) { return (r - ra + c) * 2 * (kPi / (2 * s.teeth) + inv(g.alphaT) - inv(std::acos(rb / r))) * r; };
+    const int n = 2000;
+    double sum = f(ra - c) + f(ra);
+    for (int i = 1; i < n; ++i) sum += (i % 2 ? 4 : 2) * f(ra - c + i * c / n);
+    return s.teeth * sum * c / n / 3;
+}
+
 TopoDS_Shape cylinderFace(const TopoDS_Shape& shape, double r) {
     for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
         BRepAdaptor_Surface s(TopoDS::Face(ex.Current()), false);
@@ -85,7 +98,8 @@ TEST(DocumentGear, SketchChangeKeepsGearAndHubBore) {
         spec.module = v.at("m");
         spec.teeth = static_cast<int>(v.at("z"));
         spec.width = v.at("H");
-        const double expected = profileArea(spec) * v.at("H") - kPi * 25.0 * v.at("H");
+        // Фаски зубьев 0,5m × 45° на обоих торцах (параметр chamfer по умолчанию).
+        const double expected = profileArea(spec) * v.at("H") - kPi * 25.0 * v.at("H") - 2 * chamferVolume(spec, 0.5 * spec.module);
         const NamedShape fin = doc.finalShape();
         EXPECT_NEAR(volume(fin.shape()), expected, 3e-6 * expected) << where;
         const auto gears = gearsOf(fin);
@@ -94,8 +108,8 @@ TEST(DocumentGear, SketchChangeKeepsGearAndHubBore) {
         EXPECT_DOUBLE_EQ(gears.front().gear.module, spec.module);
         EXPECT_NEAR(gears.front().gear.width, v.at("H"), 1e-9);
         EXPECT_TRUE(gears.front().gear.axis.Direction().IsParallel(gp::DZ(), 1e-12));
-        // Боковые грани зубьев (без вершин): 5 на зуб.
-        EXPECT_EQ(gears.front().faces.size(), 5u * spec.teeth) << where;
+        // Боковые грани зубьев (без вершин): 5 на зуб и 2 конуса фасок.
+        EXPECT_EQ(gears.front().faces.size(), 7u * spec.teeth) << where;
         EXPECT_TRUE(hasCylinder(fin.shape(), 5.0, 2, 0, 0)) << where;
     }
     // Сохранение и загрузка: тот же объём и тот же венец.
@@ -113,7 +127,9 @@ TEST(DocumentGear, HelicalNewBodyAndErrors) {
               {}, {{"mode", "newBody"}, {"axis", "Y"}, {"hand", "left"}}, false});
     doc.rebuild();
     auto g = info(doc, "G");
-    ASSERT_EQ(g.state, FeatureState::Ok) << messages(g);
+    // Фаска по умолчанию (0,5m) на косом зубе не строится — предупреждение.
+    ASSERT_EQ(g.state, FeatureState::Warning) << messages(g);
+    EXPECT_NE(messages(g).find("chamfer is not built on helical teeth"), std::string::npos);
     GearSpec spec;
     spec.module = 1.5;
     spec.teeth = 17;

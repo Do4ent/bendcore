@@ -285,17 +285,27 @@ json elementMapJson(const modeling::NamedShape& map) {
     json j;
     for (ElementKind kind : {ElementKind::Face, ElementKind::Edge, ElementKind::Vertex}) {
         json list = json::array();
-        for (const modeling::ElementRecord& r : map.records(kind))
-            list.push_back({{"name", r.name},
-                            {"origin", modeling::toString(r.origin)},
-                            {"feature", r.feature},
-                            {"aliases", r.aliases},
-                            {"signature", signatureJson(r.signature)}});
+        for (const modeling::ElementRecord& r : map.records(kind)) {
+            json e{{"name", r.name},
+                   {"origin", modeling::toString(r.origin)},
+                   {"feature", r.feature},
+                   {"aliases", r.aliases},
+                   {"signature", signatureJson(r.signature)}};
+            // Атрибуты элемента (резьба, зубчатый венец, подшипник, шпонка: «thread.*», «gear.*»,
+            // «bearing.*», «key.*») — по ним чертёж строит условные изображения встроенных деталей.
+            if (!r.attributes.empty()) {
+                json attrs = json::array();
+                for (const auto& [k, v] : r.attributes) attrs.push_back(json::array({k, v}));
+                e["attributes"] = std::move(attrs);
+            }
+            list.push_back(std::move(e));
+        }
         j[modeling::toString(kind)] = std::move(list);
     }
     json del = json::object();
     for (const auto& [name, d] : map.deletions()) del[name] = {{"feature", d.feature}, {"successors", d.successors}};
     j["deletions"] = std::move(del);
+    j["bodies"] = map.bodyNames();
     return j;
 }
 
@@ -311,6 +321,12 @@ Result<modeling::NamedShape> elementMapFrom(const json& j, const TopoDS_Shape& s
             rec.feature = text(r, "feature");
             if (r.contains("aliases")) rec.aliases = r.at("aliases").get<std::vector<std::string>>();
             rec.signature = signatureFrom(field(r, "signature"));
+            if (r.contains("attributes"))
+                for (const json& kv : r.at("attributes")) {
+                    if (!kv.is_array() || kv.size() != 2 || !kv.at(0).is_string() || !kv.at(1).is_string())
+                        bad("element attribute must be a pair of strings");
+                    rec.attributes.emplace_back(kv.at(0).get<std::string>(), kv.at(1).get<std::string>());
+                }
             records[static_cast<std::size_t>(kind)].push_back(std::move(rec));
         }
     }
@@ -318,7 +334,9 @@ Result<modeling::NamedShape> elementMapFrom(const json& j, const TopoDS_Shape& s
     if (j.contains("deletions"))
         for (const auto& [name, d] : j.at("deletions").items())
             deletions[name] = {text(d, "feature"), field(d, "successors").get<std::vector<std::string>>()};
-    return modeling::NamedShape::fromRecords(shape, std::move(records), std::move(deletions));
+    std::vector<std::string> bodies;
+    if (j.contains("bodies")) bodies = j.at("bodies").get<std::vector<std::string>>();
+    return modeling::NamedShape::fromRecords(shape, std::move(records), std::move(deletions), std::move(bodies));
 }
 
 // ---------------------------------------------------------------- отпечаток геометрии

@@ -364,7 +364,7 @@ public:
     std::string type() const override { return "GearTeeth"; }
     std::vector<ParameterSpec> parameterSpecs() const override {
         return {{"module", "2"}, {"teeth", "20"}, {"shift", "0"}, {"width", "0"},
-                {"helix", "0"},  {"offset", "0"}, {"angle", "0"}};
+                {"helix", "0"},  {"offset", "0"}, {"angle", "0"}, {"chamfer", "0.5"}};
     }
     std::vector<ReferenceSlot> referenceSlots() const override {
         return {{"face", ElementKind::Face, false, true}, {"axisEdge", ElementKind::Edge, false, true}};
@@ -386,6 +386,7 @@ public:
         s.teeth = static_cast<int>(teeth);
         s.shift = ctx.parameter("shift");
         s.helix = ctx.parameter("helix") * kDeg;
+        p.chamfer = ctx.parameter("chamfer");  // фаска зубьев на торцах, в долях модуля
         s.hand = ctx.option("hand") == "left" ? GearHand::Left : GearHand::Right;
         const std::string& axisChoice = ctx.option("axis");
         auto ax = axisFromOption(ctx, axisChoice, "face", "axisEdge", "axis");

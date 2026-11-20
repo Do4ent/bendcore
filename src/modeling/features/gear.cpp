@@ -12,6 +12,7 @@
 
 #include <bendcore/modeling/gear.hpp>
 
+#include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
@@ -19,11 +20,14 @@
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepCheck_Analyzer.hxx>
+#include <BRepClass3d_SolidClassifier.hxx>
 #include <BRepGProp.hxx>
 #include <BRepLib.hxx>
 #include <BRepOffsetAPI_MakePipeShell.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
+#include <BRepPrimAPI_MakeRevol.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
 #include <Bnd_Box.hxx>
 #include <GCE2d_MakeSegment.hxx>
 #include <GProp_GProps.hxx>
@@ -488,6 +492,41 @@ Result<GearProfile> gearProfile(const GearSpec& spec, double tolerance) {
     }
 }
 
+namespace {
+
+// Сектор фаски зуба у торца t0 (t0 = 0 — начало венца, t0 = b — конец): тело вращения
+// треугольника (ra − c, t0), (R, t0), (R, t0 ± (R − ra + c)) вокруг оси венца на угол sweep от
+// угла a0 (от зуба № 1) — снимает материал, где r − (ra − c) > |t − t0| (фаска c × 45° по кромке
+// вершин, R = ra + c/2). sweep = 2π — кольцо на все зубья.
+TopoDS_Shape chamferSector(const gp_Ax2& frame, double ra, double c, double t0, double sign, double a0, double sweep) {
+    const double R = ra + 0.5 * c;
+    gp_Dir x = frame.XDirection();
+    x.Rotate(gp_Ax1(frame.Location(), frame.Direction()), a0);
+    auto at = [&](double rho, double t) {
+        return frame.Location().Translated(gp_Vec(x) * rho + gp_Vec(frame.Direction()) * t);
+    };
+    BRepBuilderAPI_MakePolygon poly(at(ra - c, t0), at(R, t0), at(R, t0 + sign * (R - ra + c)), true);
+    BRepBuilderAPI_MakeFace face(poly.Wire(), true);
+    BRepPrimAPI_MakeRevol rev(face.Face(), gp_Ax1(frame.Location(), frame.Direction()), sweep);
+    rev.Build();
+    if (!rev.IsDone()) throw Standard_Failure("tooth chamfer revolution failed");
+    return rev.Shape();
+}
+
+// Номер зуба (1…z), к которому относится точка: угол вокруг оси от направления зуба № 1,
+// повёрнутого на долю twist по ширине (косой зуб).
+int toothOf(const gp_Ax2& frame, const GearGeometry& g, int z, double width, const gp_Pnt& p) {
+    const gp_Vec v(frame.Location(), p);
+    const double t = v.Dot(gp_Vec(frame.Direction()));
+    const double a = std::atan2(v.Dot(gp_Vec(frame.YDirection())), v.Dot(gp_Vec(frame.XDirection()))) - g.twist * t / width;
+    const double step = 2 * kPi / z;
+    int k = static_cast<int>(std::lround(a / step)) % z;
+    if (k < 0) k += z;
+    return k + 1;
+}
+
+}  // namespace
+
 Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& params) {
     const GearSpec& spec = params.spec;
     auto prof = gearProfile(spec, params.tolerance);
@@ -595,6 +634,115 @@ Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& pa
                 roles = gearRoles;
                 roles.emplace_back(pipe.FirstShape(), "Start");
                 roles.emplace_back(pipe.LastShape(), "End");
+            }
+        }
+        // Фаски c × 45° по кромкам вершин на торцах венца: кольца фасок объединяются с
+        // инструментом нарезания (Cut) или вычитаются из тела венца (Boss, NewBody); роли граней
+        // переносятся по истории, конусы фасок — роли «T<k>.ChamferStart» / «T<k>.ChamferEnd».
+        const double c = params.chamfer * spec.module;
+        if (!(std::isfinite(params.chamfer) && params.chamfer >= 0.0))
+            return Error{ErrorCode::InvalidInput, "gear tooth chamfer must be >= 0"};
+        // Косой зуб: пересечение конуса фаски с заметёнными гранями зубьев в OCCT занимает минуты
+        // на венец — фаска не строится (предупреждение), венец остаётся без фасок.
+        if (c > 0.0 && helical) {
+            P.warnings.push_back("gear tooth chamfer is not built on helical teeth");
+        } else if (c > 0.0) {
+            if (!(c < (g.da - g.dForm) / 2.0) || !(3.0 * c < spec.width))
+                return Error{ErrorCode::InvalidInput, "gear tooth chamfer " + number(c) + " mm is too large: it must be below " +
+                                                          number((g.da - g.dForm) / 2.0) + " mm (tip to form circle) and " +
+                                                          number(spec.width / 3.0) + " mm (face width / 3)"};
+            const double ra = g.da / 2.0;
+            // По сектору на зуб (угол 1,6π/z вокруг оси зуба): габарит сектора пересекается только с
+            // гранями своего зуба, и булева операция не пересекает конус со всеми гранями венца.
+            // Сектор должен накрывать вершину зуба на всей глубине фаски с учётом поворота косого зуба.
+            const double step = 2 * kPi / spec.teeth, half = 0.8 * kPi / spec.teeth;
+            const double toothHalf = (kPi / 2 + 2 * spec.shift * std::tan(spec.rack.alpha)) / spec.teeth +
+                                     (std::tan(g.alphaT) - g.alphaT) -
+                                     (std::tan(std::acos(g.db / (2 * (ra - c)))) - std::acos(g.db / (2 * (ra - c))));
+            const double drift = std::abs(g.twist) * 0.75 * c / spec.width;
+            const bool sectors = toothHalf + drift < 0.9 * half;
+            std::vector<TopoDS_Shape> rings;
+            std::vector<std::string> ringRoles;
+            for (int end = 0; end < 2; ++end) {
+                const double t0 = end == 0 ? 0.0 : spec.width, sign = end == 0 ? 1.0 : -1.0;
+                // Нарезание: заготовка, продолжающаяся за торец венца у вершин, фаску не получает.
+                if (params.mode == FeatureMode::Cut) {
+                    bool beyond = false;
+                    for (int k = 0; k < 8 && !beyond; ++k) {
+                        const double a = 2 * kPi * k / 8;
+                        const gp_Pnt q = frame.Location().Translated(
+                            (gp_Vec(frame.XDirection()) * std::cos(a) + gp_Vec(frame.YDirection()) * std::sin(a)) * (ra - 0.5 * c) +
+                            gp_Vec(frame.Direction()) * (t0 - sign * 1e-3 * spec.module));
+                        BRepClass3d_SolidClassifier cls(target, q, 1e-9);
+                        beyond = cls.State() == TopAbs_IN;
+                    }
+                    if (beyond) {
+                        P.warnings.push_back(std::string("gear tooth chamfer is not built at the ") + (end == 0 ? "start" : "end") +
+                                             " face: the blank continues beyond the rim");
+                        continue;
+                    }
+                }
+                const std::string role = end == 0 ? "ChamferStart" : "ChamferEnd";
+                if (!sectors) {
+                    rings.push_back(chamferSector(frame, ra, c, t0, sign, 0.0, 2 * kPi));
+                    ringRoles.push_back(role);
+                    continue;
+                }
+                // Ось зуба k на середине глубины фаски (косой зуб поворачивается на twist по ширине).
+                const double tm = t0 + sign * 0.75 * c;
+                for (int k = 0; k < spec.teeth; ++k) {
+                    const double axis = k * step + g.twist * tm / spec.width;
+                    rings.push_back(chamferSector(frame, ra, c, t0, sign, axis - half, 2 * half));
+                    ringRoles.push_back("T" + std::to_string(k + 1) + "." + role);
+                }
+            }
+            if (!rings.empty()) {
+                const kernel::BooleanType op = params.mode == FeatureMode::Cut ? kernel::BooleanType::Fuse : kernel::BooleanType::Cut;
+                // Тело венца построено из контура, проверенного на самопересечения: повторный
+                // BRepAlgoAPI_Check его сплайновых граней не нужен (см. ниже о booleanReady).
+                if (!isValidShape(tool)) return Error{ErrorCode::OperationFailed, "gear: the tool body is not valid"};
+                ShapeFacts ready;
+                ready.valid = true;
+                ready.booleanReady = true;
+                rememberFacts(tool, ready);
+                auto step = booleanWithHistory(op, {tool}, rings, true, true);
+                if (!step) return step.error();
+                const TopoDS_Shape chamfered = step.value().shape;
+                const History& h = step.value().history;
+                std::vector<std::pair<TopoDS_Shape, std::string>> mapped;
+                for (const auto& [f, role] : roles) {
+                    const auto& mods = h->Modified(f);
+                    if (!mods.IsEmpty()) {
+                        for (const TopoDS_Shape& m : mods) mapped.emplace_back(m, role);
+                    } else if (containsSubShape(chamfered, f)) {
+                        mapped.emplace_back(f, role);
+                    }
+                }
+                // Конические грани колец фасок в инструменте: по куску на зуб.
+                for (std::size_t i = 0; i < rings.size(); ++i) {
+                    for (TopExp_Explorer ex(rings[i], TopAbs_FACE); ex.More(); ex.Next()) {
+                        BRepAdaptor_Surface sf(TopoDS::Face(ex.Current()), false);
+                        if (sf.GetType() != GeomAbs_Cone) continue;
+                        std::vector<TopoDS_Shape> images;
+                        const auto& mods = h->Modified(ex.Current());
+                        for (const TopoDS_Shape& m : mods) images.push_back(m);
+                        if (mods.IsEmpty() && containsSubShape(chamfered, ex.Current())) images.push_back(ex.Current());
+                        for (const TopoDS_Shape& im : images) {
+                            if (im.ShapeType() != TopAbs_FACE) continue;
+                            GProp_GProps fp;
+                            BRepGProp::SurfaceProperties(im, fp);
+                            if (ringRoles[i].front() == 'T') {
+                                mapped.emplace_back(im, ringRoles[i]);
+                            } else {
+                                const int k = toothOf(frame, g, spec.teeth, spec.width, fp.CentreOfMass());
+                                mapped.emplace_back(im, "T" + std::to_string(k) + "." + ringRoles[i]);
+                            }
+                        }
+                    }
+                }
+                roles = std::move(mapped);
+                tool = chamfered;
+                P.warnings.insert(P.warnings.end(), step.value().warnings.begin(), step.value().warnings.end());
             }
         }
         // Инструмент — призма или заметание контура, проверенного на самопересечения

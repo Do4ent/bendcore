@@ -39,7 +39,7 @@ const TrueTypeFont* textLayerFont() {
 }  // namespace
 
 Result<KitFiles> writeKit(const std::string& directory, const std::vector<PartEntry>& parts,
-                          const std::vector<StandardPart>& standard, const Gearbox& g, const DrawingSet& set,
+                          const Gearbox& g, const DrawingSet& set,
                           const KitOptions& options) {
     namespace fs = std::filesystem;
     const fs::path dir(directory);
@@ -53,13 +53,9 @@ Result<KitFiles> writeKit(const std::string& directory, const std::vector<PartEn
         if (!j.ok()) return Error{j.error().code, p.file + ": " + j.error().message};
         if (auto st = save(dir / p.file, j.value(), &out.partDocuments); !st.ok()) return st.error();
     }
-    for (const auto& s : standard) {
-        auto j = s.doc->toJson();
-        if (!j.ok()) return Error{j.error().code, s.key + ": " + j.error().message};
-        if (auto st = save(dir / (s.key + ".bcpart.json"), j.value(), &out.partDocuments); !st.ok()) return st.error();
-    }
+    // Стандартные изделия (подшипники, шпонки, крепёж) — модели библиотеки, встроены в документ сборки.
     assembly_v2::SaveOptions so;
-    so.embedSourcedGeometry = false;  // детали — ссылками на свои документы, крепёж встроен
+    so.embedSourcedGeometry = false;  // детали — ссылками на свои документы, стандартные изделия встроены
     out.assemblyDocument = (dir / "gearbox.bcasm.json").string();
     if (auto st = g.doc->saveFile(out.assemblyDocument, so); !st.ok()) return st.error();
 

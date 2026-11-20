@@ -6,6 +6,7 @@
 
 #include <bendcore/modeling/gear.hpp>
 
+#include <BRepAlgoAPI_Check.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRep_Tool.hxx>
 #include <Geom_Curve.hxx>
@@ -14,6 +15,7 @@
 #include <map>
 
 using namespace ft;
+using bendcore::kernel::ErrorCode;
 
 namespace {
 
@@ -47,6 +49,28 @@ double profileArea(const GearSpec& s, int samples = 4000) {
         a += p.first * q.second - q.first * p.second;
     }
     return 2.0 * s.teeth * std::abs(a) / 2.0;
+}
+
+// Объём, снятый фаской c × 45° по кромке вершин на одном торце: точка зуба на радиусе r
+// снимается на глубину r − (ra − c) от торца, поэтому V = z·∫ (r − ra + c)·2ψ(r)·r dr по
+// r ∈ [ra − c, ra], где 2ψ(r) — угловая толщина зуба по формуле эвольвенты
+// ψ(r) = (π/2 + 2x·tg α)/z + inv αt − inv α(r), cos α(r) = rb / r (Симпсон, 2000 интервалов).
+double chamferVolume(const GearSpec& s, double c) {
+    const GearGeometry g = gearGeometry(s).value();
+    const double ra = g.da / 2, rb = g.db / 2;
+    const auto inv = [](double a) { return std::tan(a) - a; };
+    const double psi0 = (kPi / 2 + 2 * s.shift * std::tan(s.rack.alpha)) / s.teeth + inv(g.alphaT);
+    const auto f = [&](double r) { return (r - ra + c) * 2 * (psi0 - inv(std::acos(rb / r))) * r; };
+    const int n = 2000;
+    const double h = c / n;
+    double sum = f(ra - c) + f(ra);
+    for (int i = 1; i < n; ++i) sum += (i % 2 ? 4 : 2) * f(ra - c + i * h);
+    return s.teeth * sum * h / 3;
+}
+
+bool selfIntersectionFree(const TopoDS_Shape& s) {
+    BRepAlgoAPI_Check check(s, true, true);
+    return check.IsValid();
 }
 
 std::map<std::string, TopoDS_Edge> edgesOf(const GearProfile& p) {
@@ -157,6 +181,7 @@ TEST(FeaturesGear, SpurVolumeAgainstProfileIntegral) {
     GearParams p;
     p.spec = spec(2, 20, 0.0, 16.0);
     p.mode = FeatureMode::NewBody;
+    p.chamfer = 0.0;  // фаски зубьев — тест TipChamfer
     auto res = gearTeeth(TopoDS_Shape(), p);
     ASSERT_TRUE(res.ok()) << res.error().message;
     EXPECT_TRUE(valid(res.value().shape));
@@ -182,9 +207,75 @@ TEST(FeaturesGear, CutOnBlank) {
     const double A = profileArea(p.spec);
     const double removed = (kPi * g.da * g.da / 4 - A) * 20.0;
     EXPECT_NEAR(volume(blank) - volume(res.value().shape), removed, 3e-6 * removed);
+    // Заготовка продолжается за оба торца венца у вершин — фасок нет, два предупреждения.
+    int skipped = 0;
+    for (const auto& w : res.value().warnings) skipped += w.find("chamfer is not built") != std::string::npos;
+    EXPECT_EQ(skipped, 2);
     // Роли — грани инструмента (без вершин зубьев: они остаются гранью заготовки).
     EXPECT_EQ(res.value().roles.size(), 5u * 24);
     for (const auto& [f, role] : res.value().roles) EXPECT_EQ(f.ShapeType(), TopAbs_FACE) << role;
+}
+
+// Фаски 0,5m × 45° по кромкам вершин: объём, снятый фасками, против интеграла по формуле
+// эвольвенты; по конической грани на зуб на каждом торце (+2z граней); тело без
+// самопересечений (BRepAlgoAPI_Check); нарезание заготовки ⌀da × b; косой зуб — без фасок с
+// предупреждением; ошибки.
+TEST(FeaturesGear, TipChamfer) {
+    GearParams p;
+    p.spec = spec(2, 20, 0.0, 16.0);
+    p.mode = FeatureMode::NewBody;
+    p.chamfer = 0.0;
+    const double plain = volume(gearTeeth(TopoDS_Shape(), p).value().shape);
+    p.chamfer = 0.5;
+    auto res = gearTeeth(TopoDS_Shape(), p);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    const TopoDS_Shape& body = res.value().shape;
+    EXPECT_TRUE(valid(body));
+    EXPECT_TRUE(selfIntersectionFree(body));
+    const double cv = chamferVolume(p.spec, 1.0);
+    std::printf("[gear] chamfer 1 x 45: %.6f mm3 per face (z = 20)\n", cv);
+    EXPECT_NEAR(plain - volume(body), 2 * cv, 1e-5 * 2 * cv);
+    EXPECT_EQ(count(body, TopAbs_FACE), 6 * 20 + 2 + 2 * 20);
+    std::map<std::string, int> roles;
+    for (const auto& [f, role] : res.value().roles) ++roles[role];
+    for (int k = 1; k <= 20; ++k) {
+        EXPECT_EQ(roles["T" + std::to_string(k) + ".ChamferStart"], 1) << k;
+        EXPECT_EQ(roles["T" + std::to_string(k) + ".ChamferEnd"], 1) << k;
+        EXPECT_EQ(roles["T" + std::to_string(k) + ".FlankR"], 1) << k;
+    }
+    EXPECT_EQ(roles["Start"], 1);
+
+    // Косой зуб: фаска не строится (предупреждение), объём — как без фасок.
+    p.spec = spec(2, 18, 0.0, 15.0, 12.0);
+    p.mode = FeatureMode::NewBody;
+    auto hel = gearTeeth(TopoDS_Shape(), p);
+    ASSERT_TRUE(hel.ok()) << hel.error().message;
+    bool warned = false;
+    for (const auto& w : hel.value().warnings) warned = warned || w == "gear tooth chamfer is not built on helical teeth";
+    EXPECT_TRUE(warned);
+    EXPECT_EQ(count(hel.value().shape, TopAbs_FACE), 6 * 18 + 2);
+
+    // Нарезание на заготовке ⌀da × b: торцы венца свободны — фаски на обоих.
+    p.spec = spec(2, 24, 0.2, 20.0);
+    p.mode = FeatureMode::Cut;
+    const GearGeometry g = gearGeometry(p.spec).value();
+    TopoDS_Shape blank = BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), g.da / 2, 20).Shape();
+    auto cut = gearTeeth(blank, p);
+    ASSERT_TRUE(cut.ok()) << cut.error().message;
+    EXPECT_TRUE(valid(cut.value().shape));
+    EXPECT_TRUE(selfIntersectionFree(cut.value().shape));
+    const double removed = (kPi * g.da * g.da / 4 - profileArea(p.spec)) * 20.0 + 2 * chamferVolume(p.spec, 1.0);
+    EXPECT_NEAR(volume(blank) - volume(cut.value().shape), removed, 3e-6 * removed);
+    for (const auto& w : cut.value().warnings) EXPECT_EQ(w.find("chamfer"), std::string::npos) << w;
+
+    // Ошибки: отрицательная фаска, фаска до окружности граничных точек, фаска шире b/3.
+    p.chamfer = -0.1;
+    EXPECT_EQ(gearTeeth(blank, p).error().code, ErrorCode::InvalidInput);
+    p.chamfer = 2.0;
+    EXPECT_EQ(gearTeeth(blank, p).error().code, ErrorCode::InvalidInput);
+    p.chamfer = 0.5;
+    p.spec.width = 2.5;
+    EXPECT_EQ(gearTeeth(TopoDS_Shape(), GearParams{p.spec, FeatureMode::NewBody, 1e-6, 0.5}).error().code, ErrorCode::InvalidInput);
 }
 
 TEST(FeaturesGear, HelicalVolumeAndTwist) {
@@ -192,6 +283,7 @@ TEST(FeaturesGear, HelicalVolumeAndTwist) {
     p.spec = spec(2, 18, 0.0, 15.0, 12.0);
     p.spec.hand = GearHand::Left;
     p.mode = FeatureMode::Boss;
+    p.chamfer = 0.0;
     auto res = gearTeeth(TopoDS_Shape(), p);
     ASSERT_TRUE(res.ok()) << res.error().message;
     EXPECT_TRUE(valid(res.value().shape));
@@ -222,6 +314,7 @@ TEST(FeaturesGear, UndercutSmallTeeth) {
     GearParams p;
     p.spec = spec(2, 8, 0.0, 10.0);
     p.mode = FeatureMode::NewBody;
+    p.chamfer = 0.0;
     const GearGeometry g = gearGeometry(p.spec).value();
     EXPECT_TRUE(g.undercut);
     EXPECT_NEAR(g.xMin, 1.0 - 8 * std::pow(std::sin(20 * kDeg), 2) / 2, 1e-12);
@@ -289,3 +382,4 @@ TEST(FeaturesGear, Attributes) {
     attrs.erase(attrs.begin() + 2);
     EXPECT_FALSE(gearFromAttributes(attrs).ok());
 }
+

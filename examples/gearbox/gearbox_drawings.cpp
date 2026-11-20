@@ -515,7 +515,7 @@ void assemblySheet(DrawingDocument& d, const Gearbox& g, const Layout& L) {
         "Плоскость разъёма покрыть герметиком; прокладку ставить на герметик.",
         "Валы должны проворачиваться от руки плавно, без заеданий.",
         "Залить масло И-Г-А-46 ГОСТ 17479.4-87 до уровня, при котором колесо погружено на высоту зуба.",
-        "Зубчатые колёса показаны условно — цилиндрами вершин (ГОСТ 2.402), подшипники — упрощёнными кольцами d×D×B.",
+        "Зубчатые колёса показаны условно — цилиндрами вершин (ГОСТ 2.402), подшипники — упрощённо (ГОСТ 2.420).",
     };
     d.sheets().push_back(std::move(sd));
 }
@@ -710,6 +710,18 @@ Result<UpdateSummary> updateDrawings(DrawingSet& set, const std::vector<PartEntr
                     if (!mb[i] && pick[i] + 1 < candidates[i].size()) ++pick[i], again = true;
                 if (!again) break;
             }
+        }
+    }
+    // Разнесение позиций (ГОСТ 2.109): ручные позиции ставятся вместе с автоматическими своего
+    // вида на одну линию полок без пересечения выносок. Один раз: признак сохраняется в файле.
+    {
+        auto& balloons = set.assembly.sheets()[0].balloons;
+        const bool arranged = std::all_of(balloons.begin(), balloons.end(), [](const BalloonItem& b) { return b.arranged; });
+        if (!balloons.empty() && !arranged) {
+            auto n = set.assembly.arrangeBalloons("S1");
+            if (!n.ok()) return Error{n.error().code, "gearbox.bcdrw.json: " + n.error().message};
+            r = set.assembly.update(m.value(), cache, set.specification.specification());
+            if (!r.ok()) return Error{r.error().code, "gearbox.bcdrw.json: " + r.error().message};
         }
     }
     collect("gearbox.bcdrw.json", r.value());
