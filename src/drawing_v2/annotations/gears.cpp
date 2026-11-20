@@ -1,6 +1,7 @@
 // Условное изображение зубчатых колёс (ГОСТ 2.402-68) и таблица параметров зубчатого венца
 // (ГОСТ 2.403-75). Документация — docs/drawing/ANNOTATIONS.md, раздел «Зубчатые колёса».
 
+#include <bendcore/drawing_v2/bearings.hpp>
 #include <bendcore/drawing_v2/gears.hpp>
 #include <bendcore/drawing_v2/stroke_font.hpp>
 #include <bendcore/kernel/boolean.hpp>
@@ -168,7 +169,7 @@ Result<modeling::NamedShape> conventionalGearModel(const modeling::NamedShape& r
 
 Result<std::vector<GearImage>> gearImages(const std::vector<modeling::GearInfo>& gears, const views::ViewFrame& frame,
                                           const std::optional<views::CuttingPlane>& sectionPlane,
-                                          const GearImageOptions& options) {
+                                          const GearImageOptions& options, const std::vector<std::size_t>& children) {
     std::vector<GearImage> out;
     for (std::size_t i = 0; i < gears.size(); ++i) {
         const modeling::GearSpec& s = gears[i].gear;
@@ -181,11 +182,25 @@ Result<std::vector<GearImage>> gearImages(const std::vector<modeling::GearInfo>&
         img.spec = s;
         img.geometry = geo.value();
         img.origin = frame.project(o);
+        img.depth = views::dot(o, frame.toward);
+        img.along = along;
+        if (i < children.size()) img.child = children[i];
         if (std::abs(along) <= options.angularTolerance) {
             img.aspect = GearAspect::Side;
             const Point2 a = frame.project(d);
             const double len = std::hypot(a.x, a.y);
             img.axis = {a.x / len, a.y / len};
+            if (s.helix > 0.0) {
+                // Линия зуба на ближней стороне делительного цилиндра (радиус к наблюдателю n):
+                // правый зуб — cos β·a + sin β·(a × n), левый — с обратным знаком второго члена.
+                const views::Vec3 n = frame.toward - along * d;
+                const double nl = views::length(n);
+                const views::Vec3 side = (1.0 / nl) * views::cross(d, n);
+                const double sign = s.hand == modeling::GearHand::Right ? 1.0 : -1.0;
+                const Point2 h = frame.project(std::cos(s.helix) * d + (sign * std::sin(s.helix)) * side);
+                const double hl = std::hypot(h.x, h.y);
+                if (hl > 0) img.helix = {h.x / hl, h.y / hl};
+            }
         } else if (std::abs(std::abs(along) - 1.0) <= options.angularTolerance) {
             img.aspect = GearAspect::End;
         } else {
@@ -217,11 +232,55 @@ std::vector<GearLine> gearLines(const GearImage& img, const views::SheetView& vi
     const double b = img.spec.width * view.scale;
     for (double side : {1.0, -1.0}) {
         const Point2 p0 = add(c, mul(side * r * view.scale, w));
-        out.push_back({GearLine::Role::Pitch, LineSeg{add(p0, mul(-overshoot, u)), add(p0, mul(b + overshoot, u))},
-                       LineType::DashDotThin, o.centerLayer});
+        // В зацеплении делительные образующие колёс совпадают: со стороны сопряжённого колеса
+        // её выводит переднее колесо на общей длине венцов.
+        double from = 0.0, to = b;
+        bool skip = false;
+        for (const GearMeshSide& m : img.mesh) {
+            if (side * (m.toward.x * w.x + m.toward.y * w.y) < 0.99) continue;
+            if (m.rear) {
+                skip = true;
+            } else {
+                from = std::min(from, m.s0 * view.scale);
+                to = std::max(to, m.s1 * view.scale);
+            }
+        }
+        if (!skip)
+            out.push_back({GearLine::Role::Pitch, LineSeg{add(p0, mul(from - overshoot, u)), add(p0, mul(to + overshoot, u))},
+                           LineType::DashDotThin, o.centerLayer});
         const Point2 q0 = add(c, mul(side * rf * view.scale, w));
         out.push_back({GearLine::Role::Root, LineSeg{q0, add(q0, mul(b, u))},
                        img.section ? LineType::SolidThick : LineType::SolidThin, img.section ? o.visibleLayer : o.thinLayer});
+    }
+    // Косой зуб на виде (ГОСТ 2.402): три сплошные тонкие линии направления зуба.
+    if (!img.section && (img.helix.x != 0.0 || img.helix.y != 0.0)) {
+        const double ra = img.geometry.da / 2.0 * view.scale;
+        const double s0 = 0.2 * b, s1 = 0.8 * b, t0 = 0.15 * ra, t1 = 0.85 * ra;
+        const double hs = img.helix.x * u.x + img.helix.y * u.y, ht = img.helix.x * w.x + img.helix.y * w.y;
+        const double gap = 0.2 * std::min(s1 - s0, t1 - t0);
+        const Point2 mid{0.5 * (s0 + s1), 0.5 * (t0 + t1)};
+        for (int k = -1; k <= 1; ++k) {
+            // Прямая mid + k·gap·n + λ·(hs, ht), n ⟂ направлению; отсечение прямоугольником.
+            const Point2 p{mid.x - k * gap * ht, mid.y + k * gap * hs};
+            double lo = -1e300, hi = 1e300;
+            auto slab = [&](double p0, double dp, double a0, double a1) {
+                if (std::abs(dp) < 1e-12) {
+                    if (p0 < a0 || p0 > a1) hi = -1e300;
+                    return;
+                }
+                double l0 = (a0 - p0) / dp, l1 = (a1 - p0) / dp;
+                if (l0 > l1) std::swap(l0, l1);
+                lo = std::max(lo, l0);
+                hi = std::min(hi, l1);
+            };
+            slab(p.x, hs, s0, s1);
+            slab(p.y, ht, t0, t1);
+            if (!(hi > lo + 1e-9)) continue;
+            auto sheet = [&](double sv, double tv) { return add(c, add(mul(sv, u), mul(tv, w))); };
+            out.push_back({GearLine::Role::Helix,
+                           LineSeg{sheet(p.x + lo * hs, p.y + lo * ht), sheet(p.x + hi * hs, p.y + hi * ht)},
+                           LineType::SolidThin, o.thinLayer});
+        }
     }
     return out;
 }
@@ -255,7 +314,9 @@ views::SectionView withUncutTeeth(const views::SectionView& section, const std::
             {{mul(-1.0, u), -(oU + b)}},
             {{mul(-1.0, u), -oU}, {u, oU + b}, {w, oW + rf}, {mul(-1.0, w), -(oW - rf)}},
         };
-        for (auto& region : out.regions) {
+        for (std::size_t ri = 0; ri < out.regions.size(); ++ri) {
+            auto& region = out.regions[ri];
+            if (img.child && (ri >= out.regionOwner.size() || out.regionOwner[ri] != int(*img.child))) continue;
             std::vector<std::vector<Point2>> clipped;
             for (const auto& contour : region)
                 for (const auto& k : keep) {
@@ -276,6 +337,160 @@ views::SectionView withUncutTeeth(const views::SectionView& section, const std::
         if (i < out.regionOwner.size()) compact.regionOwner.push_back(out.regionOwner[i]);
     }
     return compact;
+}
+
+std::vector<GearMesh> gearMeshes(std::vector<GearImage>& images, double tolerance) {
+    std::vector<GearMesh> out;
+    for (std::size_t i = 0; i < images.size(); ++i)
+        for (std::size_t j = i + 1; j < images.size(); ++j) {
+            GearImage& a = images[i];
+            GearImage& b = images[j];
+            if (a.aspect != b.aspect) continue;
+            const double tol = tolerance * std::min(a.spec.module, b.spec.module);
+            const double aw = 0.5 * (a.geometry.d + b.geometry.d);
+            const bool aFront = a.spec.teeth <= b.spec.teeth;
+            GearImage& f = aFront ? a : b;
+            GearImage& r = aFront ? b : a;
+            const std::size_t fi = aFront ? i : j, ri = aFront ? j : i;
+            if (a.aspect == GearAspect::End) {
+                const double dist = std::hypot(b.origin.x - a.origin.x, b.origin.y - a.origin.y);
+                if (std::abs(dist - aw) > tol) continue;
+                // Перекрытие по глубине: венец занимает [depth, depth + along·b] вдоль toward.
+                const double a0 = std::min(a.depth, a.depth + a.along * a.spec.width);
+                const double a1 = std::max(a.depth, a.depth + a.along * a.spec.width);
+                const double b0 = std::min(b.depth, b.depth + b.along * b.spec.width);
+                const double b1 = std::max(b.depth, b.depth + b.along * b.spec.width);
+                if (!(std::min(a1, b1) > std::max(a0, b0) + 1e-9)) continue;
+                out.push_back({fi, ri});
+                continue;
+            }
+            const double cr = a.axis.x * b.axis.y - a.axis.y * b.axis.x;
+            if (std::abs(cr) > 1e-6 || std::abs(a.depth - b.depth) > tol) continue;
+            const Point2 u = f.axis, w{-u.y, u.x};
+            const Point2 dlt{r.origin.x - f.origin.x, r.origin.y - f.origin.y};
+            const double t = dlt.x * w.x + dlt.y * w.y;
+            if (std::abs(std::abs(t) - aw) > tol) continue;
+            // Ширина заднего венца в координатах переднего (s от начала переднего вдоль его оси).
+            const double rs = dlt.x * u.x + dlt.y * u.y;
+            const double dir = r.axis.x * u.x + r.axis.y * u.y > 0 ? 1.0 : -1.0;
+            const double r0 = std::min(rs, rs + dir * r.spec.width), r1 = std::max(rs, rs + dir * r.spec.width);
+            if (!(std::min(f.spec.width, r1) > std::max(0.0, r0) + 1e-9)) continue;
+            const Point2 toward = t > 0 ? w : Point2{-w.x, -w.y};
+            f.mesh.push_back({toward, false, r0, r1});
+            // Ширина переднего в координатах заднего.
+            const Point2 ur = r.axis;
+            const double fs = -(dlt.x * ur.x + dlt.y * ur.y);
+            const double dirF = u.x * ur.x + u.y * ur.y > 0 ? 1.0 : -1.0;
+            r.mesh.push_back({{-toward.x, -toward.y}, true, std::min(fs, fs + dirF * f.spec.width),
+                              std::max(fs, fs + dirF * f.spec.width)});
+            out.push_back({fi, ri});
+        }
+    return out;
+}
+
+namespace {
+
+// Полоса зубьев венца на виде со стороны направления n: s вдоль оси от начала венца в [0, b],
+// t от оси вдоль n в [df/2, da/2], с допуском (координаты вида, мм модели).
+struct Band {
+    Point2 o, u, n;
+    double s0, s1, t0, t1;
+    double s(Point2 p) const { return (p.x - o.x) * u.x + (p.y - o.y) * u.y; }
+    double t(Point2 p) const { return (p.x - o.x) * n.x + (p.y - o.y) * n.y; }
+    bool inside(Point2 p) const {
+        const double sv = s(p), tv = t(p);
+        return sv >= s0 && sv <= s1 && tv >= t0 && tv <= t1;
+    }
+};
+
+Band toothBand(const GearImage& g, Point2 toward) {
+    const double eps = 1e-4 * g.geometry.da + 1e-6;
+    return {g.origin, g.axis, toward, -eps, g.spec.width + eps, g.geometry.df / 2.0 - eps, g.geometry.da / 2.0 + eps};
+}
+
+// Рёбра детали owner внутри полосы получают видимость vis; отрезки рассекаются по её границе,
+// прочие кривые — по середине.
+void markInBand(std::vector<views::ViewEdge>& edges, std::size_t owner, const Band& band, views::Visibility vis,
+                const EdgeChildOf& childOf) {
+    std::vector<views::ViewEdge> added;
+    for (views::ViewEdge& e : edges) {
+        if (e.visibility == vis) continue;
+        const auto c = childOf(e);
+        if (!c || *c != owner) continue;
+        if (const auto* l = std::get_if<LineSeg>(&e.curve)) {
+            double lo = 0.0, hi = 1.0;
+            auto slab = [&](double v0, double v1, double a0, double a1) {
+                const double dv = v1 - v0;
+                if (std::abs(dv) < 1e-12) {
+                    if (v0 < a0 || v0 > a1) hi = -1.0;
+                    return;
+                }
+                double l0 = (a0 - v0) / dv, l1 = (a1 - v0) / dv;
+                if (l0 > l1) std::swap(l0, l1);
+                lo = std::max(lo, l0);
+                hi = std::min(hi, l1);
+            };
+            slab(band.s(l->a), band.s(l->b), band.s0, band.s1);
+            slab(band.t(l->a), band.t(l->b), band.t0, band.t1);
+            if (!(hi > lo + 1e-9)) continue;
+            const LineSeg seg = *l;
+            auto at = [&](double k) { return Point2{seg.a.x + k * (seg.b.x - seg.a.x), seg.a.y + k * (seg.b.y - seg.a.y)}; };
+            const double len = std::hypot(seg.b.x - seg.a.x, seg.b.y - seg.a.y);
+            const views::Visibility old = e.visibility;
+            e.curve = LineSeg{at(lo), at(hi)};
+            e.visibility = vis;
+            for (auto [k0, k1] : {std::make_pair(0.0, lo), std::make_pair(hi, 1.0)}) {
+                if ((k1 - k0) * len <= 1e-9) continue;
+                views::ViewEdge piece = e;
+                piece.curve = LineSeg{at(k0), at(k1)};
+                piece.visibility = old;
+                added.push_back(std::move(piece));
+            }
+            continue;
+        }
+        if (band.inside(edgeMidpoint(e.curve))) e.visibility = vis;
+    }
+    edges.insert(edges.end(), added.begin(), added.end());
+}
+
+}  // namespace
+
+void applyGearMesh(std::vector<views::ViewEdge>& edges, const std::vector<GearImage>& images,
+                   const std::vector<GearMesh>& meshes, const EdgeChildOf& childOf) {
+    for (const GearMesh& m : meshes) {
+        const GearImage& f = images[m.front];
+        const GearImage& r = images[m.rear];
+        if (!f.child || !r.child) continue;
+        if (f.aspect == GearAspect::End) {
+            // Окружности вершин обоих колёс — сплошные основные целиком.
+            for (views::ViewEdge& e : edges) {
+                if (e.visibility == views::Visibility::Visible) continue;
+                const auto c = childOf(e);
+                if (!c) continue;
+                for (const GearImage* g : {&f, &r}) {
+                    if (*c != *g->child) continue;
+                    std::optional<Point2> center;
+                    double radius = 0;
+                    if (const auto* a = std::get_if<Arc>(&e.curve)) {
+                        center = a->center;
+                        radius = a->radius;
+                    } else if (const auto* ci = std::get_if<Circle>(&e.curve)) {
+                        center = ci->center;
+                        radius = ci->radius;
+                    }
+                    const double tol = 1e-4 * g->geometry.da + 1e-6;
+                    if (center && std::hypot(center->x - g->origin.x, center->y - g->origin.y) <= tol &&
+                        std::abs(radius - g->geometry.da / 2.0) <= tol)
+                        e.visibility = views::Visibility::Visible;
+                }
+            }
+            continue;
+        }
+        for (const GearMeshSide& side : f.mesh)
+            if (!side.rear) markInBand(edges, *r.child, toothBand(f, side.toward), views::Visibility::Hidden, childOf);
+        for (const GearMeshSide& side : r.mesh)
+            if (side.rear) markInBand(edges, *f.child, toothBand(r, side.toward), views::Visibility::Visible, childOf);
+    }
 }
 
 double commonNormalLength(const modeling::GearSpec& gear, int& zn) {

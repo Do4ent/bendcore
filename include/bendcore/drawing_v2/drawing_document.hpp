@@ -16,6 +16,8 @@
 #include <bendcore/drawing_v2/specification.hpp>
 #include <bendcore/drawing_v2/threads.hpp>
 #include <bendcore/drawing_v2/gears.hpp>
+#include <bendcore/drawing_v2/bearings.hpp>
+#include <bendcore/drawing_v2/balloon_layout.hpp>
 #include <bendcore/drawing_v2/title_block.hpp>
 #include <bendcore/drawing_v2/view_cache.hpp>
 #include <bendcore/drawing_v2/view_sheet.hpp>
@@ -81,10 +83,16 @@ struct ModelSnapshot {
     // подсборка-сборочная единица получает позицию по линиям своих деталей (ГОСТ 2.109).
     std::vector<std::vector<assembly_v2::DefinitionId>> childChain;
     std::vector<std::uint32_t> edgeChild;
+    std::vector<std::uint32_t> faceChild;  // для каждой грани — индекс дочерней формы (UINT32_MAX — нет)
     // Зубчатые венцы детали (modeling::gearsOf исходной формы). shape и named — условная форма
     // ГОСТ 2.402 (впадины заполнены до окружности вершин, annotations::conventionalGearModel);
-    // масса — по исходной форме с зубьями.
+    // масса — по исходной форме с зубьями. Сборка — венцы всех деталей в мировой СК (ось
+    // венца перенесена положением вхождения), gearChild — дочерняя форма каждого венца.
     std::vector<modeling::GearInfo> gears;
+    std::vector<std::size_t> gearChild;
+    // Сборка: подшипники качения (annotations::recognizeBearing — по телам качения в геометрии
+    // или по наименованию «Подшипник …»), изображаются условно по ГОСТ 2.420.
+    std::vector<annotations::BearingInfo> bearings;
 };
 
 // Определение, номер позиции которого ставится на ребре edge: первое определение цепочки
@@ -210,7 +218,16 @@ struct ViewDef {
     // Условное изображение зубчатых венцов модели по ГОСТ 2.402 (annotations::gearImages):
     // виды сбоку и с торца, разрезы через ось (зуб не рассекается).
     bool gears = true;
-    bool autoBalloons = false;  // позиции ГОСТ 2.109 по составу сборки на этом виде
+    // Подшипники качения сборки (ModelSnapshot::bearings) в разрезе через ось — условно по
+    // ГОСТ 2.420: контур сечения без штриховки с диагоналями или символом тела качения.
+    bool bearings = true;
+    annotations::BearingSymbol bearingSymbol = annotations::BearingSymbol::Diagonals;
+    // Позиции ГОСТ 2.109 по составу сборки на этом виде: составная часть получает одну позицию на
+    // листе — на первом таком виде, где она видна (линиями или фигурой сечения), а скрытая — на
+    // ближайшем виде листа с разрезом, где видна. Полки — annotations::arrangeBalloons по линии
+    // balloonLine.
+    bool autoBalloons = false;
+    annotations::BalloonLine balloonLine = annotations::BalloonLine::Auto;
     views::HlrMethod method = views::HlrMethod::Exact;
     bool autoMethod = false;  // выбор алгоритма HLR по геометрии (views::chooseHlrMethod)
 };
@@ -264,6 +281,9 @@ struct BalloonItem {
     std::string view;
     modeling::TopoReference edge;
     std::optional<Point2> at;
+    // Полка ставится разнесением вместе с автоматическими позициями вида (arrangeBalloons,
+    // DrawingDocument::arrangeBalloons); at при этом не используется.
+    bool arranged = false;
 };
 
 // Размер резьбы с обозначением (ГОСТ 2.311, п. 5) на виде: ссылка — грань резьбы (стенка
@@ -320,6 +340,8 @@ struct ComputedView {
     views::CenterGeometry centers;
     std::vector<annotations::ThreadImage> threads;  // резьбы ГОСТ 2.311 на виде
     std::vector<annotations::GearImage> gears;      // зубчатые венцы ГОСТ 2.402 на виде
+    std::vector<annotations::GearMesh> gearMeshes;  // зацепления на виде (сборка)
+    std::vector<annotations::BearingImage> bearings;  // подшипники ГОСТ 2.420 в разрезе
     bool fromCache = false;
 };
 
@@ -360,7 +382,13 @@ struct BalloonReport {
     std::string sheet;
     std::string view;
     std::vector<std::pair<int, assembly_v2::DefinitionId>> placed;  // номер позиции → определение
-    std::vector<assembly_v2::DefinitionId> withoutBalloon;  // составные части, не видимые на виде
+    std::vector<assembly_v2::DefinitionId> withoutBalloon;  // составные части, не видимые ни на одном виде листа
+    // Составные части, скрытые на этом виде, позиции которых поставлены на другом виде листа
+    // (ближайшем разрезе): определение → вид.
+    std::vector<std::pair<assembly_v2::DefinitionId, std::string>> movedTo;
+    annotations::BalloonLine line = annotations::BalloonLine::Right;  // линия полок
+    bool ordered = true;        // номера на полках по порядку
+    std::size_t crossings = 0;  // пересечения линий-выносок (0 — разнесено)
 };
 
 struct UpdateReport {
@@ -423,6 +451,13 @@ public:
                                 const annotations::Specification* spec = nullptr);
     Result<UpdateReport> update(const ModelLoader& loader, views::ViewCache& cache,
                                 const annotations::Specification* spec = nullptr);
+
+    // Разнесение позиций листа (ГОСТ 2.109): ручные позиции листа (или только вида view, если он
+    // задан) получают arranged = true — при обновлении их полки ставятся вместе с автоматическими
+    // позициями своего вида на одну линию без пересечения выносок, по порядку номеров
+    // (annotations::arrangeBalloons). Возвращает число ручных позиций; после вызова нужен update.
+    // Ошибка InvalidInput — нет листа или вида.
+    Result<std::size_t> arrangeBalloons(const std::string& sheet, const std::string& view = {});
 
     // Автокомпоновка размеров вида (annotations::arrangeDimensions, ГОСТ 2.307): новые offset,
     // textShift и направление полок размеров вида view листа sheet по последнему обновлению;
