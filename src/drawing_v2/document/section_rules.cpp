@@ -12,6 +12,7 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Iterator.hxx>
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>
@@ -113,6 +114,9 @@ views::SectionParts sectionParts(const ModelSnapshot& model, views::Vec3 sight) 
     for (std::size_t i = 0; i < children.size(); ++i) {
         const assembly_v2::DefinitionId id = model.childOwner[i];
         if (!model.assembly->hasDefinition(id)) continue;
+        // Подшипник качения рассекается всегда: в разрезе через ось он изображается условно
+        // (ГОСТ 2.420) по контуру сечения, а не нерассечённым телом.
+        if (std::any_of(model.bearings.begin(), model.bearings.end(), [&](const auto& b) { return b.child == i; })) continue;
         const assembly_v2::Definition& def = model.assembly->definition(id);
         switch (sectionRule(def.properties, def.name)) {
             case SectionRule::Cut: break;

@@ -184,7 +184,16 @@ export class DrawingHandle {
     return this.#call('addBalloon', sheet, view, text(pick), text(spec)).id;
   }
 
-  /** Moves the shelf of a manual position: { at: [x, y] | null }. */
+  /**
+   * Arranges the positions (ГОСТ 2.109) of a sheet, or of one view: manual positions join the
+   * automatic ones on one line of shelves, leaders not crossing, numbers in order. Returns
+   * { arranged: manual positions, views: [{ view, line, ordered, crossings }] }.
+   */
+  arrangeBalloons(sheet, view = '') {
+    return this.#call('arrangeBalloons', sheet, view);
+  }
+
+  /** Moves the shelf of a manual position: { at: [x, y] | null }; a moved shelf is no longer arranged. */
   setBalloon(sheet, id, changes) {
     return this.#call('setBalloon', sheet, id, text(changes));
   }

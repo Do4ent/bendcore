@@ -83,24 +83,39 @@ Result<ModelSnapshot> snapshotAssembly(std::shared_ptr<const assembly_v2::Assemb
     std::vector<std::vector<assembly_v2::DefinitionId>> childChain;
     // Детали с зубчатыми венцами — условной формой ГОСТ 2.402 (впадины заполнены до окружности
     // вершин), одной на определение.
-    std::map<assembly_v2::DefinitionId, TopoDS_Shape> conventional;
+    std::map<assembly_v2::DefinitionId, std::pair<TopoDS_Shape, std::vector<modeling::GearInfo>>> conventional;
+    std::vector<modeling::GearInfo> allGears;
+    std::vector<std::size_t> gearChild;
+    std::vector<annotations::BearingInfo> bearings;
     for (assembly_v2::PlacedOccurrence& p : placed.value()) {
         if (p.shape.IsNull()) continue;
         const assembly_v2::Definition& def = document->definition(p.definition);
+        const std::size_t childIndex = childOwner.size();
         if (def.elementMap && !def.shape.IsNull()) {
             auto it = conventional.find(p.definition);
             if (it == conventional.end()) {
                 TopoDS_Shape conv;
-                const auto gears = modeling::gearsOf(*def.elementMap);
+                auto gears = modeling::gearsOf(*def.elementMap);
                 if (!gears.empty()) {
                     auto c = annotations::conventionalGearShape(def.shape, gears);
                     if (!c) return Error{c.error().code, "drawing model: " + def.name + ": " + c.error().message};
                     conv = c.value().shape;
                 }
-                it = conventional.emplace(p.definition, conv).first;
+                it = conventional.emplace(p.definition, std::make_pair(conv, std::move(gears))).first;
             }
-            if (!it->second.IsNull())
-                p.shape = it->second.Moved(p.shape.Location() * def.shape.Location().Inverted());
+            // Положение вхождения относительно формы определения: оно же переносит оси венцов.
+            const TopLoc_Location place = p.shape.Location() * def.shape.Location().Inverted();
+            if (!it->second.first.IsNull()) p.shape = it->second.first.Moved(place);
+            for (modeling::GearInfo g : it->second.second) {
+                g.gear.axis.Transform(place.Transformation());
+                allGears.push_back(std::move(g));
+                gearChild.push_back(childIndex);
+            }
+        }
+        // Подшипник качения (ГОСТ 2.420): по телам качения в геометрии или по наименованию.
+        if (auto b = annotations::recognizeBearing(p.shape, {def.properties.name, def.name})) {
+            b->child = childIndex;
+            bearings.push_back(*b);
         }
         builder.Add(compound, p.shape);
         childOwner.push_back(p.definition);
@@ -114,6 +129,9 @@ Result<ModelSnapshot> snapshotAssembly(std::shared_ptr<const assembly_v2::Assemb
         childChain.push_back(std::move(chain));
     }
     ModelSnapshot s;
+    s.gears = std::move(allGears);
+    s.gearChild = std::move(gearChild);
+    s.bearings = std::move(bearings);
     s.childOwner = std::move(childOwner);
     s.childChain = std::move(childChain);
     s.kind = ModelKind::Assembly;
@@ -125,6 +143,7 @@ Result<ModelSnapshot> snapshotAssembly(std::shared_ptr<const assembly_v2::Assemb
     // те же подформы (TShape + положение).
     s.edgeOwner.assign(topo.value().edges().size(), assembly_v2::DefinitionId(0));
     s.edgeChild.assign(topo.value().edges().size(), UINT32_MAX);
+    s.faceChild.assign(topo.value().faces().size(), UINT32_MAX);
     std::uint32_t child = 0;
     for (const assembly_v2::PlacedOccurrence& p : placed.value()) {
         if (p.shape.IsNull()) continue;
@@ -134,6 +153,8 @@ Result<ModelSnapshot> snapshotAssembly(std::shared_ptr<const assembly_v2::Assemb
                 s.edgeChild[*i] = child;
             }
         }
+        for (TopExp_Explorer ex(p.shape, TopAbs_FACE); ex.More(); ex.Next())
+            if (auto i = topo.value().faceIndex(ex.Current())) s.faceChild[*i] = child;
         ++child;
     }
     modeling::NamingRequest req;

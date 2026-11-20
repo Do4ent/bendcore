@@ -382,7 +382,10 @@ json updateReportJson(const dd::UpdateReport& r) {
     for (const dd::BalloonReport& b : r.balloons) {
         json placed = json::array();
         for (const auto& [pos, def] : b.placed) placed.push_back({{"position", pos}, {"definition", def}});
-        balloons.push_back({{"sheet", b.sheet}, {"view", b.view}, {"placed", placed}, {"withoutBalloon", b.withoutBalloon}});
+        json moved = json::array();
+        for (const auto& [def, view] : b.movedTo) moved.push_back({{"definition", def}, {"view", view}});
+        balloons.push_back({{"sheet", b.sheet}, {"view", b.view}, {"placed", placed}, {"withoutBalloon", b.withoutBalloon},
+                            {"movedTo", moved}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings}});
     }
     return {{"modelChanged", r.modelChanged}, {"previousHash", r.previousHash}, {"currentHash", r.currentHash},
             {"revision", r.revision},         {"viewsComputed", r.viewsComputed}, {"viewsFromCache", r.viewsFromCache},
@@ -463,7 +466,10 @@ json viewDefJson(const dd::ViewDef& v) {
               {"position", v.position ? pointJson(*v.position) : json(nullptr)},
               {"hidden", v.hidden},
               {"centerLines", v.centerLines},
-              {"autoBalloons", v.autoBalloons}};
+              {"autoBalloons", v.autoBalloons},
+              {"balloonLine", an::toString(v.balloonLine)},
+              {"bearings", v.bearings},
+              {"bearingSymbol", v.bearingSymbol == an::BearingSymbol::RollingElement ? "rollingElement" : "diagonals"}};
     if (v.kind == dd::ViewKind::Axonometric) j["axonometry"] = enumName(v.axonometry, kAxo);
     if (v.kind == dd::ViewKind::Section) {
         j["planePoint"] = vec3Json(v.planePoint);
@@ -570,7 +576,7 @@ json describe(Session& s) {
         json positions = json::array();
         for (std::size_t i = 0; i < sd.balloons.size(); ++i) {
             const auto& b = sd.balloons[i];
-            json p = {{"id", b.id}, {"view", b.view}, {"at", b.at ? pointJson(*b.at) : json(nullptr)}, {"state", nullptr}};
+            json p = {{"id", b.id}, {"view", b.view}, {"at", b.at ? pointJson(*b.at) : json(nullptr)}, {"arranged", b.arranged}, {"state", nullptr}};
             if (cs && i < cs->manualBalloons.size()) {
                 const auto& c = cs->manualBalloons[i];
                 p["state"] = c ? "ok" : "dangling";
@@ -1137,6 +1143,24 @@ std::string setView(std::uint32_t handle, std::string sheetId, std::string viewI
             if (j.contains("hidden")) v->hidden = boolOr(j, "hidden", true);
             if (j.contains("centerLines")) v->centerLines = boolOr(j, "centerLines", true);
             if (j.contains("autoBalloons")) v->autoBalloons = boolOr(j, "autoBalloons", false);
+            if (j.contains("bearings")) v->bearings = boolOr(j, "bearings", true);
+            if (j.contains("bearingSymbol")) {
+                const std::string sym = strOr(j, "bearingSymbol");
+                if (sym == "diagonals") v->bearingSymbol = an::BearingSymbol::Diagonals;
+                else if (sym == "rollingElement") v->bearingSymbol = an::BearingSymbol::RollingElement;
+                else throw InputError("unknown bearing symbol '" + sym + "'");
+            }
+            if (j.contains("balloonLine")) {
+                const std::string line = strOr(j, "balloonLine");
+                bool known = false;
+                for (an::BalloonLine l : {an::BalloonLine::Auto, an::BalloonLine::Right, an::BalloonLine::Left, an::BalloonLine::Above,
+                                          an::BalloonLine::Below})
+                    if (line == an::toString(l)) {
+                        v->balloonLine = l;
+                        known = true;
+                    }
+                if (!known) throw InputError("unknown balloon line '" + line + "'");
+            }
             if (j.contains("position")) {
                 if (j.at("position").is_null()) v->position.reset();
                 else v->position = point2From(j.at("position"), "position");
@@ -1450,7 +1474,10 @@ std::string setBalloon(std::uint32_t handle, std::string sheetId, std::string id
             dd::SheetDef& sd = sheetOf(s, sheetId);
             for (auto& b : sd.balloons) {
                 if (b.id != id) continue;
-                if (j.contains("at")) b.at = j.at("at").is_null() ? std::nullopt : std::optional(point2From(j.at("at"), "at"));
+                if (j.contains("at")) {
+                    b.at = j.at("at").is_null() ? std::nullopt : std::optional(point2From(j.at("at"), "at"));
+                    b.arranged = false;  // the shelf is placed by hand again
+                }
                 return nullptr;
             }
             throw InputError("unknown position '" + id + "'");
@@ -1566,6 +1593,27 @@ std::string arrangeDimensions(std::uint32_t handle, std::string sheetId, std::st
             const an::ArrangeResult r = take(s.doc.arrangeDimensions(*s.shown, sheetId, viewId));
             return {{"arranged", r.arranged}, {"crossings", r.crossings}, {"collisions", r.collisions}};
         });
+    });
+}
+
+// Arranges the positions of a sheet (or of one view if viewId is not empty, GOST 2.109): the manual
+// positions join the automatic ones of their view on one line of shelves, leaders not crossing,
+// numbers in order (DrawingDocument::arrangeBalloons). Returns the number of manual positions and,
+// per view, the line, whether the numbers are in order and the crossings left.
+std::string arrangeBalloons(std::uint32_t handle, std::string sheetId, std::string viewId) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        json out = transaction(s, "arrangeBalloons", [&]() -> json {
+            const std::size_t n = take(s.doc.arrangeBalloons(sheetId, viewId));
+            return {{"arranged", n}};
+        });
+        json views = json::array();
+        for (const dd::BalloonReport& b : s.lastReport.balloons) {
+            if (b.sheet != sheetId || (!viewId.empty() && b.view != viewId)) continue;
+            views.push_back({{"view", b.view}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings}});
+        }
+        out["views"] = views;
+        return out;
     });
 }
 
@@ -1919,6 +1967,7 @@ EMSCRIPTEN_BINDINGS(bendcore_drawing) {
     emscripten::function("removeLocalSection", &removeLocalSection);
     emscripten::function("moveDimension", &moveDimension);
     emscripten::function("arrangeDimensions", &arrangeDimensions);
+    emscripten::function("arrangeBalloons", &arrangeBalloons);
     emscripten::function("addDimensionGroup", &addDimensionGroup);
     emscripten::function("addThreadNote", &addThreadNote);
     emscripten::function("setThreadNote", &setThreadNote);
