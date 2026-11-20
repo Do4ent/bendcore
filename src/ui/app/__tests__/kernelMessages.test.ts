@@ -156,7 +156,9 @@ describe('localization', () => {
       ['InvalidInput', 'the DXF file has no $INSUNITS; choose the drawing units', /^В файле DXF нет единиц/],
       // Views and sections: the sheet and view prefix with the nested reason.
       ['OperationFailed', "sheet 'S1', view 'V2': section: OCCT failure: BRepAlgoAPI_Cut", /^Лист «S1», вид «V2»: разрез: сбой геометрического ядра OCCT$/],
-      ['message', "sheet 'S1': view 'V3' reduced to 1:2", /^Лист «S1»: масштаб вида «V3» уменьшен до 1:2$/],
+      ['message', "sheet 'S1': views 'F' and 'V3' overlap", /^Лист «S1»: виды «F» и «V3» перекрываются$/],
+      ['message', "sheet 'S1': view 'V3' at 1:1 does not fit its cell; set its position on the sheet",
+        /^Лист «S1»: вид «V3» в масштабе 1:1 не помещается в свою ячейку — задайте его положение на листе$/],
       ['InvalidInput', 'stepped section: two plane points at the same position along the step axis', /^Ступенчатый разрез: две точки/],
       // Dimensions and positions.
       ['message', 'edge #4 resolved to 2 elements', /^Ссылке edge #4 соответствуют 2 элементов$/],

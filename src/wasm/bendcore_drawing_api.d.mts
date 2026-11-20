@@ -351,6 +351,8 @@ export class DrawingHandle {
   addLocalSection(sheet: string, view: string, spec: { points: Point[]; spline?: boolean; depth: number }): EditResult & { view: string; index: number };
   removeLocalSection(sheet: string, view: string, index: number): EditResult;
   moveDimension(sheet: string, id: string, x: number, y: number): EditResult & { offset: number; textShift: number; leaderAngle: number };
+  /** Arranges the dimensions of a view (ГОСТ 2.307); counts of moved dimensions and of what is left to fix by hand. */
+  arrangeDimensions(sheet: string, view: string): EditResult & { arranged: number; crossings: number; collisions: number };
   addDimensionGroup(sheet: string, view: string, picks: number[], options?: { mode?: 'chain' | 'baseline'; direction?: 'horizontal' | 'vertical'; offset?: number; spacing?: number }): string[];
   addThreadNote(sheet: string, view: string, spec: { at: Point; toleranceField?: string; offset?: number; leaderAngle?: number; textShift?: number; id?: string }): EditResult & { id: string; thread: string };
   setThreadNote(sheet: string, id: string, changes: { toleranceField?: string; offset?: number; leaderAngle?: number; textShift?: number }): EditResult;

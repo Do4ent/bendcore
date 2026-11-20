@@ -50,6 +50,7 @@ import {
   downloadName,
   emptyPicks,
   sheetToViewPoint,
+  freeSectionFrame,
   viewAt,
   viewPointToModel,
 } from './sheetGeometry';
@@ -605,6 +606,7 @@ export default function DrawingEditorApp({
         const planes = o.points.map((q) => viewPointToModel(view, sheetToViewPoint(view, q)));
         const spec: ViewSpec = { kind: 'section', parent: view.id, planePoint: planes[0], stepPoints: planes.slice(1), markView: view.id };
         if (sectionSide !== 'none') spec.side = sectionSide as ViewSpec['side'];
+        else Object.assign(spec, freeSectionFrame(view));
         setOutline(emptyOutline);
         run(t('drawing.done.stepped'), (d) => d.addView(sheetId, spec));
       }
@@ -678,6 +680,7 @@ export default function DrawingEditorApp({
     } else if (tool === 'section') {
       const spec: ViewSpec = { kind: 'section', parent: view.id, planePoint: viewPointToModel(view, vp), markView: view.id };
       if (sectionSide !== 'none') spec.side = sectionSide as ViewSpec['side'];
+      else Object.assign(spec, freeSectionFrame(view));
       run(t('drawing.done.section'), (d) => d.addView(sheetId, spec));
     }
   };
@@ -980,6 +983,7 @@ export default function DrawingEditorApp({
                     <label>
                       {t('drawing.viewScale')}
                       <select
+                        data-testid="view-scale"
                         value={selected.scale ? selected.scale.ratio.join(':') : ''}
                         onChange={(e) => {
                           const scale = scaleOf(e.target.value);
@@ -1016,6 +1020,21 @@ export default function DrawingEditorApp({
                   ))}
                   {selected.position && (
                     <button onClick={() => run(t('drawing.done.autoPosition'), (d) => d.setView(sheet.id, selected.id, { position: null }))}>{t('drawing.autoPosition')}</button>
+                  )}
+                  {sheet.dimensions.some((x) => x.view === selected.id) && (
+                    <button
+                      data-testid="view-arrange-dimensions"
+                      title={t('drawing.arrangeDimensionsHint')}
+                      onClick={() =>
+                        run(t('drawing.done.dimsArranged'), async (d) => {
+                          const r = await d.arrangeDimensions(sheet.id, selected.id);
+                          const left = r.crossings + r.collisions;
+                          return { ...r, warnings: left > 0 ? [...r.warnings, t('drawing.arrangeLeft', { count: left })] : r.warnings };
+                        })
+                      }
+                    >
+                      {t('drawing.arrangeDimensions')}
+                    </button>
                   )}
                   <button
                     onClick={() =>
@@ -1154,7 +1173,7 @@ export default function DrawingEditorApp({
                 {tool === 'section' && (
                   <label>
                     {t('drawing.sectionSide')}
-                    <select value={sectionSide} onChange={(e) => setSectionSide(e.target.value)}>
+                    <select value={sectionSide} data-testid="section-side" onChange={(e) => setSectionSide(e.target.value)}>
                       {SHEET_SIDES.map((s) => (
                         <option key={s} value={s}>{t(`drawing.sectionAt.${s}`)}</option>
                       ))}

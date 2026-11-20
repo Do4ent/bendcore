@@ -13,6 +13,8 @@
  "InvalidInput\tPDF: null page",
  "InvalidInput\tSVG: cap height ratio out of range",
  "InvalidInput\tapplyPoses: result has {} poses, assembly has {} components",
+ "InvalidInput\tarrange dimensions: offsets, spacing and tiers must be positive",
+ "InvalidInput\tarrange dimensions: the view has no geometry",
  "InvalidInput\tauxiliary view: zero or non-finite direction",
  "InvalidInput\tbasic rack coefficients must be positive",
  "InvalidInput\tbasic rack: rho_f* must be in (0, c*/(1 - sin alpha)]",

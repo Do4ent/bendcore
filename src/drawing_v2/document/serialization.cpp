@@ -65,7 +65,8 @@ const std::vector<std::pair<annotations::DimensionType, const char*>> kDimTypes 
     {annotations::DimensionType::Diameter, "diameter"},     {annotations::DimensionType::Angle, "angle"}};
 const std::vector<std::pair<annotations::AnchorKind, const char*>> kAnchorKinds = {
     {annotations::AnchorKind::Start, "start"}, {annotations::AnchorKind::End, "end"},
-    {annotations::AnchorKind::Center, "center"}, {annotations::AnchorKind::Point, "point"}};
+    {annotations::AnchorKind::Center, "center"}, {annotations::AnchorKind::Point, "point"},
+    {annotations::AnchorKind::Section, "section"}};
 const std::vector<std::pair<annotations::ToleranceDisplay, const char*>> kTolDisp = {
     {annotations::ToleranceDisplay::ClassOnly, "classOnly"},
     {annotations::ToleranceDisplay::Deviations, "deviations"},
@@ -199,7 +200,11 @@ annotations::RefKind refKind(modeling::ElementKind k) {
 
 json anchorsJson(const std::vector<annotations::Anchor>& as) {
     json a = json::array();
-    for (const auto& x : as) a.push_back({{"anchor", enumName(x.kind, kAnchorKinds)}, {"ref", refJson(x.ref.persistent)}});
+    for (const auto& x : as) {
+        json o = {{"anchor", enumName(x.kind, kAnchorKinds)}, {"ref", refJson(x.ref.persistent)}};
+        if (x.kind == annotations::AnchorKind::Section) o["at"] = pt(x.at);  // точка контура сечения, мм вида
+        a.push_back(std::move(o));
+    }
     return a;
 }
 std::vector<annotations::Anchor> anchorsFrom(const json& j, int version) {
@@ -217,6 +222,7 @@ std::vector<annotations::Anchor> anchorsFrom(const json& j, int version) {
             a.ref.persistent = refFrom(field(x, "ref"));
         }
         a.ref.kind = refKind(a.ref.persistent.kind);
+        if (a.kind == annotations::AnchorKind::Section) a.at = ptFrom(field(x, "at"));
         out.push_back(std::move(a));
     }
     return out;
