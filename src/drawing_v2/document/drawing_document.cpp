@@ -592,7 +592,11 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         }
         cs.scale = pg.scale;
 
-        // Виды вне проекционной связи — столбцом в своей области.
+        // Виды вне проекционной связи. Без положения — столбцом в своей области (ячейка на вид);
+        // масштаб без явного значения уменьшается до помещающегося в ячейку. С явным положением
+        // (ViewDef::position) вид не ограничивается ячейкой: центр — заданная точка, масштаб —
+        // заданный (или масштаб листа). Явный масштаб не уменьшается и без положения; выход за
+        // ячейку, перекрытие видов, основной надписи и рамки — предупреждения (проверка ниже).
         std::vector<const ViewDef*> secondary;
         for (const ViewDef& v : sd.views)
             if (!isGroupView(v)) secondary.push_back(&v);
@@ -600,9 +604,12 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         std::map<std::string, Point2> secAnchor;
         if (!secondary.empty()) {
             Rect2 area = reg.secondary.valid() ? reg.secondary : reg.group;
-            const double slotH = area.h() / double(secondary.size());
-            for (std::size_t k = 0; k < secondary.size(); ++k) {
-                const ViewDef& v = *secondary[k];
+            std::size_t cells = 0;
+            for (const ViewDef* v : secondary) cells += v->position ? 0 : 1;
+            const double slotH = area.h() / double(std::max<std::size_t>(cells, 1));
+            std::size_t k = 0;  // номер ячейки
+            for (const ViewDef* vp : secondary) {
+                const ViewDef& v = *vp;
                 const ProjectedView& pv = projected[v.id];
                 const double factor =
                     v.kind == ViewKind::Axonometric ? axonometricFactor(v.axonometry, settings_.reducedAxonometry) : 1.0;
@@ -619,27 +626,36 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                         }
                     }
                 }
-                const Rect2 slot{area.x0, area.y1 - slotH * double(k + 1), area.x1, area.y1 - slotH * double(k)};
-                auto fitsAt = [&](const ScaleRatio& s) {
-                    const double sc = s.value() * factor;
-                    return pv.bounds.width() * sc <= slot.w() && pv.bounds.height() * sc + room <= slot.h();
-                };
                 ScaleRatio chosen = want;
-                if (!fitsAt(want)) {
-                    bool found = false;
-                    for (const ScaleRatio& s : gostScales()) {
-                        if (s.value() > want.value() + 1e-12) continue;
-                        if (fitsAt(s)) {
-                            chosen = s;
-                            found = true;
-                            break;
+                Point2 c;
+                if (v.position) {
+                    c = *v.position;
+                } else {
+                    const Rect2 slot{area.x0, area.y1 - slotH * double(k + 1), area.x1, area.y1 - slotH * double(k)};
+                    ++k;
+                    auto fitsAt = [&](const ScaleRatio& s) {
+                        const double sc = s.value() * factor;
+                        return pv.bounds.width() * sc <= slot.w() && pv.bounds.height() * sc + room <= slot.h();
+                    };
+                    if (!fitsAt(want)) {
+                        if (v.scale) {
+                            report.warnings.push_back("sheet '" + sd.id + "': view '" + v.id + "' at " + want.label() +
+                                                      " does not fit its cell; set its position on the sheet");
+                        } else {
+                            bool found = false;
+                            for (const ScaleRatio& s : gostScales()) {
+                                if (s.value() > want.value() + 1e-12) continue;
+                                if (fitsAt(s)) {
+                                    chosen = s;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (!found) return invalid("sheet '" + sd.id + "': view '" + v.id + "' does not fit its area");
                         }
                     }
-                    if (!found) return invalid("sheet '" + sd.id + "': view '" + v.id + "' does not fit its area");
-                    if (v.scale) report.warnings.push_back("sheet '" + sd.id + "': view '" + v.id + "' reduced to " + chosen.label());
+                    c = {0.5 * (slot.x0 + slot.x1), 0.5 * (slot.y0 + slot.y1)};
                 }
-                Point2 c{0.5 * (slot.x0 + slot.x1), 0.5 * (slot.y0 + slot.y1)};
-                if (v.position) c = *v.position;
                 secScale[v.id] = {chosen.value() * factor, chosen};
                 secAnchor[v.id] = anchorForCenter(pv, chosen.value() * factor, c, room);
             }
@@ -688,6 +704,31 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                     for (annotations::ThreadImage& t : cv.threads) t.clip = annotations::ThreadClip{v.detailCenter, v.detailRadius};
             }
             cs.views.push_back(std::move(cv));
+        }
+        // Проверка компоновки (предупреждения, не ошибки): изображения (с надписью «А–А» над
+        // разрезом и выносным элементом) не перекрывают друг друга, основную надпись и не выходят
+        // за рамку. Касание и перекрытие меньше 0,5 мм не считаются.
+        {
+            std::vector<Rect2> boxes;
+            for (const ComputedView& cv : cs.views) {
+                Box2 b = cv.sheetView.sheetBounds();
+                if (cv.kind == ViewKind::Section || cv.kind == ViewKind::Detail) b = inflate(b, kLabelRoom);
+                boxes.push_back({b.minX, b.minY, b.maxX, b.maxY});
+            }
+            auto overlap = [](const Rect2& a, const Rect2& b) {
+                return std::min(a.x1, b.x1) - std::max(a.x0, b.x0) > 0.5 && std::min(a.y1, b.y1) - std::max(a.y0, b.y0) > 0.5;
+            };
+            for (std::size_t i = 0; i < boxes.size(); ++i) {
+                for (std::size_t j = i + 1; j < boxes.size(); ++j)
+                    if (overlap(boxes[i], boxes[j]))
+                        report.warnings.push_back("sheet '" + sd.id + "': views '" + cs.views[i].id + "' and '" +
+                                                  cs.views[j].id + "' overlap");
+                if (overlap(boxes[i], reg.title))
+                    report.warnings.push_back("sheet '" + sd.id + "': view '" + cs.views[i].id + "' overlaps the title block");
+                const Rect2& f = reg.frame;
+                if (boxes[i].x0 < f.x0 - 1e-9 || boxes[i].y0 < f.y0 - 1e-9 || boxes[i].x1 > f.x1 + 1e-9 || boxes[i].y1 > f.y1 + 1e-9)
+                    report.warnings.push_back("sheet '" + sd.id + "': view '" + cs.views[i].id + "' goes beyond the drawing frame");
+            }
         }
         // Секущая плоскость должна быть видна на виде обозначения следом.
         for (const ComputedView& cv : cs.views) {
