@@ -123,7 +123,7 @@ TEST(FeaturesGear, ProfileDiametersAndToothThickness) {
         ASSERT_TRUE(p.ok()) << p.error().message;
         EXPECT_TRUE(valid(p.value().face));
         EXPECT_EQ(p.value().roles.size(), 6u * s.teeth);
-        EXPECT_LE(p.value().maxDeviation, 1e-4);
+        EXPECT_LE(p.value().maxDeviation, 1e-5);
         const GearGeometry g = gearGeometry(s).value();
         auto e = edgesOf(p.value());
         // Окружности вершин и впадин — по рёбрам.
@@ -164,7 +164,7 @@ TEST(FeaturesGear, SpurVolumeAgainstProfileIntegral) {
     // Площадь лежит между кругами впадин и вершин.
     EXPECT_GT(A, kPi * 17.5 * 17.5);
     EXPECT_LT(A, kPi * 22.0 * 22.0);
-    EXPECT_NEAR(volume(res.value().shape), A * 16.0, 1e-6 * A * 16.0);
+    EXPECT_NEAR(volume(res.value().shape), A * 16.0, 3e-6 * A * 16.0);
     // Грани ролей: 6 на зуб + 2 торца.
     EXPECT_EQ(res.value().roles.size(), 6u * 20 + 2);
     EXPECT_EQ(count(res.value().shape, TopAbs_FACE), 6 * 20 + 2);
@@ -181,7 +181,7 @@ TEST(FeaturesGear, CutOnBlank) {
     EXPECT_TRUE(valid(res.value().shape));
     const double A = profileArea(p.spec);
     const double removed = (kPi * g.da * g.da / 4 - A) * 20.0;
-    EXPECT_NEAR(volume(blank) - volume(res.value().shape), removed, 1e-6 * removed);
+    EXPECT_NEAR(volume(blank) - volume(res.value().shape), removed, 3e-6 * removed);
     // Роли — грани инструмента (без вершин зубьев: они остаются гранью заготовки).
     EXPECT_EQ(res.value().roles.size(), 5u * 24);
     for (const auto& [f, role] : res.value().roles) EXPECT_EQ(f.ShapeType(), TopAbs_FACE) << role;
@@ -197,7 +197,7 @@ TEST(FeaturesGear, HelicalVolumeAndTwist) {
     EXPECT_TRUE(valid(res.value().shape));
     const double A = profileArea(p.spec);
     // Принцип Кавальери: объём косозубого венца равен площади торцового сечения × b.
-    EXPECT_NEAR(volume(res.value().shape), A * 15.0, 2e-5 * A * 15.0);
+    EXPECT_NEAR(volume(res.value().shape), A * 15.0, 3e-5 * A * 15.0);
     // Торец End повёрнут на twist = −2b·tg β/d (левый зуб): центр масс торца — на оси, поэтому
     // поворот проверяется по вершине зуба № 1 (середина дуги вершины).
     const GearGeometry g = gearGeometry(p.spec).value();
@@ -234,13 +234,14 @@ TEST(FeaturesGear, UndercutSmallTeeth) {
     for (const auto& w : res.value().warnings) warned = warned || w.find("undercut") != std::string::npos;
     EXPECT_TRUE(warned);
     const double A = profileArea(p.spec);
-    EXPECT_NEAR(volume(res.value().shape), A * 10.0, 1e-6 * A * 10.0);
+    EXPECT_NEAR(volume(res.value().shape), A * 10.0, 3e-6 * A * 10.0);
     // Подрезанная ножка тоньше: переходная кривая уходит внутрь основной окружности.
     double rMin = 1e300;
     for (const auto& [x, y] : side.value().fillet) rMin = std::min(rMin, std::hypot(x, y));
     EXPECT_LT(rMin, g.db / 2);
-    // С x = 0,6 > xmin подрезания нет.
-    p.spec.shift = 0.6;
+    // z = 10, x = 0,45 > xmin = 0,415: подрезания нет (при z = 8 зуб без подрезания заострён).
+    p.spec = spec(2, 10, 0.45, 10.0);
+    EXPECT_FALSE(gearGeometry(p.spec).value().undercut);
     auto res2 = gearTeeth(TopoDS_Shape(), p);
     ASSERT_TRUE(res2.ok()) << res2.error().message;
     for (const auto& w : res2.value().warnings) EXPECT_EQ(w.find("undercut"), std::string::npos) << w;

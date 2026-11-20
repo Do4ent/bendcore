@@ -452,7 +452,7 @@ Result<GearProfile> gearProfile(const GearSpec& spec, double tolerance) {
         auto add = [&](const TopoDS_Edge& e, const std::string& role) {
             wire.Add(e);
             if (!wire.IsDone()) throw Standard_Failure(("gear profile: edge " + role + " does not connect").c_str());
-            out.roles.emplace_back(e, role);
+            out.roles.emplace_back(wire.Edge(), role);
         };
         for (int k = 0; k < z; ++k) {
             const double a = k * tau;
@@ -460,11 +460,11 @@ Result<GearProfile> gearProfile(const GearSpec& spec, double tolerance) {
             BRepBuilderAPI_MakeEdge fr(curveOf(fil.value(), a, false), v[k][0], v[k][1]);
             BRepBuilderAPI_MakeEdge er(curveOf(evo.value(), a, false), v[k][1], v[k][2]);
             Handle(Geom_Circle) tc = new Geom_Circle(tipCircle);
-            BRepBuilderAPI_MakeEdge tip(tc, a - thA, a + thA);
+            BRepBuilderAPI_MakeEdge tip(tc, v[k][2], v[k][3], a - thA, a + thA);
             BRepBuilderAPI_MakeEdge el(curveOf(evo.value(), a, true), v[k][4], v[k][3]);
             BRepBuilderAPI_MakeEdge fl(curveOf(fil.value(), a, true), v[k][5], v[k][4]);
             Handle(Geom_Circle) rc = new Geom_Circle(rootCircle);
-            BRepBuilderAPI_MakeEdge root(rc, a + T.gamma, a + tau - T.gamma);
+            BRepBuilderAPI_MakeEdge root(rc, v[k][5], v[(k + 1) % z][0], a + T.gamma, a + tau - T.gamma);
             for (auto* e : {&fr, &er, &tip, &el, &fl, &root})
                 if (!e->IsDone()) return Error{ErrorCode::OperationFailed, "gear profile: edge construction failed"};
             add(fr.Edge(), tk + "FilletR");
@@ -528,7 +528,7 @@ Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& pa
                 if (!mf.IsDone()) return Error{ErrorCode::OperationFailed, "gear: ring face construction failed"};
                 TopoDS_Face ring = mf.Face();
                 if (!BRepCheck_Analyzer(ring).IsValid()) return Error{ErrorCode::OperationFailed, "gear: ring face is not valid"};
-                BRepPrimAPI_MakePrism prism(ring, along, true);
+                BRepPrimAPI_MakePrism prism(ring, along, false);
                 prism.Build();
                 if (!prism.IsDone()) return Error{ErrorCode::OperationFailed, "gear: prism failed"};
                 tool = prism.Shape();
@@ -538,7 +538,7 @@ Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& pa
                         if (f.ShapeType() == TopAbs_FACE) roles.emplace_back(f, role);
                 }
             } else {
-                BRepPrimAPI_MakePrism prism(P.face, along, true);
+                BRepPrimAPI_MakePrism prism(P.face, along, false);
                 prism.Build();
                 if (!prism.IsDone()) return Error{ErrorCode::OperationFailed, "gear: prism failed"};
                 tool = prism.Shape();
@@ -560,6 +560,7 @@ Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& pa
             TopoDS_Wire aux = BRepBuilderAPI_MakeWire(helixEdge).Wire();
             BRepOffsetAPI_MakePipeShell pipe(spine);
             pipe.SetMode(aux, false);
+            pipe.SetTolerance(1e-7, 1e-7, 1e-6);
             pipe.Add(P.wire, false, false);
             pipe.Build();
             if (!pipe.IsDone() || !pipe.MakeSolid()) return Error{ErrorCode::OperationFailed, "gear: helical sweep failed"};

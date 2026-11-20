@@ -93,7 +93,7 @@ struct GearProfile {
     double maxDeviation = 0.0;  // наибольшее отклонение B-сплайнов от формул в контрольных точках
     std::vector<std::string> warnings;
 };
-Result<GearProfile> gearProfile(const GearSpec& spec, double tolerance = 1e-4);
+Result<GearProfile> gearProfile(const GearSpec& spec, double tolerance = 1e-5);
 
 // Операция «Зубчатый венец».
 //   Cut     — нарезание зубьев на заготовке target: удаляется кольцо между окружностью,
@@ -107,7 +107,7 @@ Result<GearProfile> gearProfile(const GearSpec& spec, double tolerance = 1e-4);
 struct GearParams {
     GearSpec spec;
     FeatureMode mode = FeatureMode::Cut;
-    double tolerance = 1e-4;  // мм, отклонение B-сплайнов профиля
+    double tolerance = 1e-5;  // мм, отклонение B-сплайнов профиля
 };
 Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& params);
 
