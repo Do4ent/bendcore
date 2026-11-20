@@ -30,8 +30,8 @@ type AnyFn = (...args: never[]) => unknown;
 /** Result of a remote call: class instances (they have dispose) become remote objects. */
 export type RemoteResult<R> = R extends { dispose(): void }
   ? Remote<R>
-  : R extends { document: infer D; report: infer P }
-    ? { document: RemoteResult<D>; report: P }
+  : R extends { document: infer D; report: unknown }
+    ? Omit<R, 'document'> & { document: RemoteResult<D> }
     : R extends { drawing: infer D; report: infer P }
       ? { drawing: RemoteResult<D>; report: P }
       : R extends { shape: infer S; structure: infer P }

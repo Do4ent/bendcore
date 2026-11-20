@@ -155,6 +155,40 @@ export interface ImportStructure {
   fileUnitMm: number | null;
 }
 
+export type MeasureElement = { kind: 'face' | 'edge' | 'vertex'; index: number };
+export type MeasureSpec =
+  | { type: 'distance' | 'angle'; a: MeasureElement; b: MeasureElement }
+  | { type: 'length' | 'area' | 'radius'; a: MeasureElement };
+export interface Measurement {
+  type: 'distance' | 'angle' | 'length' | 'area' | 'radius';
+  unit: 'mm' | 'mm2' | 'deg';
+  value: number;
+  /** distance: nearest points; angle: vertex, point on the first, on the second; length: start, end, middle. */
+  points: Vec3[];
+  diameter?: number;
+}
+export interface SectionPlane {
+  origin: Vec3;
+  normal: Vec3;
+}
+export interface SectionResult {
+  area: number;
+  polylines: Float32Array[];
+}
+export interface LibraryMaterial {
+  id: string;
+  name: string;
+  category: string;
+  /** kg/m^3 */
+  density: number;
+  color: [number, number, number];
+  source: string;
+  verified: boolean;
+  youngModulus?: number;
+  poissonRatio?: number;
+  yieldStrength?: number;
+}
+
 export class KernelShape {
   readonly handle: number;
   readonly disposed: boolean;
@@ -170,6 +204,10 @@ export class KernelShape {
   tessellate(params?: TessellationParams): KernelMesh;
   exportFile(format: ExportFormat, options?: ExportOptions): Uint8Array;
   massProperties(density: number): MassProperties;
+  /** Measurement between elements (kernel indices); distances in mm, angles in degrees. */
+  measure(spec: MeasureSpec): Measurement;
+  /** Section by a plane: area (mm^2) and contour polylines (xyz triples). */
+  section(plane: SectionPlane, deflection?: number): SectionResult;
 }
 
 export interface KernelInfo {
@@ -182,6 +220,8 @@ export class Kernel {
   readStep(bytes: Uint8Array): KernelShape;
   importModel(bytes: Uint8Array, format: 'step' | 'iges'): { shape: KernelShape; structure: ImportStructure };
   exchangeInfo(): { zipMethod: 'deflate' | 'stored' };
+  /** Built-in material library of the kernel. */
+  materials(): LibraryMaterial[];
 }
 
 export type KernelModuleFactory = (options?: Record<string, unknown>) => Promise<unknown>;

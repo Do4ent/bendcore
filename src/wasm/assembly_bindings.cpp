@@ -28,6 +28,7 @@
 #include <bendcore/modeling/part_document.hpp>
 #include <bendcore/modeling/part_features.hpp>
 
+#include "analysis_common.hpp"
 #include "exchange_common.hpp"
 
 #include <emscripten/bind.h>
@@ -1549,6 +1550,46 @@ val asmElement(std::uint32_t handle, val ref) {
     });
 }
 
+// B-rep element of a placed part in world coordinates (the part's shape moved by the occurrence's
+// placement), for measurements. ref {path, kind, index}.
+TopoDS_Shape worldElement(const a::AssemblyDocument& doc, const val& ref, const std::string& what) {
+    const a::GeometryRef r = refFromJs(ref, what);
+    if (!r.element.index) throw InputError(what + " needs an index");
+    const a::Occurrence* leaf = doc.findOccurrence(r.path.back());
+    if (!leaf) throw InputError("unknown occurrence " + std::to_string(r.path.back()));
+    const a::Definition& def = doc.definition(leaf->definition);
+    if (def.kind != a::DefinitionKind::Part || !def.topology) throw InputError(what + ": the path does not end at a part");
+    const std::uint32_t index = *r.element.index;
+    if (index >= a::elementCount(*def.topology, r.element.kind)) throw InputError(what + ": element index out of range");
+    TopoDS_Shape shape;
+    if (r.element.kind == m::ElementKind::Face) shape = def.topology->faces()[index].face;
+    else if (r.element.kind == m::ElementKind::Edge) shape = def.topology->edges()[index].edge;
+    else shape = def.topology->vertices()[index].vertex;
+    auto world = doc.worldPlacement(r.path);
+    if (!world) throw InputError(what + ": " + world.error().message);
+    return shape.Moved(a::toLocation(world.value()));
+}
+
+// Measurement between elements of placed parts, world coordinates (analysis_common.hpp): spec
+// {type: distance | angle | length | area | radius, a: {path, kind, index}, b: {path, kind, index}}.
+val asmMeasure(std::uint32_t handle, val spec) {
+    return withSession(handle, [&](Session& s) {
+        const a::AssemblyDocument& doc = s.active();
+        if (!isObject(spec)) throw InputError("spec must be an object");
+        const std::string type = requireString(spec["type"], "spec.type");
+        const TopoDS_Shape first = worldElement(doc, spec["a"], "spec.a");
+        if (type == "length" || type == "area" || type == "radius") {
+            auto r = bendcore::wasm_analysis::measureShapes(type, first, nullptr);
+            if (!r) return failure(r.error());
+            return success(r.value());
+        }
+        const TopoDS_Shape second = worldElement(doc, spec["b"], "spec.b");
+        auto r = bendcore::wasm_analysis::measureShapes(type, first, &second);
+        if (!r) return failure(r.error());
+        return success(r.value());
+    });
+}
+
 val asmInterference(std::uint32_t handle, val options) {
     return withSession(handle, [&](Session& s) {
         a::InterferenceOptions o;
@@ -1734,6 +1775,7 @@ EMSCRIPTEN_BINDINGS(bendcore_assembly) {
     emscripten::function("asmTessellate", &asmTessellate);
     emscripten::function("asmPlacements", &asmPlacements);
     emscripten::function("asmElement", &asmElement);
+    emscripten::function("asmMeasure", &asmMeasure);
     emscripten::function("asmInterference", &asmInterference);
     emscripten::function("asmBom", &asmBom);
     emscripten::function("asmFindHoles", &asmFindHoles);

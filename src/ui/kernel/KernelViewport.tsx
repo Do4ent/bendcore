@@ -9,6 +9,11 @@
  * In edge mode a click selects the kernel edge nearest to the cursor on screen (edgePick.ts),
  * unless a face hides it; selected edges are drawn as a separate highlighted LineSegments.
  * An optional overlay mesh (sketch regions) is drawn translucent on top of the model.
+ *
+ * Tools (docs/ui/KERNEL_VIEWPORT.md, "Измерения и сечение"): `clip` is a clipping plane of the
+ * renderer (the section slider moves it without a kernel call; the faces and edges of the removed
+ * side are neither drawn nor picked), `sectionLines` the section contour of the kernel and
+ * `measure` the lines and the label of a kernel measurement.
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -40,6 +45,20 @@ export interface KernelViewportHandle {
   worldToClient(x: number, y: number, z: number): { x: number; y: number };
 }
 
+/** Clipping plane in three.js form: the side with normal . p + constant >= 0 is kept. */
+export interface ClipPlane {
+  normal: [number, number, number];
+  constant: number;
+}
+
+export interface MeasureOverlay {
+  /** Polylines to draw, model coordinates. */
+  lines: [number, number, number][][];
+  /** Where the label is anchored. */
+  anchor: [number, number, number];
+  label: string;
+}
+
 export interface KernelViewportProps {
   mesh: KernelMesh | null;
   selectedFace: number | null;
@@ -66,12 +85,20 @@ export interface KernelViewportProps {
    * view, the view is framed again (src/ui/kernel/autoFrame.ts).
    */
   bodyCount?: number | null;
+  /** Section: the model is clipped by this plane (null: whole). */
+  clip?: ClipPlane | null;
+  /** Section contour polylines (xyz triples) drawn over the cut. */
+  sectionLines?: readonly Float32Array[];
+  /** A measurement drawn over the model. */
+  measure?: MeasureOverlay | null;
 }
 
 const FACE_COLOR = 0xb8c4d6;
 const SELECTED_COLOR = 0xff8c1a;
 const EDGE_COLOR = 0x1d2733;
 const OVERLAY_COLOR = 0x2f7de1;
+const SECTION_COLOR = 0xd62828;
+const MEASURE_COLOR = 0x0b8a3e;
 /** Pointer distance (px) within which a click picks an edge. */
 const EDGE_TOLERANCE = 6;
 const BACKGROUND = 0xf3f5f8;
@@ -88,6 +115,11 @@ interface SceneState {
   edgeBuffers: EdgeBuffers | null;
   highlight: THREE.Group;
   overlay: THREE.Group;
+  /** section contour and measurement lines (not pickable) */
+  tools: THREE.Group;
+  clip: THREE.Plane | null;
+  /** measurement label: anchor in model coordinates, element placed over the viewport */
+  label: { anchor: THREE.Vector3; element: HTMLDivElement } | null;
   framed: boolean;
   /** bodies and bounding box of the mesh shown (for the re-framing of new bodies) */
   bodies: number | null;
@@ -169,6 +201,26 @@ function buildOverlay(mesh: KernelMesh): THREE.Object3D[] {
   return [faces, buildEdges(packEdgePolylines(mesh.edges), OVERLAY_COLOR)];
 }
 
+/** Puts the measurement label over the projection of its anchor. */
+function placeLabel(state: SceneState | null, camera: THREE.Camera, canvas: HTMLElement): void {
+  const label = state?.label;
+  if (!label) return;
+  const p = label.anchor.clone().project(camera);
+  const visible = p.z > -1 && p.z < 1;
+  label.element.style.display = visible ? 'block' : 'none';
+  label.element.style.left = `${((p.x + 1) / 2) * canvas.clientWidth}px`;
+  label.element.style.top = `${((1 - p.y) / 2) * canvas.clientHeight}px`;
+}
+
+function lineObject(points: ArrayLike<number>, color: number, name: string): THREE.Line {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(points as ArrayLike<number>), 3));
+  const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color, depthTest: false }));
+  line.renderOrder = 10;
+  line.name = name;
+  return line;
+}
+
 const KernelViewport: React.FC<KernelViewportProps> = ({
   mesh,
   selectedFace,
@@ -182,6 +234,9 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
   autoFrame = 'always',
   frameKey,
   bodyCount = null,
+  clip = null,
+  sectionLines,
+  measure = null,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
@@ -217,10 +272,15 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     scene.add(highlight);
     const overlayGroup = new THREE.Group();
     scene.add(overlayGroup);
+    const toolsGroup = new THREE.Group();
+    scene.add(toolsGroup);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.screenSpacePanning = true;
-    const render = () => renderer.render(scene, camera);
+    const render = () => {
+      renderer.render(scene, camera);
+      placeLabel(stateRef.current, camera, renderer.domElement);
+    };
     controls.addEventListener('change', render);
     const state: SceneState = {
       renderer,
@@ -232,6 +292,9 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       edgeBuffers: null,
       highlight,
       overlay: overlayGroup,
+      tools: toolsGroup,
+      clip: null,
+      label: null,
       framed: false,
       bodies: null,
       box: new THREE.Box3(),
@@ -271,7 +334,11 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       );
       const raycaster = new THREE.Raycaster();
       raycaster.setFromCamera(ndc, camera);
-      const hit = state.faces && current ? raycaster.intersectObject(state.faces, false)[0] : undefined;
+      // The first hit on the kept side of the section plane.
+      const hit =
+        state.faces && current
+          ? raycaster.intersectObject(state.faces, false).find((h) => !state.clip || state.clip.distanceToPoint(h.point) >= 0)
+          : undefined;
       if (mode === 'edge') {
         const buffers = state.edgeBuffers;
         if (!buffers || !current) {
@@ -340,6 +407,8 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       disposeModel(model);
       disposeModel(highlight);
       disposeModel(overlayGroup);
+      disposeModel(toolsGroup);
+      state.label?.element.remove();
       renderer.dispose();
       container.removeChild(renderer.domElement);
       stateRef.current = null;
@@ -432,6 +501,56 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     // autoFrame is a mount-time choice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overlay]);
+
+  // Section plane: a renderer clipping plane, so the slider needs no kernel call.
+  const clipKey = clip ? `${clip.normal.join(',')}|${clip.constant}` : '';
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    if (clip) {
+      state.clip = new THREE.Plane(new THREE.Vector3(...clip.normal), clip.constant);
+      state.renderer.localClippingEnabled = false;
+      state.renderer.clippingPlanes = [state.clip];
+    } else {
+      state.clip = null;
+      state.renderer.clippingPlanes = [];
+    }
+    state.renderer.domElement.parentElement?.setAttribute('data-clipped', clip ? 'true' : 'false');
+    state.render();
+    // clipKey stands for the plane.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipKey]);
+
+  // Section contour from the kernel and the lines of a measurement.
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    disposeModel(state.tools);
+    for (const line of sectionLines ?? []) {
+      if (line.length >= 6) state.tools.add(lineObject(line, SECTION_COLOR, 'kernel-section'));
+    }
+    if (measure) {
+      for (const line of measure.lines) state.tools.add(lineObject(line.flat(), MEASURE_COLOR, 'kernel-measure'));
+    }
+    if (state.label && !measure) {
+      state.label.element.remove();
+      state.label = null;
+    }
+    if (measure) {
+      if (!state.label) {
+        const element = document.createElement('div');
+        element.className = 'kernel-measure-label';
+        element.setAttribute('data-testid', 'measure-label');
+        state.renderer.domElement.parentElement?.appendChild(element);
+        state.label = { anchor: new THREE.Vector3(), element };
+      }
+      state.label.anchor.set(...measure.anchor);
+      state.label.element.textContent = measure.label;
+      state.label.element.setAttribute('data-label', measure.label);
+    }
+    state.renderer.domElement.parentElement?.setAttribute('data-section-lines', String(sectionLines?.length ?? 0));
+    state.render();
+  }, [sectionLines, measure]);
 
   return <div ref={containerRef} className="kernel-viewport" data-testid="kernel-viewport" />;
 };

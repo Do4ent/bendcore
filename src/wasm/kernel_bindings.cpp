@@ -11,6 +11,7 @@
 #include <bendcore/kernel/step_io.hpp>
 #include <bendcore/kernel/tessellation.hpp>
 
+#include "analysis_common.hpp"
 #include "exchange_common.hpp"
 
 #include <emscripten/bind.h>
@@ -437,6 +438,31 @@ val massProperties(std::uint32_t handle, val density) {
     });
 }
 
+// Measurement between elements of the shape: spec {type: distance | angle | length | area |
+// radius, a: {kind, index}, b: {kind, index}} (analysis_common.hpp).
+val measure(std::uint32_t handle, val spec) {
+    return withShape(handle, [&](Entry& e) {
+        val error;
+        const k::TopologyIndex* topo = topology(e, error);
+        if (!topo) return error;
+        auto m = bendcore::wasm_analysis::measureElements(*topo, spec);
+        if (!m) return failure(m.error());
+        return success(m.value());
+    });
+}
+
+// Section by the plane {origin, normal}: area, contour polylines (analysis_common.hpp).
+val sectionShape(std::uint32_t handle, val plane, double deflection) {
+    return withShape(handle, [&](Entry& e) {
+        auto s = bendcore::wasm_analysis::sectionShape(e.shape, plane, deflection);
+        if (!s) return failure(s.error());
+        return success(s.value());
+    });
+}
+
+// Built-in material library of bendcore_kernel_analysis.
+val materials() { return bendcore::wasm_analysis::materialsToJs(); }
+
 // Byte layout of the formats in this build: {zipMethod: 'deflate' | 'stored'} (3MF).
 val exchangeInfo() {
     val out = val::object();
@@ -450,6 +476,9 @@ EMSCRIPTEN_BINDINGS(bendcore_kernel) {
     emscripten::function("importModel", &importModel);
     emscripten::function("exportShape", &exportShape);
     emscripten::function("massProperties", &massProperties);
+    emscripten::function("measure", &measure);
+    emscripten::function("sectionShape", &sectionShape);
+    emscripten::function("materials", &materials);
     emscripten::function("exchangeInfo", &exchangeInfo);
     emscripten::function("kernelInfo", &kernelInfo);
     emscripten::function("readStep", &readStep);

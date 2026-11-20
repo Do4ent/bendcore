@@ -1,7 +1,7 @@
 // Types of bendcore_modeling_api.mjs (docs/ui/PART_MODELING_UI.md).
 
 import { KernelError, KernelMesh, TessellationParams, Vec3, faceOfTriangle } from './bendcore_kernel_api.mjs';
-import type { ExportFormat, ExportOptions, MassProperties } from './bendcore_kernel_api.mjs';
+import type { ExportFormat, ExportOptions, MassProperties, LibraryMaterial, MeasureSpec, Measurement, SectionPlane, SectionResult } from './bendcore_kernel_api.mjs';
 
 export type { ExportFormat, ExportOptions, MassProperties };
 
@@ -321,11 +321,21 @@ export interface PartProperties {
   boundingBox: { min: Vec3; max: Vec3 } | null;
 }
 
+export interface PartMaterial {
+  /** Id of a kernel library material (ModelingKernel.materials()) or any id for a custom density. */
+  id: string;
+  /** kg/m^3 */
+  density: number;
+}
+
+export type { LibraryMaterial, MeasureSpec, Measurement, SectionPlane, SectionResult } from './bendcore_kernel_api.mjs';
+
 export class PartDocumentHandle {
   readonly handle: number;
   readonly disposed: boolean;
   dispose(): void;
-  save(options?: { includeCache?: boolean }): string;
+  /** material: written as the top-level field "material" of the file (kg/m^3). */
+  save(options?: { includeCache?: boolean; material?: PartMaterial }): string;
   variables(): VariableView[];
   setVariable(name: string, expression: Expr): void;
   removeVariable(name: string): void;
@@ -350,6 +360,10 @@ export class PartDocumentHandle {
   properties(target?: ShapeTarget, density?: number | null): PartProperties;
   exportFile(format: ExportFormat, options?: ExportOptions, target?: ShapeTarget): Uint8Array;
   massProperties(density: number, target?: ShapeTarget): MassProperties;
+  /** Measurement between elements of the target (kernel indices); mm and degrees. */
+  measure(spec: MeasureSpec, target?: ShapeTarget): Measurement;
+  /** Section of the target by a plane: area (mm^2) and contour polylines (xyz triples). */
+  section(plane: SectionPlane, target?: ShapeTarget, deflection?: number): SectionResult;
   solveSketch(featureId: string, sketch: SketchData, options?: { drag?: { point: number; x: number; y: number }; lite?: boolean }): SketchSolution;
   editSketch(featureId: string, sketch: SketchData, tool: SketchTool): SketchEditOutcome;
 }
@@ -418,7 +432,8 @@ export class ModelingKernel {
   sketchTemplate(spec: { profiles: SketchProfileTemplate[] }): SketchData;
   dxfSketch(bytes: Uint8Array | string, options?: DxfSketchOptions): DxfSketchImport;
   createDocument(): PartDocumentHandle;
-  loadDocument(json: string): { document: PartDocumentHandle; report: RebuildReport };
+  materials(): LibraryMaterial[];
+  loadDocument(json: string): { document: PartDocumentHandle; report: RebuildReport; material: PartMaterial | null };
 }
 
 export type ModelingModuleFactory = (options?: Record<string, unknown>) => Promise<unknown>;

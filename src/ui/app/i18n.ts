@@ -2,7 +2,7 @@
  * Interface strings of the application in Russian and English (docs/ui/APP_SHELL.md,
  * "Локализация"). Each area has its dictionary pair in src/ui/app/messages/: the shell, the part
  * editor with its feature panels and tree, the sketch editor, the assembly editor, the drawing
- * editor, the STEP viewer, data exchange and the kernel messages. They are merged here into `ru` and `en`.
+ * editor, the STEP viewer, data exchange, the viewport tools and the kernel messages. They are merged here into `ru` and `en`.
  *
  * `ru` is the reference dictionary; `en` must have exactly its keys (checked by the types of the
  * per-area dictionaries and by src/ui/app/__tests__/i18nCoverage.test.ts, which also checks that
@@ -19,15 +19,16 @@ import { drawingEn, drawingRu } from './messages/drawing';
 import { viewerEn, viewerRu } from './messages/viewer';
 import { exchangeEn, exchangeRu } from './messages/exchange';
 import { kernelEn, kernelRu } from './messages/kernel';
+import { toolsEn, toolsRu } from './messages/tools';
 
 export type Lang = 'ru' | 'en';
 export const LANGS: Lang[] = ['ru', 'en'];
 
-export const ru = { ...shellRu, ...partRu, ...sketchRu, ...assemblyRu, ...drawingRu, ...viewerRu, ...exchangeRu, ...kernelRu } as const;
+export const ru = { ...shellRu, ...partRu, ...sketchRu, ...assemblyRu, ...drawingRu, ...viewerRu, ...exchangeRu, ...kernelRu, ...toolsRu } as const;
 
 export type MessageKey = keyof typeof ru;
 
-export const en: Record<MessageKey, string> = { ...shellEn, ...partEn, ...sketchEn, ...assemblyEn, ...drawingEn, ...viewerEn, ...exchangeEn, ...kernelEn };
+export const en: Record<MessageKey, string> = { ...shellEn, ...partEn, ...sketchEn, ...assemblyEn, ...drawingEn, ...viewerEn, ...exchangeEn, ...kernelEn, ...toolsEn };
 
 /** The per-area dictionaries, for the test that no key is defined twice. */
 export const AREAS: Record<string, { ru: Record<string, string>; en: Record<string, string> }> = {
@@ -39,6 +40,7 @@ export const AREAS: Record<string, { ru: Record<string, string>; en: Record<stri
   viewer: { ru: viewerRu, en: viewerEn },
   exchange: { ru: exchangeRu, en: exchangeEn },
   kernel: { ru: kernelRu, en: kernelEn },
+  tools: { ru: toolsRu, en: toolsEn },
 };
 
 export const DICTIONARIES: Record<Lang, Record<MessageKey, string>> = { ru, en };

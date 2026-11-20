@@ -1,6 +1,7 @@
 // Types of bendcore_assembly_api.mjs (docs/ui/ASSEMBLY_UI.md).
 
 import { KernelError, faceOfTriangle } from './bendcore_kernel_api.mjs';
+import type { Measurement } from './bendcore_kernel_api.mjs';
 import type { ExportFormat, ExportOptions, KernelMesh, MassProperties, Vec3 } from './bendcore_kernel_api.mjs';
 
 export { KernelError, faceOfTriangle };
@@ -205,6 +206,11 @@ export interface TessellateOptions extends ExplodeOptions {
   skip?: string[];
 }
 
+export type AssemblyMeasureElement = { path: number[]; kind: ElementKind; index: number };
+export type AssemblyMeasureSpec =
+  | { type: 'distance' | 'angle'; a: AssemblyMeasureElement; b: AssemblyMeasureElement }
+  | { type: 'length' | 'area' | 'radius'; a: AssemblyMeasureElement };
+
 export interface EntityInfo {
   type: 'point' | 'axis' | 'plane' | 'cylinder' | 'sphere';
   point: Vec3;
@@ -395,6 +401,8 @@ export class AssemblyDocumentHandle {
   tessellate(options?: TessellateOptions): AssemblyTessellation;
   placements(options?: ExplodeOptions): PlacedPart[];
   element(ref: GeometryRef): ElementInfo;
+  /** Measurement between elements of placed parts, world coordinates; mm and degrees. */
+  measure(spec: AssemblyMeasureSpec): Measurement;
   interference(options?: {
     reportTouching?: boolean;
     includeSameTopLevel?: boolean;
