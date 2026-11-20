@@ -107,7 +107,7 @@ inline double shapeVolume(const TopoDS_Shape& s) {
 
 inline void requireValid(const TopoDS_Shape& s, const std::string& what) {
     BRepCheck_Analyzer check(s);
-    if (!check.IsValid()) partFail(kernel::ErrorCode::OperationFailed, what + " body is not valid (BRepCheck)");
+    if (!check.IsValid()) partFail(kernel::ErrorCode::OperationFailed, "standard part " + what + " is not valid (BRepCheck)");
 }
 
 // Роль грани: имя и ключ сортировки для нумерованных ролей (пустое имя — грань без роли).
@@ -135,7 +135,7 @@ inline std::shared_ptr<const modeling::NamedShape> namePartFaces(const TopoDS_Sh
             numbered[r.role].emplace_back(r.key, g.face);
             continue;
         }
-        if (++seen[r.role] > 1) partFail(kernel::ErrorCode::OperationFailed, feature + " face role '" + r.role + "' is not unique");
+        if (++seen[r.role] > 1) partFail(kernel::ErrorCode::OperationFailed, "standard part face role '" + feature + ":" + r.role + "' is not unique");
         roles.push_back({g.face, r.role, attributes});
     }
     for (auto& [role, list] : numbered) {
@@ -147,12 +147,12 @@ inline std::shared_ptr<const modeling::NamedShape> namePartFaces(const TopoDS_Sh
         }
     }
     for (const std::string& r : required)
-        if (seen.count(r) == 0) partFail(kernel::ErrorCode::OperationFailed, feature + " face role '" + r + "' not found");
+        if (seen.count(r) == 0) partFail(kernel::ErrorCode::OperationFailed, "standard part face role '" + feature + ":" + r + "' not found");
     req.featureId = feature;
     req.result = shape;
     req.roles = std::move(roles);
     auto named = modeling::buildNamedShape(req);
-    if (!named) partFail(named.error().code, feature + " naming: " + named.error().message);
+    if (!named) partFail(named.error().code, "standard part naming: " + named.error().message);
     return std::make_shared<const modeling::NamedShape>(std::move(named).value());
 }
 

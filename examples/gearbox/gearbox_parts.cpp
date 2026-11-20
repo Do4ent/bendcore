@@ -281,7 +281,8 @@ void keyway(PartBuilder& b, const std::string& id, const std::string& r, const s
 
 std::unique_ptr<PartDocument> inputShaft(const Layout& L) {
     PartBuilder b("shaft_in");
-    b.var("d0", 20);  b.var("L0", 38);   // выходной конец под муфту
+    const double d0 = 20;
+    b.var("d0", d0);  b.var("L0", 38);   // выходной конец под муфту
     b.var("d1", 22);  b.var("l1", 12);   // под щелевое уплотнение крышки
     b.var("ds", 25);  b.var("ls", 15);   // под подшипник 205
     b.var("dc", 30);  b.var("lc", 27);   // заплечики
@@ -290,7 +291,7 @@ std::unique_ptr<PartDocument> inputShaft(const Layout& L) {
     b.var("x1", "L0"); b.var("x2", "x1 + l1"); b.var("x3", "x2 + ls"); b.var("x4", "x3 + lc");
     b.var("x5", "x4 + b1"); b.var("x6", "x5 + lc"); b.var("x7", "x6 + ls");
     {
-        const auto k = seat(b.value("d0"));  // шпонка 6×6×28: паз b, t1 по ГОСТ 23360, длина l
+        const auto k = seat(d0);  // шпонка 6×6×28: паз b, t1 по ГОСТ 23360, длина l
         b.var("bk", k.b); b.var("tk", k.t1); b.var("lk", 28);
     }
     b.var("c", 1);
@@ -319,16 +320,17 @@ std::unique_ptr<PartDocument> inputShaft(const Layout& L) {
 std::unique_ptr<PartDocument> outputShaft(const Layout&) {
     PartBuilder b("shaft_out");
     b.var("ds", 30);   b.var("ls", 16);    // под подшипник 206 (левый)
-    b.var("dw", 35);   b.var("lw", 64);    // под колесо и распорную втулку
+    const double dw = 35, d0 = 25;
+    b.var("dw", dw);   b.var("lw", 64);    // под колесо и распорную втулку
     b.var("dcl", 42);  b.var("lcl", 10);   // буртик
     b.var("dsh", 36);  b.var("lsh", 14);   // заплечик правого подшипника
     b.var("ls2", 16);                      // под подшипник 206 (правый)
     b.var("dg", 28);   b.var("lg", 12);    // под щелевое уплотнение
-    b.var("d0", 25);   b.var("L0", 40);    // выходной конец
+    b.var("d0", d0);   b.var("L0", 40);    // выходной конец
     b.var("x1", "ls"); b.var("x2", "x1 + lw"); b.var("x3", "x2 + lcl"); b.var("x4", "x3 + lsh");
     b.var("x5", "x4 + ls2"); b.var("x6", "x5 + lg"); b.var("x7", "x6 + L0");
     {
-        const auto kw = seat(b.value("dw")), ko = seat(b.value("d0"));  // пазы ГОСТ 23360: b, t1
+        const auto kw = seat(dw), ko = seat(d0);  // пазы ГОСТ 23360: b, t1
         b.var("bw", kw.b); b.var("tw", kw.t1); b.var("lkw", 32); b.var("xkw", "x1 + 44");  // шпонка 10×8×32 под колесом
         b.var("bo", ko.b); b.var("to", ko.t1); b.var("lko", 32); b.var("xko", "x6 + L0 / 2");  // шпонка 8×7×32
     }
@@ -359,9 +361,10 @@ std::unique_ptr<PartDocument> wheel(const Layout& L) {
     b.var("tw", 10);     // диск
     b.var("dh", 56);     // ступица
     b.var("lh", 40);
-    b.var("db", 35);     // отверстие
+    const double db = 35;
+    b.var("db", db);     // отверстие
     {
-        const auto k = seat(b.value("db"));  // паз ступицы под шпонку 10×8: b, t2 по ГОСТ 23360
+        const auto k = seat(db);  // паз ступицы под шпонку 10×8: b, t2 по ГОСТ 23360
         b.var("bk", k.b); b.var("t2", k.t2);
     }
     b.var("Dh", 78); b.var("dl", 16); b.var("nl", 6);  // облегчающие отверстия
