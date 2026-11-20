@@ -53,6 +53,16 @@ std::vector<Case> allCases() {
         {"tangent plane-sphere", [=](auto& g) { return Mate::tangent(F(0, pl(g)), F(1, sp(g, 8))); }},
         {"tangent sphere-plane", [=](auto& g) { return Mate::tangent(F(0, sp(g, 8)), F(1, pl(g))); }},
         {"rigid", [=](auto& g) { return Mate::rigid(0, 1, randomPose(g, 40)); }},
+        {"gear external", [=](auto& g) {
+             Mate m = Mate::gear(F(0, cy(g, 20)), F(1, ax(g)), 3.0);
+             m.gearPhase = Eigen::Vector2d(0.3, -1.1);
+             return m;
+         }},
+        {"gear internal", [=](auto& g) {
+             Mate m = Mate::gear(F(0, ax(g)), F(1, cy(g, 40)), 0.4, true);
+             m.gearPhase = Eigen::Vector2d(-2.0, 0.5);
+             return m;
+         }},
     };
 }
 
