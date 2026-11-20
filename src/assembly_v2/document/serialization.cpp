@@ -260,7 +260,7 @@ E enumFrom(const std::string& s, const E (&values)[N], const char* what) {
 
 constexpr MateType kMateTypes[] = {MateType::Coincident, MateType::Concentric, MateType::Distance,
                                    MateType::Angle,      MateType::Parallel,   MateType::Perpendicular,
-                                   MateType::Tangent,    MateType::Rigid};
+                                   MateType::Tangent,    MateType::Rigid,      MateType::Gear};
 constexpr EntityUse kUses[] = {EntityUse::Auto, EntityUse::Axis, EntityUse::Point};
 constexpr PatternKind kPatternKinds[] = {PatternKind::Linear, PatternKind::Circular, PatternKind::Feature};
 
@@ -606,6 +606,7 @@ Result<std::string> AssemblyDocument::toJson(const SaveOptions& options) const {
                       {"suppressed", m.suppressed},
                       {"bound", json::array({boundJson(m.bound[0]), boundJson(m.bound[1])})}};
             if (m.rigidRelative) j["rigidRelative"] = placementJson(*m.rigidRelative);
+            if (m.gearPhase) j["gearPhase"] = json::array({(*m.gearPhase)(0), (*m.gearPhase)(1)});
             if (m.broken()) j["broken"] = m.brokenReason;
             mates.push_back(std::move(j));
         }
@@ -959,6 +960,14 @@ private:
             dm.suppressed = flag(m, "suppressed");
             dm.brokenReason = text(m, "broken");
             if (m.contains("rigidRelative")) dm.rigidRelative = placementFrom(m.at("rigidRelative"), version_);
+            if (m.contains("gearPhase")) {
+                const json& g = m.at("gearPhase");
+                if (!g.is_array() || g.size() != 2 || !g[0].is_number() || !g[1].is_number())
+                    bad("mate gearPhase must be two numbers");
+                dm.gearPhase = Eigen::Vector2d(g[0].get<double>(), g[1].get<double>());
+            } else if (dm.spec.type == MateType::Gear) {
+                bad("gear mate " + std::to_string(dm.id) + " has no gearPhase");
+            }
             std::set<DefinitionId> touched;
             const bool rigid = dm.spec.type == MateType::Rigid;
             if (!pathError.empty()) {

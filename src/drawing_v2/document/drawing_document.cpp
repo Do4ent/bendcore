@@ -151,7 +151,9 @@ SheetRegions computeRegions(const Sheet& sheet, const SheetDef& def, const Drawi
     }
     if (def.partsList) trTop += 8.0 * 9.0;  // перечень ISO 7573: заголовок + строки (оценка)
     const double m = st.margin;
-    const double topReserve = def.roughnessRemainder ? 25.0 : 0.0;
+    double topReserve = def.roughnessRemainder ? 25.0 : 0.0;
+    // Таблица параметров венца ГОСТ 2.403 в правом верхнем углу: строки по 8 мм (оценка — до 14).
+    if (def.gearTable) topReserve = std::max(topReserve, 8.0 * 14.0 + 5.0);
     if (r.title.x0 - r.frame.x0 >= 150.0) {
         r.group = {r.frame.x0 + m, r.frame.y0 + m, r.title.x0 - m / 2.0, r.frame.y1 - m};
         r.secondary = {r.title.x0 + m / 2.0, trTop + m, r.frame.x1 - m, r.frame.y1 - m - topReserve};
@@ -727,6 +729,18 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             // Условная резьба модели (ГОСТ 2.311): ортогональные виды и разрезы; аксонометрия
             // (ГОСТ 2.317) — эллипс наружного диаметра; выносной элемент — изображение резьбы
             // вида-родителя, отсечённое окружностью элемента.
+            // Зубчатые венцы (ГОСТ 2.402): виды сбоку и с торца и разрезы через ось; в разрезе
+            // полоса зубьев не штрихуется.
+            if (v.gears && !model.gears.empty() && v.kind != ViewKind::Axonometric && v.kind != ViewKind::Detail) {
+                std::optional<CuttingPlane> plane;
+                if (v.kind == ViewKind::Section && v.stepPoints.empty())
+                    plane = CuttingPlane{v.planePoint, -1.0 * cv.sheetView.view.frame.toward};
+                auto gi = annotations::gearImages(model.gears, cv.sheetView.view.frame, plane);
+                if (!gi) return Error{gi.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + gi.error().message};
+                cv.gears = std::move(gi).value();
+                if (cv.section && std::any_of(cv.gears.begin(), cv.gears.end(), [](const auto& g) { return g.section; }))
+                    cv.section = std::make_shared<const SectionView>(annotations::withUncutTeeth(*cv.section, cv.gears));
+            }
             if (v.threads && !threadInfos.empty()) {
                 auto ti = annotations::threadImages(threadInfos, binding.topology(), cv.sheetView.view);
                 if (!ti) return Error{ti.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + ti.error().message};
@@ -1033,6 +1047,16 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             manualDefinitions.insert(*owner);
             cs.manualBalloons.emplace_back(std::move(b));
         }
+        // Таблица параметров зубчатого венца (ГОСТ 2.403) по венцу модели.
+        cs.gearTable.clear();
+        if (sd.gearTable) {
+            if (sd.gearTable->gear >= model.gears.size())
+                return invalid("sheet '" + sd.id + "': gear table refers to gear #" + std::to_string(sd.gearTable->gear + 1) +
+                               ", the model has " + std::to_string(model.gears.size()));
+            auto rows = annotations::gearTableRows(model.gears[sd.gearTable->gear].gear, *sd.gearTable);
+            if (!rows) return Error{rows.error().code, "sheet '" + sd.id + "', gear table: " + rows.error().message};
+            cs.gearTable = std::move(rows).value();
+        }
         // Размеры резьбы: грань по ссылке → резьба на виде → размер с обозначением (ГОСТ 2.311, п. 5).
         cs.threadNotes.clear();
         for (ThreadNoteItem& tn : sd.threadNotes) {
@@ -1205,6 +1229,9 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
             if (!cv.threads.empty()) {
                 if (auto st = annotations::renderThreads(d, cv.sheetView, cv.threads, ro); !st) return fail(st.error());
             }
+            if (!cv.gears.empty()) {
+                if (auto st = annotations::renderGears(d, cv.sheetView, cv.gears, ro); !st) return fail(st.error());
+            }
             if (!cv.label.empty()) {
                 if (auto st = renderViewLabel(d, cv.sheetView, cv.label, ro); !st) return fail(st.error());
             }
@@ -1242,8 +1269,14 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
                 if (auto st = annotations::renderSymbol(d, *g, style); !st) return st.error();
             }
         }
+        Rect cornerFrame = lay.value().frame;
+        if (!cs.gearTable.empty()) {
+            auto table = annotations::addGearTable(d, lay.value().frame, cs.gearTable, metrics);
+            if (!table) return Error{table.error().code, "sheet '" + cs.id + "', gear table: " + table.error().message};
+            cornerFrame.x1 = table.value().box.x0;  // знак «остальное» — левее таблицы
+        }
         if (sd.roughnessRemainder) {
-            auto g = annotations::roughnessRemainder(lay.value().frame, *sd.roughnessRemainder, style);
+            auto g = annotations::roughnessRemainder(cornerFrame, *sd.roughnessRemainder, style);
             if (!g) return g.error();
             if (auto st = annotations::renderSymbol(d, g.value(), style); !st) return st.error();
         }

@@ -19,6 +19,7 @@ const char* toString(MateType type) noexcept {
         case MateType::Perpendicular: return "Perpendicular";
         case MateType::Tangent: return "Tangent";
         case MateType::Rigid: return "Rigid";
+        case MateType::Gear: return "Gear";
     }
     return "Unknown";
 }
@@ -39,6 +40,7 @@ const char* toString(MateForm form) noexcept {
         case MateForm::TangentCylinderCylinder: return "TangentCylinderCylinder";
         case MateForm::TangentPlaneSphere: return "TangentPlaneSphere";
         case MateForm::Rigid: return "Rigid";
+        case MateForm::Gear: return "Gear";
     }
     return "Unknown";
 }
@@ -59,6 +61,7 @@ int equationCount(MateForm form) noexcept {
         case MateForm::TangentCylinderCylinder: return 4;
         case MateForm::TangentPlaneSphere: return 1;
         case MateForm::Rigid: return 9;
+        case MateForm::Gear: return 1;
     }
     return 0;
 }
@@ -107,6 +110,12 @@ Mate Mate::rigid(ComponentId a, ComponentId b, std::optional<Transform> relative
     m.a.component = a;
     m.b.component = b;
     m.relative = relative;
+    return m;
+}
+
+Mate Mate::gear(const Feature& a, const Feature& b, double ratio, bool internal) {
+    Mate m = makeMate(MateType::Gear, a, b, ratio, Alignment::Closest);
+    m.internalTangency = internal;
     return m;
 }
 
@@ -252,6 +261,14 @@ kernel::Result<Mate> prepareMate(Mate m) {
                 return m;
             }
             return fail(ErrorCode::Unsupported, m, "unsupported entity pair " + pairName(m));
+        case MateType::Gear:
+            if (!ea.isLineLike() || !eb.isLineLike())
+                return fail(ErrorCode::Unsupported, m, "needs two axes or cylinders, got " + pairName(m));
+            if (m.a.component == m.b.component) return fail(ErrorCode::InvalidInput, m, "components must differ");
+            if (!(m.value > 0.0)) return fail(ErrorCode::InvalidInput, m, "gear ratio must be positive");
+            if (m.gearPhase && !m.gearPhase->allFinite()) return fail(ErrorCode::InvalidInput, m, "gear phase is not finite");
+            m.form = MateForm::Gear;
+            return m;
         case MateType::Rigid:
             break;
     }
@@ -278,6 +295,7 @@ Mate resolveAlignment(const Mate& mate, const Transform& poseA, const Transform&
         case MateForm::LineLine:
         case MateForm::Parallel:
         case MateForm::TangentCylinderCylinder:
+        case MateForm::Gear:
             m.alignment = bySign(da.dot(db));
             break;
         case MateForm::TangentPlaneCylinder:
@@ -368,7 +386,77 @@ void lineOffsetRows(const WorldEntity& A, const WorldEntity& B, int row, MateEva
     out.jacobianB.row(row + 1) = delta.transpose() * B.V - B.v.transpose() * B.P;
 }
 
+// Угол θ компонента сопряжения Gear вокруг оси d от линии центров c и его производная по
+// переменным (dt, ω) обоих компонентов (12 столбцов: a, затем b).
+struct GearAngle {
+    double theta = 0.0;
+    Eigen::Matrix<double, 1, 12> grad;
+};
+
+using Mat312 = Eigen::Matrix<double, 3, 12>;
+
+struct CenterLine {
+    Vec3 c;
+    Mat312 C;  // ∂c
+    bool ok = false;
+};
+
+// c = w/|w|, w = Δ − da(da·Δ), Δ = pb − pa.
+CenterLine centerLine(const WorldEntity& A, const WorldEntity& B) {
+    CenterLine out;
+    const Vec3 delta = B.p - A.p;
+    const double axial = A.d.dot(delta);
+    const Vec3 w = delta - A.d * axial;
+    const double len = w.norm();
+    if (len < 1e-12 * std::max(1.0, delta.norm())) return out;
+    out.c = w / len;
+    Mat312 dDelta, dDa;
+    dDelta << -A.P, B.P;
+    dDa << A.D, Mat36::Zero();
+    const Mat3 I = Mat3::Identity();
+    const Mat312 dw = (I - A.d * A.d.transpose()) * dDelta - (axial * I + A.d * delta.transpose()) * dDa;
+    out.C = (I - out.c * out.c.transpose()) / len * dw;
+    out.ok = true;
+    return out;
+}
+
+// θ = atan2(y, x), x = u·c, y = u·(d × c); u, d — направления сущности (a или b, столбцы offset).
+GearAngle gearAngle(const Vec3& u, const Mat36& U, const Vec3& d, const Mat36& D, int offset, const CenterLine& cl) {
+    GearAngle g;
+    const Vec3 dxc = d.cross(cl.c);
+    const double x = u.dot(cl.c), y = u.dot(dxc);
+    g.theta = std::atan2(y, x);
+    Mat312 dU = Mat312::Zero(), dD = Mat312::Zero();
+    dU.middleCols<6>(offset) = U;
+    dD.middleCols<6>(offset) = D;
+    const Eigen::Matrix<double, 1, 12> dx = cl.c.transpose() * dU + u.transpose() * cl.C;
+    // dy = (d × c)·du + (c × u)·dd + (u × d)·dc.
+    const Eigen::Matrix<double, 1, 12> dy =
+        dxc.transpose() * dU + cl.c.cross(u).transpose() * dD + u.cross(d).transpose() * cl.C;
+    g.grad = (x * dy - y * dx) / (x * x + y * y);
+    return g;
+}
+
+double wrapAngle(double a) {
+    constexpr double kTwoPi = 6.283185307179586;
+    a = std::fmod(a + 3.141592653589793, kTwoPi);
+    if (a < 0) a += kTwoPi;
+    return a - 3.141592653589793;
+}
+
 }  // namespace
+
+kernel::Result<Eigen::Vector2d> gearAngles(const Mate& m, const Transform& poseA, const Transform& poseB) {
+    using R = kernel::Result<Eigen::Vector2d>;
+    if (m.type != MateType::Gear) return R::failure(ErrorCode::InvalidInput, "gearAngles: not a gear mate");
+    const WorldEntity A = toWorld(m.a.entity, poseA, true);
+    const WorldEntity B = toWorld(m.b.entity, poseB, true);
+    const CenterLine cl = centerLine(A, B);
+    if (!cl.ok) return R::failure(ErrorCode::InvalidInput, "Gear: the axes coincide (no centre line)");
+    const GearAngle ga = gearAngle(A.u, A.U, A.d, A.D, 0, cl);
+    const GearAngle gb = gearAngle(B.u, B.U, B.d, B.D, 6, cl);
+    return Eigen::Vector2d(ga.theta, gb.theta);
+}
 
 namespace detail {
 
@@ -396,6 +484,31 @@ void evaluateResolved(const Mate& m, const Transform& poseA, const Transform& po
             out.jacobianB.middleRows<3>(row) = dirJac(eb);
             out.jacobianA.middleRows<3>(row) = -dirJac(et);
         }
+        return;
+    }
+
+    if (m.form == MateForm::Gear) {
+        // wrap(θa − θa0) + σ·u·wrap(θb − θb0), σ = +s при внешнем зацеплении (оси сонаправлены —
+        // вращение в разные стороны), −s при внутреннем.
+        const WorldEntity A = toWorld(m.a.entity, poseA, true);
+        const WorldEntity B = toWorld(m.b.entity, poseB, true);
+        const CenterLine cl = centerLine(A, B);
+        if (!cl.ok) {
+            // Оси совпали: передача не определена — невязка 0 без вклада в якобиан
+            // (диагностика покажет недоопределённость).
+            out.residual(0) = 0.0;
+            out.jacobianA.setZero();
+            out.jacobianB.setZero();
+            return;
+        }
+        const GearAngle ga = gearAngle(A.u, A.U, A.d, A.D, 0, cl);
+        const GearAngle gb = gearAngle(B.u, B.U, B.d, B.D, 6, cl);
+        const Eigen::Vector2d phase = m.gearPhase.value_or(Eigen::Vector2d::Zero());
+        const double sigma = (m.internalTangency ? -1.0 : 1.0) * s;
+        out.residual(0) = wrapAngle(ga.theta - phase(0)) + sigma * m.value * wrapAngle(gb.theta - phase(1));
+        const Eigen::Matrix<double, 1, 12> g = ga.grad + sigma * m.value * gb.grad;
+        out.jacobianA.row(0) = g.leftCols<6>();
+        out.jacobianB.row(0) = g.rightCols<6>();
         return;
     }
 
@@ -473,6 +586,7 @@ void evaluateResolved(const Mate& m, const Transform& poseA, const Transform& po
         }
         case MateForm::Unprepared:
         case MateForm::Rigid:
+        case MateForm::Gear:
             break;
     }
 }

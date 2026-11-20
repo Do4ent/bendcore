@@ -9,7 +9,7 @@
    "material": "Сталь 40Х ГОСТ 4543-2016",
    "name": "Вал-шестерня"
   },
-  "resultHash": "00c0814876f1a409",
+  "resultHash": "e686bfd105c61f2e",
   "revision": 1
  },
  "settings": {
@@ -189,12 +189,12 @@
        "anchor": "point",
        "ref": {
         "kind": "vertex",
-        "name": "Profile:V9_10",
+        "name": "Profile:V8_9",
         "signature": {
          "center": [
           92.0,
           0.0,
-          20.0
+          15.0
          ],
          "direction": [
           0.0,
@@ -212,12 +212,12 @@
        "anchor": "point",
        "ref": {
         "kind": "vertex",
-        "name": "Profile:V10_11",
+        "name": "Profile:V11_12",
         "signature": {
          "center": [
           128.0,
           0.0,
-          20.0
+          15.0
          ],
          "direction": [
           0.0,
@@ -236,7 +236,7 @@
      "id": "b1",
      "lastValue": 36.0,
      "leaderAngleDeg": 45.0,
-     "offset": 8.0,
+     "offset": 15.0,
      "offsetFrom": [],
      "prefix": "",
      "suffix": "",
@@ -417,12 +417,12 @@
        "anchor": "center",
        "ref": {
         "kind": "face",
-        "name": "G[Body](Profile:E10)",
+        "name": "F()",
         "signature": {
          "center": [
-          110.0,
-          4.635181127810027e-16,
-          7.105427357601002e-15
+          109.99999999999999,
+          1.652718366203358e-15,
+          0.0
          ],
          "direction": [
           1.0,
@@ -431,15 +431,15 @@
          ],
          "geometry": "Cylinder",
          "hasDirection": true,
-         "radius": 20.0,
-         "size": 4523.893421169302
+         "radius": 22.0,
+         "size": 4976.282763286232
         }
        }
       }
      ],
      "decimals": 2,
-     "id": "d",
-     "lastValue": 40.0,
+     "id": "da",
+     "lastValue": 44.0,
      "leaderAngleDeg": 45.0,
      "offset": 8.0,
      "offsetFrom": [],
@@ -447,7 +447,7 @@
      "suffix": "",
      "textOverride": null,
      "textShift": 0.0,
-     "tolerance": null,
+     "tolerance": "h11",
      "toleranceDisplay": "classOnly",
      "type": "diameter",
      "view": "F"
@@ -522,6 +522,14 @@
     "multiplier": 1,
     "orientation": "landscape"
    },
+   "gearTable": {
+    "accuracy": "8-B ГОСТ 1643-81",
+    "centerDistance": 80.0,
+    "commonNormal": true,
+    "gear": 0,
+    "matingDesignation": "РЦ.080.00.005",
+    "matingTeeth": 60
+   },
    "id": "S1",
    "partsList": false,
    "roughness": [
@@ -593,12 +601,12 @@
      "at": 0.3,
      "edge": {
       "kind": "edge",
-      "name": "Profile:E10",
+      "name": "E(F())",
       "signature": {
        "center": [
         110.0,
         0.0,
-        20.0
+        22.0
        ],
        "direction": [
         1.0,
@@ -634,7 +642,6 @@
     "235...262 HB.",
     "Неуказанные предельные отклонения размеров: валов h14, остальных ±IT14/2.",
     "Неуказанные радиусы скруглений 0,5 мм; фаски 1×45°.",
-    "Венец показан делительным цилиндром d = 40 (зубья не моделируются): m = 2, z = 20, угол профиля 20°, x = 0, da = 44h11, df = 35, степень точности 8-B ГОСТ 1643-81.",
     "Шпоночный паз: t1 = 3,5, длина 28 — по ГОСТ 23360-78."
    ],
    "title": {
@@ -706,12 +713,12 @@
      "diameterZone": false,
      "edge": {
       "kind": "edge",
-      "name": "Profile:E10",
+      "name": "E(F())",
       "signature": {
        "center": [
         110.0,
         0.0,
-        20.0
+        22.0
        ],
        "direction": [
         1.0,
@@ -740,6 +747,7 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": true,
      "id": "F",
      "kind": "base",
@@ -778,6 +786,7 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": true,
      "id": "T",
      "kind": "projected",
@@ -816,6 +825,7 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": false,
      "id": "A",
      "kind": "section",

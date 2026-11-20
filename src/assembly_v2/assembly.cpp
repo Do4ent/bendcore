@@ -30,6 +30,11 @@ kernel::Result<MateId> Assembly::addMate(Mate mate) {
     if (m.form == MateForm::Rigid && !m.relative) {
         m.relative = components_[m.a.component].pose.inverse() * components_[m.b.component].pose;
     }
+    if (m.form == MateForm::Gear && !m.gearPhase) {
+        auto phase = gearAngles(m, components_[m.a.component].pose, components_[m.b.component].pose);
+        if (!phase) return phase.error();
+        m.gearPhase = phase.value();
+    }
     m.id = nextMateId_++;
     mateIndex_[m.id] = mates_.size();
     mates_.push_back(std::move(m));

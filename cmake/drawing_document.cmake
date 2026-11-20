@@ -40,6 +40,7 @@ add_executable(test_drawing_document
   tests/drawing_v2/test_drawing_document_subassembly.cpp
   tests/drawing_v2/test_drawing_document_io.cpp
   tests/drawing_v2/test_drawing_document_sections.cpp
+  tests/drawing_v2/test_drawing_gears.cpp
   tests/drawing_v2/test_drawing_threads.cpp
   tests/drawing_v2/test_drawing_document_layout.cpp
   tests/drawing_v2/test_drawing_document_section_dims.cpp

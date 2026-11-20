@@ -377,6 +377,7 @@ Result<std::string> DrawingDocument::toJson() const {
                     {"hidden", v.hidden},
                     {"centerLines", v.centerLines},
                     {"threads", v.threads},
+                    {"gears", v.gears},
                     {"autoBalloons", v.autoBalloons},
                     {"method", enumName(v.method, kHlr)},
                     {"autoMethod", v.autoMethod}};
@@ -448,6 +449,13 @@ Result<std::string> DrawingDocument::toJson() const {
                               {"textShift", t.def.textShift}});
             js["threadNotes"] = std::move(tn);
         }
+        if (s.gearTable)
+            js["gearTable"] = {{"gear", s.gearTable->gear},
+                               {"accuracy", s.gearTable->accuracy},
+                               {"matingTeeth", s.gearTable->matingTeeth},
+                               {"matingDesignation", s.gearTable->matingDesignation},
+                               {"centerDistance", s.gearTable->centerDistance},
+                               {"commonNormal", s.gearTable->commonNormal}};
         js["roughnessRemainder"] = s.roughnessRemainder ? roughJson(*s.roughnessRemainder) : json(nullptr);
         js["technicalRequirements"] = s.technicalRequirements;
         js["partsList"] = s.partsList;
@@ -533,6 +541,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                 v.hidden = flag(jv, "hidden", true);
                 v.centerLines = flag(jv, "centerLines", true);
                 v.threads = flag(jv, "threads", true);
+                v.gears = flag(jv, "gears", true);
                 v.autoBalloons = flag(jv, "autoBalloons", false);
                 if (jv.contains("method")) v.method = enumValue(jv.at("method"), kHlr, "HLR method");
                 v.autoMethod = flag(jv, "autoMethod", false);
@@ -646,6 +655,19 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                     t.def.textShift = num(jt, "textShift", 0.0);
                     s.threadNotes.push_back(std::move(t));
                 }
+            }
+            if (js.contains("gearTable") && !js.at("gearTable").is_null()) {
+                const json& jg = js.at("gearTable");
+                annotations::GearTableDef g;
+                const int index = integer(jg, "gear", 0);
+                if (index < 0) fail("'gear' must be a non-negative integer");
+                g.gear = static_cast<std::size_t>(index);
+                if (jg.contains("accuracy")) g.accuracy = str(jg, "accuracy");
+                g.matingTeeth = integer(jg, "matingTeeth", 0);
+                if (jg.contains("matingDesignation")) g.matingDesignation = str(jg, "matingDesignation");
+                g.centerDistance = num(jg, "centerDistance", 0.0);
+                g.commonNormal = flag(jg, "commonNormal", true);
+                s.gearTable = std::move(g);
             }
             if (js.contains("roughnessRemainder") && !js.at("roughnessRemainder").is_null())
                 s.roughnessRemainder = roughFrom(js.at("roughnessRemainder"));

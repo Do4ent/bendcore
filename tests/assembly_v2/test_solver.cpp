@@ -512,3 +512,93 @@ TEST(AssemblyV2Solver, ConvergesFromRandomPerturbations) {
 }
 
 }  // namespace
+
+// ---------------------------------------------------------------------------------------------
+// Передача: шестерня z1 = 20 и колесо z2 = 60 на осях корпуса (межосевое 80 мм). Каждая ось —
+// соосность и торец (по 1 степени свободы — поворот); передача связывает повороты: 2 → 1.
+
+struct GearPair {
+    Assembly a;
+    ComponentId housing = 0, pinion = 0, wheel = 0;
+    Feature pinionPitch, wheelPitch;
+    MateId gear = 0;
+    explicit GearPair(bool withGear, const Transform& pinionStart = Transform::identity(),
+                      const Transform& wheelStart = Transform::fromTranslation(Vec3(80, 0, 0))) {
+        housing = a.addComponent("housing", Transform::identity(), true);
+        pinion = a.addComponent("pinion", pinionStart);
+        wheel = a.addComponent("wheel", wheelStart);
+        const Feature boreP{housing, Entity::makeCylinder(Vec3::Zero(), Vec3::UnitZ(), 10)};
+        const Feature boreW{housing, Entity::makeCylinder(Vec3(80, 0, 0), Vec3::UnitZ(), 15)};
+        const Feature faceP{housing, Entity::makePlane(Vec3(0, 0, 0), Vec3::UnitZ())};
+        const Feature faceW{housing, Entity::makePlane(Vec3(80, 0, 0), Vec3::UnitZ())};
+        const Feature shaftP{pinion, Entity::makeCylinder(Vec3(0, 0, -30), Vec3::UnitZ(), 10)};
+        const Feature shaftW{wheel, Entity::makeCylinder(Vec3(0, 0, -30), Vec3::UnitZ(), 15)};
+        const Feature shoulderP{pinion, Entity::makePlane(Vec3::Zero(), -Vec3::UnitZ())};
+        const Feature shoulderW{wheel, Entity::makePlane(Vec3::Zero(), -Vec3::UnitZ())};
+        pinionPitch = {pinion, Entity::makeCylinder(Vec3::Zero(), Vec3::UnitZ(), 20)};
+        wheelPitch = {wheel, Entity::makeCylinder(Vec3::Zero(), Vec3::UnitZ(), 60)};
+        addOk(a, Mate::concentric(boreP, shaftP));
+        addOk(a, Mate::coincident(faceP, shoulderP, Alignment::AntiAligned));
+        addOk(a, Mate::concentric(boreW, shaftW));
+        addOk(a, Mate::coincident(faceW, shoulderW, Alignment::AntiAligned));
+        if (withGear) gear = addOk(a, Mate::gear(pinionPitch, wheelPitch, 3.0));
+    }
+};
+
+TEST(AssemblyV2Solver, GearMateRemovesOneDof) {
+    GearPair free(false), geared(true);
+    const SolveResult r0 = solve(free.a), r1 = solve(geared.a);
+    EXPECT_EQ(r0.totalDof, 2);
+    EXPECT_EQ(r1.totalDof, 1);
+    ASSERT_EQ(r1.subsystems.size(), 1u);
+    EXPECT_EQ(r1.subsystems[0].status, SubsystemStatus::Solved);
+    EXPECT_TRUE(r1.subsystems[0].redundantMates.empty());
+    EXPECT_EQ(diagFor(r1.subsystems[0], geared.gear)->independent, 1);
+    // Фаза — углы при сборке; передача в исходном положении выполнена.
+    const Mate* m = geared.a.findMate(geared.gear);
+    ASSERT_TRUE(m && m->gearPhase);
+    EXPECT_NEAR((*m->gearPhase)(0), 0.0, 1e-15);
+    EXPECT_NEAR((*m->gearPhase)(1), 0.0, 1e-15);
+}
+
+TEST(AssemblyV2Solver, GearMatePinionTurnsWheelBackByRatio) {
+    for (double phi : {deg(30), deg(-75), deg(150), deg(5)}) {
+        GearPair g(true);
+        // Шестерня повёрнута на φ и зафиксирована: колесо поворачивается на −φ/u.
+        g.a.setPose(g.pinion, Transform::fromAxisAngle(Vec3::UnitZ(), phi));
+        g.a.setFixed(g.pinion, true);
+        const SolveResult r = solve(g.a);
+        // Подсистемы: колесо и проверка сопряжений двух фиксированных тел (корпус, шестерня).
+        for (const SubsystemReport& sub : r.subsystems) {
+            EXPECT_EQ(sub.status, SubsystemStatus::Solved) << phi;
+            EXPECT_LT(sub.residualNorm, 1e-10);
+        }
+        EXPECT_EQ(r.totalDof, 0);
+        EXPECT_NEAR(yawOf(r.poses[g.wheel]), -phi / 3.0, 1e-9) << phi;
+        EXPECT_LT((r.poses[g.wheel].position - Vec3(80, 0, 0)).norm(), 1e-9);
+    }
+    // Внутреннее зацепление: колесо вращается в ту же сторону.
+    GearPair in(false);
+    addOk(in.a, Mate::gear(in.pinionPitch, in.wheelPitch, 3.0, true));
+    in.a.setPose(in.pinion, Transform::fromAxisAngle(Vec3::UnitZ(), deg(45)));
+    in.a.setFixed(in.pinion, true);
+    const SolveResult r = solve(in.a);
+    EXPECT_NEAR(yawOf(r.poses[in.wheel]), deg(15), 1e-9);
+    // Колесо собрано повёрнутым на 6° (фаза зубьев): после поворота шестерни на 30° — 6° − 10°.
+    GearPair ph(true, Transform::identity(), Transform::fromAxisAngle(Vec3::UnitZ(), deg(6), Vec3(80, 0, 0)));
+    ph.a.setPose(ph.pinion, Transform::fromAxisAngle(Vec3::UnitZ(), deg(30)));
+    ph.a.setFixed(ph.pinion, true);
+    EXPECT_NEAR(yawOf(solve(ph.a).poses[ph.wheel]), deg(-4), 1e-9);
+}
+
+TEST(AssemblyV2Solver, GearMateErrors) {
+    Assembly a;
+    const ComponentId c0 = a.addComponent("a", Transform::identity());
+    const ComponentId c1 = a.addComponent("b", Transform::identity());
+    const Feature ax0{c0, Entity::makeAxis(Vec3::Zero(), Vec3::UnitZ())};
+    const Feature ax1{c1, Entity::makeAxis(Vec3::Zero(), Vec3::UnitZ())};
+    const Feature pl1{c1, Entity::makePlane(Vec3::Zero(), Vec3::UnitZ())};
+    EXPECT_FALSE(a.addMate(Mate::gear(ax0, pl1, 2.0)).ok());   // не ось
+    EXPECT_FALSE(a.addMate(Mate::gear(ax0, ax1, -1.0)).ok());  // отношение ≤ 0
+    EXPECT_FALSE(a.addMate(Mate::gear(ax0, ax1, 2.0)).ok());   // оси совпадают: линии центров нет
+}

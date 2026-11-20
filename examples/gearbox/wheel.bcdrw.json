@@ -9,7 +9,7 @@
    "material": "Сталь 45 ГОСТ 1050-2013",
    "name": "Колесо зубчатое"
   },
-  "resultHash": "324f30ed5358ca41",
+  "resultHash": "4fedaf2e1bb2b450",
   "revision": 1
  },
  "settings": {
@@ -61,12 +61,12 @@
        "anchor": "point",
        "ref": {
         "kind": "vertex",
-        "name": "V(F(G[Body](Profile:V7_8)|G[Body](Profile:V8_9))|G[RimChamfers](G[Body](Profile:V7_8)))",
+        "name": "Profile:V8_9",
         "signature": {
          "center": [
           -16.0,
           0.0,
-          58.5
+          48.0
          ],
          "direction": [
           0.0,
@@ -84,12 +84,12 @@
        "anchor": "point",
        "ref": {
         "kind": "vertex",
-        "name": "V(F(G[Body](Profile:V5_6)|G[Body](Profile:V6_7))|G[RimChamfers](G[Body](Profile:V6_7)))",
+        "name": "Profile:V5_6",
         "signature": {
          "center": [
           16.0,
           0.0,
-          58.5
+          48.0
          ],
          "direction": [
           0.0,
@@ -108,7 +108,7 @@
      "id": "b",
      "lastValue": 32.0,
      "leaderAngleDeg": 45.0,
-     "offset": 12.0,
+     "offset": 26.0,
      "offsetFrom": [],
      "prefix": "",
      "suffix": "",
@@ -189,12 +189,12 @@
        "anchor": "center",
        "ref": {
         "kind": "face",
-        "name": "G[Body](Profile:E7)",
+        "name": "F()",
         "signature": {
          "center": [
-          4.3349782325132374e-16,
-          -3.367676508029642e-16,
-          0.0
+          -4.742332428275351e-16,
+          7.879002110243047e-17,
+          7.105427357601002e-15
          ],
          "direction": [
           1.0,
@@ -203,15 +203,15 @@
          ],
          "geometry": "Cylinder",
          "hasDirection": true,
-         "radius": 60.0,
-         "size": 10932.74243449248
+         "radius": 62.0,
+         "size": 12465.8396494443
         }
        }
       }
      ],
      "decimals": 2,
-     "id": "d",
-     "lastValue": 120.0,
+     "id": "da",
+     "lastValue": 124.0,
      "leaderAngleDeg": 45.0,
      "offset": 10.0,
      "offsetFrom": [],
@@ -219,7 +219,7 @@
      "suffix": "",
      "textOverride": null,
      "textShift": 0.0,
-     "tolerance": null,
+     "tolerance": "h11",
      "toleranceDisplay": "classOnly",
      "type": "diameter",
      "view": "F"
@@ -315,7 +315,7 @@
         "name": "G[Keyway](KeySketch:V3_4);G2",
         "signature": {
          "center": [
-          20.000000000000004,
+          19.999999999999996,
           -5.0,
           20.8
          ],
@@ -338,7 +338,7 @@
         "name": "G[Keyway](KeySketch:V2_3);G2",
         "signature": {
          "center": [
-          20.000000000000004,
+          19.999999999999996,
           5.0,
           20.8
          ],
@@ -376,6 +376,14 @@
     "multiplier": 1,
     "orientation": "landscape"
    },
+   "gearTable": {
+    "accuracy": "8-B ГОСТ 1643-81",
+    "centerDistance": 80.0,
+    "commonNormal": true,
+    "gear": 0,
+    "matingDesignation": "РЦ.080.00.003",
+    "matingTeeth": 20
+   },
    "id": "S1",
    "partsList": false,
    "roughness": [
@@ -383,22 +391,22 @@
      "at": 0.5,
      "edge": {
       "kind": "edge",
-      "name": "Profile:E7",
+      "name": "E(F())",
       "signature": {
        "center": [
-        8.881784197001252e-16,
         0.0,
-        60.0
+        0.0,
+        -62.0
        ],
        "direction": [
         1.0,
-        -0.0,
-        -0.0
+        0.0,
+        0.0
        ],
        "geometry": "Line",
        "hasDirection": true,
        "radius": 0.0,
-       "size": 29.0
+       "size": 32.0
       }
      },
      "id": "Ra1",
@@ -454,7 +462,6 @@
    "scale": null,
    "technicalRequirements": [
     "235...262 HB.",
-    "Венец показан делительным цилиндром d = 120 (зубья не моделируются): m = 2, z = 60, угол профиля 20°, x = 0, da = 124h11, df = 115, степень точности 8-B ГОСТ 1643-81.",
     "Паз ступицы: t2 = 3,3 (размер 38,3+0,2) по ГОСТ 23360-78.",
     "Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
     "Облегчающие отверстия: 6 отв. ⌀16 на ⌀78."
@@ -497,22 +504,22 @@
      "diameterZone": false,
      "edge": {
       "kind": "edge",
-      "name": "E(F(G[Body](Profile:V5_6)|G[Body](Profile:V6_7))|G[RimChamfers](G[Body](Profile:V6_7)))",
+      "name": "E(F()|F(G[Body](Profile:V5_6)|G[Body](Profile:V6_7)))",
       "signature": {
        "center": [
         16.0,
-        -4.858411868445129e-16,
-        2.8275957074350654e-13
+        -4.584146682323227e-15,
+        -2.943022170051512e-13
        ],
        "direction": [
         1.0,
         0.0,
-        -0.0
+        0.0
        ],
        "geometry": "Circle",
        "hasDirection": true,
-       "radius": 58.5,
-       "size": 367.5663404700058
+       "radius": 62.0,
+       "size": 389.55748904513433
       }
      },
      "id": "T1",
@@ -531,6 +538,7 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": true,
      "id": "F",
      "kind": "base",
@@ -569,6 +577,7 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": true,
      "id": "L",
      "kind": "projected",
@@ -607,13 +616,14 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": false,
      "id": "A",
      "kind": "section",
      "letter": "",
      "markView": "L",
      "method": "exact",
-     "parent": "",
+     "parent": "L",
      "planePoint": [
       0.0,
       0.0,
@@ -627,7 +637,7 @@
      ],
      "scale": null,
      "sectionKind": "cut",
-     "side": null,
+     "side": "rightOf",
      "threads": true,
      "toward": [
       0.0,

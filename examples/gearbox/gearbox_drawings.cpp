@@ -9,7 +9,9 @@
 
 #include <bendcore/modeling/part_document.hpp>
 
+#include <BRepAdaptor_Curve.hxx>
 #include <BRep_Tool.hxx>
+#include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <gp.hxx>
 
@@ -65,8 +67,35 @@ public:
             if (found) fail("several vertices at (" + detail::num(x) + ", " + detail::num(y) + ", " + detail::num(z) + ")");
             found = i;
         }
-        if (!found) fail("no vertex at (" + detail::num(x) + ", " + detail::num(y) + ", " + detail::num(z) + ")");
+        if (!found) {
+            std::string near;
+            for (std::size_t i = 0; i < n; ++i) {
+                const gp_Pnt p = BRep_Tool::Pnt(TopoDS::Vertex(m_.named->element(ElementKind::Vertex, i)));
+                if (std::abs(p.X() - x) < 1e-5) near += " (" + detail::num(p.X()) + ", " + detail::num(p.Y()) + ", " + detail::num(p.Z()) + ")";
+            }
+            fail("no vertex at (" + detail::num(x) + ", " + detail::num(y) + ", " + detail::num(z) + "); vertices with this x:" + near);
+        }
         return m_.named->element(ElementKind::Vertex, *found);
+    }
+    // Образующая цилиндра радиуса r вокруг оси X от x0 до x1 (шов цилиндра вершин условной формы
+    // венца: его положение по углу задаёт упрощение формы, а не модель); из нескольких — верхняя.
+    TopoDS_Shape axialLine(double r, double x0, double x1) const {
+        std::optional<TopoDS_Shape> found;
+        for (TopExp_Explorer ex(shape(), TopAbs_EDGE); ex.More(); ex.Next()) {
+            BRepAdaptor_Curve c(TopoDS::Edge(ex.Current()));
+            if (c.GetType() != GeomAbs_Line || !c.Line().Direction().IsParallel(gp::DX(), 1e-9)) continue;
+            const gp_Pnt a = c.Value(c.FirstParameter()), b = c.Value(c.LastParameter());
+            if (std::abs(std::hypot(a.Y(), a.Z()) - r) > 1e-6) continue;
+            if (std::abs(std::min(a.X(), b.X()) - x0) > 1e-6 || std::abs(std::max(a.X(), b.X()) - x1) > 1e-6) continue;
+            // Несколько образующих (цилиндр вершин из нескольких граней) — ближайшая к верхнему очерку.
+            if (found) {
+                BRepAdaptor_Curve f(TopoDS::Edge(*found));
+                if (f.Value(f.FirstParameter()).Z() >= a.Z()) continue;
+            }
+            found = ex.Current();
+        }
+        if (!found) fail("no generator of r = " + detail::num(r) + " from x = " + detail::num(x0));
+        return *found;
     }
     annotations::Anchor v(double x, double y, double z) const { return anchor(ElementKind::Vertex, vertex(x, y, z), AnchorKind::Point); }
     annotations::Anchor circ(double x, double y, double z, double r) const {
@@ -258,16 +287,16 @@ void shaftInSheet(DrawingDocument& d, const PartEntry& p) {
     const gp_Dir X = gp::DX();
     s.dim("L", "F", DimensionType::Horizontal, {s.v(0, 0, 9), s.v(x7, 0, 11.5)}, -32);
     s.dim("L0", "F", DimensionType::Horizontal, {s.v(0, 0, 9), s.v(x1, 0, 11)}, 18);
-    s.dim("b1", "F", DimensionType::Horizontal, {s.v(x4, 0, 20), s.v(x5, 0, 20)}, 8);
+    s.dim("b1", "F", DimensionType::Horizontal, {s.v(x4, 0, 15), s.v(x5, 0, 15)}, 15);
     s.dim("D0", "F", DimensionType::Diameter, {s.cyl(10, gp::Origin(), X, gp_Pnt(3, 0, 10))}, -8, "k6");
     s.dim("Ds1", "F", DimensionType::Diameter, {s.cyl(12.5, gp::Origin(), X, gp_Pnt(x2 + 5, 0, 12.5))}, 8, "k6");
     s.dim("Ds2", "F", DimensionType::Diameter, {s.cyl(12.5, gp::Origin(), X, gp_Pnt(x6 + 8, 0, 12.5))}, 8, "k6");
     s.dim("Dc", "F", DimensionType::Diameter, {s.cyl(15, gp::Origin(), X, gp_Pnt(x3 + 10, 0, 15))}, -8);
-    s.dim("d", "F", DimensionType::Diameter, {s.cyl(20, gp::Origin(), X, gp_Pnt((x4 + x5) / 2, 0, 20))}, 8);
+    s.dim("da", "F", DimensionType::Diameter, {s.cyl(22, gp::Origin(), X, gp_Pnt((x4 + x5) / 2, 0, 22))}, 8, "h11");
     s.dim("bk", "T", DimensionType::Vertical, {s.v(L0 / 2 - 11, -3, 6.5), s.v(L0 / 2 - 11, 3, 6.5)}, 12, "N9");
     const TopoDS_Shape seatL = detail::lineEdge(s.shape(), gp_Pnt(x2 + 1, 0, 12.5), gp_Pnt(x3 - 2, 0, 12.5));
     const TopoDS_Shape seatR = detail::lineEdge(s.shape(), gp_Pnt(x6 + 2, 0, 12.5), gp_Pnt(x7 - 1, 0, 12.5));
-    const TopoDS_Shape rim = detail::lineEdge(s.shape(), gp_Pnt(x4, 0, 20), gp_Pnt(x5, 0, 20));
+    const TopoDS_Shape rim = s.axialLine(22, x4, x5);
     s.roughness("Ra1", "F", seatL, "0,8");
     s.roughness("Ra2", "F", seatR, "0,8");
     s.roughness("Ra3", "F", rim, "1,6", 0.3);
@@ -276,10 +305,14 @@ void shaftInSheet(DrawingDocument& d, const PartEntry& p) {
     s.tolerance("T2", "F", rim, GeometricCharacteristic::CircularRunout, "0,03", {"А"}, 0.7);
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::MaterialRemoval, "Ra", "6,3", "", 2.5};
     sd.technicalRequirements = kShaftRequirements;
-    sd.technicalRequirements.push_back(
-        "Венец показан делительным цилиндром d = 40 (зубья не моделируются): m = 2, z = 20, угол профиля 20°, x = 0, da = 44h11, "
-        "df = 35, степень точности 8-B ГОСТ 1643-81.");
     sd.technicalRequirements.push_back("Шпоночный паз: t1 = 3,5, длина 28 — по ГОСТ 23360-78.");
+    // Таблица параметров венца ГОСТ 2.403; изображение венца — по ГОСТ 2.402 (условная форма).
+    annotations::GearTableDef gt;
+    gt.accuracy = "8-B ГОСТ 1643-81";
+    gt.matingTeeth = 60;
+    gt.matingDesignation = "РЦ.080.00.005";
+    gt.centerDistance = 80;
+    sd.gearTable = gt;
 }
 
 // ---------------------------------------------------------------- колесо
@@ -289,20 +322,26 @@ void wheelSheet(DrawingDocument& d, const PartEntry& p) {
     SheetDef& sd = d.sheets()[0];
     ViewDef f = view("F", ViewKind::Base);
     ViewDef l = view("L", ViewKind::Projected, "F", views::SheetSide::RightOf);
-    sd.views = {f, l, section("A", {0, -1, 0}, {1, 0, 0}, {0, 0, 0}, "L", views::SectionKind::Cut)};
+    // Разрез А–А — в проекционной связи справа от вида слева (масштаб листа): правый верхний
+    // угол листа занят таблицей параметров венца ГОСТ 2.403.
+    ViewDef a = section("A", {0, -1, 0}, {1, 0, 0}, {0, 0, 0}, "L", views::SectionKind::Cut);
+    a.parent = "L";
+    a.side = views::SheetSide::RightOf;
+    sd.views = {f, l, a};
     Sheet s(sd, m);
-    const double r = var(p, "d") / 2, bw = var(p, "bw"), lh = var(p, "lh"), rh = var(p, "dh") / 2, rb = var(p, "db") / 2,
+    const double r = var(p, "da") / 2, bw = var(p, "bw"), lh = var(p, "lh"), rh = var(p, "dh") / 2, rb = var(p, "db") / 2,
                  bk = var(p, "bk"), t2 = var(p, "t2");
     const gp_Dir X = gp::DX();
-    s.dim("b", "F", DimensionType::Horizontal, {s.v(-bw / 2, 0, r - 1.5), s.v(bw / 2, 0, r - 1.5)}, 12);
+    const double rr = var(p, "dr") / 2;
+    s.dim("b", "F", DimensionType::Horizontal, {s.v(-bw / 2, 0, rr), s.v(bw / 2, 0, rr)}, r - rr + 12);
     s.dim("lh", "F", DimensionType::Horizontal, {s.v(-lh / 2, 0, rh - 1), s.v(lh / 2, 0, rh - 1)}, 50);
-    s.dim("d", "F", DimensionType::Diameter, {s.cyl(r, gp::Origin(), X, gp_Pnt(0, 0, r))}, 10);
+    s.dim("da", "F", DimensionType::Diameter, {s.cyl(r, gp::Origin(), X, gp_Pnt(0, 0, r))}, 10, "h11");
     s.dim("dh", "F", DimensionType::Diameter, {s.cyl(rh, gp::Origin(), X, gp_Pnt(12, 0, rh))}, -10);
     s.dim("db", "L", DimensionType::Diameter, {s.circ(-lh / 2, 0, 0, rb)}, 0, "H7").def.leaderAngleDeg = 225;
     s.dim("bk", "L", DimensionType::Aligned, {s.v(lh / 2, -bk / 2, rb + t2), s.v(lh / 2, bk / 2, rb + t2)}, 10, "JS9");
-    const TopoDS_Shape rimLine = detail::lineEdge(s.shape(), gp_Pnt(-bw / 2 + 1.5, 0, r), gp_Pnt(bw / 2 - 1.5, 0, r));
+    const TopoDS_Shape rimLine = s.axialLine(r, -bw / 2, bw / 2);
     const TopoDS_Shape hubFace = detail::circleEdge(s.shape(), gp_Pnt(lh / 2, 0, 0), rh - 1);
-    const TopoDS_Shape rimFace = detail::circleEdge(s.shape(), gp_Pnt(bw / 2, 0, 0), r - 1.5);
+    const TopoDS_Shape rimFace = detail::circleEdge(s.shape(), gp_Pnt(bw / 2, 0, 0), r);
     s.roughness("Ra1", "F", rimLine, "1,6", 0.5);
     s.roughness("Ra2", "F", hubFace, "3,2", 0.5);
     s.datum("DA", "F", hubFace, "А", 0.3);
@@ -310,12 +349,16 @@ void wheelSheet(DrawingDocument& d, const PartEntry& p) {
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::MaterialRemoval, "Ra", "6,3", "", 2.5};
     sd.technicalRequirements = {
         "235...262 HB.",
-        "Венец показан делительным цилиндром d = 120 (зубья не моделируются): m = 2, z = 60, угол профиля 20°, x = 0, da = 124h11, "
-        "df = 115, степень точности 8-B ГОСТ 1643-81.",
         "Паз ступицы: t2 = 3,3 (размер 38,3+0,2) по ГОСТ 23360-78.",
         "Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
         "Облегчающие отверстия: 6 отв. ⌀16 на ⌀78.",
     };
+    annotations::GearTableDef gt;
+    gt.accuracy = "8-B ГОСТ 1643-81";
+    gt.matingTeeth = 20;
+    gt.matingDesignation = "РЦ.080.00.003";
+    gt.centerDistance = 80;
+    sd.gearTable = gt;
 }
 
 // ---------------------------------------------------------------- крышка подшипника сквозная
@@ -445,14 +488,16 @@ void assemblySheet(DrawingDocument& d, const Gearbox& g, const Layout& L) {
     const double Za = L.axisHeight, aw = L.aw();
     // Главный вид и разрез А–А по осям валов на месте вида сверху (в проекционной связи) —
     // основные изображения; разрезы Б–Б (по оси колеса), В–В (по штифту), Г–Г (по оси
-    // вала-шестерни) — 1:2,5 колонкой справа, их секущие плоскости обозначены на разрезе А–А.
+    // вала-шестерни) — 1:2,5 колонкой справа (Б–Б затем — 1:1 на свободном месте, updateDrawings), их секущие плоскости обозначены на разрезе А–А.
     ViewDef f = view("F", ViewKind::Base);
     f.hidden = false;
     ViewDef a = section("A", {0, 0, 1}, {1, 0, 0}, {0, 0, Za}, "F", views::SectionKind::Cut);
     a.parent = "F";
     a.side = views::SheetSide::Below;
     a.autoBalloons = true;
-    ViewDef b = section("B", {0, -1, 0}, {1, 0, 0}, {0, aw, 0}, "A", views::SectionKind::Cut);
+    // Б–Б по оси колеса — наблюдатель со стороны +Y, взгляд к шестерне: вал-шестерня (не
+    // рассекается, ⌀da 44) остаётся за плоскостью и не закрывает шпонку под колесом.
+    ViewDef b = section("B", {0, 1, 0}, {-1, 0, 0}, {0, aw, 0}, "A", views::SectionKind::Cut);
     ViewDef c = section("C", {0, -1, 0}, {1, 0, 0}, {0, -68, 0}, "A", views::SectionKind::Cut);
     ViewDef dv = section("D", {0, -1, 0}, {1, 0, 0}, {0, 0, 0}, "A", views::SectionKind::Cut);
     b.scale = c.scale = dv.scale = views::ScaleRatio{2, 5};
@@ -470,7 +515,7 @@ void assemblySheet(DrawingDocument& d, const Gearbox& g, const Layout& L) {
         "Плоскость разъёма покрыть герметиком; прокладку ставить на герметик.",
         "Валы должны проворачиваться от руки плавно, без заеданий.",
         "Залить масло И-Г-А-46 ГОСТ 17479.4-87 до уровня, при котором колесо погружено на высоту зуба.",
-        "Зубчатые венцы показаны делительными цилиндрами, подшипники — упрощёнными кольцами d×D×B.",
+        "Зубчатые колёса показаны условно — цилиндрами вершин (ГОСТ 2.402), подшипники — упрощёнными кольцами d×D×B.",
     };
     d.sheets().push_back(std::move(sd));
 }
@@ -532,6 +577,65 @@ Result<UpdateSummary> updateDrawings(DrawingSet& set, const std::vector<PartEntr
     if (!su.ok()) return Error{su.error().code, "specification: " + su.error().message};
     auto r = set.assembly.update(m.value(), cache, set.specification.specification());
     if (!r.ok()) return Error{r.error().code, "gearbox.bcdrw.json: " + r.error().message};
+    // Разрез Б–Б (по оси колеса) — в масштабе 1:1 на свободном месте листа: проекционная группа
+    // (главный вид и разрез А–А) сдвигается к левому краю поля, затем перебором центров с шагом
+    // 5 мм ищется место для изображения с надписью (10 мм до соседних изображений, основная
+    // надпись и технические требования над ней заняты). Один раз: положения сохраняются в файле.
+    {
+        SheetDef& sd = set.assembly.sheets()[0];
+        auto def = [&](const std::string& id) -> ViewDef* {
+            for (ViewDef& v : sd.views)
+                if (v.id == id) return &v;
+            return nullptr;
+        };
+        auto computed = [&](const std::string& id) -> const ComputedView* {
+            for (const ComputedView& v : set.assembly.computedSheets()[0].views)
+                if (v.id == id) return &v;
+            return nullptr;
+        };
+        ViewDef* bd = def("B");
+        if (bd && !bd->position && computed("F") && computed("A") && computed("B")) {
+            views::Box2 g = computed("F")->sheetView.sheetBounds();
+            const views::Box2 ab = computed("A")->sheetView.sheetBounds();
+            g.add({ab.minX, ab.minY});
+            g.add({ab.maxX, ab.maxY + 14.0});
+            def("F")->position = Point2{20 + 15 + g.width() / 2, 0.5 * (g.minY + g.maxY)};
+            r = set.assembly.update(m.value(), cache, set.specification.specification());
+            if (!r.ok()) return Error{r.error().code, "gearbox.bcdrw.json: " + r.error().message};
+            struct Box4 {
+                double x0, y0, x1, y1;
+            };
+            const ComputedSheet& cs = set.assembly.computedSheets()[0];
+            const double W = cs.sheet.widthMm, H = cs.sheet.heightMm;
+            const views::Box2 vb = computed("B")->sheetView.view.bounds;
+            const double w = vb.width(), h = vb.height();
+            std::vector<Box4> busy;
+            for (const ComputedView& v : cs.views) {
+                if (v.id == "B") continue;
+                const views::Box2 q = v.sheetView.sheetBounds();
+                const double room = v.kind == ViewKind::Section || v.kind == ViewKind::Detail ? 14.0 : 0.0;
+                busy.push_back({q.minX, q.minY, q.maxX, q.maxY + room});
+            }
+            busy.push_back({W - 5 - 185, 5, W - 5, 5 + 55 + 110});
+            std::optional<Point2> spot;
+            for (double cy = H - 15 - (h + 14) / 2; cy >= 15 + (h + 14) / 2 && !spot; cy -= 5)
+                for (double cx = 30 + w / 2; cx <= W - 15 - w / 2 && !spot; cx += 5) {
+                    const Box4 q{cx - w / 2 - 10, cy - (h + 14) / 2 - 10, cx + w / 2 + 10, cy + (h + 14) / 2 + 10};
+                    if (std::none_of(busy.begin(), busy.end(), [&](const Box4& o) {
+                            return q.x0 < o.x1 && o.x0 < q.x1 && q.y0 < o.y1 && o.y0 < q.y1;
+                        }))
+                        spot = Point2{cx, cy};
+                }
+            if (spot) {
+                bd->scale = views::ScaleRatio{1, 1};
+                bd->position = *spot;
+                r = set.assembly.update(m.value(), cache, set.specification.specification());
+                if (!r.ok()) return Error{r.error().code, "gearbox.bcdrw.json: " + r.error().message};
+            } else {
+                out.warnings.push_back("gearbox.bcdrw.json: no free space for section B-B at 1:1");
+            }
+        }
+    }
     // Составные части, не видимые в разрезе А–А (крышка корпуса, прокладка, штифты, болты
     // фланца, заливная пробка), получают ручные позиции на главном виде: полки — колонной слева
     // от вида, шаг 10 мм (ГОСТ 2.109). Один раз: ручные позиции сохраняются в файле.

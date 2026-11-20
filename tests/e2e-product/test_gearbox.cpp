@@ -11,6 +11,7 @@
 #include <bendcore/assembly_v2/bom.hpp>
 #include <bendcore/assembly_v2/interference.hpp>
 #include <bendcore/kernel/step_io.hpp>
+#include <bendcore/modeling/gear.hpp>
 #include <bendcore/modeling/part_features.hpp>
 
 #include <BRepGProp.hxx>
@@ -167,6 +168,40 @@ TEST(E2EProductGearbox, MassesAgainstFormulas) {
         const double v = volume(e.doc->finalShape().shape()), f = formula(key);
         EXPECT_NEAR(v, f, 1e-9 * f) << key;
     }
+    // Зубчатые венцы: объём, снятый нарезанием зубьев, — кольцо (π·da²/4 − A)·b, где A — площадь
+    // торцового профиля венца, численный интеграл по точкам формул эвольвенты и переходной кривой
+    // (не по B-сплайнам модели); тело без венца — тот же документ с подавленной операцией.
+    for (const auto& [key, width] : std::vector<std::pair<std::string, const char*>>{{"wheel", "bw"}, {"shaft_in", "b1"}}) {
+        const PartEntry& e = *findPart(p.parts, key);
+        const auto gears = bendcore::modeling::gearsOf(e.doc->finalShape());
+        ASSERT_EQ(gears.size(), 1u) << key;
+        const auto& g = gears.front().gear;
+        EXPECT_DOUBLE_EQ(g.module, 2.0);
+        EXPECT_EQ(g.teeth, key == "wheel" ? 60 : 20);
+        EXPECT_NEAR(g.width, var(e, width), 1e-9);
+        auto side = bendcore::modeling::toothSidePoints(g, 4000);
+        ASSERT_TRUE(side.ok());
+        std::vector<std::pair<double, double>> poly{{0.0, 0.0}};
+        for (const auto* part : {&side.value().root, &side.value().fillet, &side.value().involute, &side.value().tipHalf})
+            poly.insert(poly.end(), part->begin(), part->end());
+        double a2 = 0;
+        for (std::size_t i = 0; i < poly.size(); ++i) {
+            const auto& u = poly[i];
+            const auto& w = poly[(i + 1) % poly.size()];
+            a2 += u.first * w.second - w.first * u.second;
+        }
+        const double A = g.teeth * std::abs(a2), da = var(e, "da");
+        auto json = e.doc->toJson();
+        ASSERT_TRUE(json.ok());
+        auto blank = bendcore::modeling::PartDocument::fromJson(json.value(), bendcore::modeling::partRegistry());
+        ASSERT_TRUE(blank.ok());
+        ASSERT_TRUE(blank.value().setSuppressed("Teeth", true).ok());
+        blank.value().rebuild();
+        const double removed = volume(blank.value().finalShape().shape()) - volume(e.doc->finalShape().shape());
+        const double expected = (kPi * da * da / 4 - A) * g.width;
+        EXPECT_NEAR(removed, expected, 3e-6 * expected) << key;
+        std::printf("[gearbox] %s: teeth remove %.3f mm3 (ring - profile integral %.3f)\n", key.c_str(), removed, expected);
+    }
     // Масса изделия по BOM = Σ объём · плотность всех вхождений.
     auto placed = p.gearbox.doc->placedParts();
     ASSERT_TRUE(placed.ok());
@@ -182,7 +217,8 @@ TEST(E2EProductGearbox, MassesAgainstFormulas) {
 
 // Пересечений нет, кроме резьбовых соединений: болт М6 и пробка М16×1,5 в отверстиях под резьбу
 // (модель резьбы условная: стержень номинального диаметра в отверстии диаметра сверла D − P) —
-// объём не больше кольца π/4·(d² − (D − P)²) на длине захода. Делительные цилиндры колёс касаются.
+// объём не больше кольца π/4·(d² − (D − P)²) на длине захода. Зубья шестерни и колеса (боковой
+// зазор нулевой) касаются, не пересекаясь.
 TEST(E2EProductGearbox, NoInterferenceExceptThreads) {
     Product& p = product();
     auto rep = asmv2::checkInterference(*p.gearbox.doc);
@@ -209,9 +245,9 @@ TEST(E2EProductGearbox, NoInterferenceExceptThreads) {
     EXPECT_TRUE(gearsTouch);
 }
 
-// Степени свободы: 60 = 2 вала + повороты осесимметричных деталей вокруг своих осей; поворот
-// вала на 30° вокруг его оси решается без невязки, колесо и шпонки поворачиваются вместе с
-// валом, корпус и крышки неподвижны.
+// Степени свободы: 59 = 1 (валы связаны передаточным сопряжением) + повороты осесимметричных деталей
+// вокруг своих осей. Поворот вала-шестерни на 30° и вала с колесом на −10° (u = 3) — допустимое
+// движение; поворот зафиксированного вала-шестерни на φ поворачивает колесо на −φ/u.
 TEST(E2EProductGearbox, DegreesOfFreedom) {
     Product& p = product();
     auto& doc = *p.gearbox.doc;
@@ -220,7 +256,7 @@ TEST(E2EProductGearbox, DegreesOfFreedom) {
     EXPECT_TRUE(rep.value().success);
     EXPECT_LT(rep.value().residualNorm, 1e-9);
     EXPECT_EQ(rep.value().totalDof, p.gearbox.expectedDof);
-    EXPECT_EQ(p.gearbox.expectedDof, 60);
+    EXPECT_EQ(p.gearbox.expectedDof, 59);
     for (const auto& s : rep.value().subsystems) {
         EXPECT_TRUE(s.redundantMates.empty());
         EXPECT_TRUE(s.conflictingMates.empty());
@@ -228,44 +264,48 @@ TEST(E2EProductGearbox, DegreesOfFreedom) {
     auto occ = [&](const std::string& k) { return *doc.findOccurrence(p.gearbox.occ.at(k)); };
     std::vector<std::pair<asmv2::OccurrenceId, asmv2::Transform>> saved;
     for (const auto& o : doc.topLevel()) saved.push_back({o.id, o.placement});
-    using Group = std::vector<std::string>;
-    for (const auto& [group, y] : std::vector<std::pair<Group, double>>{
-             {{"shaft_in", "key_in"}, 0.0}, {{"shaft_out", "wheel", "spacer", "key_wheel", "key_out"}, 80.0}}) {
-        // Поворот вала с жёстко связанными деталями на 30° вокруг оси — допустимое движение:
-        // решатель ничего не сдвигает (невязка 0), крышки и корпус на месте.
+    auto turnAbout = [](double y, double angle) {
         const asmv2::Vec3 axisPoint(0, y, 78);
-        const asmv2::Transform turn = asmv2::Transform::fromTranslation(axisPoint) *
-                                      asmv2::Transform::fromAxisAngle(asmv2::Vec3::UnitX(), kPi / 6) *
-                                      asmv2::Transform::fromTranslation(-axisPoint);
-        std::map<std::string, asmv2::Transform> target;
+        return asmv2::Transform::fromTranslation(axisPoint) * asmv2::Transform::fromAxisAngle(asmv2::Vec3::UnitX(), angle) *
+               asmv2::Transform::fromTranslation(-axisPoint);
+    };
+    using Group = std::vector<std::string>;
+    const Group input{"shaft_in", "key_in"}, output{"shaft_out", "wheel", "spacer", "key_wheel", "key_out"};
+    // Совместный поворот по передаче: решатель ничего не сдвигает.
+    std::map<std::string, asmv2::Transform> target;
+    for (const auto& [group, y, angle] : std::vector<std::tuple<Group, double, double>>{{input, 0.0, kPi / 6}, {output, 80.0, -kPi / 18}})
         for (const auto& k : group) {
-            target[k] = turn * occ(k).placement;
+            target[k] = turnAbout(y, angle) * occ(k).placement;
             ASSERT_TRUE(doc.setPlacement(p.gearbox.occ.at(k), target[k]).ok());
         }
-        const asmv2::Transform cap = occ("cap_out_r").placement;
-        auto r = doc.solve();
-        ASSERT_TRUE(r.ok());
-        EXPECT_TRUE(r.value().success) << group[0];
-        EXPECT_LT(r.value().residualNorm, 1e-9);
-        for (const auto& k : group) {
-            EXPECT_LT((occ(k).placement.position - target[k].position).norm(), 1e-7) << k;
-            EXPECT_LT((occ(k).placement.rotationMatrix() - target[k].rotationMatrix()).norm(), 1e-7) << k;
-        }
-        EXPECT_LT((occ("cap_out_r").placement.position - cap.position).norm(), 1e-9);
-        // Поворот одного вала: после решения ось вала неподвижна, жёстко связанные детали
-        // повернулись вместе с ним (относительное положение сохранено).
-        const asmv2::Transform before = occ(group[0]).placement, rel = before.inverse() * occ(group[1]).placement;
-        ASSERT_TRUE(doc.setPlacement(p.gearbox.occ.at(group[0]), turn * before).ok());
-        auto r2 = doc.solve();
-        ASSERT_TRUE(r2.ok());
-        EXPECT_TRUE(r2.value().success);
-        const asmv2::Transform after = occ(group[0]).placement;
-        for (double x : {-50.0, 50.0})
-            EXPECT_LT((after.applyToPoint(before.inverse().applyToPoint(asmv2::Vec3(x, y, 78))) - asmv2::Vec3(x, y, 78)).norm(), 1e-7);
-        const asmv2::Transform relAfter = after.inverse() * occ(group[1]).placement;
+    const asmv2::Transform cap = occ("cap_out_r").placement;
+    auto r = doc.solve();
+    ASSERT_TRUE(r.ok());
+    EXPECT_TRUE(r.value().success);
+    EXPECT_LT(r.value().residualNorm, 1e-9);
+    for (const auto& [k, t] : target) {
+        EXPECT_LT((occ(k).placement.position - t.position).norm(), 1e-7) << k;
+        EXPECT_LT((occ(k).placement.rotationMatrix() - t.rotationMatrix()).norm(), 1e-7) << k;
+    }
+    EXPECT_LT((occ("cap_out_r").placement.position - cap.position).norm(), 1e-9);
+    for (const auto& [id, t] : saved) ASSERT_TRUE(doc.setPlacement(id, t).ok());
+    // Передача: вал-шестерня повёрнут на φ и зафиксирован — колесо поворачивается на −φ/3 вокруг
+    // своей оси (оси валов сонаправлены, внешнее зацепление), шпонки и втулка — вместе с ним.
+    for (double phi : {kPi / 6, -kPi / 4}) {
+        const asmv2::Transform wheel0 = occ("wheel").placement, rel = occ("shaft_out").placement.inverse() * wheel0;
+        for (const auto& k : input) ASSERT_TRUE(doc.setPlacement(p.gearbox.occ.at(k), turnAbout(0, phi) * occ(k).placement).ok());
+        ASSERT_TRUE(doc.setFixed(p.gearbox.occ.at("shaft_in"), true).ok());
+        auto t = doc.solve();
+        ASSERT_TRUE(t.ok());
+        EXPECT_TRUE(t.value().success);
+        EXPECT_LT(t.value().residualNorm, 1e-9);
+        const asmv2::Transform expected = turnAbout(80, -phi / 3) * wheel0;
+        EXPECT_LT((occ("wheel").placement.position - expected.position).norm(), 1e-6) << phi;
+        EXPECT_LT((occ("wheel").placement.rotationMatrix() - expected.rotationMatrix()).norm(), 1e-7) << phi;
+        const asmv2::Transform relAfter = occ("shaft_out").placement.inverse() * occ("wheel").placement;
         EXPECT_LT((relAfter.position - rel.position).norm(), 1e-7);
-        EXPECT_LT((relAfter.rotationMatrix() - rel.rotationMatrix()).norm(), 1e-7);
-        for (const auto& [id, t] : saved) ASSERT_TRUE(doc.setPlacement(id, t).ok());
+        ASSERT_TRUE(doc.setFixed(p.gearbox.occ.at("shaft_in"), false).ok());
+        for (const auto& [id, tr] : saved) ASSERT_TRUE(doc.setPlacement(id, tr).ok());
     }
     auto back = doc.solve();
     ASSERT_TRUE(back.ok());
@@ -421,7 +461,7 @@ TEST(E2EProductGearbox, FilesOpenBack) {
     auto solved = ld.solve();
     ASSERT_TRUE(solved.ok());
     EXPECT_TRUE(solved.value().success);
-    EXPECT_EQ(solved.value().totalDof, 60);
+    EXPECT_EQ(solved.value().totalDof, 59);
     ASSERT_EQ(ld.topLevel().size(), p.gearbox.doc->topLevel().size());
     for (std::size_t i = 0; i < ld.topLevel().size(); ++i)
         EXPECT_LT((ld.topLevel()[i].placement.position - p.gearbox.doc->topLevel()[i].placement.position).norm(), 1e-7);
@@ -507,7 +547,7 @@ TEST(E2EProductGearbox, CommittedKitOpens) {
         EXPECT_EQ(s.status == asmv2::SourceStatus::Loaded || s.status == asmv2::SourceStatus::Embedded, true) << s.name << ": " << s.message;
     auto solved = loaded.value().document.solve();
     ASSERT_TRUE(solved.ok());
-    EXPECT_EQ(solved.value().totalDof, 60);
+    EXPECT_EQ(solved.value().totalDof, 59);
     EXPECT_EQ(loaded.value().document.topLevel().size(), 72u);
     // Документы чертежей обновляются по закоммиченным моделям без изменений и висячих размеров.
     bendcore::drawing_v2::views::ViewCache cache(16, 2);

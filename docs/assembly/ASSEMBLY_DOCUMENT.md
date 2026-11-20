@@ -262,11 +262,19 @@ P_i = P_ref · L_i · P_ref⁻¹ · P_seed
    "a": {"path": [2], "kind": "face", "name": "Shaft:Side", "use": "Auto"},
    "b": {"path": [1], "kind": "face", "index": 1, "use": "Auto"},
    "bound": [{"index": 0, "signature": {...}}, {"index": 1, "signature": {...}}],
-   "rigidRelative": {"position": [...], "rotation": [...]}}],
+   "rigidRelative": {"position": [...], "rotation": [...]},
+   "gearPhase": [θa0, θb0]}],
  "patterns": [{"id": 1, "kind": "Feature", "seed": 2, "reference": 1, "instances": [3, 4, 5],
    "spec": {...}, "holeBound": {...}}],
  "explodedViews": [{"name": "...", "steps": [{"occurrences": [2], "direction": [0, 0, 1], "distance": 40}]}]}
 ```
+
+Передача (`"type": "Gear"`, `MateSpec::gear(a, b, ratio, internal)`): `value` — передаточное
+отношение zb/za, `internalTangency` — внутреннее зацепление, `gearPhase` — углы осей a и b от
+линии центров в момент добавления (`gearAngles`, `docs/assembly/SOLVER.md`, раздел 2);
+сопряжение Gear без `gearPhase` при загрузке — ошибка разбора. Ссылки — оси или цилиндрические
+грани (делительный цилиндр, посадочные поверхности валов). Пример — зацепление вала-шестерни с
+выходным валом редуктора `examples/gearbox/` (u = 3).
 
 ### 10.1 Компоненты и геометрия
 

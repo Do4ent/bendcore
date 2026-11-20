@@ -154,6 +154,9 @@ struct MateSpec {
     static MateSpec perpendicular(GeometryRef a, GeometryRef b);
     static MateSpec tangent(GeometryRef a, GeometryRef b, Alignment side = Alignment::Closest, bool internal = false);
     static MateSpec rigid(OccurrenceId a, OccurrenceId b);
+    // Передача (зацепление) между осями a и b (оси, делительные цилиндры): ratio = zb/za,
+    // внешнее зацепление — противоположные направления вращения (docs/assembly/SOLVER.md).
+    static MateSpec gear(GeometryRef a, GeometryRef b, double ratio, bool internal = false);
 };
 
 // Разрешённая сторона сопряжения: индекс элемента, его сигнатура (в СК детали) и
@@ -170,6 +173,7 @@ struct DocumentMate {
     MateSpec spec;
     std::array<BoundElement, 2> bound;
     std::optional<Transform> rigidRelative;  // Rigid: положение b в СК a
+    std::optional<Eigen::Vector2d> gearPhase;  // Gear: углы осей a и b при добавлении (gearAngles)
     std::string brokenReason;                // не пусто: ссылка не разрешилась, сопряжение не решается
     bool suppressed = false;                 // подавлено пользователем: не решается
     bool broken() const { return !brokenReason.empty(); }

@@ -7,6 +7,7 @@
 //   Extrude, Revolve, Hole, Fillet, Chamfer, LinearPattern, CircularPattern, Mirror,
 //   Shell, Draft                                        — body operations
 //   Sweep, Loft, Rib, ThreadedHole                      — phase 2 body operations
+//   GearTeeth                                           — involute gear rim (gear.hpp)
 //   BodyBoolean, DeleteBody, BodyLinearPattern, BodyCircularPattern, BodyMirror
 //                                                       — nodes of a multibody part
 //   Box, Cylinder                                       — primitives (rectangle / circle

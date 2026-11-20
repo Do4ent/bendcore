@@ -152,6 +152,7 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         const PartEntry* sin = findPart(parts, "shaft_in");
         const PartEntry* sout = findPart(parts, "shaft_out");
         const double x6 = sin->doc->variableValue("x6").value(), x7 = sin->doc->variableValue("x7").value();
+        // Фаза зубьев шестерни относительно колеса задана в документе детали (buildParts).
         b.place("shaft_in", "shaft_in", at(xo - x7, 0, Za));
         {
             const TopoDS_Shape seat = cylinderFaceAt(b.shapeOf("shaft_in"), 12.5, gp::Origin(), gp::DX(), gp_Pnt(x7 - 5, 0, 12.5));
@@ -260,11 +261,19 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         take(insertFastenerStacks(*g.doc, {g.defs["bolt10"], {g.defs["washer10"]}, {g.defs["washer10"]}, g.defs["nut10"]}, sites),
              "flange bolts");
 
+        // ---- зацепление: передаточное сопряжение валов, u = z2/z1 (внешнее — вращение в разные стороны)
+        {
+            const TopoDS_Shape seatIn = cylinderFaceAt(b.shapeOf("shaft_in"), 12.5, gp::Origin(), gp::DX(), gp_Pnt(x7 - 5, 0, 12.5));
+            const TopoDS_Shape seatOut = cylinderFaceAt(b.shapeOf("shaft_out"), 15, gp::Origin(), gp::DX(), gp_Pnt(o5 - 5, 0, 15));
+            b.mate(MateSpec::gear(b.face("shaft_in", seatIn), b.face("shaft_out", seatOut), double(L.z2) / L.z1), "gear mesh");
+        }
+
         auto rep = take(g.doc->solve(), "solve");
         if (!rep.success) fail("assembly does not solve: residual " + num(rep.residualNorm));
-        // 2 вала + 4 подшипника + 2 штифта + 2 пробки + 2 прокладки пробок + 16 болтов + 16 шайб
+        // 1 (валы связаны зацеплением) + 4 подшипника + 2 штифта + 2 пробки + 2 прокладки пробок + 16 болтов + 16 шайб
         // + 4 болта + 8 шайб + 4 гайки.
-        g.expectedDof = 2 + 4 + 2 + 2 + 2 + 16 + 16 + 4 + 8 + 4;
+        // Передаточное сопряжение связывает повороты валов: 2 → 1.
+        g.expectedDof = 1 + 4 + 2 + 2 + 2 + 16 + 16 + 4 + 8 + 4;
         return g;
     });
 }

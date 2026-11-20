@@ -21,6 +21,7 @@ enum class MateType {
     Perpendicular,  // направления перпендикулярны
     Tangent,        // плоскость-цилиндр, цилиндр-цилиндр, плоскость-сфера
     Rigid,          // жёсткая связь двух компонентов
+    Gear,           // передача: углы поворота вокруг двух осей связаны передаточным отношением
 };
 
 const char* toString(MateType type) noexcept;
@@ -48,6 +49,7 @@ enum class MateForm {
     TangentCylinderCylinder,  // 4: da − s·db; (|w|² − D²) / (2D), w = (I − db dbᵀ)(pa − pb)
     TangentPlaneSphere,       // 1: na·(cb − pa) − σ·ρ
     Rigid,                    // 9: tb − (Ra t_rel + ta); Rb ex − Ra R_rel ex; Rb ey − Ra R_rel ey
+    Gear,                     // 1: wrap(θa − θa0) + σ·u·wrap(θb − θb0)
 };
 
 const char* toString(MateForm form) noexcept;
@@ -69,6 +71,11 @@ struct Mate {
     bool internalTangency = false;
     // Rigid: положение b в СК a. Если не задано, Assembly::addMate берёт текущее.
     std::optional<Transform> relative;
+    // Gear: value — передаточное отношение u = zb/za > 0 (поворот a на φ — поворот b на ∓φ/u);
+    // internalTangency — внутреннее зацепление (b вращается в ту же сторону, что a);
+    // gearPhase — углы (θa0, θb0) осей при сборке (см. gearAngles). Если не заданы,
+    // Assembly::addMate берёт текущие.
+    std::optional<Eigen::Vector2d> gearPhase;
 
     // Заполняется prepareMate.
     MateForm form = MateForm::Unprepared;
@@ -83,7 +90,16 @@ struct Mate {
     static Mate tangent(const Feature& a, const Feature& b, Alignment side = Alignment::Closest,
                         bool internal = false);
     static Mate rigid(ComponentId a, ComponentId b, std::optional<Transform> relative = {});
+    // Передача между осями a и b (оси или цилиндры, например делительные цилиндры колёс):
+    // ratio = zb/za; внешнее зацепление — противоположные направления вращения.
+    static Mate gear(const Feature& a, const Feature& b, double ratio, bool internal = false);
 };
+
+// Углы поворота компонентов a и b сопряжения Gear вокруг своих осей, отсчитанные от линии
+// центров c (перпендикуляр от оси a к оси b): θ = atan2(u·(d × c), u·c), где u — мировой образ
+// детерминированного перпендикуляра к оси в СК компонента (perpendicularBasis). Ошибка — оси
+// совпадают (линии центров нет).
+kernel::Result<Eigen::Vector2d> gearAngles(const Mate& mate, const Transform& poseA, const Transform& poseB);
 
 // Проверяет типы сущностей и параметры, приводит порядок a/b к каноническому (например,
 // точка — a, плоскость — b) и заполняет form. Ошибка InvalidInput/Unsupported с причиной.
