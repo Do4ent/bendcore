@@ -9,6 +9,7 @@
 #include <gp.hxx>
 
 #include <cmath>
+#include <cstdio>
 
 namespace bendcore::examples::gearbox {
 
@@ -463,6 +464,27 @@ PartEntry entry(std::string key, std::string designation, std::string name, std:
     return e;
 }
 
+// Фаза зацепления. Оси шестерни и колеса в сборке — вдоль X без поворота, колесо смещено на aw по
+// +Y (линия центров c = +Y). Поворот шестерни вокруг её оси, при котором зуб шестерни входит во
+// впадину колеса: в исходном положении зуб шестерни направлен по c, впадина колеса — по −c;
+// поворот колеса на δ требует поворота шестерни на −s·u·δ (s = +1 при сонаправленных осях).
+double meshingTurn(const modeling::PartDocument& pinion, const modeling::PartDocument& wheel) {
+    const auto gp = modeling::gearsOf(pinion.finalShape()), gw = modeling::gearsOf(wheel.finalShape());
+    if (gp.size() != 1 || gw.size() != 1) fail("meshing: expected one gear rim on the pinion and on the wheel");
+    const gp_Dir c(0, 1, 0);
+    const gp_Ax3 &ap = gp.front().gear.axis, &aw = gw.front().gear.axis;
+    auto angleAround = [](const gp_Dir& v, const gp_Dir& axis, const gp_Dir& ref) {
+        return std::atan2(axis.Crossed(ref).Dot(v), ref.Dot(v));
+    };
+    auto wrap = [](double a, double period) { return a - period * std::round(a / period); };
+    const int z1 = gp.front().gear.teeth, z2 = gw.front().gear.teeth;
+    const double tauW = 2 * M_PI / z2, tauP = 2 * M_PI / z1;
+    const double s = ap.Direction().Dot(aw.Direction()) >= 0 ? 1.0 : -1.0;
+    const double space = wrap(angleAround(aw.XDirection(), aw.Direction(), c.Reversed()) + tauW / 2, tauW);
+    const double now = angleAround(ap.XDirection(), ap.Direction(), c);
+    return wrap(-s * (double(z2) / z1) * space - now, tauP);
+}
+
 }  // namespace
 
 Result<std::vector<PartEntry>> buildParts(const Layout& L) {
@@ -486,6 +508,20 @@ Result<std::vector<PartEntry>> buildParts(const Layout& L) {
         v.push_back(entry("gasket", "РЦ.080.00.011", "Прокладка", "Паронит ПОН-Б ГОСТ 481-80", 1800, flangeGasket(L)));
         v.push_back(entry("plug", "РЦ.080.00.012", "Пробка М16×1,5", "Сталь 20 ГОСТ 1050-2013", 7850, plug()));
         v.push_back(entry("plug_gasket", "РЦ.080.00.013", "Прокладка", "Паронит ПОН-Б ГОСТ 481-80", 1800, plugGasket()));
+        // Зубья шестерни — в фазе зацепления с колесом (параметр angle венца, градусы).
+        {
+            modeling::PartDocument& pinion = *v[2].doc;
+            const double turn = meshingTurn(pinion, *v[4].doc);
+            const double deg = turn * 180.0 / M_PI;
+            if (std::abs(deg) > 1e-9) {
+                char text[40];
+                std::snprintf(text, sizeof text, "%.17g", deg);
+                if (auto st = pinion.setParameter("Teeth", "angle", text); !st.ok()) fail("pinion phase: " + st.error().message);
+                pinion.rebuild();
+                if (pinion.feature("Teeth").value().state != modeling::FeatureState::Ok) fail("pinion phase: teeth not rebuilt");
+                if (std::abs(meshingTurn(pinion, *v[4].doc)) > 1e-12) fail("pinion phase: the teeth are not in mesh");
+            }
+        }
         return v;
     });
 }
