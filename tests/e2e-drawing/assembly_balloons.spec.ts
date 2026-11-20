@@ -18,6 +18,15 @@ interface Balloon {
   definition: number;
   text: string;
   at: [number, number];
+  target: [number, number];
+}
+
+/** Proper crossing of two leader segments target → at (shared end points do not count). */
+function leadersCross(a: Balloon, b: Balloon): boolean {
+  const cross = (o: number[], p: number[], q: number[]) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+  const d1 = cross(b.target, b.at, a.target), d2 = cross(b.target, b.at, a.at);
+  const d3 = cross(a.target, a.at, b.target), d4 = cross(a.target, a.at, b.at);
+  return d1 * d2 < -1e-9 && d3 * d4 < -1e-9;
 }
 interface EditorState {
   status: string;
@@ -29,7 +38,7 @@ interface EditorState {
       height: number;
       views: { id: string; bounds?: { minX: number; minY: number; maxX: number; maxY: number } }[];
       balloons: Balloon[];
-      positions: { id: string; state: string | null; text?: string; definition?: number; shelf?: [number, number] }[];
+      positions: { id: string; state: string | null; text?: string; definition?: number; shelf?: [number, number]; arranged?: boolean }[];
     }[];
   } | null;
 }
@@ -130,6 +139,30 @@ test('assembly drawing: positions by the specification and a manual position wit
   expect(sheet.balloons.map((b) => Number(b.text)).sort()).toEqual([1, 2, 3, 4, 5]);
   // The number is on the sheet drawn by the kernel.
   await expect(page.getByTestId('sheet-svg').locator('text', { hasText: /^2$/ })).toHaveCount(1);
+
+  // "Разнести позиции" (ГОСТ 2.109): the manual shelf joins the automatic ones on one vertical,
+  // leaders do not cross, numbers go down in order.
+  await page.getByTestId('arrange-balloons').click();
+  await expect(page.getByTestId('status')).toContainText('Позиции разнесены');
+  await expectNoError(page);
+  sheet = (await state(page)).description!.sheets[0];
+  expect(sheet.positions[0].arranged).toBe(true);
+  expect(sheet.balloons).toHaveLength(5);
+  const column = sheet.balloons.map((b) => b.at[0]);
+  for (const x of column) expect(x).toBeCloseTo(column[0], 6);
+  expect(column[0]).toBeGreaterThan(sheet.views[0].bounds!.maxX);
+  for (let i = 0; i < sheet.balloons.length; ++i)
+    for (let j = i + 1; j < sheet.balloons.length; ++j) expect(leadersCross(sheet.balloons[i], sheet.balloons[j])).toBe(false);
+  const byNumber = [...sheet.balloons].sort((a, b) => Number(a.text) - Number(b.text));
+  const ordered = byNumber.every((b, i) => i === 0 || byNumber[i - 1].at[1] > b.at[1]);
+  if (!ordered) await expect(page.getByTestId('status')).toContainText('не по порядку');
+  // The shelves to the left of the view: the line of the view.
+  await page.getByTestId('view-balloon-line').selectOption('left');
+  await expect(page.getByTestId('status')).toContainText('Линия полок позиций');
+  sheet = (await state(page)).description!.sheets[0];
+  for (const b of sheet.balloons) expect(b.at[0]).toBeLessThan(sheet.views[0].bounds!.minX);
+  await page.getByTestId('view-balloon-line').selectOption('auto');
+  await expectNoError(page);
 
   // The specification tab: every position once on the sheet.
   await page.getByTestId('tab-specification').click();
