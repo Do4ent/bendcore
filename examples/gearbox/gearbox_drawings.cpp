@@ -490,7 +490,9 @@ void assemblySheet(DrawingDocument& d, const Gearbox& g, const Layout& L) {
     a.parent = "F";
     a.side = views::SheetSide::Below;
     a.autoBalloons = true;
-    ViewDef b = section("B", {0, -1, 0}, {1, 0, 0}, {0, aw, 0}, "A", views::SectionKind::Cut);
+    // Б–Б по оси колеса — наблюдатель со стороны +Y, взгляд к шестерне: вал-шестерня (не
+    // рассекается, ⌀da 44) остаётся за плоскостью и не закрывает шпонку под колесом.
+    ViewDef b = section("B", {0, 1, 0}, {-1, 0, 0}, {0, aw, 0}, "A", views::SectionKind::Cut);
     ViewDef c = section("C", {0, -1, 0}, {1, 0, 0}, {0, -68, 0}, "A", views::SectionKind::Cut);
     ViewDef dv = section("D", {0, -1, 0}, {1, 0, 0}, {0, 0, 0}, "A", views::SectionKind::Cut);
     b.scale = c.scale = dv.scale = views::ScaleRatio{2, 5};
@@ -508,7 +510,7 @@ void assemblySheet(DrawingDocument& d, const Gearbox& g, const Layout& L) {
         "Плоскость разъёма покрыть герметиком; прокладку ставить на герметик.",
         "Валы должны проворачиваться от руки плавно, без заеданий.",
         "Залить масло И-Г-А-46 ГОСТ 17479.4-87 до уровня, при котором колесо погружено на высоту зуба.",
-        "Зубчатые венцы показаны делительными цилиндрами, подшипники — упрощёнными кольцами d×D×B.",
+        "Зубчатые колёса показаны условно — цилиндрами вершин (ГОСТ 2.402), подшипники — упрощёнными кольцами d×D×B.",
     };
     d.sheets().push_back(std::move(sd));
 }
