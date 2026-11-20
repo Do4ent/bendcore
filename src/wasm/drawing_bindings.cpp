@@ -1108,7 +1108,11 @@ std::string moveView(std::uint32_t handle, std::string sheetId, std::string view
                     moved = v.id;
                 }
             } else {
-                target->position = dv::Point2{x, y};
+                // A view outside the projection link goes where it is dropped, not limited by its
+                // auto-layout cell; the position is the centre of the picture with the room of its
+                // label ("A-A") above, so the picture's centre lands at (x, y).
+                const double room = target->kind == dd::ViewKind::Axonometric ? 0.0 : dd::kViewLabelRoom;
+                target->position = dv::Point2{x, y + room / 2.0};
             }
             return {{"moved", moved}, {"group", inGroup(*target)}};
         });
@@ -1552,6 +1556,19 @@ std::string moveDimension(std::uint32_t handle, std::string sheetId, std::string
     });
 }
 
+// Automatic arrangement of the dimensions of one view (GOST 2.307: 10 mm from the contour, 7 mm
+// between parallel dimension lines, no overlapping texts; DrawingDocument::arrangeDimensions).
+std::string arrangeDimensions(std::uint32_t handle, std::string sheetId, std::string viewId) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        return transaction(s, "arrangeDimensions", [&]() -> json {
+            computedViewOf(computedSheetOf(s, sheetId), viewId);
+            const an::ArrangeResult r = take(s.doc.arrangeDimensions(*s.shown, sheetId, viewId));
+            return {{"arranged", r.arranged}, {"crossings", r.crossings}, {"collisions", r.collisions}};
+        });
+    });
+}
+
 // Chain or baseline dimensions (GOST 2.307) from picked edges of one view: {mode: 'chain' |
 // 'baseline', direction?: 'horizontal' | 'vertical', offset?, spacing?}. Points: a vertex of a
 // straight edge, the centre of a circle or arc; the first pick is the base of a baseline group.
@@ -1901,6 +1918,7 @@ EMSCRIPTEN_BINDINGS(bendcore_drawing) {
     emscripten::function("addLocalSection", &addLocalSection);
     emscripten::function("removeLocalSection", &removeLocalSection);
     emscripten::function("moveDimension", &moveDimension);
+    emscripten::function("arrangeDimensions", &arrangeDimensions);
     emscripten::function("addDimensionGroup", &addDimensionGroup);
     emscripten::function("addThreadNote", &addThreadNote);
     emscripten::function("setThreadNote", &setThreadNote);

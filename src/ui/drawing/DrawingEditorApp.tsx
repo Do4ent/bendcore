@@ -1017,6 +1017,21 @@ export default function DrawingEditorApp({
                   {selected.position && (
                     <button onClick={() => run(t('drawing.done.autoPosition'), (d) => d.setView(sheet.id, selected.id, { position: null }))}>{t('drawing.autoPosition')}</button>
                   )}
+                  {sheet.dimensions.some((x) => x.view === selected.id) && (
+                    <button
+                      data-testid="view-arrange-dimensions"
+                      title={t('drawing.arrangeDimensionsHint')}
+                      onClick={() =>
+                        run(t('drawing.done.dimsArranged'), async (d) => {
+                          const r = await d.arrangeDimensions(sheet.id, selected.id);
+                          const left = r.crossings + r.collisions;
+                          return { ...r, warnings: left > 0 ? [...r.warnings, t('drawing.arrangeLeft', { count: left })] : r.warnings };
+                        })
+                      }
+                    >
+                      {t('drawing.arrangeDimensions')}
+                    </button>
+                  )}
                   <button
                     onClick={() =>
                       run(t('drawing.done.viewRemoved'), async (d) => {

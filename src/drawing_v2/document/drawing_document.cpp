@@ -24,7 +24,7 @@ namespace {
 Error invalid(std::string message) { return Error{ErrorCode::InvalidInput, std::move(message)}; }
 
 // Высота надписи над видом (renderViewLabel: отступ 5 + буквы 7) — запас при компоновке.
-constexpr double kLabelRoom = 14.0;
+constexpr double kLabelRoom = kViewLabelRoom;
 
 struct Rect2 {
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;

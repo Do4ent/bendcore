@@ -152,6 +152,10 @@ struct TitleFields {
     SignatureRow developer, checker, techControl, normControl, approver;
 };
 
+// Место над изображением под надпись разреза и выносного элемента («А–А», «Б (4:1)»), мм листа:
+// ViewDef::position — центр габарита изображения вместе с этим местом.
+inline constexpr double kViewLabelRoom = 14.0;
+
 enum class ViewKind {
     Base,         // главный вид: ориентация toward/right
     Projected,    // проекционный вид от parent со стороны side (ГОСТ 2.305, разд. 5)
