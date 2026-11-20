@@ -218,7 +218,8 @@ TEST(FeaturesGear, CutOnBlank) {
 
 // Фаски 0,5m × 45° по кромкам вершин: объём, снятый фасками, против интеграла по формуле
 // эвольвенты; по конической грани на зуб на каждом торце (+2z граней); тело без
-// самопересечений (BRepAlgoAPI_Check); нарезание заготовки ⌀da × b; ошибки.
+// самопересечений (BRepAlgoAPI_Check); нарезание заготовки ⌀da × b; косой зуб — без фасок с
+// предупреждением; ошибки.
 TEST(FeaturesGear, TipChamfer) {
     GearParams p;
     p.spec = spec(2, 20, 0.0, 16.0);
@@ -244,19 +245,15 @@ TEST(FeaturesGear, TipChamfer) {
     }
     EXPECT_EQ(roles["Start"], 1);
 
-    // Косой зуб: та же формула (поворот сечения не меняет площадь среза на глубине t).
+    // Косой зуб: фаска не строится (предупреждение), объём — как без фасок.
     p.spec = spec(2, 18, 0.0, 15.0, 12.0);
-    p.mode = FeatureMode::Boss;
-    p.chamfer = 0.0;
-    const double plainHelical = volume(gearTeeth(TopoDS_Shape(), p).value().shape);
-    p.chamfer = 0.5;
+    p.mode = FeatureMode::NewBody;
     auto hel = gearTeeth(TopoDS_Shape(), p);
     ASSERT_TRUE(hel.ok()) << hel.error().message;
-    EXPECT_TRUE(valid(hel.value().shape));
-    EXPECT_TRUE(selfIntersectionFree(hel.value().shape));
-    const double hv = chamferVolume(p.spec, 1.0);
-    EXPECT_NEAR(plainHelical - volume(hel.value().shape), 2 * hv, 2e-3 * 2 * hv);
-    EXPECT_EQ(count(hel.value().shape, TopAbs_FACE), 6 * 18 + 2 + 2 * 18);
+    bool warned = false;
+    for (const auto& w : hel.value().warnings) warned = warned || w == "gear tooth chamfer is not built on helical teeth";
+    EXPECT_TRUE(warned);
+    EXPECT_EQ(count(hel.value().shape, TopAbs_FACE), 6 * 18 + 2);
 
     // Нарезание на заготовке ⌀da × b: торцы венца свободны — фаски на обоих.
     p.spec = spec(2, 24, 0.2, 20.0);
@@ -385,3 +382,4 @@ TEST(FeaturesGear, Attributes) {
     attrs.erase(attrs.begin() + 2);
     EXPECT_FALSE(gearFromAttributes(attrs).ok());
 }
+

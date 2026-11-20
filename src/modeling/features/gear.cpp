@@ -642,7 +642,11 @@ Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& pa
         const double c = params.chamfer * spec.module;
         if (!(std::isfinite(params.chamfer) && params.chamfer >= 0.0))
             return Error{ErrorCode::InvalidInput, "gear tooth chamfer must be >= 0"};
-        if (c > 0.0) {
+        // Косой зуб: пересечение конуса фаски с заметёнными гранями зубьев в OCCT занимает минуты
+        // на венец — фаска не строится (предупреждение), венец остаётся без фасок.
+        if (c > 0.0 && helical) {
+            P.warnings.push_back("gear tooth chamfer is not built on helical teeth");
+        } else if (c > 0.0) {
             if (!(c < (g.da - g.dForm) / 2.0) || !(3.0 * c < spec.width))
                 return Error{ErrorCode::InvalidInput, "gear tooth chamfer " + number(c) + " mm is too large: it must be below " +
                                                           number((g.da - g.dForm) / 2.0) + " mm (tip to form circle) and " +
@@ -694,6 +698,13 @@ Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& pa
             }
             if (!rings.empty()) {
                 const kernel::BooleanType op = params.mode == FeatureMode::Cut ? kernel::BooleanType::Fuse : kernel::BooleanType::Cut;
+                // Тело венца построено из контура, проверенного на самопересечения: повторный
+                // BRepAlgoAPI_Check его сплайновых граней не нужен (см. ниже о booleanReady).
+                if (!isValidShape(tool)) return Error{ErrorCode::OperationFailed, "gear: the tool body is not valid"};
+                ShapeFacts ready;
+                ready.valid = true;
+                ready.booleanReady = true;
+                rememberFacts(tool, ready);
                 auto step = booleanWithHistory(op, {tool}, rings, true, true);
                 if (!step) return step.error();
                 const TopoDS_Shape chamfered = step.value().shape;

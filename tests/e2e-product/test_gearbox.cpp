@@ -111,8 +111,8 @@ double var(const PartEntry& p, const char* name) { return p.doc->variableValue(n
 
 }  // namespace
 
-// Состав: 13 деталей собственной разработки, 11 типоразмеров стандартных изделий (подшипники,
-// шпонки — документы детали; болты, шайбы, гайки, штифты — bendcore_fasteners), 72 вхождения;
+// Состав: 13 деталей собственной разработки, 11 типоразмеров стандартных изделий (подшипники
+// ГОСТ 8338, шпонки ГОСТ 23360, болты, шайбы, гайки, штифты — bendcore_fasteners), 72 вхождения;
 // количества — из конструкции (4 крышки × 4 болта, 4 болта фланца с двумя шайбами и гайкой).
 TEST(E2EProductGearbox, Composition) {
     Product& p = product();
@@ -139,9 +139,35 @@ TEST(E2EProductGearbox, Composition) {
 // Массы простых деталей — против формул из размеров (≤ 1e-9 отн.); масса изделия = Σ V·ρ.
 TEST(E2EProductGearbox, MassesAgainstFormulas) {
     Product& p = product();
+    // Подшипники ГОСТ 8338 (кольца с желобами и скруглениями r + шарики) — теорема Паппа —
+    // Гульдена для профилей колец и Z·π·Dw³/6; шпонки ГОСТ 23360 исп. 1 с фасками s:
+    // (b·h − 2s²)(l − b) + 2·π(h·R²/2 − s²(R − s/3)), R = b/2. Размеры d, D, B, r — из таблицы
+    // стандарта (205: 25×52×15, 206: 30×62×16, r = 1), b×h×l и s — из ГОСТ 23360.
+    auto bearingVolume = [](double d, double D, double B, double r, const StandardPart& sp) {
+        const double Dw = 0.3 * (D - d), Dpw = (d + D) / 2, rg = 0.52 * Dw, cl = 0.02;
+        const int Z = static_cast<int>(std::floor(kPi * Dpw / (1.6 * Dw)));
+        EXPECT_DOUBLE_EQ(sp.dimension("Z"), Z);
+        const double spA = r * r * (1 - kPi / 4), spX = (10 - 3 * kPi) / (12 - 3 * kPi) * r;
+        const double h = 0.2 * Dw + cl / 2, th = 2 * std::acos((rg - h) / rg);
+        const double segA = rg * rg / 2 * (th - std::sin(th)), segY = 4 * rg * std::pow(std::sin(th / 2), 3) / (3 * (th - std::sin(th)));
+        const double ri = Dpw / 2 - 0.3 * Dw, rbi = Dpw / 2 - Dw / 2 - cl / 2, ro = Dpw / 2 + 0.3 * Dw, rbo = Dpw / 2 + Dw / 2 + cl / 2;
+        const double Mi = (ri * ri - d * d / 4) / 2 * B - 2 * spA * (d / 2 + spX) - segA * (rbi + rg - segY);
+        const double Mo = (D * D / 4 - ro * ro) / 2 * B - 2 * spA * (D / 2 - spX) - segA * (rbo - rg + segY);
+        return 2 * kPi * (Mi + Mo) + Z * kPi * Dw * Dw * Dw / 6;
+    };
+    auto keyVolume = [](double b, double h, double l, double s) {
+        const double R = b / 2;
+        return (b * h - 2 * s * s) * (l - b) + 2 * kPi * (h * R * R / 2 - s * s * (R - s / 3));
+    };
+    const std::map<std::string, double> standardVolume{
+        {"bearing205", bearingVolume(25, 52, 15, 1, *standardPart(p, "bearing205"))},
+        {"bearing206", bearingVolume(30, 62, 16, 1, *standardPart(p, "bearing206"))},
+        {"key6", keyVolume(6, 6, 28, 0.25)},
+        {"key10", keyVolume(10, 8, 32, 0.4)},
+        {"key8", keyVolume(8, 7, 32, 0.25)}};
     for (const auto& s : p.standard) {
-        const double v = volume(s.doc->finalShape().shape());
-        EXPECT_NEAR(v, s.formulaVolume, 1e-9 * s.formulaVolume) << s.key;
+        const double v = volume(p.gearbox.doc->definition(p.gearbox.defs.at(s.key)).shape), f = standardVolume.at(s.key);
+        EXPECT_NEAR(v, f, 1e-7 * f) << s.key;
     }
     auto formula = [&](const std::string& key) -> double {
         const PartEntry& e = *findPart(p.parts, key);
@@ -198,7 +224,15 @@ TEST(E2EProductGearbox, MassesAgainstFormulas) {
         ASSERT_TRUE(blank.value().setSuppressed("Teeth", true).ok());
         blank.value().rebuild();
         const double removed = volume(blank.value().finalShape().shape()) - volume(e.doc->finalShape().shape());
-        const double expected = (kPi * da * da / 4 - A) * g.width;
+        // Фаски 0,5m × 45° по кромкам вершин на обоих торцах: z·∫ (r − ra + c)·2ψ(r)·r dr,
+        // ψ(r) = π/(2z) + inv αt − inv α(r) (x = 0, прямой зуб), Симпсон по r ∈ [ra − c, ra].
+        const double c = 0.5 * g.module, ra = da / 2, alpha = 20.0 * kPi / 180, rb = g.module * g.teeth / 2 * std::cos(alpha);
+        auto inv = [](double a) { return std::tan(a) - a; };
+        auto f = [&](double r) { return (r - ra + c) * 2 * (kPi / (2 * g.teeth) + inv(alpha) - inv(std::acos(rb / r))) * r; };
+        double simpson = f(ra - c) + f(ra);
+        for (int i = 1; i < 2000; ++i) simpson += (i % 2 ? 4 : 2) * f(ra - c + i * c / 2000);
+        const double chamfers = 2 * g.teeth * simpson * c / 2000 / 3;
+        const double expected = (kPi * da * da / 4 - A) * g.width + chamfers;
         EXPECT_NEAR(removed, expected, 3e-6 * expected) << key;
         std::printf("[gearbox] %s: teeth remove %.3f mm3 (ring - profile integral %.3f)\n", key.c_str(), removed, expected);
     }
