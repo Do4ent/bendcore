@@ -778,6 +778,13 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 // Ссылки «следуют» за элементами: сохраняются новые имена и сигнатуры.
                 item.def.anchors = def.anchors;
                 item.def.offsetFrom = def.offsetFrom;
+                // Точки контура сечения следуют за линиями сечения: подсказка — найденная точка.
+                if (res.state == DimensionState::Ok) {
+                    for (auto* list : {&item.def.anchors, &item.def.offsetFrom})
+                        for (Anchor& a : *list)
+                            if (a.kind == annotations::AnchorKind::Section)
+                                if (auto p = annotations::anchorPoint(a, binding, cv.sheetView.view)) a.at = p.value();
+                }
             }
             dr.state = res.state;
             dr.reason = res.reason;
