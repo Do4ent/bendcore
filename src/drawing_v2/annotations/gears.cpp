@@ -81,7 +81,9 @@ namespace {
 // Кольцо rIn…rOut на ширине венца.
 Result<TopoDS_Shape> gearRing(const modeling::GearSpec& gear, double rIn, double rOut) {
     try {
-        const gp_Ax2 frame(gear.axis.Location(), gear.axis.Direction(), gear.axis.XDirection());
+        // Шов цилиндров кольца — по gp_Ax2(начало, ось).XDirection(), а не по зубу № 1: положение
+        // линий условной формы не зависит от поворота зубьев (параметр angle венца).
+        const gp_Ax2 frame(gear.axis.Location(), gear.axis.Direction());
         if (!(rIn > 0.0 && rOut > rIn)) return Error{ErrorCode::InvalidInput, "gear filler: root diameter is too small"};
         Handle(Geom_Circle) co = new Geom_Circle(gp_Circ(frame, rOut));
         Handle(Geom_Circle) ci = new Geom_Circle(gp_Circ(frame, rIn));

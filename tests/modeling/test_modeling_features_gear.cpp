@@ -123,7 +123,7 @@ TEST(FeaturesGear, ProfileDiametersAndToothThickness) {
         ASSERT_TRUE(p.ok()) << p.error().message;
         EXPECT_TRUE(valid(p.value().face));
         EXPECT_EQ(p.value().roles.size(), 6u * s.teeth);
-        EXPECT_LE(p.value().maxDeviation, 1e-5);
+        EXPECT_LE(p.value().maxDeviation, 1e-6);
         const GearGeometry g = gearGeometry(s).value();
         auto e = edgesOf(p.value());
         // Окружности вершин и впадин — по рёбрам.
