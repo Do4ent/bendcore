@@ -65,6 +65,50 @@ private:
 
 Transform at(double x, double y, double z) { return Transform::fromTranslation(Vec3(x, y, z)); }
 
+// Венец детали в мировой СК вхождения: начало, ось, направление зуба № 1.
+struct WorldGear {
+    Vec3 origin, axis, tooth;
+    int teeth = 0;
+};
+
+WorldGear worldGear(const modeling::PartDocument& part, const Transform& placement) {
+    const auto gears = modeling::gearsOf(part.finalShape());
+    if (gears.size() != 1) fail("expected one gear rim, found " + std::to_string(gears.size()));
+    const gp_Ax3& a = gears.front().gear.axis;
+    WorldGear w;
+    w.origin = placement.applyToPoint(Vec3(a.Location().X(), a.Location().Y(), a.Location().Z()));
+    w.axis = placement.applyToDirection(Vec3(a.Direction().X(), a.Direction().Y(), a.Direction().Z()));
+    w.tooth = placement.applyToDirection(Vec3(a.XDirection().X(), a.XDirection().Y(), a.XDirection().Z()));
+    w.teeth = gears.front().gear.teeth;
+    return w;
+}
+
+// Угол направления v вокруг оси axis от направления ref (ref ⟂ axis).
+double angleAround(const Vec3& v, const Vec3& axis, const Vec3& ref) { return std::atan2(axis.cross(ref).dot(v), ref.dot(v)); }
+
+double wrapPeriod(double a, double period) { return a - period * std::round(a / period); }
+
+// Поворот вокруг прямой (точка p, направление d) на angle.
+Transform aboutLine(const Vec3& p, const Vec3& d, double angle) {
+    return Transform::fromTranslation(p) * Transform::fromAxisAngle(d, angle) * Transform::fromTranslation(-p);
+}
+
+// Фаза зацепления: угол поворота шестерни вокруг её оси, при котором её зубья входят во впадины
+// колеса без пересечения. В исходном положении зуб шестерни направлен по линии центров c к
+// колесу, впадина колеса — к шестерне; поворот колеса на δ требует поворота шестерни на −s·u·δ
+// (s = +1 при сонаправленных осях, внешнее зацепление).
+double meshingTurn(const WorldGear& pinion, const WorldGear& wheel) {
+    const Vec3 delta = wheel.origin - pinion.origin;
+    const Vec3 c = (delta - pinion.axis * pinion.axis.dot(delta)).normalized();
+    const double tauW = 2 * kPi / wheel.teeth, tauP = 2 * kPi / pinion.teeth;
+    const double s = pinion.axis.dot(wheel.axis) >= 0 ? 1.0 : -1.0;
+    const double u = double(wheel.teeth) / pinion.teeth;
+    const double space = wrapPeriod(angleAround(wheel.tooth, wheel.axis, -c) + tauW / 2, tauW);
+    const double target = -s * u * space;
+    const double now = angleAround(pinion.tooth, pinion.axis, c);
+    return wrapPeriod(target - now, tauP);
+}
+
 }  // namespace
 
 Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::vector<StandardPart>& standard,
@@ -152,7 +196,13 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         const PartEntry* sin = findPart(parts, "shaft_in");
         const PartEntry* sout = findPart(parts, "shaft_out");
         const double x6 = sin->doc->variableValue("x6").value(), x7 = sin->doc->variableValue("x7").value();
-        b.place("shaft_in", "shaft_in", at(xo - x7, 0, Za));
+        // Шестерня повёрнута вокруг своей оси в фазу зацепления с колесом (положение колеса — как
+        // ниже: без поворота на выходном валу).
+        const double o2w = sout->doc->variableValue("x2").value(), o5w = sout->doc->variableValue("x5").value();
+        const WorldGear wheelGear = worldGear(*findPart(parts, "wheel")->doc, at(xo - o5w + o2w - 20.0, aw, Za));
+        const WorldGear pinion0 = worldGear(*sin->doc, at(xo - x7, 0, Za));
+        const Transform phase = aboutLine(Vec3(0, 0, Za), Vec3::UnitX(), meshingTurn(pinion0, wheelGear));
+        b.place("shaft_in", "shaft_in", phase * at(xo - x7, 0, Za));
         {
             const TopoDS_Shape seat = cylinderFaceAt(b.shapeOf("shaft_in"), 12.5, gp::Origin(), gp::DX(), gp_Pnt(x7 - 5, 0, 12.5));
             const TopoDS_Shape bore = cylinderFace(b.shapeOf("bearing_in_r"), 12.5, gp::Origin(), gp::DX());
@@ -188,7 +238,7 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         b.place("key_out", "key8", at(outX0 + xko, aw, Za + 25.0 / 2 - 4));
         b.rigid("shaft_out", "key_out");
         const double inX = xo - x7;
-        b.place("key_in", "key6", at(inX + sin->doc->variableValue("L0").value() / 2, 0, Za + 20.0 / 2 - 3.5));
+        b.place("key_in", "key6", phase * at(inX + sin->doc->variableValue("L0").value() / 2, 0, Za + 20.0 / 2 - 3.5));
         b.rigid("shaft_in", "key_in");
 
         // ---- штифты: в отверстиях фланцев, торец End1 в плоскости низа фланца корпуса
@@ -260,11 +310,19 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         take(insertFastenerStacks(*g.doc, {g.defs["bolt10"], {g.defs["washer10"]}, {g.defs["washer10"]}, g.defs["nut10"]}, sites),
              "flange bolts");
 
+        // ---- зацепление: передаточное сопряжение валов, u = z2/z1 (внешнее — вращение в разные стороны)
+        {
+            const TopoDS_Shape seatIn = cylinderFaceAt(b.shapeOf("shaft_in"), 12.5, gp::Origin(), gp::DX(), gp_Pnt(x7 - 5, 0, 12.5));
+            const TopoDS_Shape seatOut = cylinderFaceAt(b.shapeOf("shaft_out"), 15, gp::Origin(), gp::DX(), gp_Pnt(o5 - 5, 0, 15));
+            b.mate(MateSpec::gear(b.face("shaft_in", seatIn), b.face("shaft_out", seatOut), double(L.z2) / L.z1), "gear mesh");
+        }
+
         auto rep = take(g.doc->solve(), "solve");
         if (!rep.success) fail("assembly does not solve: residual " + num(rep.residualNorm));
-        // 2 вала + 4 подшипника + 2 штифта + 2 пробки + 2 прокладки пробок + 16 болтов + 16 шайб
+        // 1 (валы связаны зацеплением) + 4 подшипника + 2 штифта + 2 пробки + 2 прокладки пробок + 16 болтов + 16 шайб
         // + 4 болта + 8 шайб + 4 гайки.
-        g.expectedDof = 2 + 4 + 2 + 2 + 2 + 16 + 16 + 4 + 8 + 4;
+        // Передаточное сопряжение связывает повороты валов: 2 → 1.
+        g.expectedDof = 1 + 4 + 2 + 2 + 2 + 16 + 16 + 4 + 8 + 4;
         return g;
     });
 }

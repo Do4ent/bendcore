@@ -271,16 +271,23 @@ std::unique_ptr<PartDocument> inputShaft(const Layout& L) {
     b.var("d1", 22);  b.var("l1", 12);   // под щелевое уплотнение крышки
     b.var("ds", 25);  b.var("ls", 15);   // под подшипник 205
     b.var("dc", 30);  b.var("lc", 27);   // заплечики
-    b.var("d", L.d1()); b.var("b1", 36); // делительный цилиндр шестерни, ширина венца
+    b.var("m", L.module); b.var("z", L.z1);  // венец шестерни: m, z (исходный контур ГОСТ 13755)
+    b.var("d", "m * z"); b.var("da", "d + 2 * m"); b.var("b1", 36);  // делительный диаметр, диаметр вершин, ширина
     b.var("x1", "L0"); b.var("x2", "x1 + l1"); b.var("x3", "x2 + ls"); b.var("x4", "x3 + lc");
     b.var("x5", "x4 + b1"); b.var("x6", "x5 + lc"); b.var("x7", "x6 + ls");
     b.var("bk", 6); b.var("tk", 3.5); b.var("lk", 28);  // шпонка 6×6×28: паз b, t1, l
     b.var("c", 1);
     b.sketch("Profile", "XZ", "0",
              revolveProfile({{"0", "0"}, {"0", "d0 / 2"}, {"x1", "d0 / 2"}, {"x1", "d1 / 2"}, {"x2", "d1 / 2"}, {"x2", "ds / 2"},
-                             {"x3", "ds / 2"}, {"x3", "dc / 2"}, {"x4", "dc / 2"}, {"x4", "d / 2"}, {"x5", "d / 2"},
+                             {"x3", "ds / 2"}, {"x3", "dc / 2"}, {"x4", "dc / 2"}, {"x4", "da / 2"}, {"x5", "da / 2"},
                              {"x5", "dc / 2"}, {"x6", "dc / 2"}, {"x6", "ds / 2"}, {"x7", "ds / 2"}, {"x7", "0"}}));
     b.revolve("Body", "Profile", "X");
+    // Зубчатый венец на цилиндре вершин: нарезание зубьев (впадины) по всей ширине b1.
+    {
+        const double x4 = b.value("x4"), x5 = b.value("x5"), ra = b.value("da") / 2;
+        const TopoDS_Shape tip = cylinderFaceAt(b.shape().shape(), ra, gp::Origin(), gp::DX(), gp_Pnt(0.5 * (x4 + x5), 0, ra));
+        b.add(spec("GearTeeth", "Teeth", {{"module", "m"}, {"teeth", "z"}}, {{"face", {b.ref(tip)}}}, {{"axis", "face"}}));
+    }
     groove(b, "GrooveL", "x3 - 2", "ds / 2");
     groove(b, "GrooveR", "x6", "ds / 2");
     keyway(b, "Keyway", "d0 / 2", "L0 / 2", "lk", "bk", "tk");
@@ -323,7 +330,9 @@ std::unique_ptr<PartDocument> outputShaft(const Layout&) {
 
 std::unique_ptr<PartDocument> wheel(const Layout& L) {
     PartBuilder b("wheel");
-    b.var("d", L.d2());  // делительный диаметр
+    b.var("m", L.module); b.var("z", L.z2);  // венец колеса: m, z (исходный контур ГОСТ 13755)
+    b.var("d", "m * z");  // делительный диаметр
+    b.var("da", "d + 2 * m");  // диаметр вершин
     b.var("bw", 32);     // ширина венца
     b.var("dr", 96);     // внутренний диаметр обода
     b.var("tw", 10);     // диск
@@ -332,12 +341,18 @@ std::unique_ptr<PartDocument> wheel(const Layout& L) {
     b.var("db", 35);     // отверстие
     b.var("bk", 10); b.var("t2", 3.3);  // паз ступицы под шпонку 10×8
     b.var("Dh", 78); b.var("dl", 16); b.var("nl", 6);  // облегчающие отверстия
-    b.var("c", 1.5);
     b.sketch("Profile", "XZ", "0",
              revolveProfile({{"-lh / 2", "db / 2"}, {"lh / 2", "db / 2"}, {"lh / 2", "dh / 2"}, {"tw / 2", "dh / 2"},
-                             {"tw / 2", "dr / 2"}, {"bw / 2", "dr / 2"}, {"bw / 2", "d / 2"}, {"-bw / 2", "d / 2"},
+                             {"tw / 2", "dr / 2"}, {"bw / 2", "dr / 2"}, {"bw / 2", "da / 2"}, {"-bw / 2", "da / 2"},
                              {"-bw / 2", "dr / 2"}, {"-tw / 2", "dr / 2"}, {"-tw / 2", "dh / 2"}, {"-lh / 2", "dh / 2"}}));
     b.revolve("Body", "Profile", "X");
+    // Зубчатый венец: нарезание зубьев на ободе ⌀da по всей ширине bw (фаски на торцах зубьев
+    // операцией не строятся — их нет и на модели).
+    {
+        const double ra = b.value("da") / 2;
+        const TopoDS_Shape tip = cylinderFaceAt(b.shape().shape(), ra, gp::Origin(), gp::DX(), gp_Pnt(0, 0, ra));
+        b.add(spec("GearTeeth", "Teeth", {{"module", "m"}, {"teeth", "z"}}, {{"face", {b.ref(tip)}}}, {{"axis", "face"}}));
+    }
     b.sketch("KeySketch", "YZ", "0", polygon({{"-bk / 2", "0"}, {"bk / 2", "0"}, {"bk / 2", "db / 2 + t2"}, {"-bk / 2", "db / 2 + t2"}}));
     b.extrude("Keyway", "KeySketch", {{"mode", "cut"}, {"extent", "throughAllBoth"}}, {});
     // Облегчающее отверстие — операция «Отверстие» насквозь с торца диска x = tw / 2.
@@ -348,8 +363,7 @@ std::unique_ptr<PartDocument> wheel(const Layout& L) {
                    {{"face", {b.ref(disc)}}}, {{"end", "through"}}));
     }
     b.add(spec("CircularPattern", "LighteningPattern", {{"count", "nl"}}, {}, {{"axis", "X"}}, {{"feature", "Lightening"}}));
-    const double bw = b.value("bw"), r = b.value("d") / 2, lh = b.value("lh"), rh = b.value("dh") / 2;
-    b.chamfer("RimChamfers", {circleEdge(b.shape().shape(), gp_Pnt(-bw / 2, 0, 0), r), circleEdge(b.shape().shape(), gp_Pnt(bw / 2, 0, 0), r)}, "c");
+    const double lh = b.value("lh"), rh = b.value("dh") / 2;
     b.chamfer("HubChamfers", {circleEdge(b.shape().shape(), gp_Pnt(-lh / 2, 0, 0), rh), circleEdge(b.shape().shape(), gp_Pnt(lh / 2, 0, 0), rh)}, "1");
     return b.release();
 }

@@ -258,16 +258,16 @@ void shaftInSheet(DrawingDocument& d, const PartEntry& p) {
     const gp_Dir X = gp::DX();
     s.dim("L", "F", DimensionType::Horizontal, {s.v(0, 0, 9), s.v(x7, 0, 11.5)}, -32);
     s.dim("L0", "F", DimensionType::Horizontal, {s.v(0, 0, 9), s.v(x1, 0, 11)}, 18);
-    s.dim("b1", "F", DimensionType::Horizontal, {s.v(x4, 0, 20), s.v(x5, 0, 20)}, 8);
+    s.dim("b1", "F", DimensionType::Horizontal, {s.v(x4, 0, 22), s.v(x5, 0, 22)}, 8);
     s.dim("D0", "F", DimensionType::Diameter, {s.cyl(10, gp::Origin(), X, gp_Pnt(3, 0, 10))}, -8, "k6");
     s.dim("Ds1", "F", DimensionType::Diameter, {s.cyl(12.5, gp::Origin(), X, gp_Pnt(x2 + 5, 0, 12.5))}, 8, "k6");
     s.dim("Ds2", "F", DimensionType::Diameter, {s.cyl(12.5, gp::Origin(), X, gp_Pnt(x6 + 8, 0, 12.5))}, 8, "k6");
     s.dim("Dc", "F", DimensionType::Diameter, {s.cyl(15, gp::Origin(), X, gp_Pnt(x3 + 10, 0, 15))}, -8);
-    s.dim("d", "F", DimensionType::Diameter, {s.cyl(20, gp::Origin(), X, gp_Pnt((x4 + x5) / 2, 0, 20))}, 8);
+    s.dim("da", "F", DimensionType::Diameter, {s.cyl(22, gp::Origin(), X, gp_Pnt((x4 + x5) / 2, 0, 22))}, 8, "h11");
     s.dim("bk", "T", DimensionType::Vertical, {s.v(L0 / 2 - 11, -3, 6.5), s.v(L0 / 2 - 11, 3, 6.5)}, 12, "N9");
     const TopoDS_Shape seatL = detail::lineEdge(s.shape(), gp_Pnt(x2 + 1, 0, 12.5), gp_Pnt(x3 - 2, 0, 12.5));
     const TopoDS_Shape seatR = detail::lineEdge(s.shape(), gp_Pnt(x6 + 2, 0, 12.5), gp_Pnt(x7 - 1, 0, 12.5));
-    const TopoDS_Shape rim = detail::lineEdge(s.shape(), gp_Pnt(x4, 0, 20), gp_Pnt(x5, 0, 20));
+    const TopoDS_Shape rim = detail::lineEdge(s.shape(), gp_Pnt(x4, 0, 22), gp_Pnt(x5, 0, 22));
     s.roughness("Ra1", "F", seatL, "0,8");
     s.roughness("Ra2", "F", seatR, "0,8");
     s.roughness("Ra3", "F", rim, "1,6", 0.3);
@@ -276,10 +276,14 @@ void shaftInSheet(DrawingDocument& d, const PartEntry& p) {
     s.tolerance("T2", "F", rim, GeometricCharacteristic::CircularRunout, "0,03", {"А"}, 0.7);
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::MaterialRemoval, "Ra", "6,3", "", 2.5};
     sd.technicalRequirements = kShaftRequirements;
-    sd.technicalRequirements.push_back(
-        "Венец показан делительным цилиндром d = 40 (зубья не моделируются): m = 2, z = 20, угол профиля 20°, x = 0, da = 44h11, "
-        "df = 35, степень точности 8-B ГОСТ 1643-81.");
     sd.technicalRequirements.push_back("Шпоночный паз: t1 = 3,5, длина 28 — по ГОСТ 23360-78.");
+    // Таблица параметров венца ГОСТ 2.403; изображение венца — по ГОСТ 2.402 (условная форма).
+    annotations::GearTableDef gt;
+    gt.accuracy = "8-B ГОСТ 1643-81";
+    gt.matingTeeth = 60;
+    gt.matingDesignation = "РЦ.080.00.005";
+    gt.centerDistance = 80;
+    sd.gearTable = gt;
 }
 
 // ---------------------------------------------------------------- колесо
@@ -291,18 +295,18 @@ void wheelSheet(DrawingDocument& d, const PartEntry& p) {
     ViewDef l = view("L", ViewKind::Projected, "F", views::SheetSide::RightOf);
     sd.views = {f, l, section("A", {0, -1, 0}, {1, 0, 0}, {0, 0, 0}, "L", views::SectionKind::Cut)};
     Sheet s(sd, m);
-    const double r = var(p, "d") / 2, bw = var(p, "bw"), lh = var(p, "lh"), rh = var(p, "dh") / 2, rb = var(p, "db") / 2,
+    const double r = var(p, "da") / 2, bw = var(p, "bw"), lh = var(p, "lh"), rh = var(p, "dh") / 2, rb = var(p, "db") / 2,
                  bk = var(p, "bk"), t2 = var(p, "t2");
     const gp_Dir X = gp::DX();
-    s.dim("b", "F", DimensionType::Horizontal, {s.v(-bw / 2, 0, r - 1.5), s.v(bw / 2, 0, r - 1.5)}, 12);
+    s.dim("b", "F", DimensionType::Horizontal, {s.v(-bw / 2, 0, r), s.v(bw / 2, 0, r)}, 12);
     s.dim("lh", "F", DimensionType::Horizontal, {s.v(-lh / 2, 0, rh - 1), s.v(lh / 2, 0, rh - 1)}, 50);
-    s.dim("d", "F", DimensionType::Diameter, {s.cyl(r, gp::Origin(), X, gp_Pnt(0, 0, r))}, 10);
+    s.dim("da", "F", DimensionType::Diameter, {s.cyl(r, gp::Origin(), X, gp_Pnt(0, 0, r))}, 10, "h11");
     s.dim("dh", "F", DimensionType::Diameter, {s.cyl(rh, gp::Origin(), X, gp_Pnt(12, 0, rh))}, -10);
     s.dim("db", "L", DimensionType::Diameter, {s.circ(-lh / 2, 0, 0, rb)}, 0, "H7").def.leaderAngleDeg = 225;
     s.dim("bk", "L", DimensionType::Aligned, {s.v(lh / 2, -bk / 2, rb + t2), s.v(lh / 2, bk / 2, rb + t2)}, 10, "JS9");
-    const TopoDS_Shape rimLine = detail::lineEdge(s.shape(), gp_Pnt(-bw / 2 + 1.5, 0, r), gp_Pnt(bw / 2 - 1.5, 0, r));
+    const TopoDS_Shape rimLine = detail::lineEdge(s.shape(), gp_Pnt(-bw / 2, 0, r), gp_Pnt(bw / 2, 0, r));
     const TopoDS_Shape hubFace = detail::circleEdge(s.shape(), gp_Pnt(lh / 2, 0, 0), rh - 1);
-    const TopoDS_Shape rimFace = detail::circleEdge(s.shape(), gp_Pnt(bw / 2, 0, 0), r - 1.5);
+    const TopoDS_Shape rimFace = detail::circleEdge(s.shape(), gp_Pnt(bw / 2, 0, 0), r);
     s.roughness("Ra1", "F", rimLine, "1,6", 0.5);
     s.roughness("Ra2", "F", hubFace, "3,2", 0.5);
     s.datum("DA", "F", hubFace, "А", 0.3);
@@ -310,12 +314,16 @@ void wheelSheet(DrawingDocument& d, const PartEntry& p) {
     sd.roughnessRemainder = annotations::RoughnessSpec{annotations::RoughnessMethod::MaterialRemoval, "Ra", "6,3", "", 2.5};
     sd.technicalRequirements = {
         "235...262 HB.",
-        "Венец показан делительным цилиндром d = 120 (зубья не моделируются): m = 2, z = 60, угол профиля 20°, x = 0, da = 124h11, "
-        "df = 115, степень точности 8-B ГОСТ 1643-81.",
         "Паз ступицы: t2 = 3,3 (размер 38,3+0,2) по ГОСТ 23360-78.",
         "Неуказанные предельные отклонения размеров: отверстий H14, валов h14, остальных ±IT14/2.",
         "Облегчающие отверстия: 6 отв. ⌀16 на ⌀78.",
     };
+    annotations::GearTableDef gt;
+    gt.accuracy = "8-B ГОСТ 1643-81";
+    gt.matingTeeth = 20;
+    gt.matingDesignation = "РЦ.080.00.003";
+    gt.centerDistance = 80;
+    sd.gearTable = gt;
 }
 
 // ---------------------------------------------------------------- крышка подшипника сквозная
