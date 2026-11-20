@@ -80,6 +80,11 @@ export interface ViewInfo {
   hidden: boolean;
   centerLines: boolean;
   autoBalloons: boolean;
+  /** Line of the position shelves (ГОСТ 2.109): auto — right, else left, above, below. */
+  balloonLine: 'auto' | 'right' | 'left' | 'above' | 'below';
+  /** Rolling bearings in a section through the axis — conventionally (ГОСТ 2.420). */
+  bearings: boolean;
+  bearingSymbol: 'diagonals' | 'rollingElement';
   inGroup: boolean;
   computedScale?: ScaleInfo;
   label?: string;
@@ -167,6 +172,8 @@ export interface SheetInfo {
     view: string;
     /** Shelf point given by the user; null — the default place. */
     at: Point | null;
+    /** The shelf is placed by arrangeBalloons together with the automatic positions of the view. */
+    arranged: boolean;
     state: 'ok' | 'dangling' | null;
     definition?: number;
     /** Number from the specification. */
@@ -222,7 +229,17 @@ export interface UpdateReport {
   stale: string[];
   /** "S1/D2: reason" */
   dangling: string[];
-  balloons: { sheet: string; view: string; placed: { position: number; definition: number }[]; withoutBalloon: number[] }[];
+  balloons: {
+    sheet: string;
+    view: string;
+    placed: { position: number; definition: number }[];
+    withoutBalloon: number[];
+    /** Parts hidden on this view whose positions are on the nearest section of the sheet. */
+    movedTo: { definition: number; view: string }[];
+    line: 'auto' | 'right' | 'left' | 'above' | 'below';
+    ordered: boolean;
+    crossings: number;
+  }[];
   warnings: string[];
 }
 export interface StalenessReport {
@@ -291,6 +308,9 @@ export interface ViewSpec {
   hidden?: boolean;
   centerLines?: boolean;
   autoBalloons?: boolean;
+  balloonLine?: 'auto' | 'right' | 'left' | 'above' | 'below';
+  bearings?: boolean;
+  bearingSymbol?: 'diagonals' | 'rollingElement';
 }
 export interface SheetOptions {
   id?: string;
@@ -339,7 +359,7 @@ export class DrawingHandle {
   addView(sheet: string, spec: ViewSpec): string;
   removeView(sheet: string, view: string): string[];
   moveView(sheet: string, view: string, x: number, y: number): EditResult & { moved: string; group: boolean };
-  setView(sheet: string, view: string, changes: Partial<Pick<ViewSpec, 'scale' | 'position' | 'hidden' | 'centerLines' | 'autoBalloons' | 'detailRadius'>>): EditResult;
+  setView(sheet: string, view: string, changes: Partial<Pick<ViewSpec, 'scale' | 'position' | 'hidden' | 'centerLines' | 'autoBalloons' | 'detailRadius' | 'balloonLine' | 'bearings' | 'bearingSymbol'>>): EditResult;
   addDimension(sheet: string, view: string, picks: number[], options?: { id?: string; offset?: number; tolerance?: string; leaderAngle?: number }): string;
   setDimension(sheet: string, id: string, changes: { offset?: number; textShift?: number; decimals?: number; tolerance?: string | null; toleranceDisplay?: DimensionInfo['toleranceDisplay']; textOverride?: string | null; prefix?: string; suffix?: string }): EditResult;
   addRoughness(sheet: string, view: string, pick: number, spec?: RoughnessSpec & { id?: string; at?: number }): string;
@@ -353,6 +373,8 @@ export class DrawingHandle {
   moveDimension(sheet: string, id: string, x: number, y: number): EditResult & { offset: number; textShift: number; leaderAngle: number };
   /** Arranges the dimensions of a view (ГОСТ 2.307); counts of moved dimensions and of what is left to fix by hand. */
   arrangeDimensions(sheet: string, view: string): EditResult & { arranged: number; crossings: number; collisions: number };
+  /** Arranges the positions of a sheet (or one view, ГОСТ 2.109); manual positions joined and the result per view. */
+  arrangeBalloons(sheet: string, view?: string): EditResult & { arranged: number; views: { view: string; line: string; ordered: boolean; crossings: number }[] };
   addDimensionGroup(sheet: string, view: string, picks: number[], options?: { mode?: 'chain' | 'baseline'; direction?: 'horizontal' | 'vertical'; offset?: number; spacing?: number }): string[];
   addThreadNote(sheet: string, view: string, spec: { at: Point; toleranceField?: string; offset?: number; leaderAngle?: number; textShift?: number; id?: string }): EditResult & { id: string; thread: string };
   setThreadNote(sheet: string, id: string, changes: { toleranceField?: string; offset?: number; leaderAngle?: number; textShift?: number }): EditResult;

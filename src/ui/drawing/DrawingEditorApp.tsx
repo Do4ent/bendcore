@@ -1012,6 +1012,26 @@ export default function DrawingEditorApp({
                       {t('drawing.autoBalloons')}
                     </label>
                   )}
+                  {desc.model.kind === 'assembly' && (
+                    <label className="dr-check">
+                      {t('drawing.balloonLine')}{' '}
+                      <select
+                        value={selected.balloonLine ?? 'auto'}
+                        data-testid="view-balloon-line"
+                        onChange={(e) =>
+                          run(t('drawing.done.balloonLine'), (d) =>
+                            d.setView(sheet.id, selected.id, { balloonLine: e.target.value as 'auto' | 'right' | 'left' | 'above' | 'below' }),
+                          )
+                        }
+                      >
+                        {(['auto', 'right', 'left', 'above', 'below'] as const).map((l) => (
+                          <option key={l} value={l}>
+                            {t(`drawing.balloonLine.${l}` as MessageKey)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   {(selected.localSections ?? []).map((ls, i) => (
                     <div key={i} className="dr-row" data-testid={`local-section-${selected.id}-${i}`}>
                       {t('drawing.localItem', { index: i + 1, depth: ls.depth })}
@@ -1242,6 +1262,24 @@ export default function DrawingEditorApp({
                   </li>
                 ))}
               </ul>
+              {desc?.model.kind === 'assembly' && (sheet.balloons ?? []).length > 0 && (
+                <button
+                  data-testid="arrange-balloons"
+                  title={t('drawing.arrangeBalloonsHint')}
+                  onClick={() =>
+                    run(t('drawing.done.balloonsArranged'), async (d) => {
+                      const r = await d.arrangeBalloons(sheet.id);
+                      const notes = r.views.flatMap((v) => [
+                        ...(v.ordered ? [] : [t('drawing.balloonsUnordered', { view: v.view })]),
+                        ...(v.crossings > 0 ? [t('drawing.balloonsCrossing', { view: v.view, count: v.crossings })] : []),
+                      ]);
+                      return { ...r, warnings: [...r.warnings, ...notes] };
+                    })
+                  }
+                >
+                  {t('drawing.arrangeBalloons')}
+                </button>
+              )}
               <TechnicalRequirements
                 key={`${sheet.id}-${sheet.technicalRequirements.join('|')}`}
                 items={sheet.technicalRequirements}
