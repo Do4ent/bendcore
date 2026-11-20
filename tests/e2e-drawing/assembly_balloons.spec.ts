@@ -157,9 +157,11 @@ test('assembly drawing: positions by the specification and a manual position wit
   const ordered = byNumber.every((b, i) => i === 0 || byNumber[i - 1].at[1] > b.at[1]);
   if (!ordered) await expect(page.getByTestId('status')).toContainText('не по порядку');
   // The shelves to the left of the view: the line of the view.
+  await page.getByTestId('view-list').locator('li').first().click();
   await page.getByTestId('view-balloon-line').selectOption('left');
   await expect(page.getByTestId('status')).toContainText('Линия полок позиций');
   sheet = (await state(page)).description!.sheets[0];
+  expect((sheet.views[0] as { balloonLine?: string }).balloonLine).toBe('left');
   for (const b of sheet.balloons) expect(b.at[0]).toBeLessThan(sheet.views[0].bounds!.minX);
   await page.getByTestId('view-balloon-line').selectOption('auto');
   await expectNoError(page);

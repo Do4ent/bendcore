@@ -686,6 +686,17 @@ TEST(DrawingAssemblyConventions, ArrangeManualPositions) {
     ASSERT_TRUE(back.ok()) << back.error().message;
     EXPECT_TRUE(back.value().sheets()[0].balloons[0].arranged);
     EXPECT_EQ(back.value().toJson().value(), text.value());
+    // Линия полок слева: все полки вида — на вертикали в 15 мм левее изображения.
+    d.sheets()[0].views[0].balloonLine = an::BalloonLine::Left;
+    ASSERT_TRUE(d.update(snap.value(), cache).ok());
+    {
+        const ComputedSheet& c2 = d.computedSheets()[0];
+        const views::Box2 vb = computedView(d, "F").sheetView.sheetBounds();
+        ASSERT_EQ(c2.balloons.size(), 1u);
+        EXPECT_NEAR(c2.balloons[0].at.x, vb.minX - 15.0, 1e-9);
+        EXPECT_NEAR(c2.manualBalloons[0]->at.x, vb.minX - 15.0, 1e-9);
+    }
+    d.sheets()[0].views[0].balloonLine = an::BalloonLine::Auto;
     // Линия полок вида и символ подшипника сохраняются.
     d.sheets()[0].views[2].balloonLine = an::BalloonLine::Below;
     d.sheets()[0].views[2].bearingSymbol = an::BearingSymbol::RollingElement;

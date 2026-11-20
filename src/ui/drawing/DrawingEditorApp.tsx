@@ -1018,11 +1018,11 @@ export default function DrawingEditorApp({
                       <select
                         value={selected.balloonLine ?? 'auto'}
                         data-testid="view-balloon-line"
-                        onChange={(e) =>
-                          run(t('drawing.done.balloonLine'), (d) =>
-                            d.setView(sheet.id, selected.id, { balloonLine: e.target.value as 'auto' | 'right' | 'left' | 'above' | 'below' }),
-                          )
-                        }
+                        onChange={(e) => {
+                          // Read now: the controlled select shows the kernel state again before the queued call runs.
+                          const balloonLine = e.target.value as 'auto' | 'right' | 'left' | 'above' | 'below';
+                          run(t('drawing.done.balloonLine'), (d) => d.setView(sheet.id, selected.id, { balloonLine }));
+                        }}
                       >
                         {(['auto', 'right', 'left', 'above', 'below'] as const).map((l) => (
                           <option key={l} value={l}>
