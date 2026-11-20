@@ -50,6 +50,7 @@ import {
   downloadName,
   emptyPicks,
   sheetToViewPoint,
+  freeSectionFrame,
   viewAt,
   viewPointToModel,
 } from './sheetGeometry';
@@ -605,6 +606,7 @@ export default function DrawingEditorApp({
         const planes = o.points.map((q) => viewPointToModel(view, sheetToViewPoint(view, q)));
         const spec: ViewSpec = { kind: 'section', parent: view.id, planePoint: planes[0], stepPoints: planes.slice(1), markView: view.id };
         if (sectionSide !== 'none') spec.side = sectionSide as ViewSpec['side'];
+        else Object.assign(spec, freeSectionFrame(view));
         setOutline(emptyOutline);
         run(t('drawing.done.stepped'), (d) => d.addView(sheetId, spec));
       }
@@ -678,6 +680,7 @@ export default function DrawingEditorApp({
     } else if (tool === 'section') {
       const spec: ViewSpec = { kind: 'section', parent: view.id, planePoint: viewPointToModel(view, vp), markView: view.id };
       if (sectionSide !== 'none') spec.side = sectionSide as ViewSpec['side'];
+      else Object.assign(spec, freeSectionFrame(view));
       run(t('drawing.done.section'), (d) => d.addView(sheetId, spec));
     }
   };

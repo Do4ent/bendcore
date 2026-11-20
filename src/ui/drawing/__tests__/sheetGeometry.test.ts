@@ -16,6 +16,7 @@ import {
   sheetToViewPoint,
   viewAt,
   viewPointToModel,
+  freeSectionFrame,
   zoomAt,
 } from '../sheetGeometry';
 import type { PictureView } from '../../../wasm/bendcore_drawing_api.mjs';
@@ -109,6 +110,17 @@ describe('view coordinates', () => {
     const vp = sheetToViewPoint(front, [120, 110]);
     expect(vp).toEqual([40, 20]);
     expect(viewPointToModel(front, vp)).toEqual([40, 0, 20]);
+  });
+
+  test('a section outside the link is perpendicular to the view: seen from its left side', () => {
+    // Front view (toward −Y, right +X): the plane x = const, seen from +X toward −X like the view
+    // from the left (ГОСТ 2.305: toward = −right of the main view, right = its toward).
+    expect(freeSectionFrame(front)).toEqual({ toward: [-1, 0, 0], right: [0, -1, 0] });
+    const top = { ...front, frame: { toward: [0, 0, 1] as [number, number, number], right: [1, 0, 0] as [number, number, number], up: [0, 1, 0] as [number, number, number] } };
+    const f = freeSectionFrame(top);
+    // The sight of the section (−toward) is along the x axis of the view: the trace is vertical on it.
+    expect(f.toward).toEqual([-1, 0, 0]);
+    expect(f.right).toEqual([0, 0, 1]);
   });
 
   test('viewAt picks the smallest view containing the point', () => {
