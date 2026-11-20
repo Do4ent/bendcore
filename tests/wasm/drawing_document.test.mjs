@@ -640,6 +640,24 @@ describe('local section, undo/redo, chain and baseline, drag', () => {
       const d2 = dimensionById(drawing, 'S1', id);
       assert.ok(Math.hypot(d2.labelPosition[0] - d0.labelPosition[0], d2.labelPosition[1] - d0.labelPosition[1]) < 1e-9);
       expectKernelError(() => drawing.moveDimension('S1', 'nope', 1, 1), 'InvalidInput', 'unknown dimension');
+
+      // Arrangement of the view's dimensions (ГОСТ 2.307): values stay, texts do not overlap, the
+      // baseline group keeps 7 mm or more between its lines; arranging again changes nothing.
+      const all = drawing.describe().sheets[0].dimensions.filter((d) => d.view === F);
+      const arranged = drawing.arrangeDimensions('S1', F);
+      assert.ok(arranged.arranged >= 1, JSON.stringify(arranged));
+      assert.equal(arranged.collisions, 0);
+      assert.equal(drawing.describe().history.undoLabel, 'arrangeDimensions');
+      const after = drawing.describe().sheets[0].dimensions.filter((d) => d.view === F);
+      assert.deepEqual(after.map((d) => d.value), all.map((d) => d.value));
+      const fb = view(drawing.sheetPicture('S1'), F).bounds;
+      for (const d of after) {
+        const [x, y] = d.labelPosition;
+        assert.ok(Math.max(fb.minX - x, x - fb.maxX, fb.minY - y, y - fb.maxY) > 4, `${d.id} text outside the view`);
+      }
+      drawing.arrangeDimensions('S1', F);
+      assert.deepEqual(drawing.describe().sheets[0].dimensions.filter((d) => d.view === F).map((d) => d.offset), after.map((d) => d.offset));
+      expectKernelError(() => drawing.arrangeDimensions('S1', 'nope'), 'InvalidInput', 'nope');
     } finally {
       drawing.dispose();
     }

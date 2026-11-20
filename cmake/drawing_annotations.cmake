@@ -19,6 +19,7 @@ add_library(bendcore_drawing_annotations STATIC
   src/drawing_v2/annotations/threads.cpp
   src/drawing_v2/annotations/specification.cpp
   src/drawing_v2/annotations/view_cache.cpp
+  src/drawing_v2/annotations/dimension_layout.cpp
 )
 target_include_directories(bendcore_drawing_annotations PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(bendcore_drawing_annotations PUBLIC

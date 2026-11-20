@@ -211,6 +211,14 @@ export class DrawingHandle {
   }
 
   /**
+   * Arranges the dimensions of a view (ГОСТ 2.307: 10 mm from the contour, 7 mm between parallel
+   * dimension lines, texts not overlapping each other and the view lines).
+   */
+  arrangeDimensions(sheet, view) {
+    return this.#call('arrangeDimensions', sheet, view);
+  }
+
+  /**
    * Chain or baseline dimensions (ГОСТ 2.307) from picked edges of one view; options
    * { mode: 'chain' | 'baseline', direction?, offset?, spacing? }. Returns the new ids.
    */

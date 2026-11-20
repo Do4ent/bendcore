@@ -91,6 +91,17 @@ export function viewPointToModel(view: Pick<PictureView, 'frame'>, p: Point): [n
   return [r(0), r(1), r(2)];
 }
 
+/**
+ * Orientation of a section outside the projection link made on a view: the cutting plane is
+ * perpendicular to the view and to its x axis (its trace on the view is vertical, so it can be
+ * marked there, ГОСТ 2.305, section 6) and the section is seen like the view from the left of it
+ * (toward = −right, right = toward of the view).
+ */
+export function freeSectionFrame(view: Pick<PictureView, 'frame'>): { toward: [number, number, number]; right: [number, number, number] } {
+  const { toward, right } = view.frame;
+  return { toward: [-right[0] || 0, -right[1] || 0, -right[2] || 0], right: [toward[0], toward[1], toward[2]] };
+}
+
 /** The view whose bounds contain the sheet point (the smallest one when bounds overlap). */
 export function viewAt(views: PictureView[], p: Point): PictureView | null {
   let best: PictureView | null = null;

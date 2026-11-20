@@ -1108,7 +1108,11 @@ std::string moveView(std::uint32_t handle, std::string sheetId, std::string view
                     moved = v.id;
                 }
             } else {
-                target->position = dv::Point2{x, y};
+                // A view outside the projection link goes where it is dropped, not limited by its
+                // auto-layout cell; the position is the centre of the picture with the room of its
+                // label ("A-A") above, so the picture's centre lands at (x, y).
+                const double room = target->kind == dd::ViewKind::Axonometric ? 0.0 : dd::kViewLabelRoom;
+                target->position = dv::Point2{x, y + room / 2.0};
             }
             return {{"moved", moved}, {"group", inGroup(*target)}};
         });
@@ -1190,6 +1194,27 @@ std::optional<dv::Point2> lineDirection(const vw::ViewEdge& e) {
 // Point of a picked edge for a linear dimension: a vertex of a straight edge, the centre of a
 // circle or arc. Returns the anchor and its position in view coordinates.
 std::pair<an::Anchor, dv::Point2> featurePoint(const Session& s, const vw::ViewEdge& e) {
+    // A line of a section figure made by a model face (GOST 2.305, sections 6, 7): a point of the
+    // section contour of that face - the middle of a line, the middle of an arc.
+    if (!e.edgeIndex && e.faceIndex && e.cls == vw::EdgeClass::SectionCut) {
+        dv::Point2 at;
+        if (const auto* l = std::get_if<dv::LineSeg>(&e.curve)) {
+            at = {0.5 * (l->a.x + l->b.x), 0.5 * (l->a.y + l->b.y)};
+        } else if (const auto* a = std::get_if<dv::Arc>(&e.curve)) {
+            double sweep = a->endDeg - a->startDeg;
+            while (sweep <= 0) sweep += 360.0;
+            const double mid = (a->startDeg + sweep / 2.0) * 3.14159265358979323846 / 180.0;
+            at = {a->center.x + a->radius * std::cos(mid), a->center.y + a->radius * std::sin(mid)};
+        } else if (const auto* c = std::get_if<dv::Circle>(&e.curve)) {
+            at = {c->center.x, c->center.y - c->radius};
+        } else if (const auto* p = std::get_if<dv::Polyline>(&e.curve)) {
+            if (p->points.empty()) throw InputError("empty section line");
+            at = p->points[p->points.size() / 2];
+        }
+        an::Anchor anchor = anchorTo(s, an::RefKind::Face, *e.faceIndex, an::AnchorKind::Section);
+        anchor.at = at;
+        return {anchor, at};
+    }
     if (!e.edgeIndex) throw InputError("the picked line is a silhouette of a curved face, not a model edge: pick an edge or a circle");
     if (const auto* c = std::get_if<dv::Circle>(&e.curve))
         return {anchorTo(s, an::RefKind::Edge, *e.edgeIndex, an::AnchorKind::Center), c->center};
@@ -1215,6 +1240,14 @@ an::DimensionDef dimensionFromPicks(const Session& s, const dd::ComputedView& cv
     const double offset = numOr(opts, "offset", 10.0);
     if (picks.size() == 1) {
         const vw::ViewEdge& e = pickedEdge(cv, picks[0]);
+        if (!e.edgeIndex && e.faceIndex && e.cls == vw::EdgeClass::SectionCut &&
+            (std::holds_alternative<dv::Circle>(e.curve) || std::holds_alternative<dv::Arc>(e.curve))) {
+            // A circle or an arc of a section figure: the cylinder face that made it.
+            def.type = std::holds_alternative<dv::Circle>(e.curve) ? an::DimensionType::Diameter : an::DimensionType::Radius;
+            def.anchors.push_back(anchorTo(s, an::RefKind::Face, *e.faceIndex, an::AnchorKind::Center));
+            def.leaderAngleDeg = numOr(opts, "leaderAngle", 45.0);
+            return def;
+        }
         if (!e.edgeIndex) throw InputError("the picked line is a silhouette: pick both silhouettes of the cylinder for its diameter");
         if (std::holds_alternative<dv::Circle>(e.curve)) {
             def.type = an::DimensionType::Diameter;
@@ -1519,6 +1552,19 @@ std::string moveDimension(std::uint32_t handle, std::string sheetId, std::string
                 return {{"offset", d.def.offset}, {"textShift", d.def.textShift}, {"leaderAngle", d.def.leaderAngleDeg}};
             }
             throw InputError("unknown dimension '" + id + "'");
+        });
+    });
+}
+
+// Automatic arrangement of the dimensions of one view (GOST 2.307: 10 mm from the contour, 7 mm
+// between parallel dimension lines, no overlapping texts; DrawingDocument::arrangeDimensions).
+std::string arrangeDimensions(std::uint32_t handle, std::string sheetId, std::string viewId) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        return transaction(s, "arrangeDimensions", [&]() -> json {
+            computedViewOf(computedSheetOf(s, sheetId), viewId);
+            const an::ArrangeResult r = take(s.doc.arrangeDimensions(*s.shown, sheetId, viewId));
+            return {{"arranged", r.arranged}, {"crossings", r.crossings}, {"collisions", r.collisions}};
         });
     });
 }
@@ -1872,6 +1918,7 @@ EMSCRIPTEN_BINDINGS(bendcore_drawing) {
     emscripten::function("addLocalSection", &addLocalSection);
     emscripten::function("removeLocalSection", &removeLocalSection);
     emscripten::function("moveDimension", &moveDimension);
+    emscripten::function("arrangeDimensions", &arrangeDimensions);
     emscripten::function("addDimensionGroup", &addDimensionGroup);
     emscripten::function("addThreadNote", &addThreadNote);
     emscripten::function("setThreadNote", &setThreadNote);

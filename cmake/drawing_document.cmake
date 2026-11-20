@@ -41,6 +41,9 @@ add_executable(test_drawing_document
   tests/drawing_v2/test_drawing_document_io.cpp
   tests/drawing_v2/test_drawing_document_sections.cpp
   tests/drawing_v2/test_drawing_threads.cpp
+  tests/drawing_v2/test_drawing_document_layout.cpp
+  tests/drawing_v2/test_drawing_document_section_dims.cpp
+  tests/drawing_v2/test_drawing_document_dim_layout.cpp
 )
 target_include_directories(test_drawing_document PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawing_v2
                            ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
@@ -48,7 +51,8 @@ target_link_libraries(test_drawing_document PRIVATE bendcore_drawing_document be
                       GTest::gtest GTest::gtest_main)
 set(_drawing_document_out "${CMAKE_CURRENT_BINARY_DIR}/drawing_document_out")
 file(MAKE_DIRECTORY "${_drawing_document_out}")
-target_compile_definitions(test_drawing_document PRIVATE BENDCORE_DRAWING_V2_OUT="${_drawing_document_out}")
+target_compile_definitions(test_drawing_document PRIVATE BENDCORE_DRAWING_V2_OUT="${_drawing_document_out}"
+                           BENDCORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 foreach(_tool pdftotext pdfinfo)
   string(TOUPPER ${_tool} _up)
   find_program(BENDCORE_${_up}_EXE ${_tool})

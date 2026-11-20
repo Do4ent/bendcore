@@ -79,6 +79,66 @@ std::vector<Point2> endpoints(const Curve2& c) {
     return {};
 }
 
+Point2 nearestOnSegment(Point2 a, Point2 b, Point2 p) {
+    const Point2 d = sub(b, a);
+    const double L2 = dot2(d, d);
+    if (L2 < 1e-24) return a;
+    const double t = std::clamp(dot2(sub(p, a), d) / L2, 0.0, 1.0);
+    return add(a, mul(t, d));
+}
+
+// Угол в [0, 360).
+double normDeg(double a) {
+    a = std::fmod(a, 360.0);
+    return a < 0 ? a + 360.0 : a;
+}
+
+// Ближайшая к p точка кривой вида; на дуге и окружности — квадрант (крайняя точка по x или y),
+// если он лежит на дуге и отстоит от ближайшей точки не больше чем на 10°.
+Point2 nearestOnCurve(const Curve2& c, Point2 p) {
+    auto onCircle = [&](Point2 center, double r, double a0, double sweep) {
+        const double ap = norm(sub(p, center)) < 1e-12 ? a0 : angleDeg(sub(p, center));
+        auto inside = [&](double a) { return normDeg(a - a0) <= sweep + 1e-9; };
+        double best = ap;
+        if (!inside(ap)) {
+            const double e1 = a0, e2 = a0 + sweep;
+            auto gap = [&](double a) { return std::abs(normDeg(ap - a + 180.0) - 180.0); };
+            best = gap(e1) <= gap(e2) ? e1 : e2;
+        }
+        for (double q : {0.0, 90.0, 180.0, 270.0}) {
+            if (inside(q) && std::abs(normDeg(best - q + 180.0) - 180.0) <= 10.0) {
+                best = q;
+                break;
+            }
+        }
+        const double rad = best * kPi / 180.0;
+        // Квадранты — точно (без погрешности cos/sin), чтобы размер до крайней точки был точным.
+        const double cx = std::abs(normDeg(best) - 90.0) < 1e-12 || std::abs(normDeg(best) - 270.0) < 1e-12 ? 0.0 : std::cos(rad);
+        const double sy = std::abs(normDeg(best)) < 1e-12 || std::abs(normDeg(best) - 180.0) < 1e-12 ? 0.0 : std::sin(rad);
+        return Point2{center.x + r * cx, center.y + r * sy};
+    };
+    if (const auto* l = std::get_if<LineSeg>(&c)) return nearestOnSegment(l->a, l->b, p);
+    if (const auto* a = std::get_if<Arc>(&c)) {
+        double sweep = a->endDeg - a->startDeg;
+        while (sweep <= 0) sweep += 360.0;
+        return onCircle(a->center, a->radius, normDeg(a->startDeg), sweep);
+    }
+    if (const auto* ci = std::get_if<Circle>(&c)) return onCircle(ci->center, ci->radius, 0.0, 360.0);
+    if (const auto* pl = std::get_if<Polyline>(&c)) {
+        Point2 best = pl->points.empty() ? p : pl->points.front();
+        double bd = norm(sub(best, p));
+        for (std::size_t i = 0; i + 1 < pl->points.size(); ++i) {
+            const Point2 q = nearestOnSegment(pl->points[i], pl->points[i + 1], p);
+            if (norm(sub(q, p)) < bd) {
+                bd = norm(sub(q, p));
+                best = q;
+            }
+        }
+        return best;
+    }
+    return p;
+}
+
 double viewTolerance(const ProjectedView& v) {
     return 1e-4 * std::max(1.0, std::hypot(v.bounds.width(), v.bounds.height())) + 1e-6;
 }
@@ -176,7 +236,8 @@ Result<SideCylinder> sideCylinder(const ModelRef& r, const ModelBinding& m, cons
     if (auto c = checkIndex(r, m); !c) return c.error();
     std::vector<LineSeg> lines;
     for (const ViewEdge* e : piecesOfFace(v, r.index)) {
-        if (e->cls != EdgeClass::Silhouette) continue;
+        // Очерк цилиндра на виде или линии его сечения в продольном разрезе (ГОСТ 2.305, разд. 6).
+        if (e->cls != EdgeClass::Silhouette && e->cls != EdgeClass::SectionCut) continue;
         if (const auto* l = std::get_if<LineSeg>(&e->curve)) lines.push_back(*l);
     }
     // Шов цилиндра, совпавший с очерком, привязан к своему ребру (VIEWS.md, «Точный HLR»):
@@ -397,6 +458,10 @@ Status checkAnchorKind(const Anchor& a) {
         case AnchorKind::Point:
             if (a.ref.kind != RefKind::Vertex) return invalid("anchor Point needs a vertex reference");
             break;
+        case AnchorKind::Section:
+            if (a.ref.kind != RefKind::Face) return invalid("anchor Section needs a face reference");
+            if (!std::isfinite(a.at.x) || !std::isfinite(a.at.y)) return invalid("anchor Section: non-finite hint point");
+            break;
     }
     return okStatus();
 }
@@ -538,6 +603,30 @@ Result<Point2> anchorPoint(const Anchor& a, const ModelBinding& m, const Project
                 BRepTools::UVBounds(m.topology().faces()[a.ref.index].face, u0, u1, v0, v1);
                 const gp_Pnt mid = cyl.Location().Translated(gp_Vec(cyl.Axis().Direction()) * (0.5 * (v0 + v1)));
                 return v.frame.project(toVec(mid));
+            }
+            case AnchorKind::Section: {
+                // Линии сечения грани: порождённые ею (faceIndex) и рёбра её контура, через которые
+                // прошла секущая плоскость (шов тела вращения в плоскости эскиза профиля).
+                std::vector<std::uint32_t> own;
+                for (TopExp_Explorer ex(m.topology().faces()[a.ref.index].face, TopAbs_EDGE); ex.More(); ex.Next())
+                    if (auto ei = m.topology().edgeIndex(ex.Current())) own.push_back(*ei);
+                std::optional<Point2> best;
+                double bestD = 1e300;
+                for (const ViewEdge& ve : v.edges) {
+                    const ViewEdge* e = &ve;
+                    if (e->cls != EdgeClass::SectionCut) continue;
+                    const bool mine = (e->faceIndex && *e->faceIndex == a.ref.index) ||
+                                      (e->edgeIndex && std::find(own.begin(), own.end(), *e->edgeIndex) != own.end());
+                    if (!mine) continue;
+                    const Point2 q = nearestOnCurve(e->curve, a.at);
+                    const double d = norm(sub(q, a.at));
+                    if (d < bestD) {
+                        bestD = d;
+                        best = q;
+                    }
+                }
+                if (!best) return dangling(refLabel(a.ref) + " has no section contour in the view");
+                return *best;
             }
             case AnchorKind::Point: {
                 const TopoDS_Vertex& vx = m.topology().vertices()[a.ref.index].vertex;
