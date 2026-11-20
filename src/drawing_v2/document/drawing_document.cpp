@@ -245,6 +245,24 @@ struct PlacedGroup {
 
 }  // namespace
 
+Status DrawingDocument::setAutoBalloon(const std::string& sheet, const std::string& view, assembly_v2::DefinitionId definition,
+                                      std::optional<Point2> at) {
+    SheetDef* sd = findSheet(sheet);
+    if (!sd) return invalid("move position shelf: no sheet '" + sheet + "'");
+    auto v = std::find_if(sd->views.begin(), sd->views.end(), [&](const ViewDef& x) { return x.id == view; });
+    if (v == sd->views.end()) return invalid("move position shelf: no view '" + view + "' on sheet '" + sheet + "'");
+    if (at && (!std::isfinite(at->x) || !std::isfinite(at->y))) return invalid("move position shelf: the point is not finite");
+    if (!at) {
+        v->balloonShelves.erase(definition);
+        return okStatus();
+    }
+    // Позиция могла быть перенесена на этот вид с вида с autoBalloons (скрытая часть на разрезе).
+    if (!v->autoBalloons && std::none_of(sd->views.begin(), sd->views.end(), [](const ViewDef& x) { return x.autoBalloons; }))
+        return invalid("move position shelf: view '" + view + "' has no positions by the specification");
+    v->balloonShelves[definition] = *at;
+    return okStatus();
+}
+
 Result<std::size_t> DrawingDocument::arrangeBalloons(const std::string& sheet, const std::string& view) {
     SheetDef* sd = findSheet(sheet);
     if (!sd) return invalid("arrange positions: no sheet '" + sheet + "'");
@@ -257,6 +275,12 @@ Result<std::size_t> DrawingDocument::arrangeBalloons(const std::string& sheet, c
         b.at.reset();
         ++n;
     }
+    // Полки автоматических позиций, перенесённые мышью, возвращаются на линию полок.
+    for (ViewDef& v : sd->views)
+        if (view.empty() || v.id == view) {
+            n += v.balloonShelves.size();
+            v.balloonShelves.clear();
+        }
     return n;
 }
 
@@ -1282,13 +1306,62 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 groups[vi].cands.push_back({b.definition, std::stoi(b.text), {b.target}});
                 groups[vi].manual.push_back(mi);
             }
+            // Препятствия для полок: размеры и размеры резьбы листа, ручные позиции с полкой в
+            // заданной точке, автоматические позиции с перенесённой полкой и полки видов,
+            // разнесённых раньше.
+            annotations::BalloonObstacles obstacles;
+            for (const DimensionResult& r : cs.dimensions)
+                if (r.state == DimensionState::Ok) annotations::addDimensionObstacles(obstacles, r.geometry, style);
+            for (const DimensionResult& r : cs.threadNotes)
+                if (r.state == DimensionState::Ok) annotations::addDimensionObstacles(obstacles, r.geometry, style);
+            auto addBalloonObstacle = [&](const annotations::Balloon& b) {
+                obstacles.boxes.push_back(annotations::balloonShelfBox(b, {}, style));
+                obstacles.lines.push_back({b.target, b.at});
+            };
+            {
+                std::set<std::size_t> arrangedIdx;
+                for (const auto& am : arrangedManual) arrangedIdx.insert(am.first);
+                for (std::size_t i = 0; i < cs.manualBalloons.size(); ++i)
+                    if (cs.manualBalloons[i] && !arrangedIdx.count(i)) addBalloonObstacle(*cs.manualBalloons[i]);
+            }
+            // Автоматические позиции с полкой, перенесённой мышью (ViewDef::balloonShelves): полка —
+            // в сохранённой точке, точка выноски — ближайшая к ней из точек изображения части.
+            for (std::size_t vi = 0; vi < cs.views.size(); ++vi) {
+                Group& g = groups[vi];
+                const std::map<assembly_v2::DefinitionId, Point2>& moved = cs.views[vi].def.balloonShelves;
+                if (moved.empty()) continue;
+                Group rest;
+                for (std::size_t k = 0; k < g.cands.size(); ++k) {
+                    auto f = moved.find(g.cands[k].definition);
+                    if (g.manual[k] || f == moved.end()) {
+                        rest.cands.push_back(g.cands[k]);
+                        rest.manual.push_back(g.manual[k]);
+                        continue;
+                    }
+                    annotations::Balloon b;
+                    b.definition = g.cands[k].definition;
+                    b.at = f->second;
+                    b.target = g.cands[k].targets.front();
+                    for (const Point2& t : g.cands[k].targets)
+                        if (std::hypot(t.x - b.at.x, t.y - b.at.y) < std::hypot(b.target.x - b.at.x, b.target.y - b.at.y)) b.target = t;
+                    b.text = std::to_string(g.cands[k].number);
+                    g.report.placed.emplace_back(g.cands[k].number, b.definition);
+                    g.reported = true;
+                    addBalloonObstacle(b);
+                    cs.balloons.push_back(std::move(b));
+                    cs.balloonViews.push_back(cs.views[vi].id);
+                    cs.balloonMoved.push_back(true);
+                }
+                g.cands = std::move(rest.cands);
+                g.manual = std::move(rest.manual);
+            }
             for (std::size_t vi = 0; vi < cs.views.size(); ++vi) {
                 Group& g = groups[vi];
                 const ComputedView& cv = cs.views[vi];
                 if (g.cands.empty()) {
                     // Silent when every part already has a manual position on this sheet.
                     if (cv.def.autoBalloons && (manualDefinitions.empty() || !g.report.withoutBalloon.empty()) &&
-                        g.report.movedTo.empty())
+                        g.report.movedTo.empty() && g.report.placed.empty())
                         report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': no assembly part is visible for positions");
                     if (g.reported) report.balloons.push_back(std::move(g.report));
                     continue;
@@ -1299,6 +1372,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 ao.view = {vb.minX, vb.minY, vb.maxX, vb.maxY};
                 ao.area = {reg.frame.x0 + 5.0, reg.frame.y0 + 5.0, reg.frame.x1 - 5.0, reg.frame.y1 - 5.0};
                 ao.style = style;
+                ao.obstacles = obstacles;
                 auto arranged = annotations::arrangeBalloons(g.cands, ao);
                 if (!arranged) {
                     report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + arranged.error().message);
@@ -1309,16 +1383,23 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 g.report.line = ar.line;
                 g.report.ordered = ar.ordered;
                 g.report.crossings = ar.crossings;
+                g.report.shelfHits = ar.shelfHits;
                 if (ar.crossings > 0)
                     report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + std::to_string(ar.crossings) +
                                               " crossing leader line(s) remain");
+                if (ar.shelfHits > 0)
+                    report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + std::to_string(ar.shelfHits) +
+                                              " position shelf(s) overlap dimensions");
                 for (std::size_t k = 0; k < ar.balloons.size(); ++k) {
+                    addBalloonObstacle(ar.balloons[k]);
                     if (g.manual[k]) {
                         cs.manualBalloons[*g.manual[k]]->at = ar.balloons[k].at;
                         continue;
                     }
                     g.report.placed.emplace_back(g.cands[k].number, ar.balloons[k].definition);
                     cs.balloons.push_back(ar.balloons[k]);
+                    cs.balloonViews.push_back(cv.id);
+                    cs.balloonMoved.push_back(false);
                 }
                 g.reported = g.reported || !g.report.placed.empty();
                 if (g.reported) report.balloons.push_back(std::move(g.report));

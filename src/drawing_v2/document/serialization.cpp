@@ -385,6 +385,11 @@ Result<std::string> DrawingDocument::toJson() const {
             if (!v.bearings) jv["bearings"] = false;
             if (v.bearingSymbol == annotations::BearingSymbol::RollingElement) jv["bearingSymbol"] = "rollingElement";
             if (v.balloonLine != annotations::BalloonLine::Auto) jv["balloonLine"] = annotations::toString(v.balloonLine);
+            if (!v.balloonShelves.empty()) {
+                json bs = json::array();
+                for (const auto& [def, at] : v.balloonShelves) bs.push_back({{"definition", def}, {"at", pt(at)}});
+                jv["balloonShelves"] = std::move(bs);
+            }
             if (!v.stepPoints.empty()) {
                 json sp = json::array();
                 for (const Vec3& p : v.stepPoints) sp.push_back(vec(p));
@@ -566,6 +571,15 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                             known = true;
                         }
                     if (!known) fail("unknown balloon line '" + bl + "'");
+                }
+                if (jv.contains("balloonShelves")) {
+                    const json& bs = jv.at("balloonShelves");
+                    if (!bs.is_array()) fail("balloonShelves must be an array");
+                    for (const json& jb : bs) {
+                        if (!jb.is_object() || !jb.contains("definition") || !jb.at("definition").is_number_unsigned())
+                            fail("balloonShelves: definition must be a non-negative integer");
+                        v.balloonShelves[jb.at("definition").get<std::uint32_t>()] = ptFrom(field(jb, "at"));
+                    }
                 }
                 if (jv.contains("method")) v.method = enumValue(jv.at("method"), kHlr, "HLR method");
                 v.autoMethod = flag(jv, "autoMethod", false);

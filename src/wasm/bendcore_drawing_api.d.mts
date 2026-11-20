@@ -165,7 +165,17 @@ export interface SheetInfo {
   technicalRequirements: string[];
   partsList: boolean;
   /** Positions on the sheet: automatic ones of the views (id null) and the manual ones (id). */
-  balloons: { id: string | null; definition: number; text: string; at: Point; target: Point }[];
+  balloons: {
+    id: string | null;
+    /** View of the position (null only for files described before an update). */
+    view: string | null;
+    /** Automatic position whose shelf was moved by hand (setAutoBalloon). */
+    moved?: boolean;
+    definition: number;
+    text: string;
+    at: Point;
+    target: Point;
+  }[];
   /** Manual positions (addBalloon); state null before the first update. */
   positions: {
     id: string;
@@ -239,6 +249,8 @@ export interface UpdateReport {
     line: 'auto' | 'right' | 'left' | 'above' | 'below';
     ordered: boolean;
     crossings: number;
+    /** Shelves touching dimensions of the sheet (0 — the line of shelves went round them). */
+    shelfHits: number;
   }[];
   warnings: string[];
 }
@@ -367,6 +379,7 @@ export class DrawingHandle {
   addDatum(sheet: string, view: string, pick: number, letter: string, spec?: { id?: string; at?: number }): string;
   addBalloon(sheet: string, view: string, pick: number, spec?: { id?: string; at?: Point | null }): string;
   setBalloon(sheet: string, id: string, changes: { at: Point | null }): EditResult;
+  setAutoBalloon(sheet: string, view: string, definition: number, changes: { at: Point | null }): EditResult;
   removeAnnotation(sheet: string, id: string): EditResult;
   addLocalSection(sheet: string, view: string, spec: { points: Point[]; spline?: boolean; depth: number }): EditResult & { view: string; index: number };
   removeLocalSection(sheet: string, view: string, index: number): EditResult;
@@ -374,7 +387,7 @@ export class DrawingHandle {
   /** Arranges the dimensions of a view (ГОСТ 2.307); counts of moved dimensions and of what is left to fix by hand. */
   arrangeDimensions(sheet: string, view: string): EditResult & { arranged: number; crossings: number; collisions: number };
   /** Arranges the positions of a sheet (or one view, ГОСТ 2.109); manual positions joined and the result per view. */
-  arrangeBalloons(sheet: string, view?: string): EditResult & { arranged: number; views: { view: string; line: string; ordered: boolean; crossings: number }[] };
+  arrangeBalloons(sheet: string, view?: string): EditResult & { arranged: number; views: { view: string; line: string; ordered: boolean; crossings: number; shelfHits: number }[] };
   addDimensionGroup(sheet: string, view: string, picks: number[], options?: { mode?: 'chain' | 'baseline'; direction?: 'horizontal' | 'vertical'; offset?: number; spacing?: number }): string[];
   addThreadNote(sheet: string, view: string, spec: { at: Point; toleranceField?: string; offset?: number; leaderAngle?: number; textShift?: number; id?: string }): EditResult & { id: string; thread: string };
   setThreadNote(sheet: string, id: string, changes: { toleranceField?: string; offset?: number; leaderAngle?: number; textShift?: number }): EditResult;

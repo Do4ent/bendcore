@@ -228,6 +228,10 @@ struct ViewDef {
     // balloonLine.
     bool autoBalloons = false;
     annotations::BalloonLine balloonLine = annotations::BalloonLine::Auto;
+    // Полки автоматических позиций этого вида, перенесённые мышью: определение → начало полки
+    // (мм листа). Такая позиция не разносится на линию полок, точка выноски — ближайшая к полке
+    // точка изображения части; DrawingDocument::arrangeBalloons очищает список.
+    std::map<assembly_v2::DefinitionId, Point2> balloonShelves;
     views::HlrMethod method = views::HlrMethod::Exact;
     bool autoMethod = false;  // выбор алгоритма HLR по геометрии (views::chooseHlrMethod)
 };
@@ -358,6 +362,9 @@ struct ComputedSheet {
     std::vector<std::optional<annotations::SymbolGeometry>> tolerances;  // по SheetDef::tolerances
     std::vector<std::optional<annotations::SymbolGeometry>> datums;      // по SheetDef::datums
     std::vector<annotations::Balloon> balloons;  // автоматические позиции видов
+    std::vector<std::string> balloonViews;       // вид каждой автоматической позиции (по balloons)
+    // По balloons: полка перенесена мышью (ViewDef::balloonShelves), не стоит на линии полок.
+    std::vector<bool> balloonMoved;
     // По SheetDef::balloons: номер, точка выноски и полка; nullopt — висячая позиция (ребро не
     // найдено или не видно, у его детали нет позиции в спецификации).
     std::vector<std::optional<annotations::Balloon>> manualBalloons;
@@ -389,6 +396,8 @@ struct BalloonReport {
     annotations::BalloonLine line = annotations::BalloonLine::Right;  // линия полок
     bool ordered = true;        // номера на полках по порядку
     std::size_t crossings = 0;  // пересечения линий-выносок (0 — разнесено)
+    // Полок, задевающих размеры листа (линии и надписи): 0 — линия полок обошла размеры.
+    std::size_t shelfHits = 0;
 };
 
 struct UpdateReport {
@@ -455,9 +464,16 @@ public:
     // Разнесение позиций листа (ГОСТ 2.109): ручные позиции листа (или только вида view, если он
     // задан) получают arranged = true — при обновлении их полки ставятся вместе с автоматическими
     // позициями своего вида на одну линию без пересечения выносок, по порядку номеров
-    // (annotations::arrangeBalloons). Возвращает число ручных позиций; после вызова нужен update.
-    // Ошибка InvalidInput — нет листа или вида.
+    // (annotations::arrangeBalloons); полки автоматических позиций, перенесённые мышью
+    // (ViewDef::balloonShelves), возвращаются на линию. Возвращает число ручных позиций и
+    // возвращённых полок; после вызова нужен update. Ошибка InvalidInput — нет листа или вида.
     Result<std::size_t> arrangeBalloons(const std::string& sheet, const std::string& view = {});
+
+    // Перенос полки автоматической позиции составной части definition на виде view (мышью):
+    // at — начало полки на листе, nullopt — обратно на линию полок вида. Ошибка InvalidInput —
+    // нет листа или вида, у вида нет позиций по спецификации (autoBalloons), точка не конечна.
+    Status setAutoBalloon(const std::string& sheet, const std::string& view, assembly_v2::DefinitionId definition,
+                          std::optional<Point2> at);
 
     // Автокомпоновка размеров вида (annotations::arrangeDimensions, ГОСТ 2.307): новые offset,
     // textShift и направление полок размеров вида view листа sheet по последнему обновлению;

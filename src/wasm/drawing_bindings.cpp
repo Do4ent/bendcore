@@ -385,7 +385,8 @@ json updateReportJson(const dd::UpdateReport& r) {
         json moved = json::array();
         for (const auto& [def, view] : b.movedTo) moved.push_back({{"definition", def}, {"view", view}});
         balloons.push_back({{"sheet", b.sheet}, {"view", b.view}, {"placed", placed}, {"withoutBalloon", b.withoutBalloon},
-                            {"movedTo", moved}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings}});
+                            {"movedTo", moved}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings},
+                            {"shelfHits", b.shelfHits}});
     }
     return {{"modelChanged", r.modelChanged}, {"previousHash", r.previousHash}, {"currentHash", r.currentHash},
             {"revision", r.revision},         {"viewsComputed", r.viewsComputed}, {"viewsFromCache", r.viewsFromCache},
@@ -571,8 +572,16 @@ json describe(Session& s) {
         // ones (id of the BalloonItem), with the number from the specification.
         json balloons = json::array();
         if (cs)
-            for (const an::Balloon& b : cs->balloons)
-                balloons.push_back({{"id", nullptr}, {"definition", b.definition}, {"text", b.text}, {"at", pointJson(b.at)}, {"target", pointJson(b.target)}});
+            for (std::size_t i = 0; i < cs->balloons.size(); ++i) {
+                const an::Balloon& b = cs->balloons[i];
+                balloons.push_back({{"id", nullptr},
+                                    {"view", i < cs->balloonViews.size() ? json(cs->balloonViews[i]) : json(nullptr)},
+                                    {"moved", i < cs->balloonMoved.size() && cs->balloonMoved[i]},
+                                    {"definition", b.definition},
+                                    {"text", b.text},
+                                    {"at", pointJson(b.at)},
+                                    {"target", pointJson(b.target)}});
+            }
         json positions = json::array();
         for (std::size_t i = 0; i < sd.balloons.size(); ++i) {
             const auto& b = sd.balloons[i];
@@ -585,7 +594,7 @@ json describe(Session& s) {
                     p["text"] = c->text;
                     p["target"] = pointJson(c->target);
                     p["shelf"] = pointJson(c->at);
-                    balloons.push_back({{"id", b.id}, {"definition", c->definition}, {"text", c->text}, {"at", pointJson(c->at)}, {"target", pointJson(c->target)}});
+                    balloons.push_back({{"id", b.id}, {"view", b.view}, {"definition", c->definition}, {"text", c->text}, {"at", pointJson(c->at)}, {"target", pointJson(c->target)}});
                 }
             }
             positions.push_back(std::move(p));
@@ -1485,6 +1494,21 @@ std::string setBalloon(std::uint32_t handle, std::string sheetId, std::string id
     });
 }
 
+// Moves the shelf of an automatic position (part definition on view viewId) to at: [x, y] — it
+// leaves the line of shelves — or puts it back on the line (null); DrawingDocument::setAutoBalloon.
+std::string setAutoBalloon(std::uint32_t handle, std::string sheetId, std::string viewId, std::uint32_t definition, std::string text) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        const json j = parseArg(text, "position");
+        return transaction(s, "setAutoBalloon", [&]() -> json {
+            std::optional<dv::Point2> at;
+            if (j.contains("at") && !j.at("at").is_null()) at = point2From(j.at("at"), "at");
+            take(s.doc.setAutoBalloon(sheetId, viewId, definition, at));
+            return nullptr;
+        });
+    });
+}
+
 std::string removeAnnotation(std::uint32_t handle, std::string sheetId, std::string id) {
     return guarded([&]() -> json {
         Session& s = session(handle);
@@ -1610,7 +1634,8 @@ std::string arrangeBalloons(std::uint32_t handle, std::string sheetId, std::stri
         json views = json::array();
         for (const dd::BalloonReport& b : s.lastReport.balloons) {
             if (b.sheet != sheetId || (!viewId.empty() && b.view != viewId)) continue;
-            views.push_back({{"view", b.view}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings}});
+            views.push_back({{"view", b.view}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings},
+                             {"shelfHits", b.shelfHits}});
         }
         out["views"] = views;
         return out;
@@ -1962,6 +1987,7 @@ EMSCRIPTEN_BINDINGS(bendcore_drawing) {
     emscripten::function("removeAnnotation", &removeAnnotation);
     emscripten::function("addBalloon", &addBalloon);
     emscripten::function("setBalloon", &setBalloon);
+    emscripten::function("setAutoBalloon", &setAutoBalloon);
     emscripten::function("sheetPicture", &sheetPicture);
     emscripten::function("addLocalSection", &addLocalSection);
     emscripten::function("removeLocalSection", &removeLocalSection);
