@@ -14,6 +14,7 @@ add_library(bendcore_modeling_features STATIC
   ${BENDCORE_MODELING_FEATURES_ROOT}/src/modeling/features/sweep.cpp
   ${BENDCORE_MODELING_FEATURES_ROOT}/src/modeling/features/rib.cpp
   ${BENDCORE_MODELING_FEATURES_ROOT}/src/modeling/features/thread.cpp
+  ${BENDCORE_MODELING_FEATURES_ROOT}/src/modeling/features/gear.cpp
   ${BENDCORE_MODELING_FEATURES_ROOT}/src/modeling/features/bodies.cpp)
 target_compile_features(bendcore_modeling_features PUBLIC cxx_std_20)
 target_include_directories(bendcore_modeling_features PUBLIC "${BENDCORE_MODELING_FEATURES_ROOT}/include")
@@ -21,7 +22,7 @@ target_link_libraries(bendcore_modeling_features PUBLIC bendcore_kernel bendcore
 
 find_package(GTest QUIET)
 if(GTest_FOUND)
-  foreach(features_test extrude revolve hole dressup pattern history sweep loft rib thread bodies)
+  foreach(features_test extrude revolve hole dressup pattern history sweep loft rib thread bodies gear)
     add_executable(test_modeling_features_${features_test}
       ${BENDCORE_MODELING_FEATURES_ROOT}/tests/modeling/test_modeling_features_${features_test}.cpp)
     target_include_directories(test_modeling_features_${features_test} PRIVATE
