@@ -243,6 +243,7 @@
    },
    "parameters": {
     "angle": "0",
+    "chamfer": "0.5",
     "helix": "0",
     "module": "m",
     "offset": "0",

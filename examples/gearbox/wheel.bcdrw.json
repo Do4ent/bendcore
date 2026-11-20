@@ -315,7 +315,7 @@
         "name": "G[Keyway](KeySketch:V3_4);G2",
         "signature": {
          "center": [
-          19.999999999999996,
+          20.0,
           -5.0,
           20.8
          ],
@@ -338,7 +338,7 @@
         "name": "G[Keyway](KeySketch:V2_3);G2",
         "signature": {
          "center": [
-          19.999999999999996,
+          20.0,
           5.0,
           20.8
          ],

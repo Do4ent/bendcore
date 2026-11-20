@@ -303,6 +303,7 @@
    },
    "parameters": {
     "angle": "-8.9999999999999876",
+    "chamfer": "0.5",
     "helix": "0",
     "module": "m",
     "offset": "0",
