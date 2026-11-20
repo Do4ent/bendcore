@@ -597,6 +597,14 @@ Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& pa
                 roles.emplace_back(pipe.LastShape(), "End");
             }
         }
+        // Инструмент — призма или заметание контура, проверенного на самопересечения
+        // (sidePoints), вокруг оси: самопересечений у него нет, BRepAlgoAPI_Check не повторяется
+        // (на 120–360 сплайновых гранях он дольше самой булевой операции).
+        if (!isValidShape(tool)) return Error{ErrorCode::OperationFailed, "gear: the tool body is not valid"};
+        ShapeFacts facts;
+        facts.valid = true;
+        facts.booleanReady = true;
+        rememberFacts(tool, facts);
         auto res = applyTool(params.mode, target, tool, toolHistory, P.warnings);
         if (!res) return res.error();
         FeatureResult out = std::move(res).value();
