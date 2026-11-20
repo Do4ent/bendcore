@@ -176,6 +176,39 @@ Result<BalloonArrangement> arrangeBalloons(const std::vector<BalloonCandidate>& 
         }
     };
     improve();
+    // Пары пересекающихся выносок: одновременная смена точек обеих (одиночная смена может не
+    // помочь — каждая из двух точек по отдельности пересекает выноску другой).
+    for (std::size_t iter = 0; iter < 4 * n + 8; ++iter) {
+        const std::size_t before = total();
+        if (before == 0) break;
+        bool improved = false;
+        for (std::size_t i = 0; i < n && !improved; ++i)
+            for (std::size_t j = i + 1; j < n && !improved; ++j) {
+                const auto [a, b] = leader(i, choice[i]);
+                const auto [p, q] = leader(j, choice[j]);
+                if (!segmentsCross(a, b, p, q)) continue;
+                const std::size_t ci = choice[i], cj = choice[j];
+                std::size_t bestI = ci, bestJ = cj, best = before;
+                double bestLen = 1e300;
+                for (std::size_t ti = 0; ti < cands[i].targets.size(); ++ti)
+                    for (std::size_t tj = 0; tj < cands[j].targets.size(); ++tj) {
+                        choice[i] = ti;
+                        choice[j] = tj;
+                        const std::size_t c = total();
+                        const double len = dist(cands[i].targets[ti], slots[slotOf[i]]) + dist(cands[j].targets[tj], slots[slotOf[j]]);
+                        if (c < best || (c == best && c < before && len < bestLen)) {
+                            best = c;
+                            bestLen = len;
+                            bestI = ti;
+                            bestJ = tj;
+                        }
+                    }
+                choice[i] = bestI;
+                choice[j] = bestJ;
+                improved = best < before;
+            }
+        if (!improved) break;
+    }
     std::size_t crossings = total();
     if (crossings > 0) {
         // Порядок номеров уступает непересечению: слоты — по положению точек вдоль линии.
