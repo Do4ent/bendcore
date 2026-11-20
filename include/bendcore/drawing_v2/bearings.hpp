@@ -8,12 +8,13 @@
 //
 // Распознавание подшипника (у модели нет атрибутов подшипника — ни у граней, ни у тел):
 //   • по геометрии — тело вращения кольцевого сечения (соосные внутренний и наружный цилиндры,
-//     все вершины в кольце и между торцами) с телами качения или дорожками (сферические или
-//     торовые грани внутри кольца) — так выглядят каталожные подшипники;
+//     все вершины в кольце и между торцами) из трёх и более тел (кольца и тела качения) со
+//     сферическими или торовыми гранями (шарики, дорожки) — так выглядят каталожные подшипники;
 //   • по имени — простое кольцо d×D×B, у которого наименование или имя определения начинается
 //     со слова «Подшипник» или «Bearing» (кольцо без тел качения иначе не отличить от втулки).
 // Размеры d, D, B и ось — всегда по геометрии (bearingGeometry).
 
+#include <bendcore/drawing_v2/gears.hpp>
 #include <bendcore/drawing_v2/sections.hpp>
 #include <bendcore/drawing_v2/view_sheet.hpp>
 
@@ -34,7 +35,9 @@ struct BearingInfo {
     views::Vec3 origin;             // центр торца s = 0
     views::Vec3 axis{0, 0, 1};      // единичное направление оси (от торца s = 0 к s = B)
     double d = 0.0, D = 0.0, B = 0.0;  // внутренний, наружный диаметры, ширина, мм
-    bool rollingElements = false;   // есть сферические или торовые грани (тела качения, дорожки)
+    // Тела качения: не меньше трёх тел (кольца и тела качения) и сферические или торовые грани
+    // (шарики, дорожки качения). Одно тело с торовыми скруглениями — не подшипник.
+    bool rollingElements = false;
 };
 
 // Геометрия кольца по форме детали: ось — у цилиндрической грани наибольшей площади; d и D —
@@ -85,9 +88,6 @@ std::vector<BearingLine> bearingLines(const BearingImage& image, const views::Sh
                                       BearingSymbol symbol = BearingSymbol::Diagonals);
 Status renderBearings(Drawing& drawing, const views::SheetView& view, const std::vector<BearingImage>& images,
                       const views::RenderOptions& options = {}, BearingSymbol symbol = BearingSymbol::Diagonals);
-
-// Деталь (дочерняя форма), которой принадлежит ребро вида; nullopt — неизвестно.
-using EdgeChildOf = std::function<std::optional<std::size_t>(const views::ViewEdge&)>;
 
 // Номер детали области фигуры сечения, на контуре которой лежит ребро (середина ребра ближе tol
 // к звену контура); nullopt — ни одной.

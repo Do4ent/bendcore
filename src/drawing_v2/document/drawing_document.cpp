@@ -127,6 +127,72 @@ std::optional<std::pair<Point2, double>> pickPoint(const Curve2& c) {
     return std::nullopt;
 }
 
+// Деталь сборки (дочерняя форма), которой принадлежит ребро вида: по ребру или грани модели; у
+// контура фигуры сечения без ссылок — по области сечения, на контуре которой лежит ребро.
+std::optional<std::size_t> edgeChild(const ModelSnapshot& model, const ViewEdge& e, const SectionView* section) {
+    if (e.edgeIndex && *e.edgeIndex < model.edgeChild.size() && model.edgeChild[*e.edgeIndex] != UINT32_MAX)
+        return model.edgeChild[*e.edgeIndex];
+    if (e.faceIndex && *e.faceIndex < model.faceChild.size() && model.faceChild[*e.faceIndex] != UINT32_MAX)
+        return model.faceChild[*e.faceIndex];
+    if (section && section->regionOwner.size() == section->regions.size() && e.cls == EdgeClass::SectionCut && !model.childOwner.empty())
+        if (auto o = annotations::sectionEdgeOwner(*section, e, 0.05); o && *o >= 0) return std::size_t(*o);
+    return std::nullopt;
+}
+
+// Определение с позицией для детали child: первое определение цепочки вхождений в спецификации.
+std::optional<assembly_v2::DefinitionId> childPosition(const ModelSnapshot& model, std::size_t child,
+                                                       const annotations::Specification& spec) {
+    if (child < model.childChain.size()) {
+        for (assembly_v2::DefinitionId d : model.childChain[child])
+            if (spec.positionOf(d)) return d;
+        return std::nullopt;
+    }
+    if (child < model.childOwner.size() && spec.positionOf(model.childOwner[child])) return model.childOwner[child];
+    return std::nullopt;
+}
+
+// Составные части, видимые на виде, и точки выносок на их изображении (мм листа): середины самых
+// длинных видимых прямых участков линий (до 6 на деталь), точки внутри фигур сечения деталей,
+// точки внутри контура условного изображения подшипника (ГОСТ 2.420).
+std::map<assembly_v2::DefinitionId, std::vector<Point2>> shownParts(const ModelSnapshot& model,
+                                                                     const annotations::Specification& spec,
+                                                                     const ComputedView& cv) {
+    std::map<assembly_v2::DefinitionId, std::vector<Point2>> out;
+    std::map<assembly_v2::DefinitionId, std::vector<std::pair<double, Point2>>> lines;
+    for (const ViewEdge& e : cv.sheetView.view.edges) {
+        if (e.visibility != Visibility::Visible) continue;
+        const auto c = edgeChild(model, e, nullptr);
+        if (!c) continue;
+        const auto owner = childPosition(model, *c, spec);
+        if (!owner) continue;
+        if (auto p = pickPoint(e.curve)) lines[*owner].push_back({p->second, cv.sheetView.toSheet(p->first)});
+    }
+    if (cv.section && cv.section->regionOwner.size() == cv.section->regions.size() && !model.childOwner.empty()) {
+        for (std::size_t i = 0; i < cv.section->regions.size(); ++i) {
+            if (cv.section->regionOwner[i] < 0) continue;
+            const auto owner = childPosition(model, std::size_t(cv.section->regionOwner[i]), spec);
+            if (!owner) continue;
+            if (auto p = annotations::regionInteriorPoint(cv.section->regions[i])) out[*owner].push_back(cv.sheetView.toSheet(*p));
+        }
+    }
+    for (const annotations::BearingImage& b : cv.bearings) {
+        const auto owner = childPosition(model, b.info.child, spec);
+        if (!owner) continue;
+        const Point2 u = b.axis, w{-b.axis.y, b.axis.x};
+        for (double side : {1.0, -1.0}) {
+            // Между диагоналями, ближе к внутреннему кольцу: s = B/2, t = d/2 + (D − d)/8.
+            const double t = side * (b.info.d / 2.0 + (b.info.D - b.info.d) / 8.0);
+            out[*owner].push_back(cv.sheetView.toSheet({b.origin.x + u.x * b.info.B / 2.0 + w.x * t,
+                                                         b.origin.y + u.y * b.info.B / 2.0 + w.y * t}));
+        }
+    }
+    for (auto& [owner, pts] : lines) {
+        std::stable_sort(pts.begin(), pts.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+        for (std::size_t k = 0; k < pts.size() && k < 6; ++k) out[owner].push_back(pts[k].second);
+    }
+    return out;
+}
+
 struct SheetRegions {
     Rect2 frame;
     Rect2 title;
@@ -178,6 +244,21 @@ struct PlacedGroup {
 };
 
 }  // namespace
+
+Result<std::size_t> DrawingDocument::arrangeBalloons(const std::string& sheet, const std::string& view) {
+    SheetDef* sd = findSheet(sheet);
+    if (!sd) return invalid("arrange positions: no sheet '" + sheet + "'");
+    if (!view.empty() && std::none_of(sd->views.begin(), sd->views.end(), [&](const ViewDef& v) { return v.id == view; }))
+        return invalid("arrange positions: no view '" + view + "' on sheet '" + sheet + "'");
+    std::size_t n = 0;
+    for (BalloonItem& b : sd->balloons) {
+        if (!view.empty() && b.view != view) continue;
+        b.arranged = true;
+        b.at.reset();
+        ++n;
+    }
+    return n;
+}
 
 Result<annotations::ArrangeResult> DrawingDocument::arrangeDimensions(const ModelSnapshot& model, const std::string& sheet,
                                                                       const std::string& view,
@@ -731,15 +812,47 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             // вида-родителя, отсечённое окружностью элемента.
             // Зубчатые венцы (ГОСТ 2.402): виды сбоку и с торца и разрезы через ось; в разрезе
             // полоса зубьев не штрихуется.
+            // Деталь сборки, которой принадлежит ребро вида: по ребру или грани модели, у контура
+            // фигуры сечения без ссылки — по области сечения (до изменений условностями).
+            const std::shared_ptr<const SectionView> originalSection = cv.section;
+            const annotations::EdgeChildOf childOf = [&model, originalSection](const ViewEdge& e) -> std::optional<std::size_t> {
+                return edgeChild(model, e, originalSection.get());
+            };
             if (v.gears && !model.gears.empty() && v.kind != ViewKind::Axonometric && v.kind != ViewKind::Detail) {
                 std::optional<CuttingPlane> plane;
                 if (v.kind == ViewKind::Section && v.stepPoints.empty())
                     plane = CuttingPlane{v.planePoint, -1.0 * cv.sheetView.view.frame.toward};
-                auto gi = annotations::gearImages(model.gears, cv.sheetView.view.frame, plane);
+                auto gi = annotations::gearImages(model.gears, cv.sheetView.view.frame, plane, {}, model.gearChild);
                 if (!gi) return Error{gi.error().code, "sheet '" + sd.id + "', view '" + v.id + "': " + gi.error().message};
                 cv.gears = std::move(gi).value();
+                if (plane && model.kind == ModelKind::Assembly) {
+                    // Колесо, которое в разрезе не рассекается (вал-шестерня в продольном разрезе),
+                    // изображается как на виде.
+                    const SectionParts parts = sectionParts(model, plane->sight);
+                    for (annotations::GearImage& g : cv.gears)
+                        if (g.child && *g.child < parts.keepWhole.size() && parts.keepWhole[*g.child]) g.section = false;
+                }
                 if (cv.section && std::any_of(cv.gears.begin(), cv.gears.end(), [](const auto& g) { return g.section; }))
                     cv.section = std::make_shared<const SectionView>(annotations::withUncutTeeth(*cv.section, cv.gears));
+                // Зацепление колёс сборки (ГОСТ 2.402): зуб шестерни — перед зубом колеса.
+                if (model.kind == ModelKind::Assembly) {
+                    cv.gearMeshes = annotations::gearMeshes(cv.gears);
+                    if (!cv.gearMeshes.empty()) annotations::applyGearMesh(cv.sheetView.view.edges, cv.gears, cv.gearMeshes, childOf);
+                }
+            }
+            // Подшипники качения в разрезе через ось — условно по ГОСТ 2.420 (не штрихуются).
+            if (v.bearings && !model.bearings.empty() && v.kind == ViewKind::Section && v.stepPoints.empty() && cv.section) {
+                const CuttingPlane plane{v.planePoint, -1.0 * cv.sheetView.view.frame.toward};
+                cv.bearings = annotations::bearingImages(model.bearings, cv.sheetView.view.frame, plane);
+                if (!cv.bearings.empty()) {
+                    cv.section = std::make_shared<const SectionView>(annotations::withConventionalBearings(*cv.section, cv.bearings, childOf));
+                    std::vector<std::size_t> bc;
+                    for (const auto& b : cv.bearings) bc.push_back(b.info.child);
+                    std::erase_if(cv.sheetView.view.edges, [&](const ViewEdge& e) {
+                        const auto c = childOf(e);
+                        return c && std::find(bc.begin(), bc.end(), *c) != bc.end();
+                    });
+                }
             }
             if (v.threads && !threadInfos.empty()) {
                 auto ti = annotations::threadImages(threadInfos, binding.topology(), cv.sheetView.view);
@@ -1001,6 +1114,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         // 7. Позиции по спецификации (ГОСТ 2.109). Сначала ручные: точка выноски на видимой линии
         // выбранного ребра, номер — позиция детали, которой принадлежит ребро.
         std::set<assembly_v2::DefinitionId> manualDefinitions;
+        std::vector<std::pair<std::size_t, std::string>> arrangedManual;  // ручные позиции для разнесения → вид
         // Определение с позицией для каждого ребра (0 — нет): деталь или подсборка-сборочная единица.
         std::vector<assembly_v2::DefinitionId> edgePosition;
         if (model.kind == ModelKind::Assembly && spec) {
@@ -1042,9 +1156,10 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             annotations::Balloon b;
             b.definition = *owner;
             b.target = cv.sheetView.toSheet(best->first);
-            b.at = bi.at ? *bi.at : Point2{b.target.x + 12.0, b.target.y + 8.0};
+            b.at = bi.at && !bi.arranged ? *bi.at : Point2{b.target.x + 12.0, b.target.y + 8.0};
             b.text = std::to_string(*position);
             manualDefinitions.insert(*owner);
+            if (bi.arranged) arrangedManual.push_back({cs.manualBalloons.size(), bi.view});
             cs.manualBalloons.emplace_back(std::move(b));
         }
         // Таблица параметров зубчатого венца (ГОСТ 2.403) по венцу модели.
@@ -1090,66 +1205,124 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             cs.threadNotes.push_back(std::move(res));
         }
 
-        // Затем автоматические — на видимые линии составных частей, у которых нет ручной позиции.
-        for (const ComputedView& cv : cs.views) {
-            if (!cv.def.autoBalloons) continue;
-            if (model.kind != ModelKind::Assembly)
-                return invalid("sheet '" + sd.id + "', view '" + cv.id + "': positions need an assembly model");
-            BalloonReport br;
-            br.sheet = sd.id;
-            br.view = cv.id;
-            std::vector<annotations::Balloon> balloons;
-            for (const annotations::SpecSectionData& sec : spec->sections) {
-                for (const annotations::SpecItem& it : sec.items) {
-                    if (!it.definition || it.position <= 0 || manualDefinitions.count(*it.definition)) continue;
-                    std::optional<std::pair<Point2, double>> best;
-                    for (const ViewEdge& e : cv.sheetView.view.edges) {
-                        if (e.visibility != Visibility::Visible || !e.edgeIndex || *e.edgeIndex >= edgePosition.size()) continue;
-                        if (edgePosition[*e.edgeIndex] != *it.definition) continue;
-                        auto p = pickPoint(e.curve);
-                        if (p && (!best || p->second > best->second)) best = p;
+        // Затем автоматические (ГОСТ 2.109): составная часть без ручной позиции получает одну позицию
+        // на листе — на первом виде с autoBalloons, где она видна (видимыми линиями, фигурой сечения,
+        // условным изображением подшипника); скрытая на них — на ближайшем к первому такому виду
+        // разрезе листа, где видна. Полки каждого вида разносятся на одну линию (arrangeBalloons).
+        {
+            std::vector<std::size_t> autoViews;
+            for (std::size_t vi = 0; vi < cs.views.size(); ++vi)
+                if (cs.views[vi].def.autoBalloons) autoViews.push_back(vi);
+            if (!autoViews.empty() && model.kind != ModelKind::Assembly)
+                return invalid("sheet '" + sd.id + "', view '" + cs.views[autoViews[0]].id + "': positions need an assembly model");
+            std::vector<std::map<assembly_v2::DefinitionId, std::vector<Point2>>> shown(cs.views.size());
+            if (model.kind == ModelKind::Assembly && spec)
+                for (std::size_t vi = 0; vi < cs.views.size(); ++vi) shown[vi] = shownParts(model, *spec, cs.views[vi]);
+            // Группы позиций по видам: кандидаты автоматических и ручных «разнесённых» позиций.
+            struct Group {
+                std::vector<annotations::BalloonCandidate> cands;
+                std::vector<std::optional<std::size_t>> manual;  // индекс в cs.manualBalloons или автоматическая
+                BalloonReport report;
+                bool reported = false;
+            };
+            std::vector<Group> groups(cs.views.size());
+            for (std::size_t vi = 0; vi < cs.views.size(); ++vi) {
+                groups[vi].report.sheet = sd.id;
+                groups[vi].report.view = cs.views[vi].id;
+                groups[vi].reported = cs.views[vi].def.autoBalloons;
+            }
+            std::set<assembly_v2::DefinitionId> assigned;
+            std::vector<assembly_v2::DefinitionId> pending;
+            if (!autoViews.empty()) {
+                for (const annotations::SpecSectionData& sec : spec->sections)
+                    for (const annotations::SpecItem& it : sec.items) {
+                        if (!it.definition || it.position <= 0 || manualDefinitions.count(*it.definition)) continue;
+                        bool placed = false;
+                        for (std::size_t vi : autoViews) {
+                            auto f = shown[vi].find(*it.definition);
+                            if (f == shown[vi].end()) continue;
+                            groups[vi].cands.push_back({*it.definition, it.position, f->second});
+                            groups[vi].manual.push_back(std::nullopt);
+                            placed = true;
+                            break;
+                        }
+                        if (!placed) pending.push_back(*it.definition);
                     }
-                    if (!best) {
-                        br.withoutBalloon.push_back(*it.definition);
+            }
+            // Скрытые — через ближайший разрез листа, где составная часть видна.
+            Group* first = autoViews.empty() ? nullptr : &groups[autoViews[0]];
+            for (assembly_v2::DefinitionId def : pending) {
+                const Box2 fb = cs.views[autoViews[0]].sheetView.sheetBounds();
+                const Point2 fc{0.5 * (fb.minX + fb.maxX), 0.5 * (fb.minY + fb.maxY)};
+                std::optional<std::size_t> bestView;
+                double bestDist = 1e300;
+                for (std::size_t vi = 0; vi < cs.views.size(); ++vi) {
+                    const ComputedView& v = cs.views[vi];
+                    const bool isSection = v.kind == ViewKind::Section || !v.def.localSections.empty();
+                    if (!isSection || !shown[vi].count(def)) continue;
+                    const Box2 b = v.sheetView.sheetBounds();
+                    const double d = std::hypot(0.5 * (b.minX + b.maxX) - fc.x, 0.5 * (b.minY + b.maxY) - fc.y);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        bestView = vi;
+                    }
+                }
+                if (!bestView) {
+                    first->report.withoutBalloon.push_back(def);
+                    continue;
+                }
+                groups[*bestView].cands.push_back({def, *spec->positionOf(def), shown[*bestView].at(def)});
+                groups[*bestView].manual.push_back(std::nullopt);
+                if (&groups[*bestView] != first) first->report.movedTo.emplace_back(def, cs.views[*bestView].id);
+                groups[*bestView].reported = true;
+            }
+            for (const auto& [mi, viewId] : arrangedManual) {
+                const std::size_t vi = indexOf.at(viewId);
+                const annotations::Balloon& b = *cs.manualBalloons[mi];
+                groups[vi].cands.push_back({b.definition, std::stoi(b.text), {b.target}});
+                groups[vi].manual.push_back(mi);
+            }
+            for (std::size_t vi = 0; vi < cs.views.size(); ++vi) {
+                Group& g = groups[vi];
+                const ComputedView& cv = cs.views[vi];
+                if (g.cands.empty()) {
+                    // Silent when every part already has a manual position on this sheet.
+                    if (cv.def.autoBalloons && (manualDefinitions.empty() || !g.report.withoutBalloon.empty()) &&
+                        g.report.movedTo.empty())
+                        report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': no assembly part is visible for positions");
+                    if (g.reported) report.balloons.push_back(std::move(g.report));
+                    continue;
+                }
+                annotations::BalloonArrangeOptions ao;
+                ao.line = cv.def.balloonLine;
+                const Box2 vb = cv.sheetView.sheetBounds();
+                ao.view = {vb.minX, vb.minY, vb.maxX, vb.maxY};
+                ao.area = {reg.frame.x0 + 5.0, reg.frame.y0 + 5.0, reg.frame.x1 - 5.0, reg.frame.y1 - 5.0};
+                ao.style = style;
+                auto arranged = annotations::arrangeBalloons(g.cands, ao);
+                if (!arranged) {
+                    report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + arranged.error().message);
+                    if (g.reported) report.balloons.push_back(std::move(g.report));
+                    continue;
+                }
+                const annotations::BalloonArrangement& ar = arranged.value();
+                g.report.line = ar.line;
+                g.report.ordered = ar.ordered;
+                g.report.crossings = ar.crossings;
+                if (ar.crossings > 0)
+                    report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + std::to_string(ar.crossings) +
+                                              " crossing leader line(s) remain");
+                for (std::size_t k = 0; k < ar.balloons.size(); ++k) {
+                    if (g.manual[k]) {
+                        cs.manualBalloons[*g.manual[k]]->at = ar.balloons[k].at;
                         continue;
                     }
-                    annotations::Balloon b;
-                    b.definition = *it.definition;
-                    b.target = cv.sheetView.toSheet(best->first);
-                    balloons.push_back(b);
+                    g.report.placed.emplace_back(g.cands[k].number, ar.balloons[k].definition);
+                    cs.balloons.push_back(ar.balloons[k]);
                 }
+                g.reported = g.reported || !g.report.placed.empty();
+                if (g.reported) report.balloons.push_back(std::move(g.report));
             }
-            if (balloons.empty()) {
-                // Silent when every part already has a manual position on this sheet.
-                if (manualDefinitions.empty() || !br.withoutBalloon.empty())
-                    report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': no assembly part is visible for positions");
-            } else {
-                // Полки в колонну справа от вида (слева, если справа нет места), сверху вниз в
-                // порядке точек выносок, шаг не менее 10 мм.
-                const Box2 vb = cv.sheetView.sheetBounds();
-                std::sort(balloons.begin(), balloons.end(),
-                          [](const annotations::Balloon& a, const annotations::Balloon& b) { return a.target.y > b.target.y; });
-                const bool right = vb.maxX + 40.0 <= reg.frame.x1 - 5.0;
-                const double x = right ? vb.maxX + 15.0 : vb.minX - 15.0;
-                const double step = 10.0;
-                double prev = 1e300;
-                for (auto& b : balloons) {
-                    double y = std::min(b.target.y + 8.0, prev - step);
-                    b.at = {x, y};
-                    prev = y;
-                }
-                const double lowest = balloons.back().at.y;
-                const double floorY = reg.frame.y0 + 10.0;
-                if (lowest < floorY)
-                    for (auto& b : balloons) b.at.y += floorY - lowest;
-                annotations::alignBalloonsInColumn(balloons, x);
-                auto sync = annotations::synchronizeBalloons(balloons, *spec);
-                if (!sync) return sync.error();
-                for (const auto& b : balloons)
-                    if (auto pos = spec->positionOf(b.definition)) br.placed.emplace_back(*pos, b.definition);
-                for (auto& b : balloons) cs.balloons.push_back(b);
-            }
-            report.balloons.push_back(std::move(br));
         }
         if (sd.partsList) {
             if (model.kind != ModelKind::Assembly) return invalid("sheet '" + sd.id + "': a parts list needs an assembly model");
@@ -1231,6 +1404,10 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
             }
             if (!cv.gears.empty()) {
                 if (auto st = annotations::renderGears(d, cv.sheetView, cv.gears, ro); !st) return fail(st.error());
+            }
+            if (!cv.bearings.empty()) {
+                if (auto st = annotations::renderBearings(d, cv.sheetView, cv.bearings, ro, cv.def.bearingSymbol); !st)
+                    return fail(st.error());
             }
             if (!cv.label.empty()) {
                 if (auto st = renderViewLabel(d, cv.sheetView, cv.label, ro); !st) return fail(st.error());

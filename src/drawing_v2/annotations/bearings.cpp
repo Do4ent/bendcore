@@ -134,7 +134,9 @@ Result<BearingInfo> bearingGeometry(const TopoDS_Shape& part, double tol) {
         info.d = 2.0 * rIn;
         info.D = 2.0 * rOut;
         info.B = s1 - s0;
-        info.rollingElements = rolling;
+        int solids = 0;
+        for (TopExp_Explorer ex(part, TopAbs_SOLID); ex.More(); ex.Next()) ++solids;
+        info.rollingElements = rolling && solids >= 3;
         return info;
     } catch (const Standard_Failure& e) {
         return Error{ErrorCode::OperationFailed, std::string("bearing: ") + e.what()};

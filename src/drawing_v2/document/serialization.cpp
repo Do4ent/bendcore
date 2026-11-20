@@ -382,6 +382,9 @@ Result<std::string> DrawingDocument::toJson() const {
                     {"method", enumName(v.method, kHlr)},
                     {"autoMethod", v.autoMethod}};
             // Необязательные поля (версия формата не меняется: прежние файлы их не содержат).
+            if (!v.bearings) jv["bearings"] = false;
+            if (v.bearingSymbol == annotations::BearingSymbol::RollingElement) jv["bearingSymbol"] = "rollingElement";
+            if (v.balloonLine != annotations::BalloonLine::Auto) jv["balloonLine"] = annotations::toString(v.balloonLine);
             if (!v.stepPoints.empty()) {
                 json sp = json::array();
                 for (const Vec3& p : v.stepPoints) sp.push_back(vec(p));
@@ -437,8 +440,11 @@ Result<std::string> DrawingDocument::toJson() const {
         if (!s.balloons.empty()) {
             json bs = json::array();
             for (const BalloonItem& b : s.balloons)
-                bs.push_back({{"id", b.id}, {"view", b.view}, {"edge", refJson(b.edge)},
-                              {"at", b.at ? pt(*b.at) : json(nullptr)}});
+            {
+                json jb = {{"id", b.id}, {"view", b.view}, {"edge", refJson(b.edge)}, {"at", b.at ? pt(*b.at) : json(nullptr)}};
+                if (b.arranged) jb["arranged"] = true;
+                bs.push_back(std::move(jb));
+            }
             js["balloons"] = std::move(bs);
         }
         if (!s.threadNotes.empty()) {
@@ -543,6 +549,24 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                 v.threads = flag(jv, "threads", true);
                 v.gears = flag(jv, "gears", true);
                 v.autoBalloons = flag(jv, "autoBalloons", false);
+                v.bearings = flag(jv, "bearings", true);
+                if (jv.contains("bearingSymbol")) {
+                    const std::string bsym = jv.at("bearingSymbol").is_string() ? jv.at("bearingSymbol").get<std::string>() : "";
+                    if (bsym == "diagonals") v.bearingSymbol = annotations::BearingSymbol::Diagonals;
+                    else if (bsym == "rollingElement") v.bearingSymbol = annotations::BearingSymbol::RollingElement;
+                    else fail("unknown bearing symbol '" + bsym + "'");
+                }
+                if (jv.contains("balloonLine")) {
+                    const std::string bl = jv.at("balloonLine").is_string() ? jv.at("balloonLine").get<std::string>() : "";
+                    bool known = false;
+                    for (auto l : {annotations::BalloonLine::Auto, annotations::BalloonLine::Right, annotations::BalloonLine::Left,
+                                   annotations::BalloonLine::Above, annotations::BalloonLine::Below})
+                        if (bl == annotations::toString(l)) {
+                            v.balloonLine = l;
+                            known = true;
+                        }
+                    if (!known) fail("unknown balloon line '" + bl + "'");
+                }
                 if (jv.contains("method")) v.method = enumValue(jv.at("method"), kHlr, "HLR method");
                 v.autoMethod = flag(jv, "autoMethod", false);
                 if (jv.contains("stepPoints")) {
@@ -640,6 +664,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                     b.view = str(jb, "view");
                     b.edge = refFrom(field(jb, "edge"));
                     if (jb.contains("at") && !jb.at("at").is_null()) b.at = ptFrom(jb.at("at"));
+                    b.arranged = flag(jb, "arranged", false);
                     s.balloons.push_back(std::move(b));
                 }
             }

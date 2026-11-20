@@ -19,6 +19,7 @@ add_library(bendcore_drawing_annotations STATIC
   src/drawing_v2/annotations/threads.cpp
   src/drawing_v2/annotations/gears.cpp
   src/drawing_v2/annotations/bearings.cpp
+  src/drawing_v2/annotations/balloon_layout.cpp
   src/drawing_v2/annotations/specification.cpp
   src/drawing_v2/annotations/view_cache.cpp
   src/drawing_v2/annotations/dimension_layout.cpp
