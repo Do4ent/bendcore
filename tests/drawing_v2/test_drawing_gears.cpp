@@ -12,7 +12,9 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
+#include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
 #include <TopoDS.hxx>
 #include <gtest/gtest.h>
 
@@ -280,6 +282,16 @@ TEST(DrawingGears, DrawingOfAGearPart) {
     ASSERT_TRUE(snap.value().massKg);
     EXPECT_NEAR(*snap.value().massKg, realVolume * 1e-9 * 7850.0, 1e-12);
     EXPECT_LT(realVolume, kPi * 32 * 32 * 20);
+    // Условная форма — 3 грани (цилиндр вершин и два торца), окружности торцов — по одному ребру.
+    int faces = 0, circles = 0;
+    for (TopExp_Explorer ex(snap.value().shape.occt(), TopAbs_FACE); ex.More(); ex.Next()) ++faces;
+    {
+        TopTools_IndexedMapOfShape edges;
+        TopExp::MapShapes(snap.value().shape.occt(), TopAbs_EDGE, edges);
+        circles = edges.Extent();
+    }
+    EXPECT_EQ(faces, 3);
+    EXPECT_EQ(circles, 3);  // две окружности торцов и шов
 
     DrawingDocument d;
     d.model().kind = ModelKind::Part;

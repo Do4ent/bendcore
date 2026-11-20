@@ -9,7 +9,9 @@
 
 #include <bendcore/modeling/part_document.hpp>
 
+#include <BRepAdaptor_Curve.hxx>
 #include <BRep_Tool.hxx>
+#include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <gp.hxx>
 
@@ -65,8 +67,35 @@ public:
             if (found) fail("several vertices at (" + detail::num(x) + ", " + detail::num(y) + ", " + detail::num(z) + ")");
             found = i;
         }
-        if (!found) fail("no vertex at (" + detail::num(x) + ", " + detail::num(y) + ", " + detail::num(z) + ")");
+        if (!found) {
+            std::string near;
+            for (std::size_t i = 0; i < n; ++i) {
+                const gp_Pnt p = BRep_Tool::Pnt(TopoDS::Vertex(m_.named->element(ElementKind::Vertex, i)));
+                if (std::abs(p.X() - x) < 1e-5) near += " (" + detail::num(p.X()) + ", " + detail::num(p.Y()) + ", " + detail::num(p.Z()) + ")";
+            }
+            fail("no vertex at (" + detail::num(x) + ", " + detail::num(y) + ", " + detail::num(z) + "); vertices with this x:" + near);
+        }
         return m_.named->element(ElementKind::Vertex, *found);
+    }
+    // Образующая цилиндра радиуса r вокруг оси X от x0 до x1 (шов цилиндра вершин условной формы
+    // венца: его положение по углу задаёт упрощение формы, а не модель); из нескольких — верхняя.
+    TopoDS_Shape axialLine(double r, double x0, double x1) const {
+        std::optional<TopoDS_Shape> found;
+        for (TopExp_Explorer ex(shape(), TopAbs_EDGE); ex.More(); ex.Next()) {
+            BRepAdaptor_Curve c(TopoDS::Edge(ex.Current()));
+            if (c.GetType() != GeomAbs_Line || !c.Line().Direction().IsParallel(gp::DX(), 1e-9)) continue;
+            const gp_Pnt a = c.Value(c.FirstParameter()), b = c.Value(c.LastParameter());
+            if (std::abs(std::hypot(a.Y(), a.Z()) - r) > 1e-6) continue;
+            if (std::abs(std::min(a.X(), b.X()) - x0) > 1e-6 || std::abs(std::max(a.X(), b.X()) - x1) > 1e-6) continue;
+            // Несколько образующих (цилиндр вершин из нескольких граней) — ближайшая к верхнему очерку.
+            if (found) {
+                BRepAdaptor_Curve f(TopoDS::Edge(*found));
+                if (f.Value(f.FirstParameter()).Z() >= a.Z()) continue;
+            }
+            found = ex.Current();
+        }
+        if (!found) fail("no generator of r = " + detail::num(r) + " from x = " + detail::num(x0));
+        return *found;
     }
     annotations::Anchor v(double x, double y, double z) const { return anchor(ElementKind::Vertex, vertex(x, y, z), AnchorKind::Point); }
     annotations::Anchor circ(double x, double y, double z, double r) const {
@@ -258,7 +287,7 @@ void shaftInSheet(DrawingDocument& d, const PartEntry& p) {
     const gp_Dir X = gp::DX();
     s.dim("L", "F", DimensionType::Horizontal, {s.v(0, 0, 9), s.v(x7, 0, 11.5)}, -32);
     s.dim("L0", "F", DimensionType::Horizontal, {s.v(0, 0, 9), s.v(x1, 0, 11)}, 18);
-    s.dim("b1", "F", DimensionType::Horizontal, {s.v(x4, 0, 22), s.v(x5, 0, 22)}, 8);
+    s.dim("b1", "F", DimensionType::Horizontal, {s.v(x4, 0, 15), s.v(x5, 0, 15)}, 15);
     s.dim("D0", "F", DimensionType::Diameter, {s.cyl(10, gp::Origin(), X, gp_Pnt(3, 0, 10))}, -8, "k6");
     s.dim("Ds1", "F", DimensionType::Diameter, {s.cyl(12.5, gp::Origin(), X, gp_Pnt(x2 + 5, 0, 12.5))}, 8, "k6");
     s.dim("Ds2", "F", DimensionType::Diameter, {s.cyl(12.5, gp::Origin(), X, gp_Pnt(x6 + 8, 0, 12.5))}, 8, "k6");
@@ -267,7 +296,7 @@ void shaftInSheet(DrawingDocument& d, const PartEntry& p) {
     s.dim("bk", "T", DimensionType::Vertical, {s.v(L0 / 2 - 11, -3, 6.5), s.v(L0 / 2 - 11, 3, 6.5)}, 12, "N9");
     const TopoDS_Shape seatL = detail::lineEdge(s.shape(), gp_Pnt(x2 + 1, 0, 12.5), gp_Pnt(x3 - 2, 0, 12.5));
     const TopoDS_Shape seatR = detail::lineEdge(s.shape(), gp_Pnt(x6 + 2, 0, 12.5), gp_Pnt(x7 - 1, 0, 12.5));
-    const TopoDS_Shape rim = detail::lineEdge(s.shape(), gp_Pnt(x4, 0, 22), gp_Pnt(x5, 0, 22));
+    const TopoDS_Shape rim = s.axialLine(22, x4, x5);
     s.roughness("Ra1", "F", seatL, "0,8");
     s.roughness("Ra2", "F", seatR, "0,8");
     s.roughness("Ra3", "F", rim, "1,6", 0.3);
@@ -298,13 +327,14 @@ void wheelSheet(DrawingDocument& d, const PartEntry& p) {
     const double r = var(p, "da") / 2, bw = var(p, "bw"), lh = var(p, "lh"), rh = var(p, "dh") / 2, rb = var(p, "db") / 2,
                  bk = var(p, "bk"), t2 = var(p, "t2");
     const gp_Dir X = gp::DX();
-    s.dim("b", "F", DimensionType::Horizontal, {s.v(-bw / 2, 0, r), s.v(bw / 2, 0, r)}, 12);
+    const double rr = var(p, "dr") / 2;
+    s.dim("b", "F", DimensionType::Horizontal, {s.v(-bw / 2, 0, rr), s.v(bw / 2, 0, rr)}, r - rr + 12);
     s.dim("lh", "F", DimensionType::Horizontal, {s.v(-lh / 2, 0, rh - 1), s.v(lh / 2, 0, rh - 1)}, 50);
     s.dim("da", "F", DimensionType::Diameter, {s.cyl(r, gp::Origin(), X, gp_Pnt(0, 0, r))}, 10, "h11");
     s.dim("dh", "F", DimensionType::Diameter, {s.cyl(rh, gp::Origin(), X, gp_Pnt(12, 0, rh))}, -10);
     s.dim("db", "L", DimensionType::Diameter, {s.circ(-lh / 2, 0, 0, rb)}, 0, "H7").def.leaderAngleDeg = 225;
     s.dim("bk", "L", DimensionType::Aligned, {s.v(lh / 2, -bk / 2, rb + t2), s.v(lh / 2, bk / 2, rb + t2)}, 10, "JS9");
-    const TopoDS_Shape rimLine = detail::lineEdge(s.shape(), gp_Pnt(-bw / 2, 0, r), gp_Pnt(bw / 2, 0, r));
+    const TopoDS_Shape rimLine = s.axialLine(r, -bw / 2, bw / 2);
     const TopoDS_Shape hubFace = detail::circleEdge(s.shape(), gp_Pnt(lh / 2, 0, 0), rh - 1);
     const TopoDS_Shape rimFace = detail::circleEdge(s.shape(), gp_Pnt(bw / 2, 0, 0), r);
     s.roughness("Ra1", "F", rimLine, "1,6", 0.5);

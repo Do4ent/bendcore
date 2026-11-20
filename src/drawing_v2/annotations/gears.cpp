@@ -10,6 +10,7 @@
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <Geom_Circle.hxx>
+#include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <Standard_Failure.hxx>
 #include <TopoDS.hxx>
 #include <gp_Circ.hxx>
@@ -75,13 +76,13 @@ double polyArea(const std::vector<Point2>& p) {
 
 }  // namespace
 
-Result<TopoDS_Shape> gearFiller(const modeling::GearSpec& gear) {
-    auto g = modeling::gearGeometry(gear);
-    if (!g) return g.error();
+namespace {
+
+// Кольцо rIn…rOut на ширине венца.
+Result<TopoDS_Shape> gearRing(const modeling::GearSpec& gear, double rIn, double rOut) {
     try {
         const gp_Ax2 frame(gear.axis.Location(), gear.axis.Direction(), gear.axis.XDirection());
-        const double rIn = g.value().df / 2.0 - gear.module / 4.0, rOut = g.value().da / 2.0;
-        if (!(rIn > 0.0)) return Error{ErrorCode::InvalidInput, "gear filler: root diameter is too small"};
+        if (!(rIn > 0.0 && rOut > rIn)) return Error{ErrorCode::InvalidInput, "gear filler: root diameter is too small"};
         Handle(Geom_Circle) co = new Geom_Circle(gp_Circ(frame, rOut));
         Handle(Geom_Circle) ci = new Geom_Circle(gp_Circ(frame, rIn));
         BRepBuilderAPI_MakeFace mf(gp_Pln(gp_Ax3(frame)), BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(co)).Wire(), true);
@@ -96,20 +97,58 @@ Result<TopoDS_Shape> gearFiller(const modeling::GearSpec& gear) {
     }
 }
 
+void mergeHistory(opencascade::handle<BRepTools_History>& h, const opencascade::handle<BRepTools_History>& next) {
+    if (next.IsNull()) return;
+    if (h.IsNull()) {
+        h = new BRepTools_History(*next);
+    } else {
+        h->Merge(next);
+    }
+}
+
+}  // namespace
+
+Result<TopoDS_Shape> gearFiller(const modeling::GearSpec& gear) {
+    auto g = modeling::gearGeometry(gear);
+    if (!g) return g.error();
+    return gearRing(gear, g.value().df / 2.0 - gear.module / 4.0, g.value().da / 2.0);
+}
+
 Result<ConventionalShape> conventionalGearShape(const TopoDS_Shape& real, const std::vector<modeling::GearInfo>& gears) {
     if (real.IsNull()) return Error{ErrorCode::InvalidInput, "conventional gear shape: empty shape"};
     if (gears.empty()) return ConventionalShape{real, {}};
-    std::vector<TopoDS_Shape> fillers;
+    // Зубья срезаются кольцом df/2 − m/4 … da/2 + m, затем ставится сплошное кольцо до da/2:
+    // цилиндр вершин — одна грань кольца (слияние частей вершин зубьев с заполнением впадин
+    // UnifySameDomain выполняет не всегда — замкнутую цилиндрическую грань из частей не строит).
+    std::vector<TopoDS_Shape> cutters, fillers;
     for (const auto& g : gears) {
-        auto f = gearFiller(g.gear);
+        auto geo = modeling::gearGeometry(g.gear);
+        if (!geo) return geo.error();
+        const double rIn = geo.value().df / 2.0 - g.gear.module / 4.0;
+        auto c = gearRing(g.gear, rIn, geo.value().da / 2.0 + g.gear.module);
+        if (!c) return c.error();
+        auto f = gearRing(g.gear, rIn, geo.value().da / 2.0);
         if (!f) return f.error();
+        cutters.push_back(c.value());
         fillers.push_back(f.value());
     }
     kernel::BooleanOptions opt;
-    opt.checkInputs = false;  // тело модели и кольца заполнения валидны по построению
-    auto r = kernel::booleanOp(kernel::BooleanType::Fuse, {real}, fillers, opt);
-    if (!r) return Error{r.error().code, "conventional gear shape: " + r.error().message};
-    return ConventionalShape{r.value().shape, r.value().history};
+    opt.checkInputs = false;  // тело модели и кольца валидны по построению
+    auto cut = kernel::booleanOp(kernel::BooleanType::Cut, {real}, cutters, opt);
+    if (!cut) return Error{cut.error().code, "conventional gear shape: " + cut.error().message};
+    auto fused = kernel::booleanOp(kernel::BooleanType::Fuse, {cut.value().shape}, fillers, opt);
+    if (!fused) return Error{fused.error().code, "conventional gear shape: " + fused.error().message};
+    try {
+        ShapeUpgrade_UnifySameDomain unify(fused.value().shape, true, true, true);
+        unify.Build();
+        opencascade::handle<BRepTools_History> h;
+        mergeHistory(h, cut.value().history);
+        mergeHistory(h, fused.value().history);
+        mergeHistory(h, unify.History());
+        return ConventionalShape{unify.Shape(), h};
+    } catch (const Standard_Failure& e) {
+        return Error{ErrorCode::OperationFailed, std::string("conventional gear shape: unify: ") + e.what()};
+    }
 }
 
 Result<modeling::NamedShape> conventionalGearModel(const modeling::NamedShape& real,
