@@ -667,6 +667,36 @@ std::vector<ThreadInfo> threadsOf(const NamedShape& shape) {
     return out;
 }
 
+std::vector<GearInfo> gearsOf(const NamedShape& shape) {
+    std::vector<GearInfo> out;
+    std::vector<ElementAttributes> keys;
+    for (std::size_t i = 0; i < shape.count(ElementKind::Face); ++i) {
+        const ElementRecord& r = shape.record(ElementKind::Face, i);
+        if (std::none_of(r.attributes.begin(), r.attributes.end(),
+                         [](const auto& kv) { return kv.first.rfind("gear.", 0) == 0; }))
+            continue;
+        ElementAttributes key;
+        for (const auto& kv : r.attributes)
+            if (kv.first.rfind("gear.", 0) == 0) key.push_back(kv);
+        std::sort(key.begin(), key.end());
+        auto it = std::find(keys.begin(), keys.end(), key);
+        if (it == keys.end()) {
+            auto spec = gearFromAttributes(key);
+            if (!spec) continue;
+            GearInfo g;
+            g.gear = std::move(spec).value();
+            if (auto b = shape.bodyOf(shape.element(ElementKind::Face, i))) g.body = shape.bodyName(*b);
+            keys.push_back(key);
+            out.push_back(std::move(g));
+            it = keys.end() - 1;
+        }
+        GearInfo& g = out[static_cast<std::size_t>(it - keys.begin())];
+        g.faces.push_back(i);
+        g.names.push_back(r.name);
+    }
+    return out;
+}
+
 Result<TopoReference> makeBodyReference(const NamedShape& shape, std::string_view bodyName) {
     auto b = shape.findBody(bodyName);
     if (!b) return Result<TopoReference>::failure(ErrorCode::InvalidInput, "no body named '" + std::string(bodyName) + "'");

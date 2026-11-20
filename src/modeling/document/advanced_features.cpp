@@ -7,10 +7,12 @@
 #include "../features/feature_common.hpp"
 
 #include <bendcore/modeling/features.hpp>
+#include <bendcore/modeling/gear.hpp>
 #include <bendcore/modeling/reference_geometry.hpp>
 
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepGProp.hxx>
+#include <BRep_Tool.hxx>
 #include <GProp_GProps.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
@@ -355,6 +357,75 @@ public:
     }
 };
 
+// ---------------------------------------------------------------- gear teeth
+
+class GearTeethFeature final : public Feature {
+public:
+    std::string type() const override { return "GearTeeth"; }
+    std::vector<ParameterSpec> parameterSpecs() const override {
+        return {{"module", "2"}, {"teeth", "20"}, {"shift", "0"}, {"width", "0"},
+                {"helix", "0"},  {"offset", "0"}, {"angle", "0"}};
+    }
+    std::vector<ReferenceSlot> referenceSlots() const override {
+        return {{"face", ElementKind::Face, false, true}, {"axisEdge", ElementKind::Edge, false, true}};
+    }
+    std::vector<OptionSpec> optionSpecs() const override {
+        return {{"mode", {"cut", "boss", "newBody"}},
+                {"axis", {"face", "X", "Y", "Z", "edge", "datum"}},
+                {"hand", {"right", "left"}}};
+    }
+    std::vector<LinkSlot> linkSlots() const override { return {{"axis", {"DatumAxis"}, true}}; }
+    Result<FeatureOutput> execute(const FeatureContext& ctx) const override {
+        GearParams p;
+        p.mode = modeOf(ctx);
+        GearSpec& s = p.spec;
+        s.module = ctx.parameter("module");
+        const double teeth = ctx.parameter("teeth");
+        if (!(std::isfinite(teeth) && teeth == std::floor(teeth) && teeth >= 3 && teeth <= 1000))
+            return fail(ErrorCode::InvalidInput, "number of teeth must be an integer in [3, 1000]");
+        s.teeth = static_cast<int>(teeth);
+        s.shift = ctx.parameter("shift");
+        s.helix = ctx.parameter("helix") * kDeg;
+        s.hand = ctx.option("hand") == "left" ? GearHand::Left : GearHand::Right;
+        const std::string& axisChoice = ctx.option("axis");
+        auto ax = axisFromOption(ctx, axisChoice, "face", "axisEdge", "axis");
+        if (!ax) return ax.error();
+        const gp_Dir dir = ax.value().Direction();
+        const double offset = ctx.parameter("offset");
+        double width = ctx.parameter("width");
+        gp_Pnt origin = ax.value().Location().Translated(gp_Vec(dir) * offset);
+        if (axisChoice == "face") {
+            // Венец на цилиндрической грани заготовки: начало — торец грани с меньшей координатой
+            // вдоль оси, ширина по умолчанию — длина грани.
+            double lo = 1e300, hi = -1e300;
+            for (TopExp_Explorer vx(ctx.references("face").front(), TopAbs_VERTEX); vx.More(); vx.Next()) {
+                const double a = gp_Vec(ax.value().Location(), BRep_Tool::Pnt(TopoDS::Vertex(vx.Current()))).Dot(gp_Vec(dir));
+                lo = std::min(lo, a);
+                hi = std::max(hi, a);
+            }
+            if (hi <= lo) return fail(ErrorCode::InvalidInput, "gear: the face has no extent along its axis");
+            origin = ax.value().Location().Translated(gp_Vec(dir) * (lo + offset));
+            if (width == 0.0) width = hi - lo - offset;
+        }
+        if (!(width > 0.0)) return fail(ErrorCode::InvalidInput, "gear face width must be > 0");
+        s.width = width;
+        const gp_Ax2 base(origin, dir);
+        gp_Dir xdir = base.XDirection();
+        xdir.Rotate(gp_Ax1(origin, dir), ctx.parameter("angle") * kDeg);
+        s.axis = gp_Ax3(origin, dir, xdir);
+        if (p.mode == FeatureMode::Cut && ctx.input().isNull()) return fail(ErrorCode::InvalidInput, "gear cut needs a blank body");
+        auto res = gearTeeth(ctx.input().isNull() ? TopoDS_Shape() : ctx.input().shape(), p);
+        if (!res) return res.error();
+        const auto attrs = gearAttributes(s);
+        FeatureResult r = std::move(res).value();
+        auto roles = std::move(r.roles);
+        r.roles.clear();
+        FeatureOutput out = outputOf(std::move(r), p.mode);
+        for (auto& [face, role] : roles) out.roles.push_back({face, role, attrs});
+        return out;
+    }
+};
+
 // ---------------------------------------------------------------- bodies
 
 // Bodies designated by face references (any face of the body).
@@ -546,6 +617,7 @@ void addAdvancedFeatures(std::vector<std::pair<std::string, FeatureRegistry::Fac
     all.emplace_back("Loft", [] { return std::make_unique<LoftFeature>(); });
     all.emplace_back("Rib", [] { return std::make_unique<RibFeature>(); });
     all.emplace_back("ThreadedHole", [] { return std::make_unique<ThreadedHoleFeature>(); });
+    all.emplace_back("GearTeeth", [] { return std::make_unique<GearTeethFeature>(); });
     all.emplace_back("BodyBoolean", [] { return std::make_unique<BodyBooleanFeature>(); });
     all.emplace_back("DeleteBody", [] { return std::make_unique<DeleteBodyFeature>(); });
     all.emplace_back("BodyLinearPattern", [] { return std::make_unique<BodyLinearPatternFeature>(); });

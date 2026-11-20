@@ -5,6 +5,7 @@
 // откатом, подавлением, переносом и сохранением в JSON (docs/modeling/PART_DOCUMENT.md).
 
 #include <bendcore/modeling/features.hpp>
+#include <bendcore/modeling/gear.hpp>
 #include <bendcore/modeling/naming.hpp>
 #include <bendcore/modeling/part_sketch.hpp>
 
@@ -226,6 +227,19 @@ struct ThreadInfo {
 
 // Cosmetic threads of a shape: every face whose record carries thread attributes.
 std::vector<ThreadInfo> threadsOf(const NamedShape& shape);
+
+// Gear rim of a shape (attributes "gear.*", operation GearTeeth): faces of one rim (same
+// attributes) — flanks, fillets and roots of the teeth, the tips and end faces when the rim is a
+// body of its own.
+struct GearInfo {
+    std::vector<std::size_t> faces;  // face indices in the NamedShape
+    std::vector<std::string> names;  // element names of the faces
+    std::string body;                // body of the first face
+    GearSpec gear;
+};
+
+// Gear rims of a shape, in the order of their first face.
+std::vector<GearInfo> gearsOf(const NamedShape& shape);
 
 // Reference to a body: a face reference to the face of the body with the smallest element name
 // (body nodes take any face of a body). Error: no body with this name.
