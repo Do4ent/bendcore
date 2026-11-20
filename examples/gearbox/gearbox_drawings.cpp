@@ -322,7 +322,12 @@ void wheelSheet(DrawingDocument& d, const PartEntry& p) {
     SheetDef& sd = d.sheets()[0];
     ViewDef f = view("F", ViewKind::Base);
     ViewDef l = view("L", ViewKind::Projected, "F", views::SheetSide::RightOf);
-    sd.views = {f, l, section("A", {0, -1, 0}, {1, 0, 0}, {0, 0, 0}, "L", views::SectionKind::Cut)};
+    // Разрез А–А — в проекционной связи справа от вида слева (масштаб листа): правый верхний
+    // угол листа занят таблицей параметров венца ГОСТ 2.403.
+    ViewDef a = section("A", {0, -1, 0}, {1, 0, 0}, {0, 0, 0}, "L", views::SectionKind::Cut);
+    a.parent = "L";
+    a.side = views::SheetSide::RightOf;
+    sd.views = {f, l, a};
     Sheet s(sd, m);
     const double r = var(p, "da") / 2, bw = var(p, "bw"), lh = var(p, "lh"), rh = var(p, "dh") / 2, rb = var(p, "db") / 2,
                  bk = var(p, "bk"), t2 = var(p, "t2");

@@ -231,12 +231,12 @@
      {
       "fixed": true,
       "x": "x4",
-      "y": "d / 2"
+      "y": "da / 2"
      },
      {
       "fixed": true,
       "x": "x5",
-      "y": "d / 2"
+      "y": "da / 2"
      },
      {
       "fixed": true,
@@ -291,6 +291,51 @@
    },
    "suppressed": false,
    "type": "Revolve"
+  },
+  {
+   "id": "Teeth",
+   "label": "Teeth",
+   "links": {},
+   "options": {
+    "axis": "face",
+    "hand": "right",
+    "mode": "cut"
+   },
+   "parameters": {
+    "angle": "-8.9999999999999876",
+    "helix": "0",
+    "module": "m",
+    "offset": "0",
+    "shift": "0",
+    "teeth": "z",
+    "width": "0"
+   },
+   "references": {
+    "axisEdge": [],
+    "face": [
+     {
+      "kind": "face",
+      "name": "G[Body](Profile:E10)",
+      "signature": {
+       "center": [
+        109.99999999999999,
+        1.652718366203358e-15,
+        0.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Cylinder",
+       "radius": 22.0,
+       "size": 4976.282763286232
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "GearTeeth"
   },
   {
    "id": "GrooveLSketch",
@@ -777,8 +822,20 @@
    "name": "lc"
   },
   {
-   "expression": "40",
+   "expression": "2",
+   "name": "m"
+  },
+  {
+   "expression": "20",
+   "name": "z"
+  },
+  {
+   "expression": "m * z",
    "name": "d"
+  },
+  {
+   "expression": "d + 2 * m",
+   "name": "da"
   },
   {
    "expression": "36",

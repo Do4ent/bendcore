@@ -794,6 +794,7 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": false,
      "id": "F",
      "kind": "base",
@@ -832,6 +833,7 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": false,
      "id": "T",
      "kind": "projected",
@@ -870,6 +872,7 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": false,
      "id": "L",
      "kind": "projected",
@@ -908,6 +911,7 @@
       0.0
      ],
      "detailRadius": 0.0,
+     "gears": true,
      "hidden": false,
      "id": "A",
      "kind": "section",

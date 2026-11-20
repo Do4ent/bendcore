@@ -176,12 +176,12 @@
      {
       "fixed": true,
       "x": "bw / 2",
-      "y": "d / 2"
+      "y": "da / 2"
      },
      {
       "fixed": true,
       "x": "-bw / 2",
-      "y": "d / 2"
+      "y": "da / 2"
      },
      {
       "fixed": true,
@@ -231,6 +231,51 @@
    },
    "suppressed": false,
    "type": "Revolve"
+  },
+  {
+   "id": "Teeth",
+   "label": "Teeth",
+   "links": {},
+   "options": {
+    "axis": "face",
+    "hand": "right",
+    "mode": "cut"
+   },
+   "parameters": {
+    "angle": "0",
+    "helix": "0",
+    "module": "m",
+    "offset": "0",
+    "shift": "0",
+    "teeth": "z",
+    "width": "0"
+   },
+   "references": {
+    "axisEdge": [],
+    "face": [
+     {
+      "kind": "face",
+      "name": "G[Body](Profile:E7)",
+      "signature": {
+       "center": [
+        -1.0943844065250809e-16,
+        7.879002110243047e-17,
+        -7.105427357601002e-15
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Cylinder",
+       "radius": 62.0,
+       "size": 12465.8396494443
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "GearTeeth"
   },
   {
    "id": "KeySketch",
@@ -414,64 +459,6 @@
    "type": "CircularPattern"
   },
   {
-   "id": "RimChamfers",
-   "label": "RimChamfers",
-   "links": {},
-   "options": {
-    "type": "equal"
-   },
-   "parameters": {
-    "angle": "45",
-    "distance": "c",
-    "distance2": "1"
-   },
-   "references": {
-    "edges": [
-     {
-      "kind": "edge",
-      "name": "G[Body](Profile:V7_8)",
-      "signature": {
-       "center": [
-        -16.0,
-        1.8947806286936005e-15,
-        2.8042753304665284e-13
-       ],
-       "direction": [
-        1.0,
-        0.0,
-        -0.0
-       ],
-       "geometry": "Circle",
-       "radius": 60.0,
-       "size": 376.9911184307752
-      }
-     },
-     {
-      "kind": "edge",
-      "name": "G[Body](Profile:V6_7)",
-      "signature": {
-       "center": [
-        16.0,
-        1.8947806286936005e-15,
-        2.8042753304665284e-13
-       ],
-       "direction": [
-        1.0,
-        0.0,
-        -0.0
-       ],
-       "geometry": "Circle",
-       "radius": 60.0,
-       "size": 376.9911184307752
-      }
-     }
-    ],
-    "face": []
-   },
-   "suppressed": false,
-   "type": "Chamfer"
-  },
-  {
    "id": "HubChamfers",
    "label": "HubChamfers",
    "links": {},
@@ -534,8 +521,20 @@
  "rollback": null,
  "variables": [
   {
-   "expression": "120",
+   "expression": "2",
+   "name": "m"
+  },
+  {
+   "expression": "60",
+   "name": "z"
+  },
+  {
+   "expression": "m * z",
    "name": "d"
+  },
+  {
+   "expression": "d + 2 * m",
+   "name": "da"
   },
   {
    "expression": "32",
@@ -580,10 +579,6 @@
   {
    "expression": "6",
    "name": "nl"
-  },
-  {
-   "expression": "1.5",
-   "name": "c"
   }
  ],
  "version": 3

@@ -65,19 +65,19 @@
    "color": null,
    "faceColors": [],
    "fingerprint": {
-    "area": 17901.372407876745,
+    "area": 22137.65026009707,
     "box": [
      0.0,
-     -20.0,
-     -20.0,
+     -21.826990658200348,
+     -21.826990658200348,
      170.0,
-     20.0,
-     20.0
+     21.826990658200348,
+     21.826990658200348
     ],
-    "edges": 48,
-    "faces": 27,
-    "vertices": 31,
-    "volume": 113836.71469875306
+    "edges": 405,
+    "faces": 146,
+    "vertices": 269,
+    "volume": 113136.86120360742
    },
    "id": 3,
    "kind": "part",
@@ -125,19 +125,19 @@
    "color": null,
    "faceColors": [],
    "fingerprint": {
-    "area": 49042.09598413903,
+    "area": 61107.29382078877,
     "box": [
      -20.0,
-     -60.0,
-     -60.0,
-     20.000000000000004,
-     60.0,
-     60.0
+     -62.0000001,
+     -62.0000001,
+     20.0,
+     62.0000001,
+     62.0000001
     ],
-    "edges": 53,
-    "faces": 25,
-    "vertices": 34,
-    "volume": 223581.0227669009
+    "edges": 1126,
+    "faces": 382,
+    "vertices": 750,
+    "volume": 222952.84455346328
    },
    "id": 5,
    "kind": "part",
@@ -7159,7 +7159,7 @@
   },
   {
    "a": {
-    "index": 24,
+    "index": 143,
     "kind": "face",
     "path": [
      12
@@ -7177,7 +7177,7 @@
    },
    "bound": [
     {
-     "index": 24,
+     "index": 143,
      "signature": {
       "center": [
        163.0,
@@ -7228,7 +7228,7 @@
   },
   {
    "a": {
-    "index": 21,
+    "index": 140,
     "kind": "face",
     "path": [
      12
@@ -7246,7 +7246,7 @@
    },
    "bound": [
     {
-     "index": 21,
+     "index": 140,
      "signature": {
       "center": [
        155.0,
@@ -15284,11 +15284,84 @@
    "suppressed": false,
    "type": "Coincident",
    "value": 0.0
+  },
+  {
+   "a": {
+    "index": 143,
+    "kind": "face",
+    "path": [
+     12
+    ],
+    "use": "Auto"
+   },
+   "alignment": "Closest",
+   "b": {
+    "index": 19,
+    "kind": "face",
+    "path": [
+     13
+    ],
+    "use": "Auto"
+   },
+   "bound": [
+    {
+     "index": 143,
+     "signature": {
+      "center": [
+       163.0,
+       1.6653345369377353e-16,
+       -1.7763568394002505e-15
+      ],
+      "direction": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "geometry": "Cylinder",
+      "hasDirection": true,
+      "kind": "face",
+      "radius": 12.5,
+      "size": 942.4777960769378,
+      "valid": true
+     }
+    },
+    {
+     "index": 19,
+     "signature": {
+      "center": [
+       113.0,
+       -8.419191270074105e-17,
+       0.0
+      ],
+      "direction": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "geometry": "Cylinder",
+      "hasDirection": true,
+      "kind": "face",
+      "radius": 15.0,
+      "size": 1319.4689145077132,
+      "valid": true
+     }
+    }
+   ],
+   "gearPhase": [
+    0.0,
+    0.0
+   ],
+   "id": 132,
+   "internalTangency": false,
+   "name": "gear mesh",
+   "suppressed": false,
+   "type": "Gear",
+   "value": 3.0
   }
  ],
  "name": "Редуктор цилиндрический",
  "next": {
-  "mate": 132,
+  "mate": 133,
   "occurrence": 73,
   "pattern": 1
  },
