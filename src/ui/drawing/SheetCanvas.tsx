@@ -145,6 +145,9 @@ const SheetCanvas = React.forwardRef<SheetCanvasHandle, Props>(function SheetCan
     }
     if (e.button !== 0) return;
     if (tool === 'select' && viewId) {
+      // No native drag/selection: a second drag that starts on text selected by the first one
+      // would otherwise turn into a native drag and cancel the pointer (the view would not move).
+      e.preventDefault();
       box.current!.setPointerCapture(e.pointerId);
       props.onSelectView(viewId);
       setDrag({ kind: 'view', view: viewId, start: s, startSheet: p, moved: false, pointerId: e.pointerId });

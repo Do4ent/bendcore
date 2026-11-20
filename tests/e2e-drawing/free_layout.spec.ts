@@ -1,12 +1,12 @@
 // Free placement of views and automatic arrangement of dimensions (docs/ui/DRAWING_UI.md,
 // «Свободное размещение видов», «Автокомпоновка размеров»). On the reference bracket
-// (tests/wasm/fixtures/bracket.part.json, A = 60, B = 50) the user adds the front and top views and
-// a section outside the projection link, sets its scale to 4:1 — larger than its auto-layout cell:
-// the scale stays 4:1 and the kernel warns — drags it to the free right part of the sheet (it lands
-// exactly where it was dropped, at 4:1), then drags it onto the front view (an overlap warning, not
-// an error). Two dimensions of the front view put close to the contour are arranged with the
-// «Автокомпоновка размеров» button: the values stay, the texts move out of the view by the GOST
-// 2.307 distances.
+// (tests/wasm/fixtures/bracket.part.json, A = 60, B = 50, Wd = 30) the user adds the front and top
+// views and a section through the wall outside the projection link, sets its scale to 5:1 — larger
+// than its auto-layout cell: the scale stays 5:1 and the kernel warns —, then 4:1 and drags it to
+// the free upper right part of the sheet (it lands exactly where it was dropped, at 4:1, without
+// warnings), then drags it onto the front view (an overlap warning, not an error). Two dimensions
+// of the front view are arranged with the «Автокомпоновка размеров» button: the values stay, the
+// texts move out of the view by the GOST 2.307 distances.
 import { expect, test, Page } from '@playwright/test';
 import path from 'path';
 
@@ -22,7 +22,7 @@ interface EditorState {
       id: string;
       width: number;
       height: number;
-      views: { id: string; kind: string; bounds?: Bounds; scale: { label: string } | null; computedScale?: { label: string }; position: [number, number] | null }[];
+      views: { id: string; kind: string; bounds?: Bounds; scale: { label: string } | null; computedScale?: { label: string; ratio: [number, number] }; position: [number, number] | null }[];
       dimensions: { id: string; view: string; value?: number; offset: number; labelPosition?: [number, number] }[];
     }[];
   } | null;
@@ -76,7 +76,7 @@ async function drag(page: Page, from: { x: number; y: number }, to: { x: number;
   await page.mouse.up();
 }
 
-test('a section outside the projection link at 4:1 dragged freely; dimensions arranged by GOST 2.307', async ({ page }) => {
+test('a section outside the projection link at its own scale dragged freely; dimensions arranged by GOST 2.307', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('status')).toContainText('Откройте документ', { timeout: 120_000 });
   await page.getByTestId('open-model').setInputFiles(bracket);
@@ -87,39 +87,50 @@ test('a section outside the projection link at 4:1 dragged freely; dimensions ar
   await expect(page.getByTestId('view-list').locator('li')).toHaveCount(2);
   await expectNoError(page);
 
-  // Section through the middle of the front view, outside the projection link.
+  // Section through the wall of the bracket (x ≈ 4 of T = 8), outside the projection link: an L
+  // of 30 × 50 mm, at 5:1 taller than the column cell.
   await page.getByTestId('tool-section').click();
   await page.getByTestId('section-side').selectOption('none');
   let s = await state(page);
   const front = s.description!.sheets[0].views[0].bounds!;
-  const p = await screenOf(page, [front.minX + 0.4 * (front.maxX - front.minX), front.minY + 0.1 * (front.maxY - front.minY)]);
+  const p = await screenOf(page, [front.minX + 0.07 * (front.maxX - front.minX), front.minY + 0.5 * (front.maxY - front.minY)]);
   await page.mouse.click(p.x, p.y);
   await expect(page.getByTestId('view-list').locator('li')).toHaveCount(3);
   await expectNoError(page);
   s = await state(page);
   const sec0 = s.description!.sheets[0].views[2];
   expect(sec0.kind).toBe('section');
-  const scale0 = Number(sec0.computedScale!.label.split(':')[0]) / Number(sec0.computedScale!.label.split(':')[1]);
+  const scale0 = sec0.computedScale!.ratio[0] / sec0.computedScale!.ratio[1];
 
-  // Scale 4:1 chosen in the properties: kept although the view does not fit its cell.
+  // Scale 5:1 chosen in the properties: kept although the view does not fit its cell.
   await page.getByTestId('tool-select').click();
   await page.getByTestId('view-list').locator('li').nth(2).click();
-  await page.getByTestId('view-scale').selectOption('4:1');
+  await page.getByTestId('view-scale').selectOption('5:1');
   await expect(page.getByTestId('status')).toContainText('does not fit its cell');
   await expectNoError(page);
   s = await state(page);
   const sec1 = s.description!.sheets[0].views[2];
-  expect(sec1.computedScale!.label).toBe('4:1');
+  expect(sec1.computedScale!.label).toBe('5:1');
   const w0 = sec0.bounds!.maxX - sec0.bounds!.minX;
-  expect(sec1.bounds!.maxX - sec1.bounds!.minX).toBeCloseTo((w0 * 4) / scale0, 6);
+  expect(sec1.bounds!.maxX - sec1.bounds!.minX).toBeCloseTo((w0 * 5) / scale0, 6);
 
-  // Drag to the free right part of the sheet: the picture's centre lands at the drop point.
+  // 4:1 (120 × 214 mm with the label) and a drag to the free upper right part of the sheet, past the
+  // column cell: the picture's centre lands at the drop point, no overlap and frame warnings.
+  await page.getByTestId('view-scale').selectOption('4:1');
+  await expectNoError(page);
+  s = await state(page);
+  const sec1b = s.description!.sheets[0].views[2];
+  expect(sec1b.computedScale!.label).toBe('4:1');
   const sheet = s.description!.sheets[0];
-  const target: [number, number] = [sheet.width - 5 - (sec1.bounds!.maxX - sec1.bounds!.minX) / 2 - 10, sheet.height / 2 + 30];
-  const from = await screenOf(page, centre(sec1.bounds!));
+  const w4 = sec1b.bounds!.maxX - sec1b.bounds!.minX, h4 = sec1b.bounds!.maxY - sec1b.bounds!.minY;
+  expect(w4).toBeCloseTo((w0 * 4) / scale0, 6);
+  const target: [number, number] = [sheet.width - 5 - w4 / 2 - 5, sheet.height - 5 - 14 - h4 / 2 - 5];
+  const from = await screenOf(page, centre(sec1b.bounds!));
   const to = await screenOf(page, target);
   await drag(page, from, to);
   await expect(page.getByTestId('status')).toContainText('Вид перемещён');
+  await expect(page.getByTestId('status')).not.toContainText('overlap');
+  await expect(page.getByTestId('status')).not.toContainText('beyond');
   await expectNoError(page);
   s = await state(page);
   const sec2 = s.description!.sheets[0].views[2];
@@ -128,11 +139,14 @@ test('a section outside the projection link at 4:1 dragged freely; dimensions ar
   const c2 = centre(sec2.bounds!);
   expect(c2[0]).toBeCloseTo(target[0], 0);
   expect(c2[1]).toBeCloseTo(target[1], 0);
-  expect(sec2.bounds!.maxX - sec2.bounds!.minX).toBeCloseTo(sec1.bounds!.maxX - sec1.bounds!.minX, 6);
+  expect(sec2.bounds!.maxX - sec2.bounds!.minX).toBeCloseTo(w4, 6);
 
   // Dropped onto the front view: a warning in the status line, the drawing stays valid.
   const v1 = s.description!.sheets[0].views[0].bounds!;
-  await drag(page, await screenOf(page, c2), await screenOf(page, centre(v1)));
+  // Its left edge 10 mm into the front view; grabbed off its centre lines.
+  const grab: [number, number] = [sec2.bounds!.minX + 0.3 * w4, sec2.bounds!.minY + 0.3 * h4];
+  const into: [number, number] = [v1.maxX - 10 + 0.3 * w4, grab[1]];
+  await drag(page, await screenOf(page, grab), await screenOf(page, into));
   await expect(page.getByTestId('status')).toContainText("views 'V1' and 'V3' overlap");
   await expectNoError(page);
   // Back to automatic placement for the rest of the test.
