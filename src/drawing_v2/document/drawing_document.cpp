@@ -177,6 +177,37 @@ struct PlacedGroup {
 
 }  // namespace
 
+Result<annotations::ArrangeResult> DrawingDocument::arrangeDimensions(const ModelSnapshot& model, const std::string& sheet,
+                                                                      const std::string& view,
+                                                                      const annotations::ArrangeOptions& options) {
+    if (!computed()) return invalid("arrange dimensions: the drawing is not updated");
+    SheetDef* sd = findSheet(sheet);
+    const ComputedSheet* cs = nullptr;
+    for (const ComputedSheet& c : computed_)
+        if (c.id == sheet) cs = &c;
+    if (!sd || !cs) return invalid("arrange dimensions: no sheet '" + sheet + "'");
+    const ComputedView* cv = nullptr;
+    for (const ComputedView& v : cs->views)
+        if (v.id == view) cv = &v;
+    if (!cv) return invalid("arrange dimensions: no view '" + view + "' on sheet '" + sheet + "'");
+    if (model.shape.isNull() || !model.named) return invalid("arrange dimensions: empty model snapshot");
+    auto bindingR = model.historyNames ? ModelBinding::fromNamedShape(*model.named) : ModelBinding::fromShape(model.shape);
+    if (!bindingR) return bindingR.error();
+    annotations::AnnotationStyle style;
+    style.font = textMetrics(font_);
+    std::vector<std::size_t> items;
+    std::vector<annotations::DimensionDef> defs;
+    for (std::size_t i = 0; i < sd->dimensions.size(); ++i) {
+        if (sd->dimensions[i].view != view) continue;
+        items.push_back(i);
+        defs.push_back(sd->dimensions[i].def);
+    }
+    auto r = annotations::arrangeDimensions(defs, bindingR.value(), cv->sheetView, style, options);
+    if (!r) return r.error();
+    for (std::size_t k = 0; k < items.size(); ++k) sd->dimensions[items[k]].def = r.value().defs[k];
+    return r;
+}
+
 const char* toString(ViewKind kind) noexcept {
     switch (kind) {
         case ViewKind::Base: return "base";

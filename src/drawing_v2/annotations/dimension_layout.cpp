@@ -47,6 +47,24 @@ bool segmentHitsBox(Point2 p, Point2 q, const Box2& b) {
     return true;
 }
 
+bool properCross(Point2 a, Point2 b, Point2 c, Point2 d) {
+    auto cr = [](Point2 o, Point2 p, Point2 q) { return (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x); };
+    const double d1 = cr(c, d, a), d2 = cr(c, d, b), d3 = cr(a, b, c), d4 = cr(a, b, d);
+    return ((d1 > 1e-9 && d2 < -1e-9) || (d1 < -1e-9 && d2 > 1e-9)) && ((d3 > 1e-9 && d4 < -1e-9) || (d3 < -1e-9 && d4 > 1e-9));
+}
+
+// Отрезки лежат на одной прямой (зазор < 0,5 мм) и перекрываются — размерные линии концентрических
+// окружностей под одним углом сливаются.
+bool collinearOverlap(Point2 a, Point2 b, Point2 c, Point2 d) {
+    const double L = std::hypot(b.x - a.x, b.y - a.y);
+    if (L < 1e-9) return false;
+    const Point2 u{(b.x - a.x) / L, (b.y - a.y) / L};
+    auto off = [&](Point2 p) { return std::abs((p.x - a.x) * u.y - (p.y - a.y) * u.x); };
+    if (off(c) > 0.5 || off(d) > 0.5) return false;
+    const double t0 = (c.x - a.x) * u.x + (c.y - a.y) * u.y, t1 = (d.x - a.x) * u.x + (d.y - a.y) * u.y;
+    return std::min(L, std::max(t0, t1)) - std::max(0.0, std::min(t0, t1)) > 0.5;
+}
+
 // Линии изображения на листе отрезками (дуги — по 10°).
 std::vector<LineSeg> contourSegments(const SheetView& sv) {
     std::vector<LineSeg> out;
@@ -265,14 +283,31 @@ Result<ArrangeResult> arrangeDimensions(const std::vector<DimensionDef>& defs, c
 
     // Надписи поставленных и неподвижных размеров — препятствия для размеров окружностей.
     std::vector<std::vector<Box2>> boxes(defs.size());
+    std::vector<std::vector<LineSeg>> extensions(defs.size()), dimLines(defs.size());
     for (std::size_t i = 0; i < defs.size(); ++i) {
         if (std::find(circles.begin(), circles.end(), i) != circles.end()) continue;
         auto ev = evaluateDimension(res.defs[i], model, sv, st);
-        if (ev && ev.value().state == DimensionState::Ok) boxes[i] = labelBoxes(ev.value().geometry, st);
+        if (ev && ev.value().state == DimensionState::Ok) {
+            boxes[i] = labelBoxes(ev.value().geometry, st);
+            extensions[i] = ev.value().geometry.extensionLines;
+            dimLines[i] = ev.value().geometry.dimensionLines;
+        }
     }
     const std::vector<LineSeg> lines = contourSegments(sv);
-    auto score = [&](const std::vector<Box2>& mine, std::size_t self) {
+    auto score = [&](const std::vector<Box2>& mine, const std::vector<LineSeg>& myLines, std::size_t self) {
         std::size_t n = 0;
+        // Полка и размерная линия окружности не пересекают выносные и размерные линии других размеров.
+        for (const LineSeg& l : myLines)
+            for (std::size_t j = 0; j < defs.size(); ++j) {
+                if (j == self) continue;
+                for (const LineSeg& e : extensions[j]) n += properCross(l.a, l.b, e.a, e.b) ? 1 : 0;
+                // Размерные линии концентрических окружностей неизбежно пересекаются в центре —
+                // недопустимо только их слияние на одной прямой.
+                const bool circle = std::find(circles.begin(), circles.end(), j) != circles.end();
+                for (const LineSeg& e : dimLines[j])
+                    n += (!circle && properCross(l.a, l.b, e.a, e.b)) || collinearOverlap(l.a, l.b, e.a, e.b) ? 1 : 0;
+                for (const Box2& b : boxes[j]) n += segmentHitsBox(l.a, l.b, b) ? 1 : 0;
+            }
         for (const Box2& b : mine) {
             for (std::size_t j = 0; j < boxes.size(); ++j)
                 if (j != self)
@@ -285,21 +320,24 @@ Result<ArrangeResult> arrangeDimensions(const std::vector<DimensionDef>& defs, c
         std::vector<double> angles{defs[i].leaderAngleDeg, 45, 135, 225, 315, 30, 60, 120, 150, 210, 240, 300, 330, 15, 75, 105, 165, 195, 255, 285, 345};
         std::optional<std::pair<std::size_t, DimensionDef>> best;
         std::vector<Box2> bestBoxes;
+        std::vector<LineSeg> bestLines;
         for (double a : angles) {
             DimensionDef d = defs[i];
             d.leaderAngleDeg = a;
             auto ev = evaluateDimension(d, model, sv, st);
             if (!ev || ev.value().state != DimensionState::Ok) break;  // висячий — без изменений
             const auto mine = labelBoxes(ev.value().geometry, st);
-            const std::size_t sc = score(mine, i);
+            const std::size_t sc = score(mine, ev.value().geometry.dimensionLines, i);
             if (!best || sc < best->first) {
                 best = {sc, d};
                 bestBoxes = mine;
+                bestLines = ev.value().geometry.dimensionLines;
             }
             if (sc == 0) break;
         }
         if (!best) continue;
         boxes[i] = bestBoxes;
+        dimLines[i] = bestLines;
         if (best->second.leaderAngleDeg != defs[i].leaderAngleDeg) {
             res.defs[i] = best->second;
             moved[i] = true;

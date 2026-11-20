@@ -408,6 +408,14 @@ public:
     Result<UpdateReport> update(const ModelLoader& loader, views::ViewCache& cache,
                                 const annotations::Specification* spec = nullptr);
 
+    // Автокомпоновка размеров вида (annotations::arrangeDimensions, ГОСТ 2.307): новые offset,
+    // textShift и направление полок размеров вида view листа sheet по последнему обновлению;
+    // model — тот же снимок, что в update. Определения меняются, после вызова нужен update.
+    // Ошибка InvalidInput — документ не обновлён, нет листа или вида.
+    Result<annotations::ArrangeResult> arrangeDimensions(const ModelSnapshot& model, const std::string& sheet,
+                                                         const std::string& view,
+                                                         const annotations::ArrangeOptions& options = {});
+
     bool computed() const { return !computed_.empty(); }
     const std::vector<ComputedSheet>& computedSheets() const { return computed_; }
 
