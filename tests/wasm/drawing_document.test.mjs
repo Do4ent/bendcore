@@ -489,6 +489,30 @@ describe('bendcore_drawing_wasm', () => {
           loaded.drawing.dispose();
         }
 
+        // "Разнести позиции" (ГОСТ 2.109): the manual shelf joins the column of the automatic ones,
+        // leaders do not cross; moving the shelf by hand takes the position out of the arrangement.
+        const ar = drawing.arrangeBalloons('S1');
+        assert.equal(ar.arranged, 1);
+        assert.equal(drawing.describe().history.undoLabel, 'arrangeBalloons');
+        assert.ok(ar.views.some((x) => x.view === V && x.crossings === 0), JSON.stringify(ar.views));
+        const arranged = drawing.describe().sheets[0];
+        assert.equal(arranged.positions[0].arranged, true);
+        const xs = arranged.balloons.map((b) => b.at[0]);
+        for (const x of xs) assert.ok(Math.abs(x - xs[0]) < 1e-9, 'one vertical line of shelves');
+        const crosses = (a, b) => {
+          const c = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+          return c(b.target, b.at, a.target) * c(b.target, b.at, a.at) < -1e-9 && c(a.target, a.at, b.target) * c(a.target, a.at, b.at) < -1e-9;
+        };
+        for (let i = 0; i < arranged.balloons.length; ++i)
+          for (let j = i + 1; j < arranged.balloons.length; ++j) assert.ok(!crosses(arranged.balloons[i], arranged.balloons[j]), 'leaders cross');
+        drawing.setView('S1', V, { balloonLine: 'left' });
+        assert.equal(drawing.describe().sheets[0].views.find((x) => x.id === V).balloonLine, 'left');
+        drawing.setView('S1', V, { balloonLine: 'auto' });
+        expectKernelError(() => drawing.setView('S1', V, { balloonLine: 'middle' }), 'InvalidInput', 'balloon line');
+        expectKernelError(() => drawing.arrangeBalloons('S9'), 'InvalidInput', 'S9');
+        drawing.setBalloon('S1', P, { at: [shelf[0] + 10, shelf[1]] });
+        assert.equal(drawing.describe().sheets[0].positions[0].arranged, false);
+
         // Errors: silhouette lines are not edges of a part; unknown ids.
         const silhouette = v.edges.find((e) => e.edgeIndex === null);
         if (silhouette) expectKernelError(() => drawing.addBalloon('S1', V, silhouette.index), 'InvalidInput', 'silhouette');
