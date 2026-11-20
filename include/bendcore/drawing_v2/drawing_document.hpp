@@ -15,6 +15,7 @@
 #include <bendcore/drawing_v2/dimensions.hpp>
 #include <bendcore/drawing_v2/specification.hpp>
 #include <bendcore/drawing_v2/threads.hpp>
+#include <bendcore/drawing_v2/gears.hpp>
 #include <bendcore/drawing_v2/title_block.hpp>
 #include <bendcore/drawing_v2/view_cache.hpp>
 #include <bendcore/drawing_v2/view_sheet.hpp>
@@ -80,6 +81,10 @@ struct ModelSnapshot {
     // подсборка-сборочная единица получает позицию по линиям своих деталей (ГОСТ 2.109).
     std::vector<std::vector<assembly_v2::DefinitionId>> childChain;
     std::vector<std::uint32_t> edgeChild;
+    // Зубчатые венцы детали (modeling::gearsOf исходной формы). shape и named — условная форма
+    // ГОСТ 2.402 (впадины заполнены до окружности вершин, annotations::conventionalGearModel);
+    // масса — по исходной форме с зубьями.
+    std::vector<modeling::GearInfo> gears;
 };
 
 // Определение, номер позиции которого ставится на ребре edge: первое определение цепочки
@@ -198,6 +203,9 @@ struct ViewDef {
     // Условная резьба модели по ГОСТ 2.311 (annotations::threadImages): виды сбоку и вдоль оси,
     // аксонометрия (эллипс у входа), выносной элемент (отсечение окружностью элемента).
     bool threads = true;
+    // Условное изображение зубчатых венцов модели по ГОСТ 2.402 (annotations::gearImages):
+    // виды сбоку и с торца, разрезы через ось (зуб не рассекается).
+    bool gears = true;
     bool autoBalloons = false;  // позиции ГОСТ 2.109 по составу сборки на этом виде
     views::HlrMethod method = views::HlrMethod::Exact;
     bool autoMethod = false;  // выбор алгоритма HLR по геометрии (views::chooseHlrMethod)
@@ -275,6 +283,8 @@ struct SheetDef {
     std::vector<DatumItem> datums;
     std::vector<BalloonItem> balloons;  // ручные позиции (сборка)
     std::vector<ThreadNoteItem> threadNotes;  // размеры резьбы
+    // Таблица параметров зубчатого венца ГОСТ 2.403 в правом верхнем углу (деталь с венцом).
+    std::optional<annotations::GearTableDef> gearTable;
     std::optional<annotations::RoughnessSpec> roughnessRemainder;  // знак в правом верхнем углу
     std::vector<std::string> technicalRequirements;
     bool partsList = false;  // перечень составных частей ISO 7573 над основной надписью (сборка)
@@ -305,6 +315,7 @@ struct ComputedView {
     std::string letter;
     views::CenterGeometry centers;
     std::vector<annotations::ThreadImage> threads;  // резьбы ГОСТ 2.311 на виде
+    std::vector<annotations::GearImage> gears;      // зубчатые венцы ГОСТ 2.402 на виде
     bool fromCache = false;
 };
 
@@ -327,6 +338,7 @@ struct ComputedSheet {
     // По SheetDef::threadNotes; Dangling — грань не найдена, не резьба или резьба не на виде.
     std::vector<annotations::DimensionResult> threadNotes;
     std::optional<annotations::Specification> specification;  // для перечня ISO 7573
+    std::vector<annotations::GearTableRow> gearTable;  // строки таблицы ГОСТ 2.403 (SheetDef::gearTable)
 };
 
 struct DimensionReport {

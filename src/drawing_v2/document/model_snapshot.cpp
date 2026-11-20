@@ -11,6 +11,7 @@
 #include <TopoDS_Compound.hxx>
 
 #include <cstdio>
+#include <map>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -45,6 +46,14 @@ Result<ModelSnapshot> snapshotPart(const modeling::PartDocument& document, const
     if (named.isNull()) return invalid("drawing model: the part document has no body");
     ModelSnapshot s;
     s.kind = ModelKind::Part;
+    // Зубчатые венцы: виды строятся по условной форме ГОСТ 2.402, масса — по форме с зубьями.
+    const kernel::Shape real(named.shape());
+    s.gears = modeling::gearsOf(named);
+    if (!s.gears.empty()) {
+        auto conv = annotations::conventionalGearModel(named, s.gears);
+        if (!conv) return Error{conv.error().code, "drawing model: " + conv.error().message};
+        named = std::move(conv).value();
+    }
     s.shape = kernel::Shape(named.shape());
     s.named = std::make_shared<const modeling::NamedShape>(std::move(named));
     s.historyNames = true;
@@ -54,7 +63,7 @@ Result<ModelSnapshot> snapshotPart(const modeling::PartDocument& document, const
     s.contentHash = hash.value();
     if (properties.density) {
         if (!(*properties.density > 0)) return invalid("drawing model: density must be positive");
-        auto vp = s.shape.volumeProperties();
+        auto vp = real.volumeProperties();
         if (!vp) return vp.error();
         // Объём, мм³ → м³ (1e-9) · плотность, кг/м³.
         s.massKg = std::abs(vp.value().volume) * 1e-9 * *properties.density;
@@ -72,8 +81,27 @@ Result<ModelSnapshot> snapshotAssembly(std::shared_ptr<const assembly_v2::Assemb
     builder.MakeCompound(compound);
     std::vector<assembly_v2::DefinitionId> childOwner;
     std::vector<std::vector<assembly_v2::DefinitionId>> childChain;
-    for (const assembly_v2::PlacedOccurrence& p : placed.value()) {
+    // Детали с зубчатыми венцами — условной формой ГОСТ 2.402 (впадины заполнены до окружности
+    // вершин), одной на определение.
+    std::map<assembly_v2::DefinitionId, TopoDS_Shape> conventional;
+    for (assembly_v2::PlacedOccurrence& p : placed.value()) {
         if (p.shape.IsNull()) continue;
+        const assembly_v2::Definition& def = document->definition(p.definition);
+        if (def.elementMap && !def.shape.IsNull()) {
+            auto it = conventional.find(p.definition);
+            if (it == conventional.end()) {
+                TopoDS_Shape conv;
+                const auto gears = modeling::gearsOf(*def.elementMap);
+                if (!gears.empty()) {
+                    auto c = annotations::conventionalGearShape(def.shape, gears);
+                    if (!c) return Error{c.error().code, "drawing model: " + def.name + ": " + c.error().message};
+                    conv = c.value().shape;
+                }
+                it = conventional.emplace(p.definition, conv).first;
+            }
+            if (!it->second.IsNull())
+                p.shape = it->second.Moved(p.shape.Location() * def.shape.Location().Inverted());
+        }
         builder.Add(compound, p.shape);
         childOwner.push_back(p.definition);
         std::vector<assembly_v2::DefinitionId> chain;
