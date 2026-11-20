@@ -993,7 +993,7 @@ export const kernelEn: Record<keyof typeof kernelRu, string> = {
   'kernel.msg.standardPartInvalid': 'standard part {what} is not valid (BRepCheck)',
   'kernel.msg.standardPartRoleUnique': 'standard part face role \'{role}\' is not unique',
   'kernel.msg.standardPartRoleMissing': 'standard part face role \'{role}\' not found',
-  'kernel.msg.standardPartNaming': 'standard part naming: {detail:msg}',
+  'kernel.msg.standardPartNaming': 'standard part naming: {detail}',
   'kernel.msg.bearingStepFailed': 'bearing {what} failed',
   'kernel.msg.keyStepFailed': 'key {what} failed',
   'kernel.msg.keySolids': 'key body has {n} solids',
