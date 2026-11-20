@@ -145,7 +145,45 @@ TEST(DrawingV2StrokeFont, CoversAlphabetsDigitsAndAnnotationSigns) {
         EXPECT_GE(b.y0, -3.0 - 1e-9) << unsigned(g.codePoint);
         EXPECT_LE(b.y1, 12.0 + 1e-9) << unsigned(g.codePoint);
     }
-    EXPECT_FALSE(F().hasGlyph(U'@'));
+}
+
+// Многоточие, @ и греческие буквы машиностроительных надписей (ГОСТ 2.304-81, греческий
+// алфавит): высоты по сетке шрифта, «…» — та же ширина и те же точки, что «...».
+TEST(DrawingV2StrokeFont, EllipsisAtSignAndGreekLetters) {
+    for (char32_t cp : std::u32string_view(U"…@αβγδεημνπρσφωθλτΔΣΩΑΒΓΕΖΗΙΚΜΝΟΠΡΤΥΦΧµΩ∆"))
+        EXPECT_TRUE(F().hasGlyph(cp)) << "U+" << std::hex << unsigned(cp);
+    EXPECT_NEAR(F().textWidthMm(U"…", 3.5), F().textWidthMm(U"...", 3.5), 1e-12);
+    const Box e = glyphBox(U'…');
+    EXPECT_NEAR(e.x0, 0.5, 1e-12);
+    EXPECT_NEAR(e.x1, 6.5, 1e-12);
+    // Прописные Δ Σ Ω — от основания до h = 10d; строчные без выносных — c = 7d.
+    for (char32_t cp : std::u32string_view(U"ΔΣΩ")) {
+        EXPECT_NEAR(glyphBox(cp).y0, 0.0, 1e-9) << unsigned(cp);
+        EXPECT_NEAR(glyphBox(cp).y1, 10.0, 1e-9) << unsigned(cp);
+    }
+    for (char32_t cp : std::u32string_view(U"αεπσωντ")) {
+        EXPECT_NEAR(glyphBox(cp).y0, 0.0, 1e-9) << unsigned(cp);
+        EXPECT_NEAR(glyphBox(cp).y1, GostStrokeFont::kLowerHeight, 1e-9) << unsigned(cp);
+    }
+    // Выносные вниз на 3d: β γ η μ ρ φ; вверх до h: β δ θ λ.
+    for (char32_t cp : std::u32string_view(U"βγημρφ")) EXPECT_NEAR(glyphBox(cp).y0, -GostStrokeFont::kDescender, 1e-9) << unsigned(cp);
+    for (char32_t cp : std::u32string_view(U"δθλ")) EXPECT_NEAR(glyphBox(cp).y1, 10.0, 1e-9) << unsigned(cp);
+    // Знаки заполняют свою ширину (оси линий не дальше 0,75d от границ клетки).
+    for (char32_t cp : std::u32string_view(U"αβγδεπσφωΔΣΩ@")) {
+        const Box b = glyphBox(cp);
+        const double w = F().glyph(cp)->width;
+        EXPECT_LE(b.x0, 0.75) << unsigned(cp);
+        EXPECT_GE(b.x1, w - 0.75) << unsigned(cp);
+    }
+    // Надпись с греческими буквами раскладывается (нет «U+…» ошибки).
+    Text t;
+    t.utf8 = "α = 20°, Δ ≈ σ…";
+    t.height = 5;
+    EXPECT_FALSE(F().layout(t).ok());  // «≈» в шрифте нет — явная ошибка
+    t.utf8 = "α = 20°, Δt = 0,1…0,3 мм, σт = 355 МПа, μ = 0,15, ω, π, @";
+    auto lay = F().layout(t);
+    ASSERT_TRUE(lay.ok()) << lay.error().message;
+    EXPECT_GT(lay.value().strokes.size(), 40u);
 }
 
 TEST(DrawingV2StrokeFont, SpacingAndTextWidth) {
@@ -197,11 +235,11 @@ TEST(DrawingV2StrokeFont, Slant75DegreesRotationAndAlignment) {
     EXPECT_NEAR((b.y0 + b.y1) / 2, 50.0, 1e-9);
     EXPECT_NEAR(b.y1 - b.y0, 6 * 0.7, 1e-9);  // ширина «Н» 6d вдоль повёрнутой строки
     // Знака нет в шрифте.
-    t.utf8 = "a@b";
+    t.utf8 = "a≈b";
     auto bad = F().layout(t);
     ASSERT_FALSE(bad);
     EXPECT_EQ(bad.error().code, bendcore::kernel::ErrorCode::Unsupported);
-    EXPECT_NE(bad.error().message.find("U+0040"), std::string::npos);
+    EXPECT_NE(bad.error().message.find("U+2248"), std::string::npos);
 }
 
 TEST(DrawingV2StrokeFont, TitleBlockFitsWithoutCompression) {
@@ -397,7 +435,8 @@ TEST(DrawingV2StrokeFont, SpecimenSheet) {
     ASSERT_TRUE(d.addLayer({"TEXT", 7}));
     const char* lines[] = {"АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ", "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789", "abcdefghijklmnopqrstuvwxyz",
-                           ".,:;!?-–—+=<>/\\|()[]{}«»\"'*#%&$′″°№±×⌀"};
+                           ".,:;!?-–—+=<>/\\|()[]{}«»\"'*#%&$′″°№±×⌀…@",
+                           "αβγδεηθλμνπρστφω ΔΣΩ"};
     double y = 280;
     for (bool slanted : {false, true}) {
         for (const char* s : lines) {
