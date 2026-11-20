@@ -98,6 +98,13 @@ MateSpec MateSpec::tangent(GeometryRef a, GeometryRef b, Alignment side, bool in
     m.internalTangency = internal;
     return m;
 }
+MateSpec MateSpec::gear(GeometryRef a, GeometryRef b, double ratio, bool internal) {
+    MateSpec m = coincident(std::move(a), std::move(b));
+    m.type = MateType::Gear;
+    m.value = ratio;
+    m.internalTangency = internal;
+    return m;
+}
 MateSpec MateSpec::rigid(OccurrenceId a, OccurrenceId b) {
     MateSpec m;
     m.type = MateType::Rigid;
@@ -466,6 +473,7 @@ Result<Mate> AssemblyDocument::solverMate(const DocumentMate& mate, ComponentId 
     m.value = s.value;
     m.alignment = s.alignment;
     m.internalTangency = s.internalTangency;
+    if (s.type == MateType::Gear) m.gearPhase = mate.gearPhase;
     return m;
 }
 
@@ -496,7 +504,15 @@ Result<MateId> AssemblyDocument::addMate(MateSpec spec) {
     const bool same = m.spec.a.path[0] == m.spec.b.path[0];
     auto sm = solverMate(m, 0, same ? 0 : 1);
     if (!sm) return sm.error();
-    if (auto p = prepareMate(sm.value()); !p) return p.error();
+    auto prepared = prepareMate(sm.value());
+    if (!prepared) return prepared.error();
+    if (m.spec.type == MateType::Gear) {
+        // Фаза передачи — углы осей при добавлении (положения вхождений верхнего уровня).
+        auto phase = gearAngles(prepared.value(), findOccurrence(m.spec.a.path[0])->placement,
+                                findOccurrence(m.spec.b.path[0])->placement);
+        if (!phase) return phase.error();
+        m.gearPhase = phase.value();
+    }
     m.id = nextMate_++;
     mates_.push_back(std::move(m));
     return mates_.back().id;
