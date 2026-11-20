@@ -1,13 +1,15 @@
 // Сборка редуктора РЦ-80 (docs/assembly/ASSEMBLY_DOCUMENT.md): определения деталей с источниками
-// <key>.bcpart.json, вхождения в положениях, уже удовлетворяющих сопряжениям, сопряжения и
-// крепёж bendcore_fasteners (insertFastenerStacks). Степени свободы: валы вращаются в
-// подшипниках; крышки, колесо, шпонки, втулка, прокладка, крышка корпуса жёстко связаны;
-// осесимметричные детали (подшипники-кольца, крепёж, штифты, пробки и их прокладки) сохраняют
+// <key>.bcpart.json, вхождения в положениях, уже удовлетворяющих сопряжениям, сопряжения,
+// стандартные изделия библиотеки bendcore_fasteners — подшипники ГОСТ 8338, шпонки ГОСТ 23360,
+// крепёж (insertFastenerStacks). Степени свободы: валы вращаются в подшипниках; крышки, колесо,
+// шпонки, втулка, прокладка, крышка корпуса жёстко связаны; осесимметричные детали
+// (подшипники — кольца с шариками одним телом, крепёж, штифты, пробки и их прокладки) сохраняют
 // поворот вокруг своей оси — он не меняет геометрию сборки и учитывается в ожидаемом числе
 // степеней свободы.
 
 #include "gearbox_internal.hpp"
 
+#include <bendcore/assembly_v2/bearings.hpp>
 #include <bendcore/assembly_v2/fasteners.hpp>
 
 #include <gp.hxx>
@@ -45,6 +47,9 @@ public:
     GeometryRef named(const std::string& occ, const std::string& role) const {
         return GeometryRef{{g_.occ.at(occ)}, ElementRef::named(ElementKind::Face, faceName(role)), EntityUse::Auto};
     }
+    GeometryRef bearing(const std::string& occ, const std::string& role) const {
+        return GeometryRef{{g_.occ.at(occ)}, ElementRef::named(ElementKind::Face, bearingFaceName(role)), EntityUse::Auto};
+    }
     const TopoDS_Shape& shapeOf(const std::string& occ) const {
         return g_.doc->definition(g_.doc->findOccurrence(g_.occ.at(occ))->definition).shape;
     }
@@ -76,7 +81,6 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
 
         std::map<std::string, const modeling::PartDocument*> sources;
         for (const auto& p : parts) sources[p.file] = p.doc.get();
-        for (const auto& s : standard) sources[s.key + ".bcpart.json"] = s.doc.get();
         const PartResolver resolver = [&sources](const std::string& src) -> kernel::Result<PartData> {
             auto it = sources.find(src);
             if (it == sources.end()) return Error{ErrorCode::InvalidInput, "unknown part source '" + src + "'"};
@@ -85,14 +89,14 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         for (const auto& p : parts)
             g.defs[p.key] = take(g.doc->addPartFromSource(p.key, p.file, resolver, {p.designation, p.name, p.material, p.density, std::nullopt}),
                                  "part " + p.key);
-        for (const auto& s : standard)
-        {
-            // Подшипники в разрезах сборки рассекаются (упрощённое изображение ГОСТ 2.420 — сечение
-            // колец); остальные стандартные изделия — по правилу по умолчанию (не рассекаются).
-            const std::optional<bool> cut = s.key.rfind("bearing", 0) == 0 ? std::optional<bool>(true) : std::nullopt;
-            g.defs[s.key] = take(g.doc->addPartFromSource(s.key, s.key + ".bcpart.json", resolver, {"", s.name, s.material, s.density, cut}),
-                                 "part " + s.key);
-        }
+        // Подшипники и шпонки — встроенные детали библиотеки (как крепёж). Подшипники в разрезах
+        // сборки рассекаются (кольца; sectionCut = true), шпонки — по правилу по умолчанию.
+        for (const auto& s : standard) g.defs[s.key] = take(g.doc->addPart(s.name, s.data, s.properties), "part " + s.key);
+        auto standardPart = [&](const std::string& key) -> const StandardPart& {
+            for (const auto& s : standard)
+                if (s.key == key) return s;
+            fail("standard part " + key + " missing");
+        };
         auto fastener = [&](const std::string& key, FastenerSpec spec) {
             g.defs[key] = take(addFastenerPart(*g.doc, take(makeFastener(spec), "fastener " + key)), "fastener " + key);
         };
@@ -125,27 +129,30 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         b.place("cap_out_r", "cap_out_t", capAt(1, aw));
         for (const char* c : {"cap_in_l", "cap_in_r", "cap_out_l", "cap_out_r"}) b.rigid("housing", c);
 
-        // ---- подшипники: кольцо x ∈ [0, B]; наружный торец касается пояска крышки
+        // ---- подшипники (ось модели Z → ось X сборки: поворот на 90° вокруг Y), торцы x ∈ [0, B];
+        // торец наружного кольца касается пояска крышки, внутреннее кольцо — заплечика вала.
         struct Brg {
             const char* occ;
             const char* def;
             const char* cap;
-            double y, B, D, side;
+            double y, side;
         };
-        const std::vector<Brg> brgs{{"bearing_in_l", "bearing205", "cap_in_l", 0, 15, 52, -1},
-                                    {"bearing_in_r", "bearing205", "cap_in_r", 0, 15, 52, 1},
-                                    {"bearing_out_l", "bearing206", "cap_out_l", aw, 16, 62, -1},
-                                    {"bearing_out_r", "bearing206", "cap_out_r", aw, 16, 62, 1}};
+        const std::vector<Brg> brgs{{"bearing_in_l", "bearing205", "cap_in_l", 0, -1},
+                                    {"bearing_in_r", "bearing205", "cap_in_r", 0, 1},
+                                    {"bearing_out_l", "bearing206", "cap_out_l", aw, -1},
+                                    {"bearing_out_r", "bearing206", "cap_out_r", aw, 1}};
         const double xo = Xb - s;  // наружный торец подшипника
+        const Transform zToX = Transform::fromAxisAngle(Vec3::UnitY(), kPi / 2);
         for (const Brg& r : brgs) {
-            b.place(r.occ, r.def, at(r.side > 0 ? xo - r.B : -xo, r.y, Za));
+            const StandardPart& sp = standardPart(r.def);
+            const double B = sp.dimension("B"), D = sp.dimension("D");
+            b.place(r.occ, r.def, Transform::fromTranslation(Vec3(r.side > 0 ? xo - B : -xo, r.y, Za)) * zToX);
             const TopoDS_Shape& hs = b.shapeOf("housing");
-            const TopoDS_Shape bore = cylinderFaceAt(hs, r.D / 2, gp_Pnt(0, r.y, Za), gp::DX(), gp_Pnt(r.side * 55, r.y, Za + r.D / 2));
-            const TopoDS_Shape outer = cylinderFace(b.shapeOf(r.occ), r.D / 2, gp::Origin(), gp::DX());
-            b.mate(MateSpec::concentric(b.face(r.occ, outer), b.face("housing", bore)), std::string(r.occ) + " in bore");
-            const TopoDS_Shape end = r.side > 0 ? planarFace(b.shapeOf(r.occ), gp::DX(), r.B) : planarFace(b.shapeOf(r.occ), -gp::DX(), 0);
+            const TopoDS_Shape bore = cylinderFaceAt(hs, D / 2, gp_Pnt(0, r.y, Za), gp::DX(), gp_Pnt(r.side * 55, r.y, Za + D / 2));
+            b.mate(MateSpec::concentric(b.bearing(r.occ, bearing_roles::kOuter), b.face("housing", bore)), std::string(r.occ) + " in bore");
             const TopoDS_Shape spig = planarFace(b.shapeOf(r.cap), -gp::DX(), s);
-            b.mate(MateSpec::coincident(b.face(r.occ, end), b.face(r.cap, spig), Alignment::AntiAligned), std::string(r.occ) + " to cap");
+            b.mate(MateSpec::coincident(b.bearing(r.occ, r.side > 0 ? "OuterFace2" : "OuterFace1"), b.face(r.cap, spig), Alignment::AntiAligned),
+                   std::string(r.occ) + " to cap");
         }
 
         // ---- валы: посадка в правый подшипник, заплечик к его внутреннему торцу
@@ -156,11 +163,9 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         b.place("shaft_in", "shaft_in", at(xo - x7, 0, Za));
         {
             const TopoDS_Shape seat = cylinderFaceAt(b.shapeOf("shaft_in"), 12.5, gp::Origin(), gp::DX(), gp_Pnt(x7 - 5, 0, 12.5));
-            const TopoDS_Shape bore = cylinderFace(b.shapeOf("bearing_in_r"), 12.5, gp::Origin(), gp::DX());
-            b.mate(MateSpec::concentric(b.face("shaft_in", seat), b.face("bearing_in_r", bore)), "shaft_in in bearing");
+            b.mate(MateSpec::concentric(b.face("shaft_in", seat), b.bearing("bearing_in_r", bearing_roles::kBore)), "shaft_in in bearing");
             const TopoDS_Shape shoulder = planarFace(b.shapeOf("shaft_in"), gp::DX(), x6);
-            b.mate(MateSpec::coincident(b.face("shaft_in", shoulder), b.face("bearing_in_r", planarFace(b.shapeOf("bearing_in_r"), -gp::DX(), 0)),
-                                        Alignment::AntiAligned),
+            b.mate(MateSpec::coincident(b.face("shaft_in", shoulder), b.bearing("bearing_in_r", "InnerFace1"), Alignment::AntiAligned),
                    "shaft_in shoulder");
         }
         const double o4 = sout->doc->variableValue("x4").value(), o5 = sout->doc->variableValue("x5").value();
@@ -168,11 +173,9 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         b.place("shaft_out", "shaft_out", at(outX0, aw, Za));
         {
             const TopoDS_Shape seat = cylinderFaceAt(b.shapeOf("shaft_out"), 15, gp::Origin(), gp::DX(), gp_Pnt(o5 - 5, 0, 15));
-            const TopoDS_Shape bore = cylinderFace(b.shapeOf("bearing_out_r"), 15, gp::Origin(), gp::DX());
-            b.mate(MateSpec::concentric(b.face("shaft_out", seat), b.face("bearing_out_r", bore)), "shaft_out in bearing");
+            b.mate(MateSpec::concentric(b.face("shaft_out", seat), b.bearing("bearing_out_r", bearing_roles::kBore)), "shaft_out in bearing");
             const TopoDS_Shape shoulder = planarFace(b.shapeOf("shaft_out"), gp::DX(), o4);
-            b.mate(MateSpec::coincident(b.face("shaft_out", shoulder),
-                                        b.face("bearing_out_r", planarFace(b.shapeOf("bearing_out_r"), -gp::DX(), 0)), Alignment::AntiAligned),
+            b.mate(MateSpec::coincident(b.face("shaft_out", shoulder), b.bearing("bearing_out_r", "InnerFace1"), Alignment::AntiAligned),
                    "shaft_out shoulder");
         }
 
@@ -184,12 +187,14 @@ Result<Gearbox> buildAssembly(const std::vector<PartEntry>& parts, const std::ve
         b.place("spacer", "spacer", at(outX0 + o1, aw, Za));
         b.rigid("shaft_out", "spacer");
         const double xkw = sout->doc->variableValue("xkw").value(), xko = sout->doc->variableValue("xko").value();
-        b.place("key_wheel", "key10", at(outX0 + xkw, aw, Za + 35.0 / 2 - 5));
+        // Шпонки — на дне пазов вала: z = d/2 − t1 (переменные пазов документов валов).
+        auto shaftVar = [](const PartEntry* p, const char* v) { return p->doc->variableValue(v).value(); };
+        b.place("key_wheel", "key10", at(outX0 + xkw, aw, Za + shaftVar(sout, "dw") / 2 - shaftVar(sout, "tw")));
         b.rigid("shaft_out", "key_wheel");
-        b.place("key_out", "key8", at(outX0 + xko, aw, Za + 25.0 / 2 - 4));
+        b.place("key_out", "key8", at(outX0 + xko, aw, Za + shaftVar(sout, "d0") / 2 - shaftVar(sout, "to")));
         b.rigid("shaft_out", "key_out");
         const double inX = xo - x7;
-        b.place("key_in", "key6", at(inX + sin->doc->variableValue("L0").value() / 2, 0, Za + 20.0 / 2 - 3.5));
+        b.place("key_in", "key6", at(inX + shaftVar(sin, "L0") / 2, 0, Za + shaftVar(sin, "d0") / 2 - shaftVar(sin, "tk")));
         b.rigid("shaft_in", "key_in");
 
         // ---- штифты: в отверстиях фланцев, торец End1 в плоскости низа фланца корпуса

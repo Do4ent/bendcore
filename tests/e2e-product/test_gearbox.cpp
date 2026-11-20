@@ -76,7 +76,7 @@ Product& product() {
         EXPECT_TRUE(u.ok()) << u.error().message;
         out->summary = std::move(u).value();
         fs::remove_all(out->dir);
-        auto kit = writeKit(out->dir, out->parts, out->standard, out->gearbox, out->set);
+        auto kit = writeKit(out->dir, out->parts, out->gearbox, out->set);
         EXPECT_TRUE(kit.ok()) << kit.error().message;
         out->kit = std::move(kit).value();
         return out;

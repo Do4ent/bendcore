@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
     if (!upd.ok()) return std::fprintf(stderr, "update: %s\n", upd.error().message.c_str()), 1;
     for (const auto& d : upd.value().dangling) std::fprintf(stderr, "dangling: %s\n", d.c_str());
     if (!upd.value().dangling.empty()) return 1;
-    auto kit = writeKit(dir, parts.value(), standard.value(), gearbox.value(), set.value(), options);
+    auto kit = writeKit(dir, parts.value(), gearbox.value(), set.value(), options);
     if (!kit.ok()) return std::fprintf(stderr, "kit: %s\n", kit.error().message.c_str()), 1;
     std::printf("parts: %zu documents, assembly: %zu occurrences, drawings: %zu, %zu dimensions, %zu positions\n",
                 kit.value().partDocuments.size(), gearbox.value().doc->topLevel().size(), kit.value().drawingDocuments.size(),

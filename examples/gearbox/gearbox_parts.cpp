@@ -2,9 +2,14 @@
 // Размеры — переменные документа; эскизы — выражения этих переменных; ссылки операций — на
 // элементы, найденные по геометрии. Локальные СК: корпус, крышка, прокладка — XY — плоскость
 // подошвы (корпус) или разъёма (крышка, прокладка), ось Y — вдоль межосевого расстояния; валы,
-// колесо, крышки подшипников, втулка, подшипники — ось X; пробки — ось Z.
+// колесо, крышки подшипников, втулка — ось X; пробки — ось Z. Пазы под шпонки — по глубинам
+// t1, t2 ГОСТ 23360 для диаметра вала (keySeatDepths); подшипники и шпонки — из каталогов
+// библиотеки стандартных изделий (buildStandardParts).
 
 #include "gearbox_internal.hpp"
+
+#include <bendcore/assembly_v2/bearings.hpp>
+#include <bendcore/assembly_v2/keys.hpp>
 
 #include <gp.hxx>
 
@@ -17,6 +22,14 @@ using namespace bendcore::modeling;
 using namespace detail;
 
 namespace {
+
+// Ширина паза и глубины t1 (вал), t2 (втулка) ГОСТ 23360 для вала диаметром d.
+assembly_v2::fasteners::KeySeatDepths seat(double d) {
+    auto r = assembly_v2::fasteners::keySeatDepths(d);
+    if (!r.ok()) fail("key seat for shaft " + num(d) + ": " + r.error().message);
+    return r.value();
+}
+
 
 constexpr double kPi = 3.14159265358979323846;
 
@@ -276,14 +289,18 @@ std::unique_ptr<PartDocument> inputShaft(const Layout& L) {
     b.var("d", "m * z"); b.var("da", "d + 2 * m"); b.var("b1", 36);  // делительный диаметр, диаметр вершин, ширина
     b.var("x1", "L0"); b.var("x2", "x1 + l1"); b.var("x3", "x2 + ls"); b.var("x4", "x3 + lc");
     b.var("x5", "x4 + b1"); b.var("x6", "x5 + lc"); b.var("x7", "x6 + ls");
-    b.var("bk", 6); b.var("tk", 3.5); b.var("lk", 28);  // шпонка 6×6×28: паз b, t1, l
+    {
+        const auto k = seat(b.value("d0"));  // шпонка 6×6×28: паз b, t1 по ГОСТ 23360, длина l
+        b.var("bk", k.b); b.var("tk", k.t1); b.var("lk", 28);
+    }
     b.var("c", 1);
     b.sketch("Profile", "XZ", "0",
              revolveProfile({{"0", "0"}, {"0", "d0 / 2"}, {"x1", "d0 / 2"}, {"x1", "d1 / 2"}, {"x2", "d1 / 2"}, {"x2", "ds / 2"},
                              {"x3", "ds / 2"}, {"x3", "dc / 2"}, {"x4", "dc / 2"}, {"x4", "da / 2"}, {"x5", "da / 2"},
                              {"x5", "dc / 2"}, {"x6", "dc / 2"}, {"x6", "ds / 2"}, {"x7", "ds / 2"}, {"x7", "0"}}));
     b.revolve("Body", "Profile", "X");
-    // Зубчатый венец на цилиндре вершин: нарезание зубьев (впадины) по всей ширине b1.
+    // Зубчатый венец на цилиндре вершин: нарезание зубьев (впадины) по всей ширине b1, фаски
+    // 0,5m × 45° по кромкам вершин (по умолчанию).
     {
         const double x4 = b.value("x4"), x5 = b.value("x5"), ra = b.value("da") / 2;
         const TopoDS_Shape tip = cylinderFaceAt(b.shape().shape(), ra, gp::Origin(), gp::DX(), gp_Pnt(0.5 * (x4 + x5), 0, ra));
@@ -310,8 +327,11 @@ std::unique_ptr<PartDocument> outputShaft(const Layout&) {
     b.var("d0", 25);   b.var("L0", 40);    // выходной конец
     b.var("x1", "ls"); b.var("x2", "x1 + lw"); b.var("x3", "x2 + lcl"); b.var("x4", "x3 + lsh");
     b.var("x5", "x4 + ls2"); b.var("x6", "x5 + lg"); b.var("x7", "x6 + L0");
-    b.var("bw", 10); b.var("tw", 5); b.var("lkw", 32); b.var("xkw", "x1 + 44");  // шпонка 10×8×32 под колесом
-    b.var("bo", 8);  b.var("to", 4); b.var("lko", 32); b.var("xko", "x6 + L0 / 2");  // шпонка 8×7×32
+    {
+        const auto kw = seat(b.value("dw")), ko = seat(b.value("d0"));  // пазы ГОСТ 23360: b, t1
+        b.var("bw", kw.b); b.var("tw", kw.t1); b.var("lkw", 32); b.var("xkw", "x1 + 44");  // шпонка 10×8×32 под колесом
+        b.var("bo", ko.b); b.var("to", ko.t1); b.var("lko", 32); b.var("xko", "x6 + L0 / 2");  // шпонка 8×7×32
+    }
     b.var("c", 1);
     b.sketch("Profile", "XZ", "0",
              revolveProfile({{"0", "0"}, {"0", "ds / 2"}, {"x1", "ds / 2"}, {"x1", "dw / 2"}, {"x2", "dw / 2"}, {"x2", "dcl / 2"},
@@ -340,15 +360,18 @@ std::unique_ptr<PartDocument> wheel(const Layout& L) {
     b.var("dh", 56);     // ступица
     b.var("lh", 40);
     b.var("db", 35);     // отверстие
-    b.var("bk", 10); b.var("t2", 3.3);  // паз ступицы под шпонку 10×8
+    {
+        const auto k = seat(b.value("db"));  // паз ступицы под шпонку 10×8: b, t2 по ГОСТ 23360
+        b.var("bk", k.b); b.var("t2", k.t2);
+    }
     b.var("Dh", 78); b.var("dl", 16); b.var("nl", 6);  // облегчающие отверстия
     b.sketch("Profile", "XZ", "0",
              revolveProfile({{"-lh / 2", "db / 2"}, {"lh / 2", "db / 2"}, {"lh / 2", "dh / 2"}, {"tw / 2", "dh / 2"},
                              {"tw / 2", "dr / 2"}, {"bw / 2", "dr / 2"}, {"bw / 2", "da / 2"}, {"-bw / 2", "da / 2"},
                              {"-bw / 2", "dr / 2"}, {"-tw / 2", "dr / 2"}, {"-tw / 2", "dh / 2"}, {"-lh / 2", "dh / 2"}}));
     b.revolve("Body", "Profile", "X");
-    // Зубчатый венец: нарезание зубьев на ободе ⌀da по всей ширине bw (фаски на торцах зубьев
-    // операцией не строятся — их нет и на модели).
+    // Зубчатый венец: нарезание зубьев на ободе ⌀da по всей ширине bw, фаски 0,5m × 45° по
+    // кромкам вершин на обоих торцах (параметр chamfer операции, по умолчанию).
     {
         const double ra = b.value("da") / 2;
         const TopoDS_Shape tip = cylinderFaceAt(b.shape().shape(), ra, gp::Origin(), gp::DX(), gp_Pnt(0, 0, ra));
@@ -435,22 +458,6 @@ std::unique_ptr<PartDocument> plugGasket() {
     return b.release();
 }
 
-std::unique_ptr<PartDocument> ring(const std::string& key, double d, double D, double B) {
-    PartBuilder b(key);
-    b.var("d", d); b.var("D", D); b.var("B", B);
-    b.sketch("Ring", "YZ", "0", circles({{"0", "0", "D / 2"}, {"0", "0", "d / 2"}}));
-    b.extrude("Body", "Ring", {}, {{"distance", "B"}});
-    return b.release();
-}
-
-std::unique_ptr<PartDocument> key(const std::string& id, double bk, double h, double l) {
-    PartBuilder b(id);
-    b.var("b", bk); b.var("h", h); b.var("l", l);
-    b.sketch("Outline", "XY", "0", slot("0", "0", "l", "b"));
-    b.extrude("Body", "Outline", {}, {{"distance", "h"}});
-    return b.release();
-}
-
 PartEntry entry(std::string key, std::string designation, std::string name, std::string material, double density,
                 std::unique_ptr<PartDocument> doc) {
     PartEntry e;
@@ -532,29 +539,29 @@ const PartEntry* findPart(const std::vector<PartEntry>& parts, const std::string
     return nullptr;
 }
 
+double StandardPart::dimension(const std::string& name) const {
+    for (const auto& [k, v] : dimensions)
+        if (k == name) return v;
+    fail(key + ": no dimension " + name);
+}
+
 Result<std::vector<StandardPart>> buildStandardParts(const Layout&) {
+    using namespace assembly_v2::fasteners;
     return guard([&]() -> Result<std::vector<StandardPart>> {
         std::vector<StandardPart> v;
-        auto add = [&](std::string key, std::string name, std::string material, double density, std::unique_ptr<PartDocument> doc,
-                       double vol) {
-            StandardPart s;
-            s.key = std::move(key);
-            s.name = std::move(name);
-            s.material = std::move(material);
-            s.density = density;
-            s.doc = std::move(doc);
-            s.formulaVolume = vol;
-            v.push_back(std::move(s));
-        };
-        auto ringVol = [](double d, double D, double B) { return kPi / 4 * (D * D - d * d) * B; };
-        auto keyVol = [](double b, double h, double l) { return ((l - b) * b + kPi * b * b / 4) * h; };
-        // Подшипники шариковые радиальные ГОСТ 8338-75 (d × D × B — требуют сверки): тело-кольцо.
-        add("bearing205", "Подшипник 205 ГОСТ 8338-75", "Сталь ШХ15 ГОСТ 801-78", 7810, ring("bearing205", 25, 52, 15), ringVol(25, 52, 15));
-        add("bearing206", "Подшипник 206 ГОСТ 8338-75", "Сталь ШХ15 ГОСТ 801-78", 7810, ring("bearing206", 30, 62, 16), ringVol(30, 62, 16));
-        // Шпонки призматические ГОСТ 23360-78, исполнение 1 (b × h × l — требуют сверки).
-        add("key6", "Шпонка 6×6×28 ГОСТ 23360-78", "Сталь 45 ГОСТ 1050-2013", 7850, key("key6", 6, 6, 28), keyVol(6, 6, 28));
-        add("key10", "Шпонка 10×8×32 ГОСТ 23360-78", "Сталь 45 ГОСТ 1050-2013", 7850, key("key10", 10, 8, 32), keyVol(10, 8, 32));
-        add("key8", "Шпонка 8×7×32 ГОСТ 23360-78", "Сталь 45 ГОСТ 1050-2013", 7850, key("key8", 8, 7, 32), keyVol(8, 7, 32));
+        // Подшипники шариковые радиальные однорядные ГОСТ 8338-75 (каталог bendcore_fasteners).
+        for (const auto& [key, number] : std::vector<std::pair<std::string, int>>{{"bearing205", 205}, {"bearing206", 206}}) {
+            auto b = makeBallBearing(number);
+            if (!b.ok()) fail(key + ": " + b.error().message);
+            v.push_back({key, b.value().properties.designation, toPartData(b.value()), toPartProperties(b.value()), b.value().dimensions});
+        }
+        // Шпонки призматические ГОСТ 23360-78, исполнение 1, фаски s — наименьшие по таблице.
+        for (const auto& [key, bh, l] : std::vector<std::tuple<std::string, std::pair<double, double>, double>>{
+                 {"key6", {6, 6}, 28}, {"key10", {10, 8}, 32}, {"key8", {8, 7}, 32}}) {
+            auto k = makeKey({KeyExecution::Rounded, bh.first, bh.second, l, std::nullopt});
+            if (!k.ok()) fail(key + ": " + k.error().message);
+            v.push_back({key, k.value().properties.designation, toPartData(k.value()), toPartProperties(k.value()), k.value().dimensions});
+        }
         return v;
     });
 }

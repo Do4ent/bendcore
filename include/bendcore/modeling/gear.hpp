@@ -108,6 +108,11 @@ struct GearParams {
     GearSpec spec;
     FeatureMode mode = FeatureMode::Cut;
     double tolerance = 1e-6;  // мм, отклонение B-сплайнов профиля
+    // Фаска c × 45° по кромкам вершин зубьев на обоих торцах венца, в долях модуля: c = chamfer·m
+    // (по умолчанию 0,5m); 0 — без фасок. c < (da − dForm)/2 и 3c < b, иначе InvalidInput. При
+    // нарезании (Cut) торец, за которым заготовка продолжается у вершин, фаски не получает
+    // (предупреждение).
+    double chamfer = 0.5;
 };
 Result<FeatureResult> gearTeeth(const TopoDS_Shape& target, const GearParams& params);
 
