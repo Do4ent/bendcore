@@ -299,3 +299,48 @@ test('undo/redo, exploded view slider, save and reopen', async ({ page }) => {
   await expect(page.getByText('Элементы одного компонента')).toBeVisible();
   await expect(page.getByTestId('mate-add')).toBeDisabled();
 });
+
+// Measurements between components (docs/ui/ASSEMBLY_UI.md, "Измерения"): the shaft is in the bore
+// with its top flush with the housing top (z = 20).
+test('measurements between faces of two components', async ({ page }) => {
+  await ready(page);
+  const ids = await insertParts(page);
+  await mateShaft(page, ids);
+  const result = async () =>
+    page.evaluate(async () => {
+      await window.bendcoreAssembly!.idle();
+      return window.bendcoreAssembly!.getState().tools;
+    });
+
+  const shaftTop = (await faceIndex(page, ids.shaft, "e.type === 'plane' && e.direction[2] > 0.999"))[0];
+  const housingFront = (await faceIndex(page, ids.block, "e.type === 'plane' && e.direction[1] < -0.999"))[0];
+  const housingTop = (await faceIndex(page, ids.block, "e.type === 'plane' && e.direction[2] > 0.999 && Math.abs(e.point[2] - 20) < 1e-6"))[0];
+
+  await page.getByTestId('measure-toggle').click();
+  // Angle between the two top faces: parallel, normals both +Z.
+  await page.getByTestId('measure-type').selectOption('angle');
+  await clickFace(page, ids.shaft, shaftTop);
+  await clickFace(page, ids.block, housingTop);
+  await expect(page.getByTestId('measure-result')).toHaveAttribute('data-type', 'angle');
+  expect((await result()).result!.value).toBeCloseTo(0, 6);
+  await expect(page.getByTestId('measure-label')).toHaveAttribute('data-label', '0°');
+
+  // Area of the shaft top: a disc of radius 10.
+  await page.getByTestId('measure-type').selectOption('area');
+  await clickFace(page, ids.shaft, shaftTop);
+  await expect(page.getByTestId('measure-result')).toHaveAttribute('data-type', 'area');
+  expect((await result()).result!.value).toBeCloseTo(Math.PI * 100, 4);
+
+  // Distance from the shaft top (disc about (40, 30), r = 10, z = 20) to the housing front face
+  // (y = 0): the nearest points are (40, 20, 20) and (40, 0, 20), 20 apart.
+  await page.getByTestId('measure-type').selectOption('distance');
+  await clickFace(page, ids.shaft, shaftTop);
+  await clickFace(page, ids.block, housingFront);
+  await expect(page.getByTestId('measure-result')).toHaveAttribute('data-type', 'distance');
+  expect((await result()).result!.value).toBeCloseTo(20, 4);
+
+  // While measuring, a click does not select a component; ending the tool clears the result.
+  expect((await pageState(page)).error).toBeNull();
+  await page.getByTestId('measure-toggle').click();
+  await expect(page.getByTestId('measure-result')).toHaveCount(0);
+});

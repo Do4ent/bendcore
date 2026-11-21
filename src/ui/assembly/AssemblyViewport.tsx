@@ -21,6 +21,7 @@ import { packEdgePolylines } from '../kernel/edgeBuffers';
 import type { EdgeBuffers } from '../kernel/edgeBuffers';
 import { closestPointOnSegmentToRay, edgeCandidates } from '../kernel/edgePick';
 import { rayPlane } from './assemblyMath';
+import type { MeasureOverlay } from '../kernel/KernelViewport';
 import { shouldReframeInstances } from '../kernel/autoFrame';
 import type { V3 } from './assemblyMath';
 
@@ -65,6 +66,8 @@ export interface AssemblyViewportProps {
   onReady?: (handle: AssemblyViewportHandle | null) => void;
   /** Changing it re-frames the view on the next non-empty scene. */
   frameKey?: number;
+  /** A measurement drawn over the model (world coordinates) with its label. */
+  measure?: MeasureOverlay | null;
 }
 
 const BASE_COLOR = 0xb8c4d6;
@@ -100,6 +103,9 @@ interface SceneState {
   instances: Map<string, Instance>;
   edgeBuffers: Map<string, EdgeBuffers>;
   geometries: Map<string, THREE.BufferGeometry>;
+  /** measurement lines (not pickable) and label */
+  tools: THREE.Group;
+  label: { anchor: THREE.Vector3; element: HTMLDivElement } | null;
   framed: boolean;
   /** times the view was framed automatically (data-frames, for end-to-end tests) */
   frames: number;
@@ -180,6 +186,7 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
   onDragEnd,
   onReady,
   frameKey,
+  measure = null,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
@@ -208,7 +215,18 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
     scene.add(root);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.screenSpacePanning = true;
-    const render = () => renderer.render(scene, camera);
+    const toolsGroup = new THREE.Group();
+    scene.add(toolsGroup);
+    const render = () => {
+      renderer.render(scene, camera);
+      const label = stateRef.current?.label;
+      if (label) {
+        const p = label.anchor.clone().project(camera);
+        label.element.style.display = p.z > -1 && p.z < 1 ? 'block' : 'none';
+        label.element.style.left = `${((p.x + 1) / 2) * renderer.domElement.clientWidth}px`;
+        label.element.style.top = `${((1 - p.y) / 2) * renderer.domElement.clientHeight}px`;
+      }
+    };
     controls.addEventListener('change', render);
     const state: SceneState = {
       renderer,
@@ -219,6 +237,8 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       instances: new Map(),
       edgeBuffers: new Map(),
       geometries: new Map(),
+      tools: toolsGroup,
+      label: null,
       framed: false,
       frames: 0,
       render,
@@ -455,6 +475,8 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       controls.removeEventListener('change', render);
       controls.dispose();
       disposeObject(root);
+      disposeObject(toolsGroup);
+      state.label?.element.remove();
       for (const g of state.geometries.values()) g.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
@@ -574,6 +596,41 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
     // selectionKey and highlightKey stand for the arrays.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meshes, parts, selectionKey, highlightKey]);
+
+  // Measurement: lines and a label over the projection of its anchor.
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    disposeObject(state.tools);
+    state.tools.clear();
+    if (measure) {
+      for (const line of measure.lines) {
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(line.flat()), 3));
+        const obj = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x0b8a3e, depthTest: false }));
+        obj.renderOrder = 10;
+        obj.name = 'assembly-measure';
+        state.tools.add(obj);
+      }
+    }
+    if (state.label && !measure) {
+      state.label.element.remove();
+      state.label = null;
+    }
+    if (measure) {
+      if (!state.label) {
+        const element = document.createElement('div');
+        element.className = 'kernel-measure-label';
+        element.setAttribute('data-testid', 'measure-label');
+        state.renderer.domElement.parentElement?.appendChild(element);
+        state.label = { anchor: new THREE.Vector3(), element };
+      }
+      state.label.anchor.set(...measure.anchor);
+      state.label.element.textContent = measure.label;
+      state.label.element.setAttribute('data-label', measure.label);
+    }
+    state.render();
+  }, [measure]);
 
   return <div ref={containerRef} className="kernel-viewport" data-testid="assembly-viewport" />;
 };
