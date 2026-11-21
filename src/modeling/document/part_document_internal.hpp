@@ -71,6 +71,7 @@ struct PartDocument::State {
     std::vector<std::pair<std::string, std::string>> variables;
     std::optional<std::size_t> rollback;
     std::vector<NodeDefinition> nodes;
+    ConfigurationTable table;
 };
 
 struct PartDocument::Transactions {

@@ -82,7 +82,11 @@ export class AssemblyDocumentHandle {
     return this.#call('asmMassProperties');
   }
 
-  /** { name, format: 'part-json' | 'step', data, placement, properties, fixed, parent } → { definition, occurrence } */
+  /**
+   * { name, format: 'part-json' | 'step', data, placement, properties, fixed, parent, source?, configuration? }
+   * → { definition, occurrence }. A part document with a configuration table is registered as a
+   * part source (source, default "<name>.part.json"); configuration picks its configuration.
+   */
   insertPart(spec) {
     return this.#call('asmInsertPart', spec);
   }
@@ -101,7 +105,10 @@ export class AssemblyDocumentHandle {
     this.#call('asmRemoveOccurrence', id);
   }
 
-  /** { fixed, suppressed, name, designation, placement, color } — one history step. */
+  /**
+   * { fixed, suppressed, name, designation, placement, color, configuration } — one history step.
+   * configuration: designation of a configuration of the component's part document ('' — as saved).
+   */
   setOccurrence(id, changes) {
     this.#call('asmSetOccurrence', id, changes);
   }
@@ -251,6 +258,14 @@ export class AssemblyKernel {
       throw new KernelError('InvalidInput', 'registerSource expects (name, text) strings');
     }
     unwrap(this.#module.asmRegisterSource(name, text));
+  }
+
+  /** Part document whose configurations components may use; returns { configurations }. */
+  registerPartSource(name, text) {
+    if (typeof name !== 'string' || typeof text !== 'string') {
+      throw new KernelError('InvalidInput', 'registerPartSource expects (name, text) strings');
+    }
+    return unwrap(this.#module.asmRegisterPartSource(name, text));
   }
 
   createDocument(name = 'Assembly') {

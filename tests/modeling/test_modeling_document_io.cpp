@@ -77,7 +77,7 @@ TEST(ModelingDocumentIo, RoundTripRecomputesIdenticalResults) {
     ASSERT_TRUE(text.ok()) << text.error().message;
     auto j = nlohmann::json::parse(text.value());
     EXPECT_EQ(j.at("format"), "bendcore-part");
-    EXPECT_EQ(j.at("version"), PartDocument::kFormatVersion);
+    EXPECT_EQ(j.at("version"), 3) << "no configuration table: v3";
     EXPECT_FALSE(j.contains("cache"));
     EXPECT_EQ(j.at("features").at(5).at("references").at("edges").at(0).at("name"), "E(Body:Front|Body:Top)");
 
@@ -151,7 +151,7 @@ TEST(ModelingDocumentIo, MigratesFormatVersion1) {
     // After the first resolution the reference carries a signature, saved as the current version.
     EXPECT_TRUE(info(doc.value(), "F").references.at("edges").at(0).signature.valid);
     auto saved = nlohmann::json::parse(doc.value().toJson().value());
-    EXPECT_EQ(saved.at("version"), PartDocument::kFormatVersion);
+    EXPECT_EQ(saved.at("version"), 3) << "no configuration table: v3";
     EXPECT_EQ(saved.at("features").at(1).at("parameters").at("radius"), "3");
 
     ASSERT_TRUE(doc.value().setSuppressed("C", false).ok());

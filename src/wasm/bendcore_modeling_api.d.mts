@@ -336,6 +336,42 @@ export interface PartProperties {
   boundingBox: { min: Vec3; max: Vec3 } | null;
 }
 
+export type ConfigurationColumnKind = 'variable' | 'suppression' | 'material';
+
+export interface ConfigurationColumn {
+  kind: ConfigurationColumnKind;
+  /** Variable name or feature id; '' for the material column. */
+  target: string;
+  /** CSV header: "W", "suppress:Hole", "material". */
+  title?: string;
+}
+
+export interface ConfigurationRow {
+  designation: string;
+  /** Designation with the first row's designation for a suffix "-01". */
+  fullDesignation?: string;
+  name: string;
+  /** One per column; '' — base value of the document. */
+  cells: string[];
+}
+
+export interface ConfigurationTable {
+  columns: ConfigurationColumn[];
+  rows: ConfigurationRow[];
+  /** Designation of the active configuration; '' — base values. */
+  active: string;
+  /** Material id of the active configuration ('' — none). */
+  material?: string;
+}
+
+export interface ConfigurationCheck {
+  designation: string;
+  fullDesignation: string;
+  ok: boolean;
+  problems: string[];
+  volume: number | null;
+}
+
 export interface PartMaterial {
   /** Id of a kernel library material (ModelingKernel.materials()) or any id for a custom density. */
   id: string;
@@ -351,6 +387,14 @@ export class PartDocumentHandle {
   dispose(): void;
   /** material: written as the top-level field "material" of the file (kg/m^3). */
   save(options?: { includeCache?: boolean; material?: PartMaterial }): string;
+  configurations(): ConfigurationTable;
+  setConfigurations(table: { columns: ConfigurationColumn[]; rows: ConfigurationRow[]; active?: string }): void;
+  setConfigurationCell(row: number, column: number, value: Expr): void;
+  addConfigurationColumn(column: ConfigurationColumn): void;
+  activateConfiguration(designation: string): void;
+  checkConfigurations(): ConfigurationCheck[];
+  exportConfigurationsCsv(options?: { decimal?: '.' | ','; bom?: boolean }): string;
+  importConfigurationsCsv(text: string): void;
   variables(): VariableView[];
   setVariable(name: string, expression: Expr): void;
   removeVariable(name: string): void;

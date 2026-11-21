@@ -44,30 +44,6 @@ using Status = kernel::Result<std::monostate>;
 
 // ---- геометрия детали и источники
 
-// Геометрия детали: форма в собственной СК и, если есть, карта имён элементов документа
-// детали (индексы карты совпадают с kernel::TopologyIndex той же формы).
-struct PartData {
-    TopoDS_Shape shape;
-    std::shared_ptr<const modeling::NamedShape> elementMap;
-};
-
-// Загрузка детали по пути или ID документа детали.
-using PartResolver = std::function<kernel::Result<PartData>(const std::string& source)>;
-
-// Итоговая форма документа детали с картой элементов. Ошибка InvalidInput — пустая форма.
-kernel::Result<PartData> partDataFromDocument(const modeling::PartDocument& document);
-
-// Источник — путь к файлу (относительный — от baseDirectory):
-//  .json — документ детали (PartDocument::fromJson с registry, перестроение, карта имён);
-//  .step/.stp — kernel::readStep; .brep — BRep текстовый или бинарный (по первому байту).
-// Ошибки: IoError (файл не читается), Unsupported (расширение), ошибки чтения формата.
-PartResolver filePartResolver(std::shared_ptr<const modeling::FeatureRegistry> registry,
-                              std::string baseDirectory = {});
-
-// ---- структура документа
-
-enum class DefinitionKind { Part, Assembly };
-
 struct PartProperties {
     std::string designation;        // обозначение
     std::string name;               // наименование; пусто — имя определения
@@ -78,6 +54,50 @@ struct PartProperties {
     // пусто — правило по умолчанию (docs/drawing/VIEWS.md, «Условности разрезов сборок»).
     std::optional<bool> sectionCut;
 };
+
+
+// Геометрия детали: форма в собственной СК и, если есть, карта имён элементов документа
+// детали (индексы карты совпадают с kernel::TopologyIndex той же формы).
+struct PartData {
+    TopoDS_Shape shape;
+    std::shared_ptr<const modeling::NamedShape> elementMap;
+    // Свойства исполнения детали (таблица параметров документа детали): обозначение
+    // исполнения, наименование, материал и плотность по библиотеке. Пусто — источник свойств
+    // не задаёт. Непустые поля дополняют свойства определения (addPartFromSource,
+    // setOccurrenceConfiguration).
+    std::optional<PartProperties> properties;
+};
+
+// Загрузка детали по пути или ID документа детали.
+using PartResolver = std::function<kernel::Result<PartData>(const std::string& source)>;
+
+// Итоговая форма документа детали с картой элементов. Ошибка InvalidInput — пустая форма.
+// С активным исполнением таблицы параметров — также его свойства (PartData::properties).
+kernel::Result<PartData> partDataFromDocument(const modeling::PartDocument& document);
+// Исполнение `configuration` документа детали (пусто — базовые значения): делает его активным,
+// перестраивает, возвращает форму и свойства исполнения: полное обозначение, наименование,
+// материал (наименование материала библиотеки) и плотность. Ошибки InvalidInput: нет такого
+// исполнения; исполнение не перестраивается (с причинами checkConfigurations).
+kernel::Result<PartData> partDataFromDocument(modeling::PartDocument& document, const std::string& configuration);
+
+// Источник детали-исполнения: «<путь>#<обозначение исполнения>» (docs/assembly/ASSEMBLY_DOCUMENT.md,
+// раздел «Исполнения»). splitConfigurationSource — {путь, исполнение} (исполнения нет — пусто).
+std::string configurationSource(const std::string& path, const std::string& configuration);
+std::pair<std::string, std::string> splitConfigurationSource(const std::string& source);
+
+// Источник — путь к файлу (относительный — от baseDirectory), для документа детали — с
+// исполнением «#<обозначение>»:
+//  .json — документ детали (PartDocument::fromJson с registry, перестроение, карта имён;
+//          исполнение — partDataFromDocument(document, configuration));
+//  .step/.stp — kernel::readStep; .brep — BRep текстовый или бинарный (по первому байту).
+// Ошибки: IoError (файл не читается), Unsupported (расширение), ошибки чтения формата.
+PartResolver filePartResolver(std::shared_ptr<const modeling::FeatureRegistry> registry,
+                              std::string baseDirectory = {});
+
+// ---- структура документа
+
+enum class DefinitionKind { Part, Assembly };
+
 
 struct Occurrence {
     OccurrenceId id = 0;
@@ -439,6 +459,13 @@ public:
     kernel::Result<ReplaceReport> replacePartGeometry(DefinitionId id, PartData data);
     // Повторная загрузка детали из её источника.
     kernel::Result<ReplaceReport> reloadPart(DefinitionId id, const PartResolver& resolver);
+    // Исполнение детали у вхождения (таблица параметров документа детали): вхождение переходит
+    // на определение с источником «<путь>#<исполнение>» (существующее или новое — свойства
+    // исполнения поверх свойств прежнего определения), сопряжения ищутся заново, как при замене.
+    // configuration пусто — деталь как сохранена в файле (без «#»). Ошибки InvalidInput: не
+    // деталь, нет источника, нет исполнения, исполнение не строится (с причиной).
+    kernel::Result<ReplaceReport> setOccurrenceConfiguration(OccurrenceId id, const std::string& configuration,
+                                                             const PartResolver& resolver);
 
     // ---- массивы
     kernel::Result<PatternId> addLinearPattern(const LinearPatternSpec& spec);

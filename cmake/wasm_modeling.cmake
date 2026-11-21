@@ -68,4 +68,10 @@ if(BENDCORE_NODE)
     COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_MODELING_ROOT}/tests/wasm/dxf_sketch.test.mjs"
             --module "${BENDCORE_WASM_MODELING_OUT}")
   set_tests_properties(wasm_dxf_sketch PROPERTIES TIMEOUT 300)
+  # Configuration table (docs/modeling/PART_DOCUMENT.md, "Таблица параметров"): block with three
+  # configurations against the volume formula, CSV and file round trips, errors.
+  add_test(NAME wasm_part_configurations
+    COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_MODELING_ROOT}/tests/wasm/part_configurations.test.mjs"
+            --module "${BENDCORE_WASM_MODELING_OUT}")
+  set_tests_properties(wasm_part_configurations PROPERTIES TIMEOUT 300)
 endif()

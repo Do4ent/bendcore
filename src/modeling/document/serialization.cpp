@@ -539,7 +539,8 @@ json migrateV2(json doc) {
 
 Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
     try {
-        json doc{{"format", kFormatName}, {"version", kFormatVersion}};
+        // Without a configuration table the document is written as v3, readable by older versions.
+        json doc{{"format", kFormatName}, {"version", table_.empty() ? 3 : kFormatVersion}};
         json vars = json::array();
         for (const auto& [name, expr] : variables_) vars.push_back(json{{"name", name}, {"expression", expr}});
         doc["variables"] = vars;
@@ -588,6 +589,15 @@ Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
             }
         }
         doc["features"] = features;
+        if (!table_.empty()) {
+            json columns = json::array();
+            for (const auto& c : table_.columns) columns.push_back(json{{"kind", toString(c.kind)}, {"target", c.target}});
+            json rows = json::array();
+            for (const auto& r : table_.rows) {
+                rows.push_back(json{{"designation", r.designation}, {"name", r.name}, {"cells", r.cells}});
+            }
+            doc["configurations"] = json{{"columns", columns}, {"rows", rows}, {"active", table_.active}};
+        }
         if (options.includeCache) doc["cache"] = cache;
         return doc.dump(1);
     } catch (const std::exception& e) {
@@ -650,6 +660,23 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
         if (!rb.is_null()) {
             auto st = part.setRollback(checkedInteger<std::size_t>(rb, "rollback"));
             if (!st) return R::failure(ErrorCode::ParseError, st.error().message);
+        }
+        if (doc.contains("configurations")) {
+            const json& cj = doc.at("configurations");
+            ConfigurationTable table;
+            for (const auto& c : cj.at("columns")) {
+                const std::string kind = c.at("kind").get<std::string>();
+                auto k = configurationColumnKindFromString(kind);
+                if (!k) return R::failure(ErrorCode::ParseError, "configurations: unknown column kind '" + kind + "'");
+                table.columns.push_back({*k, c.value("target", std::string())});
+            }
+            for (const auto& r : cj.at("rows")) {
+                table.rows.push_back({r.at("designation").get<std::string>(), r.value("name", std::string()),
+                                      r.at("cells").get<std::vector<std::string>>()});
+            }
+            table.active = cj.value("active", std::string());
+            auto st = part.setConfigurationTable(std::move(table));
+            if (!st) return R::failure(ErrorCode::ParseError, "configurations: " + st.error().message);
         }
         if (doc.contains("cache")) {
             for (const auto& [id, entry] : doc.at("cache").items()) {

@@ -633,9 +633,11 @@ export interface PropertiesPanelProps {
   definition: DefinitionInfo | null;
   onRename: (name: string) => void;
   onProperties: (p: Partial<PartProperties>) => void;
+  /** Configuration of the component's part document ('' — as saved). */
+  onConfiguration?: (configuration: string) => void;
 }
 
-export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ occurrence, definition, onRename, onProperties }) => {
+export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ occurrence, definition, onRename, onProperties, onConfiguration }) => {
   const { t } = useI18n();
   const [name, setName] = useState('');
   const [designation, setDesignation] = useState('');
@@ -672,6 +674,25 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ occurrence, de
           counts: definition.faces !== undefined ? t('assembly.props.counts', { faces: definition.faces, edges: definition.edges ?? 0 }) : '',
         })}
       </p>
+      {definition.kind === 'part' && definition.configurations && definition.configurations.length > 0 && (
+        <label className="as-field">
+          {t('assembly.props.configuration')}
+          <select
+            value={definition.configuration}
+            data-testid="prop-configuration"
+            disabled={occurrence.pattern !== null}
+            title={occurrence.pattern !== null ? t('assembly.props.configurationPattern') : ''}
+            onChange={(e) => onConfiguration?.(e.target.value)}
+          >
+            <option value="">{t('assembly.props.configurationSaved')}</option>
+            {definition.configurations.map((c) => (
+              <option key={c.designation} value={c.designation}>
+                {c.name ? `${c.fullDesignation} — ${c.name}` : c.fullDesignation}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="as-field">
         {t('assembly.props.designation')}
         <input value={designation} onChange={(e) => setDesignation(e.target.value)} data-testid="prop-designation" />

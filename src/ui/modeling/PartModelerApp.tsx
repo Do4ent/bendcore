@@ -14,6 +14,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KernelMesh } from '../../wasm/bendcore_kernel_api.mjs';
 import type {
+  ConfigurationCheck,
+  ConfigurationTable,
   DocumentState,
   FeatureTypeSpec,
   FeatureView,
@@ -35,6 +37,7 @@ import type { ViewTools } from '../kernel/useViewTools';
 import { boxOfPositions } from '../kernel/viewTools';
 import type { MeasureResult } from '../kernel/viewTools';
 import FeaturePanel from './FeaturePanel';
+import ConfigurationPanel from './ConfigurationPanel';
 import FeatureTree from './FeatureTree';
 import SketchEditor from './sketch/SketchEditor';
 import {
@@ -86,6 +89,7 @@ interface Snapshot {
   doc: DocumentState | null;
   variables: VariableView[];
   properties: PartProperties | null;
+  configurations: ConfigurationTable | null;
 }
 
 interface SelectionInfo {
@@ -111,6 +115,9 @@ export interface PartModelerState {
   material: { id: string; density: number | null; libraryCount: number };
   /** Measurement and section tools (docs/ui/KERNEL_VIEWPORT.md). */
   tools: ViewTools['state'];
+  /** Configuration table of the document and the last check of its configurations. */
+  configurations: ConfigurationTable | null;
+  configurationChecks: ConfigurationCheck[] | null;
 }
 
 export interface PartModelerTestApi {
@@ -161,7 +168,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<PartModelerState['status']>('loading');
   const [catalog, setCatalog] = useState<FeatureTypeSpec[]>([]);
-  const [snapshot, setSnapshot] = useState<Snapshot>({ features: [], doc: null, variables: [], properties: null });
+  const [snapshot, setSnapshot] = useState<Snapshot>({ features: [], doc: null, variables: [], properties: null, configurations: null });
+  const [configChecks, setConfigChecks] = useState<ConfigurationCheck[] | null>(null);
   const [mesh, setMesh] = useState<PartMesh | null>(null);
   const [shownBodies, setShownBodies] = useState<number | null>(null);
   const [overlay, setOverlay] = useState<KernelMesh | null>(null);
@@ -237,12 +245,13 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     const doc = docRef.current;
     if (!doc) return;
     try {
-      const [features, state, variables, properties, shown] = await Promise.all([
+      const [features, state, variables, properties, shown, configurations] = await Promise.all([
         doc.features(),
         doc.state(),
         doc.variables(),
         doc.properties('final', densityValue()),
         doc.tessellate(shownTarget(p), MESH_PARAMS),
+        doc.configurations(),
       ]);
       const sketchId = p?.type === 'Sketch' ? p.featureId : selected;
       const sketch = features.find((f) => f.id === sketchId && f.type === 'Sketch');
@@ -251,7 +260,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
       const target = shownTarget(p);
       const bodies = target === 'final' ? properties.counts.solids : (await doc.properties(target)).counts.solids;
       if (docRef.current !== doc) return;
-      setSnapshot({ features, doc: state, variables, properties });
+      setSnapshot({ features, doc: state, variables, properties, configurations });
       setShownBodies(bodies);
       setMesh(shown);
       setOverlay(sketchMesh);
@@ -810,6 +819,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     sketchMode: sketchMode && { featureId: sketchMode.featureId, isNew: sketchMode.isNew },
     material: { id: materialId, density: densityValue(), libraryCount: materials.length },
     tools: tools.state,
+    configurations: snapshot.configurations,
+    configurationChecks: configChecks,
   };
   useEffect(() => {
     window.bendcorePartModeler = {
@@ -951,6 +962,67 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
               void run(async (d) => {
                 await d.setRollback(null);
                 await d.rebuild();
+              })
+            }
+          />
+          <ConfigurationPanel
+            table={snapshot.configurations}
+            variables={snapshot.variables.map((v) => v.name)}
+            features={snapshot.features}
+            materials={materials}
+            checks={configChecks}
+            disabled={busyPanel}
+            onSetTable={(table) => {
+              setConfigChecks(null);
+              void run(async (d) => {
+                await d.setConfigurations(table);
+                await d.rebuild();
+              });
+            }}
+            onSetCell={(row, column, value) => {
+              setConfigChecks(null);
+              void run(async (d) => {
+                await d.setConfigurationCell(row, column, value);
+                await d.rebuild();
+              });
+            }}
+            onAddColumn={(column) =>
+              void run(async (d) => {
+                await d.addConfigurationColumn(column);
+              })
+            }
+            onActivate={(designation) =>
+              void run(async (d) => {
+                await d.activateConfiguration(designation);
+                await d.rebuild();
+                // The material of the configuration becomes the material of the page (mass).
+                const m = (await d.configurations()).material ?? '';
+                const lib = materials.find((x) => x.id === m);
+                if (lib) {
+                  materialRef.current = lib.id;
+                  densityRef.current = String(lib.density);
+                  setMaterialId(lib.id);
+                  setDensity(String(lib.density));
+                }
+              })
+            }
+            onCheck={() =>
+              void run(async (d) => {
+                setConfigChecks(await d.checkConfigurations());
+              })
+            }
+            onImportCsv={(text) => {
+              setConfigChecks(null);
+              void run(async (d) => {
+                await d.importConfigurationsCsv(text);
+                await d.rebuild();
+              });
+            }}
+            onExportCsv={(decimal) =>
+              void run(async (d) => {
+                const csv = await d.exportConfigurationsCsv({ decimal });
+                const base = fileNameRef.current.replace(/(\.bcpart)?\.json$/i, '');
+                downloadText(`${base}.configurations.csv`, csv, 'text/csv');
               })
             }
           />
