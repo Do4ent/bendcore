@@ -389,6 +389,7 @@ export const KERNEL_TEMPLATES: readonly (readonly [string, string])[] = [
   ['fastenerKind', '{standard} is a {kind}, not a {expected}'],
   ['resolvedMany', '{ref} resolved to {n} elements'],
   ['moveDangling', 'move dimension: the dimension is dangling: {why}'],
+  ['shelvesOverDimensions', 'sheet \'{sheet}\', view \'{view}\': {n:num} position shelf(s) overlap dimensions'],
   ['threadImageOcct', 'thread image: OCCT: {what}'],
   ['rollingBearingEmpty', 'bearing: empty shape'],
   ['rollingBearingNoCylinders', 'bearing: the part has no cylindrical faces'],
