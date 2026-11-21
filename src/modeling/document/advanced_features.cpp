@@ -601,7 +601,7 @@ public:
     std::vector<OptionSpec> optionSpecs() const override {
         return {{"plane", {"YZ", "XZ", "XY", "face", "datum"}}, {"merge", {"false", "true"}}};
     }
-    std::vector<LinkSlot> linkSlots() const override { return {{"plane", {"DatumPlane"}, true}}; }
+    std::vector<LinkSlot> linkSlots() const override { return {{"plane", {"DatumPlane", "DatumCsys"}, true}}; }
     Result<FeatureOutput> execute(const FeatureContext& ctx) const override {
         auto pln = planeFromOption(ctx, ctx.option("plane"), "face", "plane");
         if (!pln) return pln.error();

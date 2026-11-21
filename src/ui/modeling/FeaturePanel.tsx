@@ -235,7 +235,6 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
                   <button
                     type="button"
                     data-testid={`slot-pick-${r.name}`}
-                    disabled={r.kind === 'vertex'}
                     onClick={() => onActivateSlot(active ? null : r.name)}
                   >
                     {active ? t('part.panel.pickDone') : t('part.panel.pick')}
@@ -260,7 +259,15 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
                     </li>
                   ))}
                 </ul>
-                {active && <p className="pm-hint">{r.kind === 'edge' ? t('part.panel.pickEdgeHint') : t('part.panel.pickFaceHint')}</p>}
+                {active && (
+                  <p className="pm-hint">
+                    {r.kind === 'edge'
+                      ? t('part.panel.pickEdgeHint')
+                      : r.kind === 'vertex'
+                        ? t('part.panel.pickVertexHint')
+                        : t('part.panel.pickFaceHint')}
+                  </p>
+                )}
               </div>
             );
           })}

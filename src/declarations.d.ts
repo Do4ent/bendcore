@@ -196,6 +196,16 @@ declare module 'three' {
     material: Material;
   }
 
+  export class PointsMaterial extends Material {
+    constructor(params?: { color?: number | string; size?: number; sizeAttenuation?: boolean; depthTest?: boolean });
+  }
+
+  export class Points extends Object3D {
+    constructor(geometry?: BufferGeometry, material?: Material);
+    geometry: BufferGeometry;
+    material: Material;
+  }
+
   export class Scene extends Object3D {
     constructor();
     background: Color | null;

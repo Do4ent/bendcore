@@ -3,7 +3,7 @@
 // Feature types of the part document (docs/modeling/PART_DOCUMENT.md, section "Операции").
 // Each type wraps an operation of src/modeling/features/ (features.hpp) or of the sketch and
 // reference geometry modules (sketch_profile.hpp, reference_geometry.hpp):
-//   Sketch, DatumPlane, DatumAxis                       — nodes without a body
+//   Sketch, DatumPlane, DatumAxis, DatumPoint, DatumCsys — nodes without a body
 //   Extrude, Revolve, Hole, Fillet, Chamfer, LinearPattern, CircularPattern, Mirror,
 //   Shell, Draft                                        — body operations
 //   Sweep, Loft, Rib, ThreadedHole                      — phase 2 body operations

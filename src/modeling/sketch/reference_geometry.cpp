@@ -2,6 +2,8 @@
 
 #include "sketch_internal.hpp"
 
+#include <algorithm>
+#include <optional>
 #include <cmath>
 #include <string>
 
@@ -10,6 +12,9 @@
 #include <BRepGProp.hxx>
 #include <BRep_Tool.hxx>
 #include <GCPnts_AbscissaPoint.hxx>
+#include <GeomAPI_IntCS.hxx>
+#include <Geom_Plane.hxx>
+#include <Geom_TrimmedCurve.hxx>
 #include <GProp_GProps.hxx>
 #include <TopAbs_Orientation.hxx>
 #include <gp_Vec.hxx>
@@ -168,6 +173,83 @@ Result<gp_Pln> planeTangentToCylinder(const kernel::TopologyIndex& topology,
     auto face = faceAt(topology, faceIndex);
     if (!face.ok()) return face.error();
     return planeTangentToCylinder(face.value(), near, tol);
+}
+
+namespace {
+
+Result<gp_Cylinder> cylinderOf(const TopoDS_Face& face) {
+    if (face.IsNull()) return invalid<gp_Cylinder>("face is null");
+    try {
+        if (BRep_Tool::Surface(face).IsNull()) return invalid<gp_Cylinder>("face has no surface");
+        const BRepAdaptor_Surface surface(face, false);
+        if (surface.GetType() != GeomAbs_Cylinder) return invalid<gp_Cylinder>("face is not cylindrical");
+        return surface.Cylinder();
+    } catch (const Standard_Failure& failure) {
+        return occtFailure<gp_Cylinder>(failure);
+    }
+}
+
+// Axis with a direction independent of the surface parametrization: Z > 0, else Y > 0, else X > 0.
+gp_Ax1 canonical(gp_Ax1 axis) {
+    const gp_Dir d = axis.Direction();
+    constexpr double eps = 1e-12;
+    const bool flip = d.Z() < -eps || (std::abs(d.Z()) <= eps && (d.Y() < -eps || (std::abs(d.Y()) <= eps && d.X() < 0)));
+    if (flip) axis.Reverse();
+    return axis;
+}
+
+// Component of v perpendicular to the unit direction z.
+gp_Vec perpendicular(const gp_Vec& v, const gp_Dir& z) {
+    const gp_Vec zv(z);
+    return v - zv * v.Dot(zv);
+}
+
+}  // namespace
+
+Result<gp_Pln> planeTangentToCylinderThroughLine(const TopoDS_Face& face, const gp_Ax1& line, bool second,
+                                                 const ReferenceTolerance& tol) {
+    auto cyl = cylinderOf(face);
+    if (!cyl.ok()) return cyl.error();
+    const gp_Ax1 axis = canonical(cyl.value().Axis());
+    const double r = cyl.value().Radius();
+    if (!parallel(axis.Direction(), line.Direction(), tol.angular)) {
+        return invalid<gp_Pln>("line is not parallel to the cylinder axis");
+    }
+    const gp_Vec toLine = perpendicular(gp_Vec(axis.Location(), line.Location()), axis.Direction());
+    const double d = toLine.Magnitude();
+    // A line on the surface (within a relative tolerance of the radius) is its own generator.
+    const double onSurface = std::max(tol.linear, 1e-9 * r);
+    if (std::abs(d - r) <= onSurface) return planeTangentToCylinder(face, axis.Location().Translated(toLine), tol);
+    if (d < r) return invalid<gp_Pln>("line lies inside the cylinder");
+    const double phi = std::acos(r / d);
+    const gp_Vec radial = gp_Vec(toLine / d).Rotated(gp_Ax1(gp::Origin(), axis.Direction()), second ? -phi : phi);
+    return planeTangentToCylinder(face, axis.Location().Translated(radial * r), tol);
+}
+
+Result<gp_Pln> planeTangentToCylinderParallelTo(const TopoDS_Face& face, const gp_Dir& direction, bool flip,
+                                                const ReferenceTolerance& tol) {
+    auto cyl = cylinderOf(face);
+    if (!cyl.ok()) return cyl.error();
+    const gp_Ax1 axis = canonical(cyl.value().Axis());
+    const gp_Vec side = gp_Vec(axis.Direction()).Crossed(gp_Vec(direction));
+    if (side.Magnitude() <= tol.angular) return invalid<gp_Pln>("direction is parallel to the cylinder axis");
+    const gp_Vec radial = side.Normalized() * (flip ? -1.0 : 1.0);
+    return planeTangentToCylinder(face, axis.Location().Translated(radial * cyl.value().Radius()), tol);
+}
+
+Result<gp_Pln> planeTangentToCylinderAtAngle(const TopoDS_Face& face, const gp_Pln& base, double angle,
+                                             const ReferenceTolerance& tol) {
+    if (!std::isfinite(angle)) return invalid<gp_Pln>("angle is not finite");
+    auto cyl = cylinderOf(face);
+    if (!cyl.ok()) return cyl.error();
+    const gp_Ax1 axis = canonical(cyl.value().Axis());
+    const gp_Dir n = direct(base.Position()).Direction();
+    if (std::abs(gp_Vec(n).Dot(gp_Vec(axis.Direction()))) > tol.angular) {
+        return invalid<gp_Pln>("cylinder axis is not parallel to the base plane");
+    }
+    const gp_Vec radial = perpendicular(gp_Vec(n), axis.Direction()).Normalized().Rotated(
+        gp_Ax1(gp::Origin(), axis.Direction()), angle);
+    return planeTangentToCylinder(face, axis.Location().Translated(radial * cyl.value().Radius()), tol);
 }
 
 Result<gp_Pln> planeMidway(const gp_Pln& a, const gp_Pln& b, const ReferenceTolerance& tol) {
@@ -344,6 +426,45 @@ Result<gp_Pnt> pointAxisPlaneIntersection(const gp_Ax1& axis, const gp_Pln& plan
     return axis.Location().Translated(d * t);
 }
 
+Result<gp_Pnt> pointEdgePlaneIntersection(const TopoDS_Edge& edge, const gp_Pln& plane,
+                                          const ReferenceTolerance& tol) {
+    auto curve = edgeCurve(edge);
+    if (!curve.ok()) return curve.error();
+    try {
+        const BRepAdaptor_Curve& c = curve.value();
+        if (c.GetType() == GeomAbs_Line) {
+            auto axis = axisOfEdge(edge, tol);
+            if (!axis.ok()) return axis.error();
+            if (std::abs(gp_Vec(axis.value().Direction()).Dot(gp_Vec(plane.Axis().Direction()))) <= tol.angular) {
+                return invalid<gp_Pnt>("edge is parallel to the plane");
+            }
+            return pointAxisPlaneIntersection(axis.value(), plane, tol);
+        }
+        double first = 0.0, last = 0.0;
+        const Handle(Geom_Curve) geometry = BRep_Tool::Curve(edge, first, last);
+        if (geometry.IsNull()) return invalid<gp_Pnt>("edge has no 3D curve");
+        const Handle(Geom_TrimmedCurve) trimmed = new Geom_TrimmedCurve(geometry, first, last);
+        GeomAPI_IntCS intersection(trimmed, new Geom_Plane(plane));
+        if (!intersection.IsDone()) {
+            return Result<gp_Pnt>::failure(ErrorCode::OperationFailed, "edge-plane intersection failed");
+        }
+        if (intersection.NbSegments() > 0) return invalid<gp_Pnt>("edge lies in the plane");
+        const bool reversed = edge.Orientation() == TopAbs_REVERSED;
+        std::optional<std::pair<double, gp_Pnt>> best;
+        for (int i = 1; i <= intersection.NbPoints(); ++i) {
+            double u = 0.0, v = 0.0, w = 0.0;
+            intersection.Parameters(i, u, v, w);
+            if (w < first - 1e-9 || w > last + 1e-9) continue;
+            const double key = reversed ? last - w : w - first;
+            if (!best || key < best->first) best = std::make_pair(key, intersection.Point(i));
+        }
+        if (!best) return invalid<gp_Pnt>("edge does not cross the plane");
+        return best->second;
+    } catch (const Standard_Failure& failure) {
+        return occtFailure<gp_Pnt>(failure);
+    }
+}
+
 gp_Pnt pointProjectedOnPlane(const gp_Pnt& point, const gp_Pln& plane) {
     const gp_Vec n(plane.Axis().Direction());
     return point.Translated(-n * gp_Vec(plane.Location(), point).Dot(n));
@@ -364,6 +485,25 @@ Result<gp_Ax3> coordinateSystemFromPoints(const gp_Pnt& origin, const gp_Pnt& on
     auto plane = planeThroughPoints(origin, onX, inXYPlane, tol);
     if (!plane.ok()) return plane.error();
     return plane.value().Position();
+}
+
+Result<gp_Ax3> coordinateSystemFromDirections(const gp_Pnt& origin, const gp_Dir& xDirection,
+                                              const gp_Dir& inXYDirection, const ReferenceTolerance& tol) {
+    const gp_Vec z = gp_Vec(xDirection).Crossed(gp_Vec(inXYDirection));
+    if (z.Magnitude() <= tol.angular) return invalid<gp_Ax3>("X and XY-plane directions are parallel");
+    return gp_Ax3(origin, gp_Dir(z), xDirection);
+}
+
+Result<gp_Ax3> coordinateSystemFromFaceEdge(const gp_Pnt& origin, const TopoDS_Face& face, const TopoDS_Edge& edge,
+                                            const ReferenceTolerance& tol) {
+    auto plane = planeOfFace(face);
+    if (!plane.ok()) return plane.error();
+    auto axis = axisOfEdge(edge, tol);
+    if (!axis.ok()) return axis.error();
+    const gp_Dir z = plane.value().Axis().Direction();
+    const gp_Vec x = perpendicular(gp_Vec(axis.value().Direction()), z);
+    if (x.Magnitude() <= tol.angular) return invalid<gp_Ax3>("edge is normal to the face");
+    return gp_Ax3(origin, z, gp_Dir(x));
 }
 
 gp_Ax3 coordinateSystemOnPlane(const gp_Pln& plane, const gp_Pnt& origin) {

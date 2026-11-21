@@ -22,12 +22,13 @@ import type {
   ModelingKernel,
   PartDocumentHandle,
   PartMaterial,
+  PartMesh,
   PartProperties,
   SketchData,
   VariableView,
 } from '../../wasm/bendcore_modeling_api.mjs';
 import KernelViewport from '../kernel/KernelViewport';
-import type { EdgePick, FacePick, KernelViewportHandle, PickMode } from '../kernel/KernelViewport';
+import type { EdgePick, FacePick, KernelViewportHandle, PickMode, VertexPick } from '../kernel/KernelViewport';
 import { MeasurePanel, SectionPanel } from '../kernel/ViewToolsPanel';
 import { useViewTools } from '../kernel/useViewTools';
 import type { ViewTools } from '../kernel/useViewTools';
@@ -40,11 +41,13 @@ import {
   FeatureForm,
   existingFeatureForm,
   newFeatureForm,
+  slotAfterPick,
   toFeatureEdits,
   toFeatureSpec,
   togglePick,
 } from './featureForm';
 import { toolbarTypes } from './labels';
+import { datumGlyphs } from './datumGlyphs';
 import { defaultModelingBaseUrl, loadModelingFrom } from './modelingLoader';
 import type { Remote, WasmClient } from '../worker/wasmClient';
 import { isCancelled } from '../worker/wasmClient';
@@ -159,7 +162,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const [status, setStatus] = useState<PartModelerState['status']>('loading');
   const [catalog, setCatalog] = useState<FeatureTypeSpec[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot>({ features: [], doc: null, variables: [], properties: null });
-  const [mesh, setMesh] = useState<KernelMesh | null>(null);
+  const [mesh, setMesh] = useState<PartMesh | null>(null);
   const [shownBodies, setShownBodies] = useState<number | null>(null);
   const [overlay, setOverlay] = useState<KernelMesh | null>(null);
   const [panel, setPanelState] = useState<PanelState | null>(null);
@@ -397,7 +400,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     if (!spec || !doc || panelRef.current) return;
     const position = snapshot.doc?.rollback ?? snapshot.features.length;
     const form = newFeatureForm(spec, snapshot.features, position);
-    const firstSlot = spec.references.find((r) => !r.optional && r.kind !== 'vertex');
+    const firstSlot = spec.references.find((r) => !r.optional);
     const p: PanelState = { mode: 'add', type, featureId: null, position, form, activeSlot: firstSlot?.name ?? null };
     void run((d) => d.beginTransaction(t('part.tx.add', { feature: caption(t, 'part.feature.', type) })), p).then((ok) => ok && setPanel(p));
   };
@@ -540,14 +543,14 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     return specOf(p.type)?.references.find((r) => r.name === p.activeSlot) ?? null;
   };
 
-  const pickElement = async (kind: 'face' | 'edge', index: number | null) => {
+  const pickElement = async (kind: 'face' | 'edge' | 'vertex', index: number | null) => {
     const doc = docRef.current;
     if (!doc) return;
     const p = panelRef.current;
     if (!p && toolsRef.current.capturing) {
       // A measurement is being collected: the click picks its element.
       if (kind === 'face') toolsRef.current.onPickFace(index);
-      else toolsRef.current.onPickEdge(index);
+      else if (kind === 'edge') toolsRef.current.onPickEdge(index);
       return;
     }
     const slot = activeSlotSpec();
@@ -557,10 +560,18 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
         const ref = await doc.makeReference(shownTarget(p), kind, index);
         const current = panelRef.current;
         if (!current || current.activeSlot !== slot.name) return;
-        const picks = togglePick(current.form.references[slot.name] ?? [], { ref, index }, slot.multiple);
-        setPanel({ ...current, form: { ...current.form, references: { ...current.form.references, [slot.name]: picks } } });
+        const before = current.form.references[slot.name] ?? [];
+        const picks = togglePick(before, { ref, index }, slot.multiple);
+        const form = { ...current.form, references: { ...current.form.references, [slot.name]: picks } };
+        // A pick added to a single slot moves on to the next empty slot of the same kind, so a
+        // plane through three points takes three clicks.
+        const spec = specOf(current.type);
+        const added = picks.length > 0 && picks.length >= before.length;
+        const activeSlot = spec && added ? slotAfterPick(spec, form, slot.name) : current.activeSlot;
+        setPanel({ ...current, activeSlot, form });
         return;
       }
+      if (kind === 'vertex') return;
       setSelection(index === null ? null : { kind, index, name: (await doc.element('final', kind, index)).name });
     } catch (e) {
       if (!isCancelled(e)) setError(describeError(e));
@@ -569,6 +580,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
 
   const onPickFace = useCallback((pick: FacePick | null) => void pickElement('face', pick ? pick.faceIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
   const onPickEdge = useCallback((pick: EdgePick | null) => void pickElement('edge', pick ? pick.edgeIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onPickVertex = useCallback((pick: VertexPick | null) => void pickElement('vertex', pick ? pick.vertexIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------------------- tree, undo, files
 
@@ -817,13 +829,14 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
 
   const slot = panel ? activeSlotSpec() : null;
   const measuring = !panel && tools.capturing;
-  const pickMode: PickMode = measuring ? tools.pickMode : slot ? (slot.kind === 'edge' ? 'edge' : 'face') : 'face';
+  const pickMode: PickMode = measuring ? tools.pickMode : slot ? (slot.kind === 'edge' || slot.kind === 'vertex' ? slot.kind : 'face') : 'face';
   const toolFaces = measuring ? tools.picks.filter((p) => p.kind === 'face').map((p) => p.index) : [];
   const toolEdges = measuring ? tools.picks.filter((p) => p.kind === 'edge').map((p) => p.index) : [];
   const slotPicks = panel && panel.activeSlot ? panel.form.references[panel.activeSlot] ?? [] : [];
   const pickedIndices = slotPicks.map((p) => p.index).filter((i): i is number => i !== null);
   const props = snapshot.properties;
   const docState = snapshot.doc;
+  const datums = useMemo(() => datumGlyphs(snapshot.features), [snapshot.features]);
   const busyPanel = panel !== null || sketchMode !== null;
   const panelSpec = panel ? specOf(panel.type) : undefined;
   const panelView = panel?.featureId ? snapshot.features.find((f) => f.id === panel.featureId) ?? null : null;
@@ -1046,6 +1059,10 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
             pickMode={pickMode}
             onPick={onPickFace}
             onPickEdge={onPickEdge}
+            vertices={mesh?.vertices ?? null}
+            onPickVertex={onPickVertex}
+            selectedVertices={slot && slot.kind === 'vertex' ? pickedIndices : []}
+            datums={datums}
             overlay={overlay}
             autoFrame="first"
             frameKey={frameKey}

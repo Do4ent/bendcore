@@ -506,7 +506,7 @@ public:
     std::vector<OptionSpec> optionSpecs() const override {
         return {{"what", {"feature", "body"}}, {"plane", {"YZ", "XZ", "XY", "face", "datum"}}, {"merge", {"true", "false"}}};
     }
-    std::vector<LinkSlot> linkSlots() const override { return {{"feature", {}, true}, {"plane", {"DatumPlane"}, true}}; }
+    std::vector<LinkSlot> linkSlots() const override { return {{"feature", {}, true}, {"plane", {"DatumPlane", "DatumCsys"}, true}}; }
     Result<FeatureOutput> execute(const FeatureContext& ctx) const override {
         if (ctx.input().isNull()) return fail(ErrorCode::InvalidInput, "mirror needs an existing body");
         auto pln = planeFromOption(ctx, ctx.option("plane"), "face", "plane");
@@ -552,7 +552,7 @@ public:
     std::vector<OptionSpec> optionSpecs() const override {
         return {{"neutral", {"face", "datum", "XY", "XZ", "YZ"}}, {"reversed", {"false", "true"}}};
     }
-    std::vector<LinkSlot> linkSlots() const override { return {{"plane", {"DatumPlane"}, true}}; }
+    std::vector<LinkSlot> linkSlots() const override { return {{"plane", {"DatumPlane", "DatumCsys"}, true}}; }
     Result<FeatureOutput> execute(const FeatureContext& ctx) const override {
         if (ctx.input().isNull()) return fail(ErrorCode::InvalidInput, "draft needs an existing body");
         auto pln = planeFromOption(ctx, ctx.option("neutral"), "neutralFace", "plane");

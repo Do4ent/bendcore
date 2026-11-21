@@ -29,7 +29,11 @@
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
+#include <BRep_Tool.hxx>
 #include <Standard_Failure.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Vertex.hxx>
+#include <gp_Ax3.hxx>
 #include <Standard_Version.hxx>
 
 #include <cmath>
@@ -484,6 +488,20 @@ val featureView(const m::FeatureInfo& f, std::size_t index) {
             const gp_Ax1& a = *f.datum->axis;
             d.set("axisOrigin", point({a.Location().X(), a.Location().Y(), a.Location().Z()}));
             d.set("axisDirection", point({a.Direction().X(), a.Direction().Y(), a.Direction().Z()}));
+        }
+        if (f.datum->point) {
+            const gp_Pnt& p = *f.datum->point;
+            d.set("point", point({p.X(), p.Y(), p.Z()}));
+        }
+        if (f.datum->csys) {
+            const gp_Ax3& c = *f.datum->csys;
+            auto dir = [](const gp_Dir& v) { return point({v.X(), v.Y(), v.Z()}); };
+            val cs = val::object();
+            cs.set("origin", point({c.Location().X(), c.Location().Y(), c.Location().Z()}));
+            cs.set("x", dir(c.XDirection()));
+            cs.set("y", dir(c.YDirection()));
+            cs.set("z", dir(c.Direction()));
+            d.set("csys", cs);
         }
         o.set("datum", d);
     }
@@ -940,6 +958,7 @@ val docTessellate(std::uint32_t handle, val target, val params) {
             out.set("edges", val::array());
             out.set("missingFaces", typedArray("Uint32Array", noi));
             out.set("missingEdges", typedArray("Uint32Array", noi));
+            out.set("vertices", typedArray("Float32Array", nof));
             return success(out);
         }
         auto mesh = k::tessellate(k::Shape(shape.shape()), p);
@@ -966,6 +985,16 @@ val docTessellate(std::uint32_t handle, val target, val params) {
         out.set("edges", edges);
         out.set("missingFaces", typedArray("Uint32Array", msh.missingFaces));
         out.set("missingEdges", typedArray("Uint32Array", msh.missingEdges));
+        // Vertex positions in the element order of the target (index i = makeReference 'vertex' i).
+        std::vector<float> vertices;
+        vertices.reserve(shape.count(m::ElementKind::Vertex) * 3);
+        for (std::size_t i = 0; i < shape.count(m::ElementKind::Vertex); ++i) {
+            const gp_Pnt p = BRep_Tool::Pnt(TopoDS::Vertex(shape.element(m::ElementKind::Vertex, i)));
+            vertices.push_back(static_cast<float>(p.X()));
+            vertices.push_back(static_cast<float>(p.Y()));
+            vertices.push_back(static_cast<float>(p.Z()));
+        }
+        out.set("vertices", typedArray("Float32Array", vertices));
         return success(out);
     });
 }
