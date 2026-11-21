@@ -1,8 +1,10 @@
 # bendcore
 
-Ядро CAD на C++20 поверх Open CASCADE (OCCT) и интерфейс на React/TypeScript, работающий с
-ядром через WebAssembly. Начиналось как система проектирования гнутых труб; сейчас
-развивается как CAD общего назначения по плану `docs/ROADMAP_GENERAL_CAD.md`. Лицензия — MIT.
+CAD общего назначения (computer-aided design, система автоматизированного проектирования):
+ядро на C++20 поверх Open CASCADE (OCCT) и интерфейс на React/TypeScript, работающий с ядром
+через WebAssembly. Параметрическая деталь с эскизами и деревом построения, сборка с решателем
+сопряжений, чертёж по ЕСКД (спецификация ГОСТ 2.106, экспорт PDF/DXF/SVG), обмен STEP/IGES.
+План — `docs/ROADMAP_GENERAL_CAD.md`. Лицензия — MIT.
 
 Этот файл описывает только то, что есть в репозитории и проверяется тестами. Правила
 разработки — `docs/PROJECT_PROCESS.md` (в том числе правило «никаких заглушек»);
@@ -20,9 +22,9 @@
 |---|---|---|
 | Ядро геометрии на OCCT: формы, STEP, тесселяция, свойства, лечение, XCAF, анализ | `src/kernel`, `include/bendcore/kernel` | `docs/kernel/` |
 | Документ детали: эскизы с ограничениями (PlaneGCS), дерево операций, топологическое именование, переменные и выражения | `src/modeling` | `docs/modeling/` |
-| Документ сборки: компоненты, решатель сопряжений, пересечения, BOM, крепёж | `src/assembly_v2` | `docs/assembly/` |
+| Документ сборки: компоненты, решатель сопряжений (в том числе передаточное), пересечения, BOM, библиотека стандартных изделий (крепёж, подшипники, шпонки) | `src/assembly_v2` | `docs/assembly/` |
 | Документ чертежа: виды (HLR), разрезы, размеры, аннотации, спецификация, экспорт PDF/DXF/SVG, импорт DXF | `src/drawing_v2`, `src/dxf_reader.cpp` | `docs/drawing/` |
-| Трубный модуль: путь трубы, гибка, развёртка, проверки, экземпляры, чертёж трубы | `src/tube_*.cpp`, `src/bend_*.cpp`, `src/core_api.cpp` и др. | `docs/ROADMAP_GENERAL_CAD.md` (раздел о трубном модуле) |
+| Трубный модуль (прежняя область bendcore, сохранён): путь трубы, гибка, развёртка, проверки, экземпляры, чертёж трубы | `src/tube_*.cpp`, `src/bend_*.cpp`, `src/core_api.cpp` и др. | `docs/ROADMAP_GENERAL_CAD.md` (раздел о трубном модуле) |
 
 Исполняемые файлы: `bendcore_cli` — команды ядра «раздел.действие» по строкам JSON через
 stdin/stdout (`src/cli/main.cpp`, `src/core_api.cpp`); `bendcore_server` (сборка с OCCT) —
@@ -40,6 +42,9 @@ HTTP-сервис тела трубы и распознавания трубы �
 | Редактор эскиза (на странице детали) | рисование с привязками, ограничения и размеры, перерешение, определённость | [`docs/ui/SKETCH_EDITOR.md`](docs/ui/SKETCH_EDITOR.md) |
 | Сборка (`web/assembly`) | дерево сборки, сопряжения, перетаскивание с перерешением, пересечения, BOM, разнесённый вид, крепёж | [`docs/ui/ASSEMBLY_UI.md`](docs/ui/ASSEMBLY_UI.md) |
 | Чертёж (`web/drawing`) | листы, виды, размеры, аннотации, обновление по модели, спецификация, экспорт PDF/DXF/SVG | [`docs/ui/DRAWING_UI.md`](docs/ui/DRAWING_UI.md) |
+
+Пример изделия — редуктор цилиндрический одноступенчатый РЦ-80 (24 позиции, рабочие и сборочный
+чертежи, спецификация, STEP): `examples/gearbox/README.md`, проверяется тестом `e2e_product_gearbox`.
 
 Руководство пользователя (быстрый старт, справка по эскизу, детали, сборке, чертежу, обмену
 данными, ограничения версии) — [`docs/USER_GUIDE/`](docs/USER_GUIDE/README.md). Оболочка с
@@ -95,9 +100,11 @@ BENDCORE_MODELING_WASM_DIR=build-wasm/wasm_modeling npm run dev:part-modeler
 BENDCORE_MODELING_WASM_DIR=$PWD/build-wasm/wasm_modeling npm run test:e2e:modeling
 # аналогично: dev:kernel-viewer / test:e2e:kernel (BENDCORE_KERNEL_WASM_DIR),
 # dev:assembly / test:e2e:assembly (BENDCORE_ASSEMBLY_WASM_DIR),
-# dev:drawing / test:e2e:drawing (BENDCORE_DRAWING_WASM_DIR)
+# dev:drawing / test:e2e:drawing (BENDCORE_DRAWING_WASM_DIR),
+# dev:app / test:e2e:app (оболочка со всеми модулями); node-тесты WASM — test:*-wasm
 npm run build                     # окно Electron: tsc + webpack → dist/
 bash scripts/check_no_stubs.sh    # проверка правила «никаких заглушек»
+bash scripts/accept_branch.sh     # приёмочный прогон всех наборов (docs/PROJECT_PROCESS.md, раздел 7)
 ```
 
 Порты страниц, переменные и состав тестов — в соответствующем `docs/ui/*.md`.
