@@ -1,7 +1,9 @@
 /**
  * Edits of the configuration table on the page (docs/ui/PART_MODELING_UI.md, "Таблица параметров").
  * The page sends whole tables to the document (setConfigurations: one undo entry, checked by the
- * kernel); these pure functions build the next table from the current one.
+ * kernel); these pure functions build the next table from the current one. Row and column edits
+ * are generic over the column type: the assembly configuration table (docs/ui/ASSEMBLY_UI.md,
+ * "Исполнения сборки") uses them with its own columns.
  */
 
 import type { ConfigurationColumn, ConfigurationRow, ConfigurationTable } from '../../wasm/bendcore_modeling_api.mjs';
@@ -12,7 +14,14 @@ export interface TableInput {
   active: string;
 }
 
-const plainColumn = (c: ConfigurationColumn): ConfigurationColumn => ({ kind: c.kind, target: c.target });
+/** Any table of configurations: rows of cells, one cell per column. */
+export interface RowTable<C> {
+  columns: C[];
+  rows: ConfigurationRow[];
+  active: string;
+}
+
+const plainColumn = <C extends { kind: string; target: string | number }>(c: C): C => ({ kind: c.kind, target: c.target }) as C;
 const plainRow = (r: ConfigurationRow): ConfigurationRow => ({ designation: r.designation, name: r.name, cells: [...r.cells] });
 
 /** Table as sent to setConfigurations (no derived fields). */
@@ -36,7 +45,7 @@ export function nextDesignation(rows: readonly ConfigurationRow[]): string {
 }
 
 /** New row: a copy of the row `from` (default the last one) with the next designation. */
-export function addRow(t: TableInput, from?: number): TableInput {
+export function addRow<T extends RowTable<unknown>>(t: T, from?: number): T {
   const src = from !== undefined ? t.rows[from] : t.rows[t.rows.length - 1];
   const row: ConfigurationRow = {
     designation: nextDesignation(t.rows),
@@ -47,7 +56,7 @@ export function addRow(t: TableInput, from?: number): TableInput {
 }
 
 /** Removes a row; the active configuration falls back to the base values when it is removed. */
-export function removeRow(t: TableInput, index: number): TableInput {
+export function removeRow<T extends RowTable<unknown>>(t: T, index: number): T {
   const removed = t.rows[index];
   return {
     ...t,
@@ -57,16 +66,16 @@ export function removeRow(t: TableInput, index: number): TableInput {
 }
 
 /** Removes a column with its cells. */
-export function removeColumn(t: TableInput, index: number): TableInput {
+export function removeColumn<T extends RowTable<{ kind: string; target: string | number }>>(t: T, index: number): T {
   return {
     ...t,
-    columns: t.columns.filter((_, i) => i !== index).map(plainColumn),
+    columns: t.columns.filter((_, i) => i !== index).map((c) => plainColumn(c)),
     rows: t.rows.map((r) => ({ ...plainRow(r), cells: r.cells.filter((_, i) => i !== index) })),
   };
 }
 
 /** Renames a row (designation or name); the active designation follows a renamed row. */
-export function editRow(t: TableInput, index: number, field: 'designation' | 'name', value: string): TableInput {
+export function editRow<T extends RowTable<unknown>>(t: T, index: number, field: 'designation' | 'name', value: string): T {
   const rows = t.rows.map(plainRow);
   const old = rows[index]?.designation;
   if (!rows[index]) return t;

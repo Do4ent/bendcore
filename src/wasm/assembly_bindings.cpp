@@ -121,6 +121,16 @@ std::map<std::string, std::string>& sources() {
     return s;
 }
 
+// Configurations of registered subassembly documents {designation, full designation, name}
+// (read on first use; registering the source again clears the entry).
+struct ConfigurationEntry {
+    std::string designation, fullDesignation, name;
+};
+std::map<std::string, std::vector<ConfigurationEntry>>& assemblyConfigurations() {
+    static std::map<std::string, std::vector<ConfigurationEntry>> s;
+    return s;
+}
+
 // Part documents with a configuration table by source name (asmRegisterPartSource, insertPart of
 // such a document): configurations of components are built from them (setOccurrence
 // {configuration}).
@@ -643,6 +653,9 @@ val solveReportToJs(const a::DocumentSolveReport& r) {
     return out;
 }
 
+const std::vector<ConfigurationEntry>* subassemblyConfigurations(const std::string& source);
+a::LoadOptions memoryLoadOptions();
+
 // Diagnostics of the current positions without changing the document (solved copy).
 a::DocumentSolveReport currentReport(const a::AssemblyDocument& doc) {
     a::AssemblyDocument copy = doc;
@@ -693,7 +706,19 @@ val stateToJs(const Session& s) {
             x.set("configuration", configuration);
             val cfgs = val::array();
             auto it = d.kind == a::DefinitionKind::Part ? partSources().find(path) : partSources().end();
-            if (it != partSources().end()) {
+            const std::vector<ConfigurationEntry>* sub =
+                d.kind == a::DefinitionKind::Assembly && !d.external && !path.empty() ? subassemblyConfigurations(path) : nullptr;
+            if (sub) {
+                x.set("partSource", val::null());
+                x.set("assemblySource", path);
+                for (const ConfigurationEntry& e : *sub) {
+                    val c = val::object();
+                    c.set("designation", e.designation);
+                    c.set("fullDesignation", e.fullDesignation);
+                    c.set("name", e.name);
+                    cfgs.call<void>("push", c);
+                }
+            } else if (it != partSources().end()) {
                 x.set("partSource", path);
                 for (std::size_t i = 0; i < it->second.configurations.size(); ++i) {
                     val c = val::object();
@@ -782,6 +807,11 @@ val stateToJs(const Session& s) {
     hist.set("depth", static_cast<double>(s.history.undoDepth()));
     out.set("history", hist);
     out.set("dragging", s.drag ? val(static_cast<double>(s.dragOccurrence)) : val::null());
+    val cfg = val::object();
+    cfg.set("active", doc.activeConfiguration());
+    cfg.set("designation", doc.configurationProperties().designation);
+    cfg.set("count", static_cast<double>(doc.configurationTable().rows.size()));
+    out.set("configuration", cfg);
     return out;
 }
 
@@ -857,6 +887,22 @@ a::LoadOptions memoryLoadOptions() {
         return it->second;
     };
     return o;
+}
+
+// Configurations of a registered subassembly document; nullptr — not registered or not readable.
+const std::vector<ConfigurationEntry>* subassemblyConfigurations(const std::string& source) {
+    auto cached = assemblyConfigurations().find(source);
+    if (cached != assemblyConfigurations().end()) return &cached->second;
+    auto text = sources().find(source);
+    if (text == sources().end()) return nullptr;
+    auto loaded = a::AssemblyDocument::fromJson(text->second, memoryLoadOptions());
+    if (!loaded) return nullptr;
+    const a::AssemblyDocument& sub = loaded.value().document;
+    const a::AssemblyConfigurationTable t = sub.configurationTable();
+    std::vector<ConfigurationEntry> list;
+    for (std::size_t r = 0; r < t.rows.size(); ++r)
+        list.push_back({t.rows[r].designation, sub.configurationFullDesignation(r), t.rows[r].name});
+    return &(assemblyConfigurations()[source] = std::move(list));
 }
 
 std::uint32_t addSession(a::AssemblyDocument doc) {
@@ -1016,8 +1062,10 @@ val fastenerDescribe(val spec) {
 }
 
 val asmRegisterSource(std::string name, std::string text) {
-    if (name.empty()) return failure("InvalidInput", "source name is empty");
+    if (name.empty() || name.find('#') != std::string::npos)
+        return failure("InvalidInput", "source name must be non-empty, without '#'");
     sources()[name] = std::move(text);
+    assemblyConfigurations().erase(name);
     return success(val(true));
 }
 
@@ -1351,7 +1399,7 @@ val asmSetOccurrence(std::uint32_t handle, std::uint32_t id, val changes) {
                 check(d.setPlacement(id, transformFromJs(changes["placement"], "changes.placement")));
             if (present(changes["configuration"])) {
                 take(d.setOccurrenceConfiguration(id, requireString(changes["configuration"], "changes.configuration"),
-                                                  memoryPartResolver()));
+                                                  memoryLoadOptions()));
             }
             if (changes["color"].isNull()) check(d.setOccurrenceColor(id, std::nullopt));
             else if (present(changes["color"])) check(d.setOccurrenceColor(id, colorFromJs(changes["color"], "changes.color")));
@@ -1760,6 +1808,243 @@ val asmBom(std::uint32_t handle, std::string mode) {
     });
 }
 
+// ---- assembly configurations (docs/assembly/ASSEMBLY_DOCUMENT.md, section 8.2)
+
+a::AssemblyColumnKind columnKindFromJs(const val& v, const std::string& what) {
+    const std::string text = requireString(v, what);
+    const auto k = a::assemblyColumnKindFromString(text);
+    if (!k) throw InputError(what + ": unknown column kind '" + text + "' (suppression, configuration, mateValue)");
+    return *k;
+}
+
+val configurationListToJs(const std::vector<ConfigurationEntry>& list) {
+    val out = val::array();
+    for (const ConfigurationEntry& c : list) {
+        val e = val::object();
+        e.set("designation", c.designation);
+        e.set("fullDesignation", c.fullDesignation);
+        e.set("name", c.name);
+        out.call<void>("push", e);
+    }
+    return out;
+}
+
+// {columns: [{kind, target, label, title, unit?, options}], rows: [{designation, fullDesignation,
+// name, cells}], active, base: [...], designation}
+val configurationTableToJs(const a::AssemblyDocument& doc, const a::AssemblyConfigurationTable& t,
+                           const std::vector<std::string>& base) {
+    val out = val::object();
+    val cols = val::array();
+    for (const a::AssemblyConfigurationColumn& c : t.columns) {
+        val x = val::object();
+        x.set("kind", std::string(a::toString(c.kind)));
+        x.set("target", static_cast<double>(c.target));
+        x.set("title", a::configurationColumnTitle(doc, c));
+        val options = val::array();
+        if (c.kind == a::AssemblyColumnKind::MateValue) {
+            const a::DocumentMate* mt = doc.findMate(c.target);
+            x.set("label", !mt ? std::string()
+                               : mt->spec.name.empty() ? mateTypeName(mt->spec.type) + " " + std::to_string(mt->id)
+                                                       : mt->spec.name);
+            x.set("unit", std::string(!mt                                   ? ""
+                                      : mt->spec.type == a::MateType::Angle ? "deg"
+                                      : mt->spec.type == a::MateType::Gear  ? "ratio"
+                                                                            : "mm"));
+        } else {
+            const a::Occurrence* o = doc.findOccurrence(c.target);
+            x.set("label", o ? o->name : std::string());
+            x.set("unit", std::string());
+            if (c.kind == a::AssemblyColumnKind::Configuration && o) {
+                const a::Definition& d = doc.definition(o->definition);
+                const std::string path = a::splitConfigurationSource(d.source).first;
+                if (d.kind == a::DefinitionKind::Part) {
+                    auto it = partSources().find(path);
+                    if (it != partSources().end()) {
+                        std::vector<ConfigurationEntry> list;
+                        for (std::size_t i = 0; i < it->second.configurations.size(); ++i)
+                            list.push_back({it->second.configurations[i].first, it->second.configurations[i].second,
+                                            it->second.names[i]});
+                        options = configurationListToJs(list);
+                    }
+                } else if (const auto* list = subassemblyConfigurations(path)) {
+                    options = configurationListToJs(*list);
+                }
+            }
+        }
+        x.set("options", options);
+        cols.call<void>("push", x);
+    }
+    out.set("columns", cols);
+    val rows = val::array();
+    for (std::size_t r = 0; r < t.rows.size(); ++r) {
+        val x = val::object();
+        x.set("designation", t.rows[r].designation);
+        x.set("fullDesignation", a::fullDesignation(t, r, doc.definition(doc.root()).properties.designation));
+        x.set("name", t.rows[r].name);
+        val cells = val::array();
+        for (const std::string& c : t.rows[r].cells) cells.call<void>("push", c);
+        x.set("cells", cells);
+        rows.call<void>("push", x);
+    }
+    out.set("rows", rows);
+    out.set("active", t.active);
+    val b = val::array();
+    for (const std::string& c : base) b.call<void>("push", c);
+    out.set("base", b);
+    out.set("designation", doc.configurationProperties().designation);
+    return out;
+}
+
+a::AssemblyConfigurationTable configurationTableFromJs(const val& v) {
+    if (!isObject(v)) throw InputError("table must be an object");
+    a::AssemblyConfigurationTable t;
+    if (present(v["columns"])) {
+        for (const val& c : arrayItems(v["columns"], "table.columns")) {
+            if (!isObject(c)) throw InputError("table.columns[] must be objects");
+            t.columns.push_back(
+                {columnKindFromJs(c["kind"], "table.columns[].kind"), requireId(c["target"], "table.columns[].target")});
+        }
+    }
+    if (present(v["rows"])) {
+        for (const val& r : arrayItems(v["rows"], "table.rows")) {
+            if (!isObject(r)) throw InputError("table.rows[] must be objects");
+            a::AssemblyConfiguration row;
+            row.designation = requireString(r["designation"], "table.rows[].designation");
+            row.name = optionalString(r, "name", "", "table.rows[]");
+            for (const val& cell : arrayItems(r["cells"], "table.rows[].cells"))
+                row.cells.push_back(requireString(cell, "table.rows[].cells[]"));
+            t.rows.push_back(std::move(row));
+        }
+    }
+    t.active = optionalString(v, "active", "", "table");
+    return t;
+}
+
+val activationToJs(const a::ConfigurationActivation& r) {
+    val out = val::object();
+    out.set("designation", r.designation);
+    out.set("fullDesignation", r.fullDesignation);
+    out.set("excluded", idArray(r.excluded));
+    val disabled = val::array();
+    for (const auto& [mate, occ] : r.disabledMates) {
+        val x = val::object();
+        x.set("mate", static_cast<double>(mate));
+        x.set("occurrence", static_cast<double>(occ));
+        disabled.call<void>("push", x);
+    }
+    out.set("disabledMates", disabled);
+    val broken = val::array();
+    for (const auto& [occ, rep] : r.replaced)
+        for (const auto& [mate, why] : rep.broken) {
+            val x = val::object();
+            x.set("mate", static_cast<double>(mate));
+            x.set("occurrence", static_cast<double>(occ));
+            x.set("reason", why);
+            broken.call<void>("push", x);
+        }
+    out.set("brokenMates", broken);
+    out.set("solve", r.solve ? solveReportToJs(*r.solve) : val::null());
+    return out;
+}
+
+val asmConfigurations(std::uint32_t handle) {
+    return withSession(handle, [&](Session& s) {
+        const a::AssemblyDocument& d = s.active();
+        return success(configurationTableToJs(d, d.configurationTable(), d.configurationBase()));
+    });
+}
+
+// Whole table in one history step: the document returns to the base values, then table.active
+// is applied and solved.
+val asmSetConfigurationTable(std::uint32_t handle, val table) {
+    return withSession(handle, [&](Session& s) {
+        requireNoDrag(s);
+        check(s.history.setConfigurationTable(configurationTableFromJs(table), memoryLoadOptions()));
+        return success(val(true));
+    });
+}
+
+// Makes a configuration active ("" — base values); one history step.
+val asmActivateConfiguration(std::uint32_t handle, std::string designation) {
+    return withSession(handle, [&](Session& s) {
+        requireNoDrag(s);
+        return success(activationToJs(take(s.history.activateConfiguration(designation, memoryLoadOptions()))));
+    });
+}
+
+// {decimal?: '.' | ',', bom?: boolean} → CSV text of the current table.
+val asmConfigurationsToCsv(std::uint32_t handle, val options) {
+    return withSession(handle, [&](Session& s) {
+        const std::string decimal = isObject(options) ? optionalString(options, "decimal", ".", "options") : ".";
+        if (decimal != "." && decimal != ",") throw InputError("options.decimal must be '.' or ','");
+        const bool bom = isObject(options) ? optionalBool(options, "bom", true, "options") : true;
+        const a::AssemblyDocument& d = s.active();
+        return success(val(a::configurationTableToCsv(d, d.configurationTable(), decimal[0], bom)));
+    });
+}
+
+// Parses CSV against the document (names of components and mates); the table is not applied:
+// the result goes to setConfigurationTable. Active — the current one if the CSV still has it.
+val asmConfigurationsFromCsv(std::uint32_t handle, std::string csv) {
+    return withSession(handle, [&](Session& s) {
+        const a::AssemblyDocument& d = s.active();
+        a::AssemblyConfigurationTable t = take(a::configurationTableFromCsv(d, csv));
+        t.active = d.activeConfiguration();
+        if (!t.rowOf(t.active)) t.active.clear();
+        const auto current = d.configurationTable();
+        const auto currentBase = d.configurationBase();
+        std::vector<std::string> base;
+        for (const auto& c : t.columns) {
+            const auto k = current.columnOf(c);
+            base.push_back(k ? currentBase[*k] : std::string());
+        }
+        return success(configurationTableToJs(d, t, base));
+    });
+}
+
+val configurationBomRowToJs(const a::ConfigurationBomRow& r) {
+    val x = val::object();
+    x.set("definition", static_cast<double>(r.definition));
+    x.set("kind", std::string(r.kind == a::DefinitionKind::Part ? "part" : "assembly"));
+    x.set("designation", r.designation);
+    x.set("name", r.name);
+    x.set("material", r.material);
+    val q = val::array();
+    for (int n : r.quantities) q.call<void>("push", n);
+    x.set("quantities", q);
+    x.set("unitVolume", r.unitVolume);
+    x.set("unitMass", r.unitMass ? val(*r.unitMass) : val::null());
+    return x;
+}
+
+// Composition of every configuration: {configurations: [{designation, fullDesignation, name,
+// totalMass, totalVolume, totalParts}], rows (first level), parts (all parts)}.
+val asmConfigurationBom(std::uint32_t handle) {
+    return withSession(handle, [&](Session& s) {
+        const a::ConfigurationBom b = take(a::configurationBom(s.active(), memoryLoadOptions()));
+        val cols = val::array();
+        for (const auto& c : b.configurations) {
+            val x = val::object();
+            x.set("designation", c.designation);
+            x.set("fullDesignation", c.fullDesignation);
+            x.set("name", c.name);
+            x.set("totalMass", c.totalMass ? val(*c.totalMass) : val::null());
+            x.set("totalVolume", c.totalVolume);
+            x.set("totalParts", c.totalParts);
+            cols.call<void>("push", x);
+        }
+        val rows = val::array();
+        for (const auto& r : b.rows) rows.call<void>("push", configurationBomRowToJs(r));
+        val parts = val::array();
+        for (const auto& r : b.parts) parts.call<void>("push", configurationBomRowToJs(r));
+        val out = val::object();
+        out.set("configurations", cols);
+        out.set("rows", rows);
+        out.set("parts", parts);
+        return success(out);
+    });
+}
+
 // ---- fasteners in holes
 
 val holeSiteToJs(const f::HoleSite& site) {
@@ -1894,6 +2179,12 @@ EMSCRIPTEN_BINDINGS(bendcore_assembly) {
     emscripten::function("asmMeasure", &asmMeasure);
     emscripten::function("asmInterference", &asmInterference);
     emscripten::function("asmBom", &asmBom);
+    emscripten::function("asmConfigurations", &asmConfigurations);
+    emscripten::function("asmSetConfigurationTable", &asmSetConfigurationTable);
+    emscripten::function("asmActivateConfiguration", &asmActivateConfiguration);
+    emscripten::function("asmConfigurationsToCsv", &asmConfigurationsToCsv);
+    emscripten::function("asmConfigurationsFromCsv", &asmConfigurationsFromCsv);
+    emscripten::function("asmConfigurationBom", &asmConfigurationBom);
     emscripten::function("asmFindHoles", &asmFindHoles);
     emscripten::function("asmInsertFasteners", &asmInsertFasteners);
 }

@@ -348,7 +348,7 @@ TEST(AssemblyConfigurations, SwitchingBackAndForthGivesSamePlacements) {
     EXPECT_NE(doc.setConfigurationTable(bad, g->options).error().message.find("no source document"), std::string::npos);
     bad = doc.configurationTable();
     bad.rows[1].designation = bad.rows[0].designation;
-    EXPECT_NE(doc.setConfigurationTable(bad, g->options).error().message.find("is repeated"), std::string::npos);
+    EXPECT_NE(doc.setConfigurationTable(bad, g->options).error().message.find("repeated designation"), std::string::npos);
 
     // Удаление вхождения удаляет его столбец.
     ASSERT_TRUE(doc.removeOccurrence(g->boltB[3]).ok());

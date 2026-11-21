@@ -48,10 +48,6 @@ std::optional<double> parseNumber(std::string text) {
 
 bool sameNumber(double a, double b) { return std::abs(a - b) <= 1e-12 * std::max(1.0, std::abs(b)); }
 
-std::string columnLabel(const AssemblyConfigurationColumn& c) {
-    return std::string(toString(c.kind)) + " " + std::to_string(c.target);
-}
-
 }  // namespace
 
 // ---------------------------------------------------------------- таблица
@@ -121,40 +117,41 @@ Result<std::string> AssemblyDocument::columnValue(const AssemblyConfigurationCol
 }
 
 Status AssemblyDocument::checkConfigurationTable(const AssemblyConfigurationTable& t) const {
-    std::vector<std::string> titles;
     for (std::size_t k = 0; k < t.columns.size(); ++k) {
         const AssemblyConfigurationColumn& c = t.columns[k];
-        const std::string where = "column " + std::to_string(k + 1) + ": ";
+        const std::string col = std::to_string(k + 1);
         for (std::size_t j = 0; j < k; ++j)
-            if (t.columns[j] == c) return fail(ErrorCode::InvalidInput, where + columnLabel(c) + " is repeated");
+            if (t.columns[j] == c) return fail(ErrorCode::InvalidInput, "repeated column '" + configurationColumnTitle(*this, c) + "'");
         if (c.kind == AssemblyColumnKind::MateValue) {
             const DocumentMate* m = findMate(c.target);
-            if (!m) return fail(ErrorCode::InvalidInput, where + "unknown mate " + std::to_string(c.target));
+            if (!m) return fail(ErrorCode::InvalidInput, "column " + col + ": unknown mate " + std::to_string(c.target));
             if (m->spec.type != MateType::Distance && m->spec.type != MateType::Angle && m->spec.type != MateType::Gear)
-                return fail(ErrorCode::InvalidInput, where + "mate " + std::to_string(c.target) + " (" +
+                return fail(ErrorCode::InvalidInput, "column " + col + ": mate " + std::to_string(c.target) + " (" +
                                                          toString(m->spec.type) + ") has no value");
             continue;
         }
         const Occurrence* o = findOccurrence(c.target);
-        if (!o) return fail(ErrorCode::InvalidInput, where + "unknown occurrence " + std::to_string(c.target));
-        if (auto e = checkEditable(c.target); !e) return fail(ErrorCode::InvalidInput, where + e.error().message);
+        if (!o) return fail(ErrorCode::InvalidInput, "column " + col + ": unknown occurrence " + std::to_string(c.target));
+        if (auto e = checkEditable(c.target); !e) return fail(ErrorCode::InvalidInput, "column " + col + ": " + e.error().message);
         // Экземпляры массива создаются и удаляются массивом (число отверстий зависит от
         // исполнения детали): они следуют за исходным компонентом.
         if (o->pattern)
-            return fail(ErrorCode::InvalidInput, where + "occurrence '" + o->name +
+            return fail(ErrorCode::InvalidInput, "column " + col + ": occurrence '" + o->name +
                                                      "' is a pattern instance; it follows the pattern seed");
         if (c.kind == AssemblyColumnKind::Configuration) {
             const Definition& d = definitions_[o->definition];
             if (d.source.empty() || (d.kind == DefinitionKind::Assembly && d.external))
-                return fail(ErrorCode::InvalidInput, where + "occurrence '" + o->name +
+                return fail(ErrorCode::InvalidInput, "column " + col + ": occurrence '" + o->name +
                                                          "' has no source document: configurations need one");
         }
     }
     std::set<std::string> seen;
     for (const AssemblyConfiguration& r : t.rows) {
-        if (r.designation.empty()) return fail(ErrorCode::InvalidInput, "configuration designation must not be empty");
+        const std::size_t number = static_cast<std::size_t>(&r - t.rows.data()) + 1;
+        if (r.designation.empty())
+            return fail(ErrorCode::InvalidInput, "configuration " + std::to_string(number) + " has no designation");
         if (!seen.insert(r.designation).second)
-            return fail(ErrorCode::InvalidInput, "configuration '" + r.designation + "' is repeated");
+            return fail(ErrorCode::InvalidInput, "repeated designation '" + r.designation + "'");
         if (r.cells.size() != t.columns.size())
             return fail(ErrorCode::InvalidInput, "configuration '" + r.designation + "' has " +
                                                      std::to_string(r.cells.size()) + " cells, the table has " +
@@ -163,15 +160,15 @@ Status AssemblyDocument::checkConfigurationTable(const AssemblyConfigurationTabl
             const std::string& cell = r.cells[k];
             if (cell.empty()) continue;
             const AssemblyConfigurationColumn& c = t.columns[k];
-            const std::string where = "configuration '" + r.designation + "', column " + std::to_string(k + 1) + ": ";
+            const std::string title = configurationColumnTitle(*this, c);
             if (c.kind == AssemblyColumnKind::Suppression && !modeling::parseSuppressionCell(cell))
-                return fail(ErrorCode::InvalidInput, where + "invalid value '" + cell + "' (expected 1 or 0)");
+                return fail(ErrorCode::InvalidInput, "configuration '" + r.designation + "', column '" + title + "': invalid value '" + cell + "' (expected 1 or 0)");
             if (c.kind == AssemblyColumnKind::MateValue) {
                 const auto v = parseNumber(cell);
-                if (!v) return fail(ErrorCode::InvalidInput, where + "invalid value '" + cell + "' (expected a number)");
+                if (!v) return fail(ErrorCode::InvalidInput, "configuration '" + r.designation + "', column '" + title + "': invalid value '" + cell + "': expected a number");
                 const DocumentMate* m = findMate(c.target);
                 if (m->spec.type == MateType::Gear && !(*v > 0.0))
-                    return fail(ErrorCode::InvalidInput, where + "gear ratio must be positive, got '" + cell + "'");
+                    return fail(ErrorCode::InvalidInput, "configuration '" + r.designation + "', column '" + title + "': invalid value '" + cell + "': a gear ratio must be positive");
             }
         }
     }
@@ -455,8 +452,9 @@ Result<std::uint32_t> resolveTarget(const AssemblyDocument& doc, AssemblyColumnK
         const auto id = static_cast<std::uint32_t>(std::strtoul(name.c_str() + 1, nullptr, 10));
         const bool exists = kind == AssemblyColumnKind::MateValue ? doc.findMate(id) != nullptr
                                                                   : doc.findOccurrence(id) != nullptr;
-        if (!exists) return Error{ErrorCode::ParseError, "CSV column '" + title + "': no such " +
-                                                             (kind == AssemblyColumnKind::MateValue ? "mate" : "occurrence")};
+        if (!exists && kind == AssemblyColumnKind::MateValue)
+            return Error{ErrorCode::ParseError, "CSV column '" + title + "': no such mate"};
+        if (!exists) return Error{ErrorCode::ParseError, "CSV column '" + title + "': no such occurrence"};
         return id;
     }
     std::vector<std::uint32_t> found;
@@ -467,15 +465,23 @@ Result<std::uint32_t> resolveTarget(const AssemblyDocument& doc, AssemblyColumnK
         for (const Occurrence* o : editableOccurrences(doc))
             if (o->name == name) found.push_back(o->id);
     }
-    const char* what = kind == AssemblyColumnKind::MateValue ? "mate" : "occurrence";
-    if (found.empty()) return Error{ErrorCode::ParseError, "CSV column '" + title + "': no " + what + " named '" + name + "'"};
+    const bool mate = kind == AssemblyColumnKind::MateValue;
+    if (found.empty() && mate) return Error{ErrorCode::ParseError, "CSV column '" + title + "': no mate named '" + name + "'"};
+    if (found.empty()) return Error{ErrorCode::ParseError, "CSV column '" + title + "': no occurrence named '" + name + "'"};
+    if (found.size() > 1 && mate)
+        return Error{ErrorCode::ParseError, "CSV column '" + title + "': " + std::to_string(found.size()) +
+                                                " mates are named '" + name + "'; use #<id>"};
     if (found.size() > 1)
-        return Error{ErrorCode::ParseError, "CSV column '" + title + "': " + std::to_string(found.size()) + " " + what +
-                                                "s are named '" + name + "'; use #<id>"};
+        return Error{ErrorCode::ParseError, "CSV column '" + title + "': " + std::to_string(found.size()) +
+                                                " occurrences are named '" + name + "'; use #<id>"};
     return found.front();
 }
 
 }  // namespace
+
+std::string configurationColumnTitle(const AssemblyDocument& document, const AssemblyConfigurationColumn& column) {
+    return kindPrefix(column.kind) + targetName(document, column);
+}
 
 std::string configurationTableToCsv(const AssemblyDocument& document, const AssemblyConfigurationTable& table,
                                     char decimal, bool byteOrderMark) {

@@ -630,6 +630,8 @@ kernel::Result<std::map<OccurrenceId, Transform>> explodedPlacements(const Assem
 // «designation;name;<столбцы>», столбцы — «suppress:<вхождение>», «configuration:<вхождение>»,
 // «mate:<сопряжение>» (при чтении также «подавить:», «исполнение:», «сопряжение:»); вхождение и
 // сопряжение — по имени, если оно однозначно, иначе «#<ID>». Активное исполнение в CSV не пишется.
+// Заголовок столбца, как в CSV: «suppress:A1», «configuration:Вал», «mate:#7».
+std::string configurationColumnTitle(const AssemblyDocument& document, const AssemblyConfigurationColumn& column);
 std::string configurationTableToCsv(const AssemblyDocument& document, const AssemblyConfigurationTable& table,
                                     char decimal = '.', bool byteOrderMark = true);
 // Ошибки ParseError: формат CSV (с номером строки), неизвестный вид столбца (material),

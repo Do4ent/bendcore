@@ -219,6 +219,38 @@ export class AssemblyDocumentHandle {
     return this.#call('asmBom', mode);
   }
 
+  /** Assembly configuration table with current values (docs/assembly/ASSEMBLY_DOCUMENT.md, 8.2). */
+  configurationTable() {
+    return this.#call('asmConfigurations');
+  }
+
+  /** { columns: [{ kind, target }], rows: [{ designation, name, cells }], active } — one undo step. */
+  setConfigurationTable(table) {
+    this.#call('asmSetConfigurationTable', table);
+  }
+
+  /** Composition of the configuration ('' — base values), then solve; one undo step. */
+  activateConfiguration(designation) {
+    if (typeof designation !== 'string') throw new KernelError('InvalidInput', 'designation must be a string');
+    return this.#call('asmActivateConfiguration', designation);
+  }
+
+  /** { decimal: '.' | ',', bom } → CSV text of the table. */
+  configurationsToCsv(options = {}) {
+    return this.#call('asmConfigurationsToCsv', options);
+  }
+
+  /** CSV text → table (not applied; pass it to setConfigurationTable). */
+  configurationsFromCsv(csv) {
+    if (typeof csv !== 'string') throw new KernelError('InvalidInput', 'csv must be a string');
+    return this.#call('asmConfigurationsFromCsv', csv);
+  }
+
+  /** Composition of every configuration: { configurations, rows, parts } with quantities per configuration. */
+  configurationBom() {
+    return this.#call('asmConfigurationBom');
+  }
+
   /** Holes of a part for a fastener: { part, insertion, radius } → sites. */
   findHoles(spec) {
     return this.#call('asmFindHoles', spec);

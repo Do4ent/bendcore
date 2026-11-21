@@ -519,7 +519,7 @@ TEST(AssemblyDocumentIo, MigrationFromVersion1) {
     EXPECT_EQ(r.value().totalDof, 1);
     expectShaftSeated(d, 2);
     auto resaved = d.toJson().value();
-    EXPECT_NE(resaved.find("\"version\": 2"), std::string::npos);
+    EXPECT_NE(resaved.find("\"version\": " + std::to_string(AssemblyDocument::kFormatVersion)), std::string::npos);
     auto back = AssemblyDocument::fromJson(resaved, m.options());
     ASSERT_TRUE(back.ok());
     EXPECT_FALSE(back.value().report.migrated);
