@@ -110,6 +110,26 @@
 (3 знака до 1 кг, 2 — до 100 кг); графа 6 — масштаб листа (`ScaleRatio::label`), 7/8 — номер
 листа и число листов чертежа.
 
+### Оформление листа, метод проекций, дополнительный вид
+
+- `DrawingSettings::sheetStyle` — `Eskd` (рамка ГОСТ 2.104, формы 1 и 2а) или `Iso7200` (рамка
+  ISO 5457, основная надпись ISO 7200 со знаком метода проекций ISO 5456-2 на каждом листе,
+  `DRAWING_MODEL.md`); при ISO основные форматы — ISO 216 (размеры те же). Поля ISO —
+  `ComputedSheet::isoTitle`: владелец — `TitleFields::organization`, обозначение, наименование,
+  автор (`developer`), утвердивший (`approver`) — из граф ЕСКД; тип документа (пусто — «Чертёж
+  детали» / «Сборочный чертёж», по-английски «Detail drawing» / «Assembly drawing»), статус,
+  ревизия, дата выпуска, язык (пусто — «ru»), отдел — новые поля `TitleFields`. Область видов
+  и проверка перекрытий учитывают рамку и надпись выбранного оформления.
+- `DrawingDocument::setProjectionMethod` — метод проекций документа (`VIEWS.md`, «Метод проекций
+  документа»).
+- `ViewKind::Auxiliary` — дополнительный вид по стрелке с буквой (`VIEWS.md`, «Дополнительный
+  вид»); `ViewDef::rotated`, `ComputedView::rotationDeg`, `ComputedView::arrow`.
+- Файл (версия 2 без изменения, поля необязательные): `settings.sheetStyle` (`"iso7200"`, пишется
+  только не по умолчанию), `title.documentType/documentStatus/revision/issueDate/language/department`
+  (пишутся непустые), вид `"kind": "auxiliary"` и `"rotated": true`.
+
+Тесты: `tests/drawing_v2/test_drawing_document_iso.cpp`.
+
 ## Компоновка
 
 Области листа (мм): рамка с полями 20/5, основная надпись 185×55 в правом нижнем углу,

@@ -17,10 +17,11 @@ constexpr double kCellMargin = 0.5;
 
 class Builder {
 public:
-    Builder(Drawing& d, const FrameOptions& o) : d_(d), o_(o) {}
+    Builder(Drawing& d, const TextMetrics* font, const std::string& frameLayer, const std::string& textLayer)
+        : d_(d), font_(font), frameLayer_(frameLayer), textLayer_(textLayer) {}
 
     Status line(double x0, double y0, double x1, double y1, bool thick) {
-        return d_.add(Entity{LineSeg{{x0, y0}, {x1, y1}}, o_.frameLayer,
+        return d_.add(Entity{LineSeg{{x0, y0}, {x1, y1}}, frameLayer_,
                              thick ? LineType::SolidThick : LineType::SolidThin});
     }
     Status rect(const Rect& r, bool thick) {
@@ -45,13 +46,13 @@ public:
         for (auto it = kGostTextHeights.rbegin(); it != kGostTextHeights.rend(); ++it) {
             const double hgt = *it;
             if (hgt > preferred + 1e-9 || hgt > across - 1.0 + 1e-9) continue;
-            if (!o_.font) {
+            if (!font_) {
                 height = hgt;
                 break;
             }
-            const double w = o_.font->textWidthMm(cps.value(), hgt);
+            const double w = font_->textWidthMm(cps.value(), hgt);
             const double need = w <= avail ? 1.0 : avail / w;
-            if (need >= o_.font->minWidthFactor() - 1e-12) {
+            if (need >= font_->minWidthFactor() - 1e-12) {
                 height = hgt;
                 wf = need;
                 break;
@@ -78,12 +79,14 @@ public:
             t.hAlign = HAlign::Center;
             t.position = {(cell.x0 + cell.x1) / 2.0, (cell.y0 + cell.y1) / 2.0};
         }
-        return d_.add(Entity{t, o_.textLayer, LineType::SolidThin});
+        return d_.add(Entity{t, textLayer_, LineType::SolidThin});
     }
 
 private:
     Drawing& d_;
-    const FrameOptions& o_;
+    const TextMetrics* font_;
+    const std::string& frameLayer_;
+    const std::string& textLayer_;
 };
 
 #define BC_TRY(expr)                    \
@@ -132,7 +135,7 @@ Result<TitleBlockLayout> addFrameAndTitleBlock(Drawing& drawing, const TitleBloc
     L.titleBlock = {X, Y, L.frame.x1, Y + tbH};
     auto R = [&](double x0, double y0, double x1, double y1) { return Rect{X + x0, Y + y0, X + x1, Y + y1}; };
 
-    Builder b(drawing, options);
+    Builder b(drawing, options.font, options.frameLayer, options.textLayer);
     BC_TRY(b.rect(L.sheet, false));  // линия обреза листа
     BC_TRY(b.rect(L.frame, true));   // рамка — сплошная толстая основная
     // Нижняя и правая стороны основной надписи совпадают с рамкой.
@@ -310,6 +313,167 @@ Result<TitleBlockLayout> addFrameAndTitleBlock(Drawing& drawing, const TitleBloc
             BC_TRY(b.text(Rect{sx0, y, sxm, y + lengths[i]}, labels[i], 2.5, HAlign::Center, true, labels[i]));
             y += lengths[i];
         }
+    }
+    return L;
+}
+
+// ---------------------------------------------------------------- ISO 7200 / ISO 5457
+
+std::string iso7200FieldLabel(Iso7200Field field, const std::string& language) {
+    const bool ru = language.size() >= 2 && (language.compare(0, 2, "ru") == 0 || language.compare(0, 2, "RU") == 0);
+    switch (field) {
+        case Iso7200Field::Department: return ru ? "Отдел" : "Responsible dept.";
+        case Iso7200Field::Creator: return ru ? "Разработал" : "Created by";
+        case Iso7200Field::Approver: return ru ? "Утвердил" : "Approved by";
+        case Iso7200Field::Projection: return "";
+        case Iso7200Field::Scale: return ru ? "Масштаб" : "Scale";
+        case Iso7200Field::LegalOwner: return ru ? "Владелец" : "Legal owner";
+        case Iso7200Field::DocumentType: return ru ? "Тип документа" : "Document type";
+        case Iso7200Field::Title: return ru ? "Наименование" : "Title";
+        case Iso7200Field::DocumentStatus: return ru ? "Статус документа" : "Document status";
+        case Iso7200Field::Identification: return ru ? "Обозначение" : "Identification number";
+        case Iso7200Field::Revision: return ru ? "Изм." : "Rev.";
+        case Iso7200Field::IssueDate: return ru ? "Дата выпуска" : "Date of issue";
+        case Iso7200Field::Language: return ru ? "Язык" : "Lang.";
+        case Iso7200Field::Sheet: return ru ? "Лист" : "Sheet";
+    }
+    return "";
+}
+
+Result<ProjectionSymbolGeometry> projectionSymbolGeometry(ProjectionSymbol method, Point2 center, double h) {
+    using R = Result<ProjectionSymbolGeometry>;
+    if (method == ProjectionSymbol::None) return R::failure(ErrorCode::InvalidInput, "projection symbol: no projection method");
+    if (!(h > 0.0) || !std::isfinite(h) || !std::isfinite(center.x) || !std::isfinite(center.y))
+        return R::failure(ErrorCode::InvalidInput, "projection symbol: height must be positive and finite");
+    // Габарит 5h × 2h: трапеция длиной 2h, зазор h, окружности диаметром 2h.
+    const double H = 2.0 * h, total = 5.0 * h;
+    const double left = center.x - total / 2.0;
+    const bool first = method == ProjectionSymbol::FirstAngle;
+    const double tx0 = first ? left : left + total - H;  // трапеция
+    const double cx = first ? left + total - h : left + h;  // центр окружностей
+    const double cy = center.y;
+    ProjectionSymbolGeometry g;
+    // Узкий торец (диаметр h) — слева, широкий (диаметр 2h) — справа.
+    const Point2 a{tx0, cy - h / 2.0}, b{tx0 + H, cy - h}, c{tx0 + H, cy + h}, d{tx0, cy + h / 2.0};
+    g.outline = {LineSeg{a, b}, LineSeg{b, c}, LineSeg{c, d}, LineSeg{d, a}};
+    g.innerCircle = Circle{{cx, cy}, h / 2.0};
+    g.outerCircle = Circle{{cx, cy}, h};
+    const double over = h / 4.0;  // выход осевых за контур
+    g.axes = {LineSeg{{left - over, cy}, {left + total + over, cy}}, LineSeg{{cx, cy - h - over}, {cx, cy + h + over}}};
+    g.bounds = {left, cy - h, left + total, cy + h};
+    return g;
+}
+
+Status addProjectionSymbol(Drawing& drawing, const ProjectionSymbolGeometry& g, const std::string& layer) {
+    for (const LineSeg& l : g.outline)
+        if (auto s = drawing.add(Entity{l, layer, LineType::SolidThin}); !s) return s;
+    for (const Circle& c : {g.innerCircle, g.outerCircle})
+        if (auto s = drawing.add(Entity{c, layer, LineType::SolidThin}); !s) return s;
+    for (const LineSeg& l : g.axes)
+        if (auto s = drawing.add(Entity{l, layer, LineType::DashDotThin}); !s) return s;
+    return okStatus();
+}
+
+Result<TitleBlockLayout> addIsoFrameAndTitleBlock(Drawing& drawing, const Iso7200Data& data, const IsoFrameOptions& options) {
+    const Sheet& sh = drawing.sheet();
+    const double W = sh.widthMm, H = sh.heightMm;
+    if (W < kIso5457LeftMargin + kIso5457Margin + kIso7200Width - 1e-9 || H < 2 * kIso5457Margin + kIso7200Height + 1e-9)
+        return Error{ErrorCode::InvalidInput, "sheet " + sh.name + " is too small for the ISO 7200 title block"};
+    if (data.sheet < 1 || data.sheets < 1 || data.sheet > data.sheets)
+        return Error{ErrorCode::InvalidInput, "title block: sheet number must be 1..sheets"};
+    for (const std::string& name : {options.frameLayer, options.textLayer}) {
+        if (!drawing.findLayer(name)) BC_TRY(drawing.addLayer(Layer{name, 7}));
+    }
+
+    TitleBlockLayout L;
+    L.sheet = {0, 0, W, H};
+    L.frame = {kIso5457LeftMargin, kIso5457Margin, W - kIso5457Margin, H - kIso5457Margin};
+    const double X = L.frame.x1 - kIso7200Width, Y = L.frame.y0;
+    L.titleBlock = {X, Y, L.frame.x1, Y + kIso7200Height};
+    auto R = [&](double x0, double y0, double x1, double y1) { return Rect{X + x0, Y + y0, X + x1, Y + y1}; };
+
+    Builder b(drawing, options.font, options.frameLayer, options.textLayer);
+    BC_TRY(b.rect(L.sheet, false));
+    BC_TRY(b.rect(L.frame, true));
+    if (options.centringMarks) {
+        // ISO 5457, п. 3.3: метки центрирования — от края листа до 5 мм за рамку внутрь.
+        const double mx = W / 2.0, my = H / 2.0;
+        BC_TRY(b.line(mx, 0.0, mx, L.frame.y0 + 5.0, true));
+        BC_TRY(b.line(mx, H, mx, L.frame.y1 - 5.0, true));
+        BC_TRY(b.line(0.0, my, L.frame.x0 + 5.0, my, true));
+        BC_TRY(b.line(W, my, L.frame.x1 - 5.0, my, true));
+    }
+
+    using F = Iso7200Field;
+    struct Cell {
+        F field;
+        Rect r;
+    };
+    // Раскладка 180×36: строки по 9 мм; левая часть 60 мм, середина 60, правая 60.
+    const Cell cells[] = {
+        {F::Department, R(0, 27, 30, 36)},      {F::Creator, R(30, 27, 60, 36)},
+        {F::Projection, R(0, 18, 15, 27)},      {F::Scale, R(15, 18, 30, 27)},
+        {F::Approver, R(30, 18, 60, 27)},       {F::LegalOwner, R(0, 0, 60, 18)},
+        {F::DocumentType, R(60, 27, 120, 36)},  {F::Title, R(60, 0, 120, 27)},
+        {F::DocumentStatus, R(120, 27, 180, 36)}, {F::Identification, R(120, 9, 180, 27)},
+        {F::Revision, R(120, 0, 130, 9)},       {F::IssueDate, R(130, 0, 156, 9)},
+        {F::Language, R(156, 0, 166, 9)},       {F::Sheet, R(166, 0, 180, 9)},
+    };
+    // Контур надписи — сплошная толстая (нижняя и правая стороны совпадают с рамкой), границы
+    // полей — сплошная тонкая (ISO 7200, п. 3.2: линии как у рамки и тонкие внутри).
+    BC_TRY(b.line(L.titleBlock.x0, L.titleBlock.y0, L.titleBlock.x0, L.titleBlock.y1, true));
+    BC_TRY(b.line(L.titleBlock.x0, L.titleBlock.y1, L.titleBlock.x1, L.titleBlock.y1, true));
+    auto hl = [&](double x0, double x1, double y) { return b.line(X + x0, Y + y, X + x1, Y + y, false); };
+    auto vl = [&](double x, double y0, double y1) { return b.line(X + x, Y + y0, X + x, Y + y1, false); };
+    BC_TRY(hl(0, 180, 27));
+    BC_TRY(hl(0, 60, 18));
+    BC_TRY(hl(120, 180, 9));
+    BC_TRY(vl(60, 0, 36));
+    BC_TRY(vl(120, 0, 36));
+    BC_TRY(vl(30, 18, 36));
+    BC_TRY(vl(15, 18, 27));
+    for (double x : {130.0, 156.0, 166.0}) BC_TRY(vl(x, 0, 9));
+
+    auto value = [&](F f) -> std::string {
+        switch (f) {
+            case F::Department: return data.department;
+            case F::Creator: return data.creator;
+            case F::Approver: return data.approver;
+            case F::Projection: return "";
+            case F::Scale: return data.scale;
+            case F::LegalOwner: return data.legalOwner;
+            case F::DocumentType: return data.documentType;
+            case F::Title: return data.title;
+            case F::DocumentStatus: return data.documentStatus;
+            case F::Identification: return data.identification;
+            case F::Revision: return data.revision;
+            case F::IssueDate: return data.issueDate;
+            case F::Language: return data.language;
+            case F::Sheet: return std::to_string(data.sheet) + "/" + std::to_string(data.sheets);
+        }
+        return "";
+    };
+    constexpr double kLabelStrip = 3.5;  // полоса наименования поля: h = 2,5 и 0,5 мм сверху и снизу
+    for (const Cell& c : cells) {
+        L.graphs[int(c.field)] = c.r;
+        if (c.field == F::Projection) continue;
+        const std::string label = iso7200FieldLabel(c.field, data.language);
+        BC_TRY(b.text(Rect{c.r.x0, c.r.y1 - kLabelStrip, c.r.x1, c.r.y1}, label, 2.5, HAlign::Left, false, label.c_str()));
+        const bool big = c.field == F::Title || c.field == F::Identification;
+        const bool centered = c.field == F::Revision || c.field == F::Language || c.field == F::Sheet;
+        const std::string v = value(c.field);
+        const std::string name = label.empty() ? "value" : label;
+        // Значение — ниже полосы наименования, 0,5 мм над нижней линией поля (место нижних
+        // выносных элементов строчных букв шрифта ГОСТ 2.304).
+        BC_TRY(b.text(Rect{c.r.x0, c.r.y0 + 0.5, c.r.x1, c.r.y1 - kLabelStrip}, v, big ? 7.0 : 3.5,
+                      big || centered ? HAlign::Center : HAlign::Left, false, name.c_str()));
+    }
+    if (data.projection != ProjectionSymbol::None) {
+        const Rect& pc = L.graphs.at(int(F::Projection));
+        auto g = projectionSymbolGeometry(data.projection, {(pc.x0 + pc.x1) / 2.0, (pc.y0 + pc.y1) / 2.0}, 2.5);
+        if (!g) return g.error();
+        BC_TRY(addProjectionSymbol(drawing, g.value(), options.frameLayer));
+        L.projectionSymbol = g.value().bounds;
     }
     return L;
 }

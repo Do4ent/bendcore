@@ -5,12 +5,36 @@
  * kernel's description and specification into the rows of the interface and the next settings.
  */
 
-import type { SpecificationTable, TextFont } from '../../wasm/bendcore_drawing_api.mjs';
+import type { ProjectionMethod, SheetStyle, SpecificationTable, TextFont, ViewInfo } from '../../wasm/bendcore_drawing_api.mjs';
 
 export const TEXT_FONTS: readonly TextFont[] = ['gost2304', 'truetype'];
 
 export function isTextFont(v: string): v is TextFont {
   return (TEXT_FONTS as readonly string[]).includes(v);
+}
+
+/** Sheet styles: ESKD (GOST 2.104) and ISO (ISO 5457 frame, ISO 7200 title block). */
+export const SHEET_STYLES: readonly SheetStyle[] = ['eskd', 'iso7200'];
+export function isSheetStyle(v: string): v is SheetStyle {
+  return (SHEET_STYLES as readonly string[]).includes(v);
+}
+
+/** Projection methods of the document: first angle (ESKD, ISO E) and third angle (ISO A). */
+export const PROJECTION_METHODS: readonly ProjectionMethod[] = ['firstAngle', 'thirdAngle'];
+export function isProjectionMethod(v: string): v is ProjectionMethod {
+  return (PROJECTION_METHODS as readonly string[]).includes(v);
+}
+
+/**
+ * Parent of a new auxiliary view (GOST 2.305, 5.4): the selected view when it is an orthogonal
+ * view the arrow can be put on (base, projected, section, auxiliary), else the base view; null —
+ * the sheet has no base view.
+ */
+export function auxiliaryParent(views: readonly Pick<ViewInfo, 'id' | 'kind'>[], selected: string | null): string | null {
+  const orthogonal = ['base', 'projected', 'section', 'auxiliary'];
+  const sel = views.find((v) => v.id === selected);
+  if (sel && orthogonal.includes(sel.kind)) return sel.id;
+  return views.find((v) => v.kind === 'base')?.id ?? null;
 }
 
 export interface SubassemblyRow {

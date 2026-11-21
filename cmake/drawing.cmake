@@ -29,6 +29,7 @@ if(GTest_FOUND)
     tests/drawing_v2/test_font.cpp
     tests/drawing_v2/test_stroke_font.cpp
     tests/drawing_v2/test_title_block.cpp
+    tests/drawing_v2/test_title_block_iso.cpp
     tests/drawing_v2/test_dxf.cpp
     tests/drawing_v2/test_svg.cpp
     tests/drawing_v2/test_pdf.cpp

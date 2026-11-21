@@ -25,6 +25,7 @@
 | `tests/wasm/drawing_document.test.mjs` | проверка API под node на эталонном кронштейне |
 | `tests/wasm/fixtures/bracket.part.json`, `make_bracket_part.mjs` | документ детали «кронштейн» (эталонная деталь 1 `docs/modeling/REFERENCE_PARTS.md`) и его генератор через `bendcore_modeling_wasm` |
 | `tests/e2e-drawing/drawing_editor.spec.ts` | сценарий Playwright |
+| `tests/e2e-drawing/iso_sheet.spec.ts` | Playwright: третий угол (раскладка видов), оформление ISO 7200 (поля, знак метода в SVG листа, DXF), дополнительный вид со стрелкой, поворот, отмена |
 | `src/ui/drawing/__tests__/sheetGeometry.test.ts` | Jest |
 
 ## Сборка
@@ -120,6 +121,9 @@ detail}` с кодом ошибки ядра (`InvalidInput`, `ParseError`, `Ope
 | `moveDimension(sheet, id, x, y)` | перенос размерного числа в точку листа (`DrawingDocument::moveDimension` → `annotations::moveDimensionTo`); размер цепочки или от базы переносит всю группу (общая линия цепочки, шаг от базы) |
 | `arrangeDimensions(sheet, view)` | автокомпоновка размеров вида по ГОСТ 2.307 (`DrawingDocument::arrangeDimensions`); результат `{arranged, crossings, collisions}` — число переставленных размеров и того, что развести не удалось |
 | `addThreadNote(sheet, view, {at, toleranceField, offset, leaderAngle, textShift})`, `setThreadNote(sheet, id, {…})` | размер резьбы ГОСТ 2.311 у резьбы вида, ближайшей к точке `at` (до линий наружного диаметра или дуги 3/4); обозначение «M10×1,25LH-6H» |
+| `setSettings({projection, sheetStyle})` | метод проекций документа `firstAngle` / `thirdAngle` (`DrawingDocument::setProjectionMethod`: проекционные виды переходят на противоположную сторону родителя, изображения те же; в оформлении ЕСКД третий угол — предупреждение в `warnings`) и оформление листа `eskd` / `iso7200` (рамка ISO 5457, основная надпись ISO 7200 со знаком метода ISO 5456-2); правка, отменяется; `describe().projection`, `describe().sheetStyle`, `describe().sheets[].isoTitleShown` — поля ISO, как они напечатаны (`projectionSymbol`) |
+| `setSheet(sheet, {title: {documentType, documentStatus, revision, issueDate, language, department}})` | поля ISO 7200, которых нет в ГОСТ 2.104; владелец, обозначение, наименование, автор и утвердивший — графы `organization`, `designation`, `name`, `developer`, `approver` |
+| `addView(sheet, {kind: 'auxiliary', parent, arrowAngle, rotated})` | дополнительный вид ГОСТ 2.305 (п. 5.4–5.6) по стрелке на виде `parent` (по умолчанию главный): `arrowAngle` — направление стрелки, градусы от оси x вида против часовой стрелки (взгляд — в плоскости вида), или `toward` (модель); `rotated` — повернуть («вверх» родителя — вверх листа); `describe()` вида — `letter`, `rotationDeg`, `arrow {tip, tail, direction, letterPosition}`; `setView(…, {rotated})` — только для дополнительного вида |
 | `undo()`, `redo()` | отмена/повтор последней правки чертежа (`dd::DrawingHistory`); `describe().history` — `canUndo`, `canRedo`, названия правок (имя метода API), глубина |
 | `variables()`, `setVariable(name, expr)` | параметры детали; изменение перестраивает деталь и возвращает, что изменится в чертеже (`checkModel`); значение, при котором деталь не строится, отвергается (`OperationFailed`), параметр восстанавливается |
 | `setModelProperties({designation, name, material, density})` | свойства детали для основной надписи и массы |
@@ -252,6 +256,20 @@ detail}` с кодом ошибки ядра (`InvalidInput`, `ParseError`, `Ope
   Полки не налезают на размеры листа — линия полок обходит размерные и выносные линии и числа
   (`docs/drawing/ANNOTATIONS.md`, «Препятствия»). Список «полки позиций»
   (`view-balloon-line`) в свойствах вида сборки — сторона линии полок. Отменяется Ctrl+Z.
+- **Оформление листа и метод проекций**: в панели листа — списки «Оформление листа»
+  (`sheet-style`: «ЕСКД (ГОСТ 2.104)» / «ISO 7200») и «Метод проекций» (`projection-method`:
+  «первый угол (E)» / «третий угол (A)») — `setSettings`; смена метода переносит проекционные виды
+  на другую сторону главного (вид сверху — над главным при третьем угле), строка состояния
+  показывает предупреждение ЕСКД. При оформлении ISO форма основной надписи в правой панели —
+  поля ISO 7200 (`title-block-iso`, поля `title-iso-<графа>`: владелец, обозначение, наименование,
+  тип документа, статус, ревизия, дата выпуска, язык, автор, утвердил, отдел; подсказки —
+  значения, выведенные из модели).
+- **Дополнительный вид**: под кнопками видов — поле «Стрелка, °» (`aux-angle`, по умолчанию −45),
+  флажок «повернуто» (`aux-rotated`) и кнопка «Дополнительный вид» (`add-auxiliary`): вид по
+  стрелке на выбранном виде (главном, проекционном, разрезе или дополнительном; иначе — на
+  главном). На листе — стрелка с буквой у родительского вида и буква над видом; в списке видов
+  повернутый вид подписан «А (повернуто)»; в свойствах вида — флажок «повернуто»
+  (`view-rotated`). Отменяется Ctrl+Z.
 - **Отмена/повтор**: кнопки «Отменить»/«Повторить» (подсказка — название правки) и Ctrl+Z,
   Ctrl+Y / Ctrl+Shift+Z (`useHotkeys`; в полях ввода клавиши не перехватываются).
 - **Печать**: «Печать» — SVG текущего листа (`exportSheet(…, 'svg')`) в документе печати

@@ -201,7 +201,16 @@ std::map<assembly_v2::DefinitionId, std::vector<Point2>> shownParts(const ModelS
 // Надпись над видом и обозначения, которые вид ставит на других видах: секущая плоскость разреза
 // (штрихи, стрелки, буквы — ГОСТ 2.305, разд. 6), окружность и буква выносного элемента (разд. 8).
 Status renderViewMarks(Drawing& d, const ComputedView& cv, const std::map<std::string, const ComputedView*>& byId,
-                       const RenderOptions& ro) {
+                       const RenderOptions& ro, const TextMetrics* font) {
+    if (cv.kind == ViewKind::Auxiliary) {
+        // Дополнительный вид (ГОСТ 2.305, п. 5.4–5.6): надпись над видом (со знаком «повернуто») и
+        // стрелка с буквой на родительском виде.
+        auto lb = renderAuxiliaryLabel(d, cv.sheetView, cv.label, cv.rotationDeg, font, ro);
+        if (!lb) return lb.error();
+        if (cv.arrow)
+            if (auto st = renderViewArrow(d, *cv.arrow, cv.letter, ro); !st) return st;
+        return okStatus();
+    }
     if (!cv.label.empty())
         if (auto st = renderViewLabel(d, cv.sheetView, cv.label, ro); !st) return st;
     if (cv.kind == ViewKind::Section && byId.count(cv.def.markView)) {
@@ -283,13 +292,19 @@ struct SheetRegions {
     Rect2 secondary;
 };
 
-// Области листа: рамка ГОСТ 2.104 (поля 20/5), основная надпись 185×55 в правом нижнем углу,
-// технические требования над ней, знак «остальное» в правом верхнем углу.
+// Области листа: рамка ГОСТ 2.104 (поля 20/5), основная надпись 185×55 в правом нижнем углу (ISO:
+// рамка ISO 5457 — поля 20/10, надпись ISO 7200 180×36), технические требования над ней, знак
+// «остальное» в правом верхнем углу.
 SheetRegions computeRegions(const Sheet& sheet, const SheetDef& def, const DrawingSettings& st,
                             bool hasSecondary, const annotations::AnnotationStyle& style) {
     SheetRegions r;
-    r.frame = {20.0, 5.0, sheet.widthMm - 5.0, sheet.heightMm - 5.0};
-    r.title = {r.frame.x1 - 185.0, r.frame.y0, r.frame.x1, r.frame.y0 + 55.0};
+    if (st.sheetStyle == SheetStyle::Iso7200) {
+        r.frame = {kIso5457LeftMargin, kIso5457Margin, sheet.widthMm - kIso5457Margin, sheet.heightMm - kIso5457Margin};
+        r.title = {r.frame.x1 - kIso7200Width, r.frame.y0, r.frame.x1, r.frame.y0 + kIso7200Height};
+    } else {
+        r.frame = {20.0, 5.0, sheet.widthMm - 5.0, sheet.heightMm - 5.0};
+        r.title = {r.frame.x1 - 185.0, r.frame.y0, r.frame.x1, r.frame.y0 + 55.0};
+    }
     double trTop = r.title.y1;
     if (!def.technicalRequirements.empty()) {
         // Те же строки, что выведет addTechnicalRequirements (параметры по умолчанию).
@@ -491,8 +506,29 @@ const char* toString(ViewKind kind) noexcept {
         case ViewKind::Axonometric: return "axonometric";
         case ViewKind::Section: return "section";
         case ViewKind::Detail: return "detail";
+        case ViewKind::Auxiliary: return "auxiliary";
     }
     return "base";
+}
+
+const char* toString(SheetStyle style) noexcept { return style == SheetStyle::Iso7200 ? "iso7200" : "eskd"; }
+
+std::size_t DrawingDocument::setProjectionMethod(views::ProjectionMethod method) {
+    if (settings_.projection == method) return 0;
+    settings_.projection = method;
+    std::size_t moved = 0;
+    for (SheetDef& sd : sheets_)
+        for (ViewDef& v : sd.views) {
+            if (!v.side || (v.kind != ViewKind::Projected && v.kind != ViewKind::Section)) continue;
+            switch (*v.side) {
+                case SheetSide::Above: v.side = SheetSide::Below; break;
+                case SheetSide::Below: v.side = SheetSide::Above; break;
+                case SheetSide::LeftOf: v.side = SheetSide::RightOf; break;
+                case SheetSide::RightOf: v.side = SheetSide::LeftOf; break;
+            }
+            ++moved;
+        }
+    return moved;
 }
 
 SheetDef* DrawingDocument::findSheet(const std::string& id) {
@@ -548,6 +584,10 @@ Status DrawingDocument::validate() const {
                 case ViewKind::Detail:
                     if (auto st = needParent(true); !st) return st;
                     if (!(v.detailRadius > 0)) return invalid("drawing: " + where + ": detail radius must be positive");
+                    break;
+                case ViewKind::Auxiliary:
+                    if (auto st = needParent(true); !st) return st;
+                    if (v.side) return invalid("drawing: " + where + ": an auxiliary view is placed outside the projection link (no side)");
                     break;
             }
             if (!v.localSections.empty()) {
@@ -682,11 +722,12 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         std::set<std::string> used;
         for (const SheetDef& s : sheets_)
             for (const ViewDef& v : s.views)
-                if ((v.kind == ViewKind::Section || v.kind == ViewKind::Detail) && !v.letter.empty()) used.insert(v.letter);
+                if ((v.kind == ViewKind::Section || v.kind == ViewKind::Detail || v.kind == ViewKind::Auxiliary) && !v.letter.empty())
+                    used.insert(v.letter);
         int next = 0;
         for (std::size_t si = 0; si < sheets_.size(); ++si) {
             for (const ViewDef& v : sheets_[si].views) {
-                if (v.kind != ViewKind::Section && v.kind != ViewKind::Detail) continue;
+                if (v.kind != ViewKind::Section && v.kind != ViewKind::Detail && v.kind != ViewKind::Auxiliary) continue;
                 std::string l = v.letter;
                 while (l.empty()) {
                     std::string cand = designationLetter(next++);
@@ -707,7 +748,11 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
     const int sheetCount = int(sheets_.size());
     for (std::size_t si = 0; si < sheets_.size(); ++si) {
         SheetDef& sd = sheets_[si];
-        auto sheetR = gostSheet(sd.format.base, sd.format.multiplier, sd.format.orientation);
+        // ISO: основные форматы — ISO 216 (размеры те же, что у ГОСТ 2.301); кратные — по ГОСТ 2.301
+        // (совпадают с удлинёнными форматами ISO 5457).
+        auto sheetR = settings_.sheetStyle == SheetStyle::Iso7200 && sd.format.multiplier == 1
+                          ? iso216Sheet(int(sd.format.base), sd.format.orientation)
+                          : gostSheet(sd.format.base, sd.format.multiplier, sd.format.orientation);
         if (!sheetR) return sheetR.error();
         ComputedSheet cs;
         cs.id = sd.id;
@@ -718,6 +763,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         // 1. Ориентации видов.
         std::map<std::string, ViewFrame> frames;
         std::map<std::string, std::size_t> indexOf;
+        std::map<std::string, AuxiliaryOrientation> auxiliary;
         for (std::size_t vi = 0; vi < sd.views.size(); ++vi) {
             const ViewDef& v = sd.views[vi];
             indexOf[v.id] = vi;
@@ -743,6 +789,13 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                     break;
                 }
                 case ViewKind::Detail: f = frames.at(v.parent); break;
+                case ViewKind::Auxiliary: {
+                    auto ax = auxiliaryViewFrame(frames.at(v.parent), v.toward, v.rotated);
+                    if (!ax) return Error{ax.error().code, where + ": " + ax.error().message};
+                    f = ax.value().frame;
+                    auxiliary[v.id] = ax.value();
+                    break;
+                }
             }
             frames[v.id] = f;
         }
@@ -789,7 +842,8 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                     cachedFlag[v.id] = false;
                     ++sectionsComputed;
                 }
-            } else if (v.kind == ViewKind::Base || v.kind == ViewKind::Projected || v.kind == ViewKind::Axonometric) {
+            } else if (v.kind == ViewKind::Base || v.kind == ViewKind::Projected || v.kind == ViewKind::Axonometric ||
+                       v.kind == ViewKind::Auxiliary) {
                 const ViewCacheStats b = cache.stats();
                 pending[v.id] = cache.request(ViewRequest{model.shape, frames[v.id], ho, v.autoMethod});
                 const ViewCacheStats a = cache.stats();
@@ -983,6 +1037,14 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 cv.scale = secScale[v.id].second;
             }
             if (sections.count(v.id)) cv.section = sections[v.id];
+            if (v.kind == ViewKind::Auxiliary) {
+                // ГОСТ 2.305, п. 5.4: буква над видом; масштаб — в скобках, если отличается от масштаба
+                // листа (ГОСТ 2.316); поворот — знаком «повернуто» (п. 5.6) при выводе.
+                cv.letter = letters.at({si, v.id});
+                cv.label = cv.letter;
+                if (std::abs(cv.scale.value() - pg.scale.value()) > 1e-12) cv.label += " (" + cv.scale.label() + ")";
+                cv.rotationDeg = auxiliary.at(v.id).rotationDeg;
+            }
             if (v.kind == ViewKind::Section || v.kind == ViewKind::Detail) {
                 cv.letter = letters.at({si, v.id});
                 // ГОСТ 2.305: «А–А»; масштаб — в скобках, если отличается от масштаба листа;
@@ -1056,6 +1118,14 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             }
             cs.views.push_back(std::move(cv));
         }
+        // Стрелки дополнительных видов на родительских видах (ГОСТ 2.305, п. 5.4).
+        for (ComputedView& cv : cs.views) {
+            if (cv.kind != ViewKind::Auxiliary) continue;
+            const ComputedView& parent = cs.views[indexOf.at(cv.def.parent)];
+            auto ar = viewArrowGeometry(parent.sheetView, auxiliary.at(cv.id).arrow, RenderOptions{}.letterHeight);
+            if (!ar) return Error{ar.error().code, "sheet '" + sd.id + "', view '" + cv.id + "': " + ar.error().message};
+            cv.arrow = ar.value();
+        }
         // Проверка компоновки (предупреждения, не ошибки): изображения (с надписью «А–А» над
         // разрезом и выносным элементом) не перекрывают друг друга, основную надпись и не выходят
         // за рамку. Касание и перекрытие меньше 0,5 мм не считаются.
@@ -1063,7 +1133,8 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             std::vector<Rect2> boxes;
             for (const ComputedView& cv : cs.views) {
                 Box2 b = cv.sheetView.sheetBounds();
-                if (cv.kind == ViewKind::Section || cv.kind == ViewKind::Detail) b = inflate(b, kLabelRoom);
+                if (cv.kind == ViewKind::Section || cv.kind == ViewKind::Detail || cv.kind == ViewKind::Auxiliary)
+                    b = inflate(b, kLabelRoom);
                 boxes.push_back({b.minX, b.minY, b.maxX, b.maxY});
             }
             auto overlap = [](const Rect2& a, const Rect2& b) {
@@ -1555,7 +1626,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                     RenderOptions ro;
                     if (ensureViewLayers(sd2, ro))
                         for (const ComputedView& v : cs.views)
-                            (void)renderViewMarks(sd2, v, byId, ro);  // ошибка обозначения — в render()
+                            (void)renderViewMarks(sd2, v, byId, ro, style.font);  // ошибка обозначения — в render()
                     for (const Entity& e : sd2.entities()) addEntityObstacles(obstacles, e, style.font);
                 }
                 for (const auto* list : {&cs.roughness, &cs.tolerances, &cs.datums})
@@ -1691,9 +1762,33 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         td.scale = cs.scale.label();
         td.sheet = cs.index;
         td.sheets = cs.count;
+        // Основная надпись ISO 7200: общие поля — из граф ЕСКД, остальные — из TitleFields.
+        Iso7200Data& iso = cs.isoTitle;
+        iso.language = sd.title.language.empty() ? "ru" : sd.title.language;
+        const bool ru = iso.language.compare(0, 2, "ru") == 0;
+        iso.legalOwner = td.organization;
+        iso.identification = td.designation;
+        iso.title = td.name;
+        iso.documentType = !sd.title.documentType.empty()
+                               ? sd.title.documentType
+                               : (model.kind == ModelKind::Assembly ? (ru ? "Сборочный чертёж" : "Assembly drawing")
+                                                                    : (ru ? "Чертёж детали" : "Detail drawing"));
+        iso.documentStatus = sd.title.documentStatus;
+        iso.revision = sd.title.revision;
+        iso.issueDate = sd.title.issueDate;
+        iso.sheet = cs.index;
+        iso.sheets = cs.count;
+        iso.creator = td.developer.surname;
+        iso.approver = td.approver.surname;
+        iso.department = sd.title.department;
+        iso.scale = td.scale;
+        iso.projection = settings_.projection == ProjectionMethod::FirstAngle ? ProjectionSymbol::FirstAngle : ProjectionSymbol::ThirdAngle;
         out.push_back(std::move(cs));
     }
 
+    if (settings_.sheetStyle == SheetStyle::Eskd && settings_.projection == ProjectionMethod::ThirdAngle)
+        report.warnings.push_back("third-angle projection (ISO 128-30, method A) is not provided by GOST 2.305; "
+                                  "the ESKD title block has no projection symbol - use the ISO 7200 sheet style");
     const ViewCacheStats statsAfter = cache.stats();
     report.viewsComputed = (statsAfter.computed - statsBefore.computed) + sectionsComputed;
     report.viewsFromCache = (statsAfter.hits - statsBefore.hits) + (statsAfter.joined - statsBefore.joined) + sectionsCached;
@@ -1722,10 +1817,14 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
         if (!dr) return dr.error();
         Drawing d = std::move(dr).value();
         d.setTextFont(settings_.textFont);
+        // Рамка и основная надпись: ЕСКД (ГОСТ 2.104, формы 1 и 2а) или ISO 5457 + ISO 7200.
+        IsoFrameOptions io;
+        io.font = metrics;
         FrameOptions fo;
         fo.form = si == 0 ? TitleBlockForm::Form1 : TitleBlockForm::Form2a;
         fo.font = metrics;
-        auto lay = addFrameAndTitleBlock(d, cs.title, fo);
+        Result<TitleBlockLayout> lay = settings_.sheetStyle == SheetStyle::Iso7200 ? addIsoFrameAndTitleBlock(d, cs.isoTitle, io)
+                                                                                 : addFrameAndTitleBlock(d, cs.title, fo);
         if (!lay) return Error{lay.error().code, "sheet '" + cs.id + "': " + lay.error().message};
         if (auto st = ensureViewLayers(d); !st) return st.error();
         std::map<std::string, const ComputedView*> byId;
@@ -1753,7 +1852,7 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
                 if (auto st = annotations::renderBearings(d, cv.sheetView, cv.bearings, ro, cv.def.bearingSymbol); !st)
                     return fail(st.error());
             }
-            if (auto st = renderViewMarks(d, cv, byId, ro); !st) return fail(st.error());
+            if (auto st = renderViewMarks(d, cv, byId, ro, metrics); !st) return fail(st.error());
             if (cv.kind == ViewKind::Detail) {
                 if (auto st = renderDetailBoundary(d, cv.sheetView, cv.def.detailCenter, cv.def.detailRadius, ro); !st)
                     return fail(st.error());

@@ -5,6 +5,9 @@
 // центровые метки, обозначения разрезов, видов и выносных элементов.
 
 #include <bendcore/drawing_v2/sections.hpp>
+#include <bendcore/drawing_v2/text_font.hpp>
+
+#include <optional>
 
 #include <string>
 
@@ -143,6 +146,41 @@ std::string designationLetter(int index);
 
 // Надпись над видом (по центру габарита, отступ 5 мм): «А–А», «А (2:1)», «Б».
 Status renderViewLabel(Drawing& drawing, const SheetView& view, const std::string& text,
+                       const RenderOptions& options = {});
+
+// Знак «повернуто» ГОСТ 2.305-2008 (п. 5.6, рис. 8): дуга окружности 270° диаметром, равным
+// высоте букв h, со стрелкой на конце (головка h/2 × h/4), сплошная тонкая; направление стрелки —
+// направление поворота (против часовой стрелки при rotationDeg > 0).
+struct RotationSignGeometry {
+    Arc arc;
+    Polyline head;  // замкнутый треугольник
+    Point2 center;
+};
+RotationSignGeometry rotationSignGeometry(Point2 center, double h, bool counterClockwise);
+
+// Надпись дополнительного вида над изображением: буква (и масштаб) по центру габарита, как
+// renderViewLabel; повернутый вид (rotationDeg ≠ 0) — знак «повернуто» справа от надписи на
+// расстоянии h/2. Возвращает геометрию знака (nullopt — без знака).
+Result<std::optional<RotationSignGeometry>> renderAuxiliaryLabel(Drawing& drawing, const SheetView& view,
+                                                                 const std::string& text, double rotationDeg,
+                                                                 const TextMetrics* font,
+                                                                 const RenderOptions& options = {});
+
+// Стрелка направления взгляда дополнительного вида на виде parent (ГОСТ 2.305-2008, п. 5.4;
+// размеры — как у стрелок секущей плоскости, разд. 6: стержень 12 мм, головка 5 × 2,5 мм):
+// arrow — направление взгляда на листе (единичный вектор, координаты вида parent). Острие — на
+// 3 мм вне габарита изображения parent со стороны наблюдателя, стрелка смотрит на изображение
+// через его центр; буква — у середины стержня сбоку (выше или правее стрелки), на расстоянии
+// полуширины головки + 1,5 мм + 0,75h (буква не заходит на стрелку при любом её наклоне).
+struct ViewArrowGeometry {
+    LineSeg shaft;
+    Polyline head;   // замкнутый треугольник
+    Point2 tip;
+    Point2 letterPos;  // центр буквы (VAlign::Middle, HAlign::Center)
+    Point2 direction;
+};
+Result<ViewArrowGeometry> viewArrowGeometry(const SheetView& parent, Point2 arrow, double letterHeight = 7.0);
+Status renderViewArrow(Drawing& drawing, const ViewArrowGeometry& arrow, const std::string& letter,
                        const RenderOptions& options = {});
 
 // Обозначение секущей плоскости на виде parent (ГОСТ 2.305, разд. 6): разомкнутые

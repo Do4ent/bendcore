@@ -35,7 +35,17 @@ import SheetCanvas, { Handle, SheetCanvasHandle } from './SheetCanvas';
 import { FONT_FAMILY, FONT_FILE, defaultDrawingBaseUrl, loadDrawingFrom } from './drawingLoader';
 import { printDocument, printHtml } from './printSheet';
 import { CHARACTERISTICS, SCALES, SHEET_SIDES, STANDARD_VIEWS } from './labels';
-import { TEXT_FONTS, isTextFont, subassemblyRows, toggleDissolved } from './documentSettings';
+import {
+  PROJECTION_METHODS,
+  SHEET_STYLES,
+  TEXT_FONTS,
+  auxiliaryParent,
+  isProjectionMethod,
+  isSheetStyle,
+  isTextFont,
+  subassemblyRows,
+  toggleDissolved,
+} from './documentSettings';
 import {
   EdgePick,
   Outline,
@@ -237,6 +247,8 @@ export default function DrawingEditorApp({
   const [localSpline, setLocalSpline] = useState(false);
   const [groupSpacing, setGroupSpacing] = useState('7');
   const [threadTol, setThreadTol] = useState('6H');
+  const [auxAngle, setAuxAngle] = useState('-45');
+  const [auxRotated, setAuxRotated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -937,6 +949,40 @@ export default function DrawingEditorApp({
                   </select>
                 </label>
               </div>
+              <div className="dr-row">
+                <label title={t('drawing.sheetStyleHint')}>
+                  {t('drawing.sheetStyle')}
+                  <select
+                    value={desc.sheetStyle}
+                    data-testid="sheet-style"
+                    onChange={(e) => {
+                      const sheetStyle = e.target.value;
+                      if (!isSheetStyle(sheetStyle)) return;
+                      run(t('drawing.done.sheetStyle', { style: t(`drawing.sheetStyle.${sheetStyle}`) }), (d) => d.setSettings({ sheetStyle }));
+                    }}
+                  >
+                    {SHEET_STYLES.map((f) => (
+                      <option key={f} value={f}>{t(`drawing.sheetStyle.${f}`)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label title={t('drawing.projectionHint')}>
+                  {t('drawing.projection')}
+                  <select
+                    value={desc.projection}
+                    data-testid="projection-method"
+                    onChange={(e) => {
+                      const projection = e.target.value;
+                      if (!isProjectionMethod(projection)) return;
+                      run(t('drawing.done.projection', { method: t(`drawing.projection.${projection}`) }), (d) => d.setSettings({ projection }));
+                    }}
+                  >
+                    {PROJECTION_METHODS.map((f) => (
+                      <option key={f} value={f}>{t(`drawing.projection.${f}`)}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               {desc.sheets.length > 1 && (
                 <button onClick={() => run(t('drawing.done.sheetRemoved'), (d) => d.removeSheet(sheet.id))}>{t('drawing.removeSheet', { id: sheet.id })}</button>
               )}
@@ -969,11 +1015,36 @@ export default function DrawingEditorApp({
                   </button>
                 </div>
               )}
+              {hasBase && (
+                <div className="dr-row" title={t('drawing.auxiliaryHint')}>
+                  <label>
+                    {t('drawing.auxiliaryAngle')}
+                    <input value={auxAngle} size={4} onChange={(e) => setAuxAngle(e.target.value)} data-testid="aux-angle" />
+                  </label>
+                  <label className="dr-check">
+                    <input type="checkbox" checked={auxRotated} onChange={(e) => setAuxRotated(e.target.checked)} data-testid="aux-rotated" />
+                    {t('drawing.auxiliaryRotated')}
+                  </label>
+                  <button
+                    data-testid="add-auxiliary"
+                    disabled={!Number.isFinite(Number(auxAngle.replace(',', '.'))) || auxAngle.trim() === ''}
+                    onClick={() => {
+                      const parent = auxiliaryParent(sheet.views, selectedView);
+                      const arrowAngle = Number(auxAngle.replace(',', '.'));
+                      const rotated = auxRotated;
+                      void run(t('drawing.done.auxiliary', { id: parent ?? '' }), (d) => d.addView(sheet.id, { kind: 'auxiliary', parent: parent ?? undefined, arrowAngle, rotated }));
+                    }}
+                  >
+                    {t('drawing.auxiliaryView')}
+                  </button>
+                </div>
+              )}
               <ul className="dr-list" data-testid="view-list">
                 {sheet.views.map((v) => (
                   <li key={v.id} className={v.id === selectedView ? 'dr-selected' : ''} onClick={() => setSelectedView(v.id)}>
                     <span>{v.id}</span> {t(`drawing.viewKind.${v.kind}`)}
-                    {v.label ? ` ${v.label}` : ''} <span className="dr-muted">{v.computedScale?.label}</span>
+                    {v.label ? ` ${v.kind === 'auxiliary' && v.rotationDeg ? t('drawing.viewRotatedLabel', { letter: v.label }) : v.label}` : ''}{' '}
+                    <span className="dr-muted">{v.computedScale?.label}</span>
                   </li>
                 ))}
               </ul>
@@ -1005,6 +1076,17 @@ export default function DrawingEditorApp({
                     <input type="checkbox" checked={selected.hidden} onChange={(e) => run(t('drawing.done.hidden'), (d) => d.setView(sheet.id, selected.id, { hidden: !selected.hidden }))} />
                     {t('drawing.hiddenLines')}
                   </label>
+                  {selected.kind === 'auxiliary' && (
+                    <label className="dr-check">
+                      <input
+                        type="checkbox"
+                        checked={!!selected.rotated}
+                        data-testid="view-rotated"
+                        onChange={() => run(t('drawing.done.rotated'), (d) => d.setView(sheet.id, selected.id, { rotated: !selected.rotated }))}
+                      />
+                      {t('drawing.auxiliaryRotated')}
+                    </label>
+                  )}
                   {desc.model.kind === 'assembly' && (
                     <label className="dr-check" title={t('drawing.autoBalloonsHint')}>
                       <input
@@ -1482,8 +1564,9 @@ export default function DrawingEditorApp({
 
               <h2>{t('drawing.titleBlock')}</h2>
               <TitleBlockForm
-                key={`${sheet.id}-${JSON.stringify(sheet.title)}`}
+                key={`${sheet.id}-${desc.sheetStyle}-${JSON.stringify(sheet.title)}`}
                 sheet={sheet}
+                iso={desc.sheetStyle === 'iso7200'}
                 onApply={(title) => run(t('drawing.done.title'), (d) => d.setSheet(sheet.id, { title }))}
               />
             </>
@@ -1552,10 +1635,45 @@ const SIGNATURES: (keyof Pick<SheetInfo['title'], 'developer' | 'checker' | 'tec
   'approver',
 ];
 
-function TitleBlockForm(props: { sheet: SheetInfo; onApply(title: SheetInfo['title']): void }) {
+// Fields of the ISO 7200 title block (the shared ones are the ESKD fields of TitleFields).
+const ISO_ROWS: (keyof Pick<
+  SheetInfo['title'],
+  'organization' | 'designation' | 'name' | 'documentType' | 'documentStatus' | 'revision' | 'issueDate' | 'language' | 'department'
+>)[] = ['organization', 'designation', 'name', 'documentType', 'documentStatus', 'revision', 'issueDate', 'language', 'department'];
+const ISO_SIGNATURES: (keyof Pick<SheetInfo['title'], 'developer' | 'approver'>)[] = ['developer', 'approver'];
+
+function TitleBlockForm(props: { sheet: SheetInfo; iso: boolean; onApply(title: SheetInfo['title']): void }) {
   const { t } = useI18n();
   const [title, setTitle] = useState(props.sheet.title);
   const shown = props.sheet.titleShown;
+  if (props.iso) {
+    const isoShown: Record<string, unknown> = { ...(props.sheet.isoTitleShown ?? {}) };
+    isoShown.organization = isoShown.legalOwner;
+    isoShown.designation = isoShown.identification;
+    isoShown.name = isoShown.title;
+    return (
+      <div className="dr-box dr-form" data-testid="title-block-iso">
+        {ISO_ROWS.map((k) => (
+          <label key={k}>
+            {t(`drawing.title.iso.${k}`)}
+            <input
+              value={title[k] ?? ''}
+              placeholder={String(isoShown[k] ?? '')}
+              onChange={(e) => setTitle({ ...title, [k]: e.target.value })}
+              data-testid={`title-iso-${k}`}
+            />
+          </label>
+        ))}
+        {ISO_SIGNATURES.map((k) => (
+          <label key={k}>
+            {t(`drawing.title.iso.${k}`)}
+            <input value={title[k].surname} onChange={(e) => setTitle({ ...title, [k]: { ...title[k], surname: e.target.value } })} data-testid={`title-iso-${k}`} />
+          </label>
+        ))}
+        <button onClick={() => props.onApply(title)} data-testid="title-apply">{t('drawing.apply')}</button>
+      </div>
+    );
+  }
   return (
     <div className="dr-box dr-form" data-testid="title-block">
       {TITLE_ROWS.map((k) => (

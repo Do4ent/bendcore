@@ -50,7 +50,10 @@ const std::vector<std::pair<ViewKind, const char*>> kViewKinds = {{ViewKind::Bas
                                                                   {ViewKind::Projected, "projected"},
                                                                   {ViewKind::Axonometric, "axonometric"},
                                                                   {ViewKind::Section, "section"},
-                                                                  {ViewKind::Detail, "detail"}};
+                                                                  {ViewKind::Detail, "detail"},
+                                                                  {ViewKind::Auxiliary, "auxiliary"}};
+const std::vector<std::pair<SheetStyle, const char*>> kSheetStyles = {{SheetStyle::Eskd, "eskd"},
+                                                                     {SheetStyle::Iso7200, "iso7200"}};
 const std::vector<std::pair<SheetSide, const char*>> kSides = {
     {SheetSide::Above, "above"}, {SheetSide::Below, "below"}, {SheetSide::LeftOf, "leftOf"}, {SheetSide::RightOf, "rightOf"}};
 const std::vector<std::pair<Axonometry, const char*>> kAxo = {{Axonometry::Isometric, "isometric"},
@@ -243,6 +246,13 @@ json titleJson(const TitleFields& t) {
             {"techControl", signatureRow(t.techControl)}, {"normControl", signatureRow(t.normControl)},
             {"approver", signatureRow(t.approver)}};
 }
+// Поля ISO 7200 — необязательные (пишутся, если заданы; версия формата не меняется).
+void isoTitleJson(json& j, const TitleFields& t) {
+    for (const auto& [k, v] : {std::pair<const char*, const std::string*>{"documentType", &t.documentType},
+                               {"documentStatus", &t.documentStatus}, {"revision", &t.revision},
+                               {"issueDate", &t.issueDate}, {"language", &t.language}, {"department", &t.department}})
+        if (!v->empty()) j[k] = *v;
+}
 TitleFields titleFrom(const json& j) {
     TitleFields t;
     if (j.is_null()) return t;
@@ -257,6 +267,12 @@ TitleFields titleFrom(const json& j) {
     t.techControl = signatureRowFrom(j, "techControl");
     t.normControl = signatureRowFrom(j, "normControl");
     t.approver = signatureRowFrom(j, "approver");
+    t.documentType = str(j, "documentType");
+    t.documentStatus = str(j, "documentStatus");
+    t.revision = str(j, "revision");
+    t.issueDate = str(j, "issueDate");
+    t.language = str(j, "language");
+    t.department = str(j, "department");
     return t;
 }
 
@@ -348,6 +364,7 @@ Result<std::string> DrawingDocument::toJson() const {
                      {"maxScale", scaleJson(settings_.maxScale)},
                      {"reducedAxonometry", settings_.reducedAxonometry},
                      {"textFont", toString(settings_.textFont)}};
+    if (settings_.sheetStyle != SheetStyle::Eskd) j["settings"]["sheetStyle"] = enumName(settings_.sheetStyle, kSheetStyles);
     json sheets = json::array();
     for (const SheetDef& s : sheets_) {
         json js;
@@ -357,6 +374,7 @@ Result<std::string> DrawingDocument::toJson() const {
                         {"orientation", enumName(s.format.orientation, kOrient)}};
         js["scale"] = scaleJson(s.scale);
         js["title"] = titleJson(s.title);
+        isoTitleJson(js["title"], s.title);
         json vs = json::array();
         for (const ViewDef& v : s.views) {
             json jv{{"id", v.id},
@@ -383,6 +401,7 @@ Result<std::string> DrawingDocument::toJson() const {
                     {"autoMethod", v.autoMethod}};
             // Необязательные поля (версия формата не меняется: прежние файлы их не содержат).
             if (!v.bearings) jv["bearings"] = false;
+            if (v.rotated) jv["rotated"] = true;
             if (v.bearingSymbol == annotations::BearingSymbol::RollingElement) jv["bearingSymbol"] = "rollingElement";
             if (v.balloonLine != annotations::BalloonLine::Auto) jv["balloonLine"] = annotations::toString(v.balloonLine);
             if (!v.balloonShelves.empty()) {
@@ -512,6 +531,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
             if (s.contains("maxScale") && !s.at("maxScale").is_null()) d.settings_.maxScale = *scaleFrom(s.at("maxScale"));
             d.settings_.reducedAxonometry = flag(s, "reducedAxonometry", true);
             if (s.contains("textFont")) d.settings_.textFont = textFontFrom(s.at("textFont"));
+            if (s.contains("sheetStyle")) d.settings_.sheetStyle = enumValue(s.at("sheetStyle"), kSheetStyles, "sheet style");
         }
         for (const json& js : field(j, "sheets")) {
             SheetDef s;
@@ -558,6 +578,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                 v.centerLines = flag(jv, "centerLines", true);
                 v.threads = flag(jv, "threads", true);
                 v.gears = flag(jv, "gears", true);
+                v.rotated = flag(jv, "rotated", false);
                 v.autoBalloons = flag(jv, "autoBalloons", false);
                 v.bearings = flag(jv, "bearings", true);
                 if (jv.contains("bearingSymbol")) {
