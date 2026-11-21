@@ -194,9 +194,9 @@ TEST(ModelingDocumentConfigurations, ExplicitErrors) {
     EXPECT_TRUE(b.doc.configurationTable().empty()) << "a refused table changes nothing";
     EXPECT_FALSE(b.doc.activateConfiguration("-01").ok());
 
-    // A configuration that does not build: the hole is wider than the block.
+    // A configuration that does not build: negative height of the box.
     t = b.table();
-    t.rows.push_back({"-03", "Тонкий", {"8", "8", "20", "0", ""}});
+    t.rows.push_back({"-03", "Ошибочный", {"60", "40", "-5", "0", ""}});
     ASSERT_TRUE(b.doc.setConfigurationTable(t).ok());
     ASSERT_TRUE(b.doc.activateConfiguration("-01").ok());
     b.doc.rebuild();
@@ -210,7 +210,7 @@ TEST(ModelingDocumentConfigurations, ExplicitErrors) {
     ASSERT_FALSE(checks[3].problems.empty());
     std::string all;
     for (const auto& p : checks[3].problems) all += p + "\n";
-    EXPECT_NE(all.find("Hole"), std::string::npos) << all;
+    EXPECT_NE(all.find("feature 'Body'"), std::string::npos) << all;
     EXPECT_EQ(b.doc.activeConfiguration(), "-01") << "the active configuration is restored";
     EXPECT_EQ(finalVolume(b.doc), v01);
     // Variable error in a cell (cycle) is a cause as well.

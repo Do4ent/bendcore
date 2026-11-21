@@ -18,7 +18,9 @@ add_library(bendcore_modeling_document STATIC
   ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/transactions.cpp
   ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/sketch_features.cpp
   ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/part_features.cpp
-  ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/advanced_features.cpp)
+  ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/advanced_features.cpp
+  ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/configuration_table.cpp
+  ${BENDCORE_MODELING_DOC_ROOT}/src/modeling/document/configurations.cpp)
 target_compile_features(bendcore_modeling_document PUBLIC cxx_std_20)
 target_include_directories(bendcore_modeling_document PUBLIC "${BENDCORE_MODELING_DOC_ROOT}/include")
 target_include_directories(bendcore_modeling_document PRIVATE "${BENDCORE_MODELING_DOC_ROOT}/third_party")
@@ -26,6 +28,10 @@ target_include_directories(bendcore_modeling_document PRIVATE "${BENDCORE_MODELI
 # Operations: bendcore_modeling_features; sketches and datums: bendcore_modeling_sketch.
 target_link_libraries(bendcore_modeling_document PUBLIC bendcore_kernel bendcore_modeling_sketch
   bendcore_modeling_features PRIVATE bendcore_formula)
+# Material column of the configuration table: ids of kernel::builtInMaterials().
+if(TARGET bendcore_kernel_analysis)
+  target_link_libraries(bendcore_modeling_document PRIVATE bendcore_kernel_analysis)
+endif()
 
 find_package(GTest QUIET)
 if(NOT GTest_FOUND)
@@ -33,7 +39,7 @@ if(NOT GTest_FOUND)
   return()
 endif()
 
-foreach(_t naming tree io survival sketch reference_parts advanced multibody gear datum)
+foreach(_t naming tree io survival sketch reference_parts advanced multibody gear datum configurations)
   add_executable(test_modeling_document_${_t}
     ${BENDCORE_MODELING_DOC_ROOT}/tests/modeling/test_modeling_document_${_t}.cpp)
   target_include_directories(test_modeling_document_${_t} PRIVATE "${BENDCORE_MODELING_DOC_ROOT}/third_party")

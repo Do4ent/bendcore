@@ -373,6 +373,10 @@ private:
     std::vector<std::pair<std::string, std::string>> effectiveVariables() const;
     // Suppression of a node with the override of the active configuration.
     bool effectiveSuppressed(const Node& node) const;
+    // Writes the non-empty cell of the active configuration that drives (kind, target);
+    // false when no such cell exists.
+    bool writeDrivenCell(ConfigurationColumnKind kind, const std::string& target, const std::string& value);
+    void removeColumns(ConfigurationColumnKind kind, const std::string& target);
     Node* node(const std::string& id);
     const Node* node(const std::string& id) const;
     State captureState() const;

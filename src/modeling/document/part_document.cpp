@@ -232,6 +232,10 @@ Status PartDocument::setVariable(const std::string& name, const std::string& exp
     auto st = checkExpression(expression);
     if (!st) return st;
     State before = captureState();
+    if (writeDrivenCell(ConfigurationColumnKind::Variable, name, expression)) {
+        recordEdit("set variable " + name + " in configuration " + table_.active, std::move(before));
+        return std::monostate{};
+    }
     bool found = false;
     for (auto& [n, e] : variables_) {
         if (n == name) {
@@ -249,11 +253,12 @@ Status PartDocument::removeVariable(const std::string& name) {
     if (it == variables_.end()) return fail(ErrorCode::InvalidInput, "no variable '" + name + "'");
     State before = captureState();
     variables_.erase(it);
+    removeColumns(ConfigurationColumnKind::Variable, name);
     recordEdit("remove variable " + name, std::move(before));
     return std::monostate{};
 }
 
-std::vector<std::pair<std::string, std::string>> PartDocument::variables() const { return variables_; }
+std::vector<std::pair<std::string, std::string>> PartDocument::variables() const { return effectiveVariables(); }
 
 Result<double> PartDocument::variableValue(const std::string& name) const {
     auto it = variableValues_.find(name);
@@ -468,6 +473,7 @@ Status PartDocument::removeFeature(const std::string& id) {
     State before = captureState();
     nodes_.erase(nodes_.begin() + static_cast<std::ptrdiff_t>(*idx));
     if (rollback_ && *idx < *rollback_) --*rollback_;
+    removeColumns(ConfigurationColumnKind::Suppression, id);
     recordEdit("remove " + id, std::move(before));
     return std::monostate{};
 }
@@ -490,6 +496,11 @@ Status PartDocument::setSuppressed(const std::string& id, bool suppressed) {
     Node* n = node(id);
     if (!n) return fail(ErrorCode::InvalidInput, "no feature '" + id + "'");
     State before = captureState();
+    if (writeDrivenCell(ConfigurationColumnKind::Suppression, id, suppressed ? "1" : "0")) {
+        recordEdit((suppressed ? "suppress " : "unsuppress ") + id + " in configuration " + table_.active,
+                   std::move(before));
+        return std::monostate{};
+    }
     n->suppressed = suppressed;
     recordEdit((suppressed ? "suppress " : "unsuppress ") + id, std::move(before));
     return std::monostate{};
@@ -601,7 +612,7 @@ Result<FeatureInfo> PartDocument::feature(const std::string& id) const {
     info.id = n->id;
     info.type = n->type;
     info.label = n->label;
-    info.suppressed = n->suppressed;
+    info.suppressed = effectiveSuppressed(*n);
     info.state = n->state;
     info.messages = n->messages;
     info.parameters = n->parameters;
@@ -818,7 +829,7 @@ void hashSketch(Hasher& h, const SketchData& s) {
 
 RebuildReport PartDocument::rebuild() {
     RebuildReport report;
-    variableValues_ = evaluateVariables(variables_);
+    variableValues_ = evaluateVariables(effectiveVariables());
 
     auto empty = std::make_shared<const NamedShape>();
     std::shared_ptr<const NamedShape> current = empty;
@@ -826,6 +837,7 @@ RebuildReport PartDocument::rebuild() {
 
     for (std::size_t i = 0; i < nodes_.size(); ++i) {
         Node& n = *nodes_[i];
+        const bool suppressed = effectiveSuppressed(n);
         if (rollback_ && i >= *rollback_) {
             n.state = FeatureState::RolledBack;
             n.clearResults();
@@ -905,7 +917,7 @@ RebuildReport PartDocument::rebuild() {
             h.add(bodyIndependent ? std::uint64_t(0x6e6f2d626f6479ULL) : chain);  // "no-body"
             h.add(n.id);
             h.add(n.type);
-            h.add(n.suppressed ? "suppressed" : "active");
+            h.add(suppressed ? "suppressed" : "active");
             for (const auto& [name, v] : values) {
                 h.add(name);
                 h.add(v);
@@ -942,7 +954,7 @@ RebuildReport PartDocument::rebuild() {
             if (!bodyIndependent) chain = key;
             continue;
         }
-        if (n.cache && n.cache->hash == key && !n.suppressed) {
+        if (n.cache && n.cache->hash == key && !suppressed) {
             n.apply(*n.cache);
             n.cache.reset();
             report.fromCache.push_back(n.id);
@@ -952,7 +964,7 @@ RebuildReport PartDocument::rebuild() {
             continue;
         }
         n.cache.reset();
-        if (!n.suppressed) {
+        if (!suppressed) {
             auto pooled = std::find_if(n.pool.begin(), n.pool.end(), [&](const CachedResult& r) { return r.hash == key; });
             if (pooled != n.pool.end()) {
                 n.apply(*pooled);
@@ -966,7 +978,7 @@ RebuildReport PartDocument::rebuild() {
         n.clearResults();
         n.values = values;
 
-        if (n.suppressed) {
+        if (suppressed) {
             n.state = FeatureState::Suppressed;
             n.hash = key;
             if (!bodyIndependent) chain = key;
