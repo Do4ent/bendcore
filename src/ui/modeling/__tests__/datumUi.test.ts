@@ -79,8 +79,16 @@ describe('picking order', () => {
     expect(slotAfterPick(planeSpec, form, 'vertex3')).toBe('vertex3');
     // An edited vertex 1 does not jump over the filled slots.
     expect(slotAfterPick(planeSpec, form, 'vertex1')).toBe('vertex1');
-    // A multiple slot keeps collecting.
+    // A multiple slot keeps collecting and is not entered by itself (body boolean: target, tools).
     expect(slotAfterPick(planeSpec, form, 'edges')).toBe('edges');
+    const booleanSpec = {
+      ...planeSpec,
+      references: [
+        { name: 'target', kind: 'face', multiple: false, optional: false },
+        { name: 'tools', kind: 'face', multiple: true, optional: false },
+      ],
+    } as FeatureTypeSpec;
+    expect(slotAfterPick(booleanSpec, newFeatureForm(booleanSpec, [], 0), 'target')).toBe('target');
   });
 });
 

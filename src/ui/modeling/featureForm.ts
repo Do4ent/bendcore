@@ -176,9 +176,10 @@ export function togglePick(
 }
 
 /**
- * Slot to pick into after a pick was added to the single slot `slot`: the next empty reference
- * slot of the same kind in catalog order (vertex 1 → 2 → 3 of a plane through three points, face →
- * face 2 of a midway plane), else `slot` itself. A multiple slot keeps collecting.
+ * Slot to pick into after a pick was added to the single slot `slot`: the next empty single
+ * reference slot of the same kind in catalog order (vertex 1 → 2 → 3 of a plane through three
+ * points, face → face 2 of a midway plane), else `slot` itself. A multiple slot keeps collecting
+ * and is never entered by itself (the target and the tools of a body boolean are chosen apart).
  */
 export function slotAfterPick(spec: FeatureTypeSpec, form: FeatureForm, slot: string): string {
   const current = spec.references.find((r) => r.name === slot);
@@ -186,6 +187,6 @@ export function slotAfterPick(spec: FeatureTypeSpec, form: FeatureForm, slot: st
   const at = spec.references.indexOf(current);
   const next = spec.references
     .slice(at + 1)
-    .find((r) => r.kind === current.kind && (form.references[r.name] ?? []).length === 0);
+    .find((r) => r.kind === current.kind && !r.multiple && (form.references[r.name] ?? []).length === 0);
   return next ? next.name : slot;
 }
