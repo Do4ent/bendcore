@@ -49,4 +49,10 @@ if(BENDCORE_NODE)
     COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_ASSEMBLY_ROOT}/tests/wasm/assembly_document.test.mjs"
             --module "${BENDCORE_WASM_ASSEMBLY_OUT}")
   set_tests_properties(wasm_assembly_document PROPERTIES TIMEOUT 600)
+  # Component configurations: two components of different configurations of one part document,
+  # BOM and mass by configuration (docs/assembly/ASSEMBLY_DOCUMENT.md, "Исполнения деталей").
+  add_test(NAME wasm_assembly_configurations
+    COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_ASSEMBLY_ROOT}/tests/wasm/assembly_configurations.test.mjs"
+            --module "${BENDCORE_WASM_ASSEMBLY_OUT}")
+  set_tests_properties(wasm_assembly_configurations PROPERTIES TIMEOUT 300)
 endif()

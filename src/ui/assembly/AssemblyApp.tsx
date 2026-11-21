@@ -986,6 +986,9 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
               definition={selectedDefinition}
               onRename={(name) => selectedOccurrence && void run((d) => d.setOccurrence(selectedOccurrence.id, { name }))}
               onProperties={(p) => selectedDefinition && void run((d) => d.setProperties(selectedDefinition.id, p))}
+              onConfiguration={(configuration) =>
+                selectedOccurrence && void run((d) => d.setOccurrence(selectedOccurrence.id, { configuration }))
+              }
             />
           )}
           {panel === 'properties' && state && <MassSection load={loadMass} version={state} />}

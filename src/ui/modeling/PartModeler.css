@@ -78,6 +78,21 @@
 .pm-variables td { padding: 1px 2px; }
 .pm-variables input { width: 100%; box-sizing: border-box; }
 
+.pm-configurations { border-bottom: 1px solid var(--kv-border); padding-bottom: 6px; }
+.pm-config-scroll { overflow-x: auto; max-width: 100%; }
+.pm-configurations table { border-collapse: collapse; font-size: 11px; }
+.pm-configurations th, .pm-configurations td { padding: 1px 2px; white-space: nowrap; }
+.pm-configurations th button { border: none; background: none; cursor: pointer; padding: 0 2px; color: var(--kv-muted); }
+.pm-configurations input:not([type='radio']) { width: 64px; box-sizing: border-box; }
+.pm-configurations select { max-width: 90px; }
+.pm-configurations tr.active td { background: #fff4e8; }
+.pm-config-base { color: var(--kv-muted); font-style: italic; }
+.pm-config-ok { color: #2e7d32; margin-left: 2px; }
+.pm-config-bad { color: #c62828; margin-left: 2px; font-weight: bold; cursor: help; }
+.pm-config-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; align-items: center; }
+.pm-file-button { display: inline-flex; align-items: center; border: 1px solid var(--kv-border); border-radius: 3px; padding: 1px 6px; cursor: pointer; }
+.pm-file-button input { display: none; }
+
 .pm-panel { border-bottom: 1px solid var(--kv-border); padding-bottom: 8px; }
 .pm-group { border: 1px solid var(--kv-border); border-radius: 4px; margin: 6px 0; padding: 4px 8px; }
 .pm-group legend { color: var(--kv-muted); font-size: 11px; }
