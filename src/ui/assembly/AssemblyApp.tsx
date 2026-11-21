@@ -29,6 +29,10 @@ import type {
 import { BomPanel, ExplodePanel, FastenerPanel, InterferencePanel, MatePanel, PatternPanel, PropertiesPanel } from './AssemblyPanels';
 import AssemblyTree, { refLabel } from './AssemblyTree';
 import AssemblyViewport, { pathKey } from './AssemblyViewport';
+import { MeasurePanel } from '../kernel/ViewToolsPanel';
+import { useViewTools } from '../kernel/useViewTools';
+import type { ViewTools } from '../kernel/useViewTools';
+import type { MeasureResult } from '../kernel/viewTools';
 import type { AssemblyPick, AssemblyPickMode, AssemblyViewportHandle, PartHighlight } from './AssemblyViewport';
 import { clampProgress, insertionDirection } from './assemblyMath';
 import type { V3 } from './assemblyMath';
@@ -72,6 +76,8 @@ export interface AssemblyPageState {
   mateSlots: (PickedElement | null)[];
   hole: PickedElement | null;
   selectedComponent: number | null;
+  /** Measurement tool (docs/ui/KERNEL_VIEWPORT.md). */
+  tools: ViewTools['state'];
   bom: Bom | null;
   interference: InterferenceReport | null;
   explode: { view: number | null; progress: number };
@@ -179,6 +185,18 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   const [dragSolve, setDragSolve] = useState<SolveReport | null>(null);
   const [frameKey, setFrameKey] = useState(0);
   const viewportRef = useRef<AssemblyViewportHandle | null>(null);
+  const tools = useViewTools({
+    measure: async (spec) => {
+      const doc = docRef.current;
+      if (!doc) throw new Error('no document');
+      return (await doc.measure(spec as Parameters<typeof doc.measure>[0])) as MeasureResult;
+    },
+    withPath: true,
+    box: null,
+    modelKey: parts,
+  });
+  const toolsRef = useRef(tools);
+  toolsRef.current = tools;
 
   const fail = (e: unknown) => {
     const err = e as { code?: string; detail?: string; message?: string };
@@ -508,6 +526,12 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   );
 
   const onPick = async (pick: AssemblyPick | null) => {
+    if (toolsRef.current.capturing) {
+      // A measurement is being collected: the click picks its element.
+      if (pick && pick.kind === 'face') toolsRef.current.onPickFace(pick.index, pick.path);
+      else if (pick) toolsRef.current.onPickEdge(pick.index, pick.path);
+      return;
+    }
     if (!pick) {
       setSelectedComponent(null);
       return;
@@ -623,10 +647,13 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   }, [selectedComponent, parts, interference, selectedPair, showTouching]);
 
   const selectedRefs = useMemo(
-    () => [mateSlots[0]?.ref, mateSlots[1]?.ref, panel === 'fasteners' || panel === 'pattern' ? hole?.ref : undefined].filter(
-      (r): r is NonNullable<typeof r> => !!r,
-    ),
-    [mateSlots, hole, panel],
+    () =>
+      tools.capturing
+        ? tools.picks.map((p) => ({ path: p.path ?? [], kind: p.kind, index: p.index }))
+        : [mateSlots[0]?.ref, mateSlots[1]?.ref, panel === 'fasteners' || panel === 'pattern' ? hole?.ref : undefined].filter(
+            (r): r is NonNullable<typeof r> => !!r,
+          ),
+    [mateSlots, hole, panel, tools.capturing, tools.picks],
   );
 
   const selectedOccurrence = state && selectedComponent !== null ? findOccurrence(state.occurrences, selectedComponent) : null;
@@ -645,6 +672,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     mateSlots,
     hole,
     selectedComponent,
+    tools: tools.state,
     bom,
     interference,
     explode,
@@ -833,12 +861,14 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
               onRemovePattern={(id) => void run((d) => d.removePattern(id))}
             />
           )}
+          <MeasurePanel {...tools.measurePanel} />
         </aside>
         <AssemblyViewport
           meshes={meshes}
           parts={parts}
-          pickMode={pickMode}
+          pickMode={tools.capturing ? tools.pickMode : pickMode}
           selected={selectedRefs}
+          measure={tools.viewport.measure}
           highlights={highlights}
           onPick={(pick) => void onPick(pick)}
           onDragStart={onDragStart}

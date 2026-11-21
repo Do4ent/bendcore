@@ -21,7 +21,11 @@ import type {
   TopologyCounts,
 } from '../../wasm/bendcore_kernel_api.mjs';
 import KernelViewport from './KernelViewport';
-import type { FacePick, KernelViewportHandle } from './KernelViewport';
+import { MeasurePanel, SectionPanel } from './ViewToolsPanel';
+import { useViewTools } from './useViewTools';
+import type { ViewTools } from './useViewTools';
+import type { MeasureResult } from './viewTools';
+import type { EdgePick, FacePick, KernelViewportHandle } from './KernelViewport';
 import { defaultKernelBaseUrl, loadKernelFrom } from './kernelLoader';
 import type { Remote, WasmClient } from '../worker/wasmClient';
 import { waitIdle } from '../worker/idle';
@@ -60,6 +64,8 @@ export interface KernelViewerState {
   error: { code: string; message: string } | null;
   model: ModelSummary | null;
   selection: Selection | null;
+  /** Measurement and section tools (docs/ui/KERNEL_VIEWPORT.md). */
+  tools: ViewTools['state'] | null;
 }
 
 export interface KernelViewerTestApi {
@@ -131,8 +137,24 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
   const kernelRef = useRef(kernel);
   kernelRef.current = kernel;
   const viewRef = useRef<KernelViewportHandle | null>(null);
-  const stateRef = useRef<KernelViewerState>({ kernelStatus, busy, error, model, selection });
-  stateRef.current = { kernelStatus, busy, error, model, selection };
+  const tools = useViewTools({
+    measure: async (spec) => {
+      const shape = shapeRef.current;
+      if (!shape) throw new Error('no model');
+      return (await shape.measure(spec as Parameters<typeof shape.measure>[0])) as MeasureResult;
+    },
+    section: async (plane) => {
+      const shape = shapeRef.current;
+      if (!shape) throw new Error('no model');
+      return shape.section(plane);
+    },
+    box: model ? model.boundingBox : null,
+    modelKey: model,
+  });
+  const toolsRef = useRef(tools);
+  toolsRef.current = tools;
+  const stateRef = useRef<KernelViewerState>({ kernelStatus, busy, error, model, selection, tools: null });
+  stateRef.current = { kernelStatus, busy, error, model, selection, tools: tools.state };
 
   useEffect(() => {
     let cancelled = false;
@@ -263,7 +285,13 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
     }
   }, [tessellationParams]);
 
+  const onPickEdge = useCallback((pick: EdgePick | null) => toolsRef.current.onPickEdge(pick ? pick.edgeIndex : null), []);
+
   const onPick = useCallback(async (pick: FacePick | null) => {
+    if (toolsRef.current.capturing) {
+      toolsRef.current.onPickFace(pick ? pick.faceIndex : null);
+      return;
+    }
     const shape = shapeRef.current;
     if (!pick || !shape) {
       setSelection(null);
@@ -338,7 +366,19 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
         />
       )}
       <main className="kv-main">
-        <KernelViewport mesh={mesh} selectedFace={selection?.face.index ?? null} onPick={onPick} onReady={onReady} />
+        <KernelViewport
+          mesh={mesh}
+          selectedFace={tools.capturing ? null : selection?.face.index ?? null}
+          selectedFaces={tools.capturing ? tools.picks.filter((p) => p.kind === 'face').map((p) => p.index) : []}
+          selectedEdges={tools.capturing ? tools.picks.filter((p) => p.kind === 'edge').map((p) => p.index) : []}
+          pickMode={tools.capturing ? tools.pickMode : 'face'}
+          onPick={onPick}
+          onPickEdge={onPickEdge}
+          clip={tools.viewport.clip}
+          sectionLines={tools.viewport.sectionLines}
+          measure={tools.viewport.measure}
+          onReady={onReady}
+        />
         <aside className="kv-panel">
           <section>
             <h2>{t('viewer.model')}</h2>
@@ -395,6 +435,8 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
               <p className="kv-hint">{model ? t('viewer.pickHint') : '—'}</p>
             )}
           </section>
+          {model && <MeasurePanel {...tools.measurePanel} />}
+          {model && tools.sectionPanel && <SectionPanel {...tools.sectionPanel} />}
         </aside>
       </main>
     </div>

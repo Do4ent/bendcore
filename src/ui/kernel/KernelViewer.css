@@ -77,3 +77,15 @@
   .kv-main { flex-direction: column; }
   .kv-panel { width: auto; max-height: 40vh; border-left: none; border-top: 1px solid var(--kv-border); }
 }
+
+.kernel-measure-label {
+  position: absolute;
+  transform: translate(-50%, -130%);
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #0b8a3e;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}

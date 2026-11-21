@@ -193,6 +193,15 @@ export class AssemblyDocumentHandle {
     return this.#call('asmElement', ref);
   }
 
+  /**
+   * Measurement between elements of placed parts in world coordinates: spec { type: 'distance' |
+   * 'angle' | 'length' | 'area' | 'radius', a: { path, kind, index }, b: { path, kind, index } } ->
+   * { type, unit, value, points } (mm, degrees; docs/kernel/ANALYSIS.md, section 4).
+   */
+  measure(spec) {
+    return this.#call('asmMeasure', spec);
+  }
+
   /** { parts, pairs: [{ a, b, kind, volume, distance }], totalPairs, candidatePairs, totalVolume } */
   interference(options = {}) {
     return this.#call('asmInterference', options);

@@ -58,9 +58,21 @@ export class PartDocumentHandle {
     unwrap(this.#module.docDispose(handle));
   }
 
-  /** JSON "bendcore-part" v3; includeCache stores BRep results keyed by input hashes. */
+  /**
+   * JSON "bendcore-part" v3; includeCache stores BRep results keyed by input hashes.
+   * options.material = { id, density } is written as the top-level field "material" (the part's
+   * material from the kernel library, docs/ui/PART_MODELING_UI.md); the v3 reader ignores it.
+   */
   save(options = {}) {
-    return this.#call('docSave', options);
+    const { material, ...kernelOptions } = options;
+    const text = this.#call('docSave', kernelOptions);
+    if (material === undefined || material === null) return text;
+    if (typeof material.id !== 'string' || !(Number.isFinite(material.density) && material.density > 0)) {
+      throw new KernelError('InvalidInput', 'save: material must be { id: string, density: kg/m3 > 0 }');
+    }
+    const doc = JSON.parse(text);
+    doc.material = { id: material.id, density: material.density };
+    return JSON.stringify(doc);
   }
 
   variables() {
@@ -175,6 +187,20 @@ export class PartDocumentHandle {
   }
 
   /**
+   * Measurement between elements of the target (kernel indices): spec { type: 'distance' | 'angle'
+   * | 'length' | 'area' | 'radius', a: { kind, index }, b: { kind, index } } -> { type, unit, value,
+   * points } (docs/kernel/ANALYSIS.md, section 4). Distances in mm, angles in degrees.
+   */
+  measure(spec, target = 'final') {
+    return this.#call('docMeasure', target, spec);
+  }
+
+  /** Section of the target by the plane { origin, normal }: { area, polylines: Float32Array[] }. */
+  section(plane, target = 'final', deflection = 0.05) {
+    return this.#call('docSection', target, plane, deflection);
+  }
+
+  /**
    * Solves sketch data in the context of sketch node `featureId` (variables, placement, projected
    * edges) without changing the document (docs/ui/SKETCH_EDITOR.md): solved points and curves,
    * intersections, dof, definition, conflicting/redundant constraints, profile regions and the
@@ -192,6 +218,17 @@ export class PartDocumentHandle {
   editSketch(featureId, sketch, tool) {
     return this.#call('docSketchEdit', featureId, sketch, tool);
   }
+}
+
+/** The part's material saved next to the v3 document, or null (absent or malformed). */
+function savedMaterial(json) {
+  try {
+    const m = JSON.parse(json).material;
+    if (m && typeof m.id === 'string' && Number.isFinite(m.density) && m.density > 0) return { id: m.id, density: m.density };
+  } catch {
+    // The kernel has already accepted the text as a document; a missing field is no error.
+  }
+  return null;
 }
 
 export class ModelingKernel {
@@ -231,11 +268,19 @@ export class ModelingKernel {
     return new PartDocumentHandle(this.#module, unwrap(this.#module.docCreate()));
   }
 
-  /** Loads (and migrates) a document file; returns { document, report }. */
+  /** Built-in material library: [{ id, name, category, density (kg/m3), color, source, verified, ... }]. */
+  materials() {
+    return unwrap(this.#module.materialLibrary());
+  }
+
+  /**
+   * Loads (and migrates) a document file; returns { document, report, material } where material is
+   * the { id, density } saved with save({ material }) or null.
+   */
   loadDocument(json) {
     if (typeof json !== 'string') throw new KernelError('InvalidInput', 'loadDocument expects a JSON string');
     const loaded = unwrap(this.#module.docLoad(json));
-    return { document: new PartDocumentHandle(this.#module, loaded.handle), report: loaded.report };
+    return { document: new PartDocumentHandle(this.#module, loaded.handle), report: loaded.report, material: savedMaterial(json) };
   }
 }
 

@@ -118,7 +118,7 @@ declare module 'three' {
   }
 
   export class LineBasicMaterial extends Material {
-    constructor(params?: { color?: number | string; linewidth?: number });
+    constructor(params?: { color?: number | string; linewidth?: number; depthTest?: boolean });
   }
 
   export class MeshPhongMaterial extends Material {
@@ -143,6 +143,7 @@ declare module 'three' {
 
   export class Object3D {
     name: string;
+    renderOrder: number;
     visible: boolean;
     position: Vector3;
     rotation: { x: number; y: number; z: number };
@@ -259,6 +260,9 @@ declare module 'three' {
   export class WebGLRenderer {
     constructor(params?: { canvas?: HTMLCanvasElement; antialias?: boolean; alpha?: boolean });
     domElement: HTMLCanvasElement;
+    /** Global clipping planes: the side with normal . p + constant >= 0 is kept. */
+    clippingPlanes: Plane[];
+    localClippingEnabled: boolean;
     shadowMap: { enabled: boolean; type: number };
     setSize(width: number, height: number): void;
     setPixelRatio(ratio: number): void;
@@ -277,6 +281,10 @@ declare module 'three' {
 
   export class Plane {
     constructor(normal?: Vector3, constant?: number);
+    normal: Vector3;
+    constant: number;
+    /** Signed distance: positive on the side the normal points to. */
+    distanceToPoint(point: Vector3): number;
   }
 
   export class Ray {

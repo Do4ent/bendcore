@@ -3,6 +3,8 @@
 // src/ui/app/messages/part.ts (part.feature.*, part.param.*, part.option.*, part.value.*,
 // part.slot.*, part.state.*); a name without a caption is shown as the kernel reports it.
 
+import { caption, isMessageKey, type Translate } from '../app/i18n';
+
 /** Toolbar order of the feature types the editor knows; the kernel catalog decides what is shown. */
 export const TOOLBAR_TYPES = [
   'Sketch',
@@ -35,4 +37,14 @@ export function toolbarTypes(catalog: readonly string[]): string[] {
   const known = TOOLBAR_TYPES.filter((t) => catalog.includes(t));
   const added = catalog.filter((t) => !TOOLBAR_TYPES.includes(t) && !NOT_ON_TOOLBAR.has(t));
   return [...known, ...added];
+}
+
+/**
+ * Caption of a feature parameter: the type's own message part.param.<Type>.<name> when the same
+ * parameter name means something else in that type (GearTeeth: width, offset, angle), else the
+ * common part.param.<name>, else the kernel's name.
+ */
+export function paramCaption(t: Translate, type: string, name: string): string {
+  const own = `part.param.${type}.${name}`;
+  return isMessageKey(own) ? t(own) : caption(t, 'part.param.', name);
 }

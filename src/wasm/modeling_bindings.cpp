@@ -22,6 +22,7 @@
 #include <bendcore/modeling/part_features.hpp>
 #include <bendcore/modeling/part_sketch.hpp>
 
+#include "analysis_common.hpp"
 #include "exchange_common.hpp"
 #include "modeling_bindings_internal.hpp"
 
@@ -1055,6 +1056,34 @@ val docMassProperties(std::uint32_t handle, val target, val density) {
     });
 }
 
+// Measurement between elements of a target shape (analysis_common.hpp): spec {type, a: {kind,
+// index}, b: {kind, index}} with kernel indices of `target`.
+val docMeasure(std::uint32_t handle, val target, val spec) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        const m::NamedShape shape = targetShape(doc, target);
+        if (shape.isNull()) throw InputError("the part has no body to measure");
+        auto topo = k::TopologyIndex::build(k::Shape(shape.shape()));
+        if (!topo) return failure(topo.error());
+        auto result = bendcore::wasm_analysis::measureElements(topo.value(), spec);
+        if (!result) return failure(result.error());
+        return success(result.value());
+    });
+}
+
+// Section of a target shape by the plane {origin, normal}: area and contour polylines.
+val docSection(std::uint32_t handle, val target, val plane, double deflection) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        const m::NamedShape shape = targetShape(doc, target);
+        if (shape.isNull()) throw InputError("the part has no body to cut");
+        auto result = bendcore::wasm_analysis::sectionShape(k::Shape(shape.shape()), plane, deflection);
+        if (!result) return failure(result.error());
+        return success(result.value());
+    });
+}
+
+// Built-in material library (bendcore_kernel_analysis).
+val materialLibrary() { return success(bendcore::wasm_analysis::materialsToJs()); }
+
 }  // namespace bendcore::wasm_modeling
 
 using namespace bendcore::wasm_modeling;
@@ -1090,4 +1119,7 @@ EMSCRIPTEN_BINDINGS(bendcore_modeling) {
     emscripten::function("docProperties", &docProperties);
     emscripten::function("docExport", &docExport);
     emscripten::function("docMassProperties", &docMassProperties);
+    emscripten::function("docMeasure", &docMeasure);
+    emscripten::function("docSection", &docSection);
+    emscripten::function("materialLibrary", &materialLibrary);
 }

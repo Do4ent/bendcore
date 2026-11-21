@@ -11,20 +11,28 @@
  * projection for end-to-end tests.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KernelMesh } from '../../wasm/bendcore_kernel_api.mjs';
 import type {
   DocumentState,
   FeatureTypeSpec,
   FeatureView,
+  LibraryMaterial,
+  MeasureSpec,
   ModelingKernel,
   PartDocumentHandle,
+  PartMaterial,
   PartProperties,
   SketchData,
   VariableView,
 } from '../../wasm/bendcore_modeling_api.mjs';
 import KernelViewport from '../kernel/KernelViewport';
 import type { EdgePick, FacePick, KernelViewportHandle, PickMode } from '../kernel/KernelViewport';
+import { MeasurePanel, SectionPanel } from '../kernel/ViewToolsPanel';
+import { useViewTools } from '../kernel/useViewTools';
+import type { ViewTools } from '../kernel/useViewTools';
+import { boxOfPositions } from '../kernel/viewTools';
+import type { MeasureResult } from '../kernel/viewTools';
 import FeaturePanel from './FeaturePanel';
 import FeatureTree from './FeatureTree';
 import SketchEditor from './sketch/SketchEditor';
@@ -54,6 +62,10 @@ import './PartModeler.css';
 import { KernelMessageText } from '../app/KernelMessageText';
 
 const MESH_PARAMS = { linearDeflection: 0.05, angularDeflection: 0.25 };
+
+/** Material id of a density typed by hand (the file keeps the density only). */
+const CUSTOM_MATERIAL = 'custom';
+const DEFAULT_DENSITY = '7850';
 
 interface PanelState {
   mode: 'add' | 'edit';
@@ -92,6 +104,10 @@ export interface PartModelerState {
   shownTarget: string;
   /** Sketch being edited in the sketch editor. */
   sketchMode: { featureId: string; isNew: boolean } | null;
+  /** Material of the part ('custom': density typed by hand) and the library size. */
+  material: { id: string; density: number | null; libraryCount: number };
+  /** Measurement and section tools (docs/ui/KERNEL_VIEWPORT.md). */
+  tools: ViewTools['state'];
 }
 
 export interface PartModelerTestApi {
@@ -127,6 +143,13 @@ function shownTarget(panel: PanelState | null): string {
 
 type PartDoc = Remote<PartDocumentHandle>;
 
+/** Library materials by category, in library order. */
+function materialGroups(materials: readonly LibraryMaterial[]): [string, LibraryMaterial[]][] {
+  const groups = new Map<string, LibraryMaterial[]>();
+  for (const m of materials) groups.set(m.category, [...(groups.get(m.category) ?? []), m]);
+  return [...groups.entries()];
+}
+
 
 const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = null, initialDirty = false, onChange, onFile, onCreateDrawing, onFault }) => {
   const { t } = useI18n();
@@ -143,7 +166,9 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selection, setSelection] = useState<SelectionInfo | null>(null);
   const [error, setError] = useState<PartModelerState['error']>(null);
-  const [density, setDensity] = useState('7850');
+  const [density, setDensity] = useState(DEFAULT_DENSITY);
+  const [materials, setMaterials] = useState<LibraryMaterial[]>([]);
+  const [materialId, setMaterialId] = useState(CUSTOM_MATERIAL);
   const [frameKey, setFrameKey] = useState(0);
   const [fileName, setFileName] = useState(() => initial?.name ?? t('part.newFile'));
   const [newVar, setNewVar] = useState({ name: '', expression: '' });
@@ -168,6 +193,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const viewRef = useRef<KernelViewportHandle | null>(null);
   const densityRef = useRef(density);
   densityRef.current = density;
+  const materialRef = useRef(materialId);
+  materialRef.current = materialId;
   const sketchModeRef = useRef(sketchMode);
   sketchModeRef.current = sketchMode;
   const selectedRef = useRef(selectedId);
@@ -181,6 +208,25 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const densityValue = (): number | null => {
     const d = Number(densityRef.current);
     return Number.isFinite(d) && d > 0 ? d : null;
+  };
+
+  /** The material saved with the part file: library id (or 'custom') and density, kg/m^3. */
+  const savedMaterial = (): PartMaterial | undefined => {
+    const d = densityValue();
+    return d === null ? undefined : { id: materialRef.current, density: d };
+  };
+
+  /** Document text with the part's material (the file, the draft and the snapshot carry it). */
+  const saveText = (doc: PartDoc, options: { includeCache?: boolean } = {}): Promise<string> => doc.save({ ...options, material: savedMaterial() });
+
+  /** Takes the material of an opened file, or the default one for a file without. */
+  const applyFileMaterial = (m: PartMaterial | null) => {
+    const id = m ? m.id : CUSTOM_MATERIAL;
+    const value = m ? String(m.density) : DEFAULT_DENSITY;
+    materialRef.current = id;
+    densityRef.current = value;
+    setMaterialId(id);
+    setDensity(value);
   };
 
   /** Reads everything shown from the document (after every call that changes it). */
@@ -214,7 +260,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   /** Takes the snapshot of the document when no transaction is open and reports it as a draft. */
   const takeSnapshot = useCallback(async (doc: PartDoc) => {
     if ((await doc.state()).inTransaction) return;
-    const text = await doc.save();
+    const text = await saveText(doc);
     if (docRef.current !== doc) return;
     snapshotRef.current = text;
     hostRef.current.onChange?.({ kind: 'part', name: fileNameRef.current, text }, text !== savedRef.current);
@@ -274,9 +320,12 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
         return;
       }
       const cat = await client.root.catalog();
+      const library = await client.root.materials();
       let doc: PartDoc;
       if (initial) {
-        doc = (await client.root.loadDocument(initial.text)).document;
+        const loaded = await client.root.loadDocument(initial.text);
+        doc = loaded.document;
+        applyFileMaterial(loaded.material);
         onFile?.(initial);
       } else {
         doc = await client.root.createDocument();
@@ -284,6 +333,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
       if (cancelled) return;
       setKernel(client);
       setCatalog(cat);
+      setMaterials(library);
       setStatus('ready');
       await replaceDocument(doc, initial && !initialDirty ? initial.text : null);
       // A restored draft keeps its "modified" state: the saved file is unknown.
@@ -318,7 +368,14 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     queueRef.current = Promise.resolve();
     try {
       const client = await loadModelingFrom(defaultModelingBaseUrl());
-      const doc = snapshot ? (await client.root.loadDocument(snapshot)).document : await client.root.createDocument();
+      let doc: PartDoc;
+      if (snapshot) {
+        const loaded = await client.root.loadDocument(snapshot);
+        doc = loaded.document;
+        applyFileMaterial(loaded.material);
+      } else {
+        doc = await client.root.createDocument();
+      }
       setKernel(client);
       setStatus('ready');
       await replaceDocument(doc, saved, false);
@@ -422,6 +479,59 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     void refresh(next);
   };
 
+  // ------------------------------------------------------------- material
+
+  /** Chooses a library material: its density replaces the field, the mass is recomputed, the file changes. */
+  const chooseMaterial = async (id: string) => {
+    const doc = docRef.current;
+    if (!doc) return;
+    materialRef.current = id;
+    setMaterialId(id);
+    if (id !== CUSTOM_MATERIAL) {
+      const m = materials.find((x) => x.id === id);
+      if (m) {
+        densityRef.current = String(m.density);
+        setDensity(String(m.density));
+      }
+    }
+    await refresh();
+    await takeSnapshot(doc).catch(() => undefined);
+  };
+
+  /** A density typed by hand no longer belongs to a library material. */
+  const typeDensity = (value: string) => {
+    densityRef.current = value;
+    materialRef.current = CUSTOM_MATERIAL;
+    setDensity(value);
+    setMaterialId(CUSTOM_MATERIAL);
+  };
+
+  // ------------------------------------------------------------- measurements and section
+
+  const meshBox = useMemo(() => (mesh ? boxOfPositions(mesh.positions) : null), [mesh]);
+  const props0 = snapshot.properties;
+  // The picks of a measurement refer to the model: they are dropped when the model changes.
+  const modelKey = useMemo(
+    () => JSON.stringify([props0?.volume ?? null, props0?.counts ?? null, props0?.boundingBox ?? null, shownBodies]),
+    [props0, shownBodies],
+  );
+  const tools = useViewTools({
+    measure: async (spec) => {
+      const doc = docRef.current;
+      if (!doc) throw new Error('no document');
+      return (await doc.measure(spec as MeasureSpec, 'final')) as MeasureResult;
+    },
+    section: async (plane) => {
+      const doc = docRef.current;
+      if (!doc) throw new Error('no document');
+      return doc.section(plane, 'final');
+    },
+    box: meshBox,
+    modelKey,
+  });
+  const toolsRef = useRef(tools);
+  toolsRef.current = tools;
+
   // ------------------------------------------------------------- picking
 
   const activeSlotSpec = () => {
@@ -434,6 +544,12 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     const doc = docRef.current;
     if (!doc) return;
     const p = panelRef.current;
+    if (!p && toolsRef.current.capturing) {
+      // A measurement is being collected: the click picks its element.
+      if (kind === 'face') toolsRef.current.onPickFace(index);
+      else toolsRef.current.onPickEdge(index);
+      return;
+    }
     const slot = activeSlotSpec();
     try {
       if (p && slot) {
@@ -512,6 +628,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     if (!kernel || panelRef.current) return;
     setError(null);
     try {
+      applyFileMaterial(null);
       await replaceDocument(await kernel.root.createDocument(), null);
       setFileName(t('part.newFile'));
     } catch (e) {
@@ -524,7 +641,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     setError(null);
     try {
       const text = await file.text();
-      const { document } = await kernel.root.loadDocument(text);
+      const { document, material } = await kernel.root.loadDocument(text);
+      applyFileMaterial(material);
       setFileName(file.name);
       fileNameRef.current = file.name;
       await replaceDocument(document, text);
@@ -538,7 +656,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     const doc = docRef.current;
     if (!doc) return;
     try {
-      const text = await doc.save();
+      const text = await saveText(doc);
       downloadText(fileName, text, 'application/json');
       savedRef.current = text;
       if (!(await doc.state()).inTransaction) snapshotRef.current = text;
@@ -555,7 +673,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     if (!doc || !hostRef.current.onCreateDrawing) return;
     try {
       // With the BRep cache the drawing kernel does not rebuild the part.
-      const text = await doc.save({ includeCache: true });
+      const text = await saveText(doc, { includeCache: true });
       hostRef.current.onCreateDrawing({ kind: 'part', name: fileName, text });
     } catch (e) {
       if (!isCancelled(e)) setError(describeError(e));
@@ -678,6 +796,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     selection,
     shownTarget: shownTarget(panel),
     sketchMode: sketchMode && { featureId: sketchMode.featureId, isNew: sketchMode.isNew },
+    material: { id: materialId, density: densityValue(), libraryCount: materials.length },
+    tools: tools.state,
   };
   useEffect(() => {
     window.bendcorePartModeler = {
@@ -696,7 +816,10 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   // ------------------------------------------------------------- render
 
   const slot = panel ? activeSlotSpec() : null;
-  const pickMode: PickMode = slot ? (slot.kind === 'edge' ? 'edge' : 'face') : 'face';
+  const measuring = !panel && tools.capturing;
+  const pickMode: PickMode = measuring ? tools.pickMode : slot ? (slot.kind === 'edge' ? 'edge' : 'face') : 'face';
+  const toolFaces = measuring ? tools.picks.filter((p) => p.kind === 'face').map((p) => p.index) : [];
+  const toolEdges = measuring ? tools.picks.filter((p) => p.kind === 'edge').map((p) => p.index) : [];
   const slotPicks = panel && panel.activeSlot ? panel.form.references[panel.activeSlot] ?? [] : [];
   const pickedIndices = slotPicks.map((p) => p.index).filter((i): i is number => i !== null);
   const props = snapshot.properties;
@@ -912,11 +1035,14 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
           <>
           <KernelViewport
             mesh={mesh}
-            selectedFace={pickMode === 'face' && !slot && selection?.kind === 'face' ? selection.index : null}
-            selectedFaces={slot && slot.kind === 'face' ? pickedIndices : []}
+            selectedFace={!measuring && pickMode === 'face' && !slot && selection?.kind === 'face' ? selection.index : null}
+            selectedFaces={measuring ? toolFaces : slot && slot.kind === 'face' ? pickedIndices : []}
             selectedEdges={
-              slot && slot.kind === 'edge' ? pickedIndices : selection?.kind === 'edge' ? [selection.index] : []
+              measuring ? toolEdges : slot && slot.kind === 'edge' ? pickedIndices : selection?.kind === 'edge' ? [selection.index] : []
             }
+            clip={tools.viewport.clip}
+            sectionLines={tools.viewport.sectionLines}
+            measure={tools.viewport.measure}
             pickMode={pickMode}
             onPick={onPickFace}
             onPickEdge={onPickEdge}
@@ -954,13 +1080,38 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                 <dd data-testid="prop-volume" data-value={props?.volume ?? ''}>
                   {props?.volume === null || props?.volume === undefined ? t('part.noBody') : fmt(props.volume)}
                 </dd>
+                <dt>{t('part.material')}</dt>
+                <dd>
+                  <select
+                    value={materialId}
+                    data-testid="material"
+                    title={t('part.material.saved')}
+                    disabled={status !== 'ready' || busyPanel}
+                    onChange={(e) => void chooseMaterial(e.target.value)}
+                  >
+                    <option value={CUSTOM_MATERIAL}>{t('part.material.custom')}</option>
+                    {materialGroups(materials).map(([category, items]) => (
+                      <optgroup key={category} label={caption(t, 'part.materialCategory.', category)}>
+                        {items.map((m) => (
+                          <option key={m.id} value={m.id} title={m.verified ? m.source : t('part.material.unverified')}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </dd>
                 <dt>{t('part.density')}</dt>
                 <dd>
                   <input
                     value={density}
                     data-testid="density"
-                    onChange={(e) => setDensity(e.target.value)}
-                    onBlur={() => void refresh()}
+                    onChange={(e) => typeDensity(e.target.value)}
+                    onBlur={() => {
+                      void refresh();
+                      const doc = docRef.current;
+                      if (doc) void takeSnapshot(doc).catch(() => undefined);
+                    }}
                   />
                 </dd>
                 <dt>{t('part.mass')}</dt>
@@ -985,6 +1136,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                 )}
               </dl>
             </section>
+            <MeasurePanel {...tools.measurePanel} />
+            {tools.sectionPanel && <SectionPanel {...tools.sectionPanel} disabled={tools.sectionPanel.disabled || busyPanel} />}
           </aside>
           </>
         )}

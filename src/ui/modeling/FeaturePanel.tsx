@@ -10,6 +10,7 @@ import React from 'react';
 import type { FeatureTypeSpec, FeatureView } from '../../wasm/bendcore_modeling_api.mjs';
 import { FeatureForm, eligibleLinks, missingInputs, withTemplateKind } from './featureForm';
 import { caption, useI18n } from '../app/i18n';
+import { paramCaption } from './labels';
 import type { MessageKey } from '../app/i18n';
 import { SketchTemplateForm, sketchDimensions } from './sketchDimensions';
 import { KernelMessageText } from '../app/KernelMessageText';
@@ -156,7 +157,7 @@ const FeaturePanel: React.FC<FeaturePanelProps> = ({
           <legend>{t('part.panel.parameters')}</legend>
           {spec.parameters.map((p) => (
             <label className="pm-field" key={p.name}>
-              <span>{caption(t, 'part.param.', p.name)}</span>
+              <span>{paramCaption(t, spec.type, p.name)}</span>
               <input
                 value={form.parameters[p.name] ?? ''}
                 data-testid={`param-${p.name}`}

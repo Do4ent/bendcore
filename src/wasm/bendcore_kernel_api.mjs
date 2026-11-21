@@ -109,6 +109,16 @@ export class KernelShape {
   massProperties(density) {
     return this.#call('massProperties', density);
   }
+
+  /** Measurement between elements (kernel indices); see PartDocumentHandle.measure. */
+  measure(spec) {
+    return this.#call('measure', spec);
+  }
+
+  /** Section by the plane { origin, normal }: { area, polylines: Float32Array[] }. */
+  section(plane, deflection = 0.05) {
+    return this.#call('sectionShape', plane, deflection);
+  }
 }
 
 export class Kernel {
@@ -116,6 +126,11 @@ export class Kernel {
 
   constructor(module) {
     this.#module = module;
+  }
+
+  /** Built-in material library (see ModelingKernel.materials()). */
+  materials() {
+    return this.#module.materials();
   }
 
   /** { occtVersion, liveShapes } */
