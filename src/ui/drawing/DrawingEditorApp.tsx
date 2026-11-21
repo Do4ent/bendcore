@@ -796,16 +796,20 @@ export default function DrawingEditorApp({
   const subassemblies = desc?.model.kind === 'assembly' ? subassemblyRows(spec.table, desc.dissolvedAssemblies) : [];
   const selected = sheet?.views.find((v) => v.id === selectedView) ?? null;
   const drawing = drawingRef.current;
-  // Draggable points: dimension texts and the shelves of manual positions.
+  // Draggable points: dimension texts and the shelves of manual and automatic positions.
   const handles: Handle[] = [
     ...(sheet?.dimensions ?? []).filter((d) => d.state === 'ok' && d.labelPosition).map((d) => ({ kind: 'dimension' as const, id: d.id, at: d.labelPosition! })),
     ...(sheet?.positions ?? []).filter((b) => b.state === 'ok' && b.shelf).map((b) => ({ kind: 'balloon' as const, id: b.id, at: b.shelf! })),
+    ...(sheet?.balloons ?? [])
+      .filter((b) => b.id === null && b.view)
+      .map((b) => ({ kind: 'autoBalloon' as const, id: `${b.view}-${b.definition}`, at: b.at, view: b.view!, definition: b.definition })),
   ];
   const onMoveHandle = (h: Handle, x: number, y: number) => {
     const sid = sheetIdRef.current;
     if (!sid) return;
     if (h.kind === 'dimension') run(t('drawing.done.dimMoved'), (d) => d.moveDimension(sid, h.id, x, y));
-    else run(t('drawing.done.balloonShelf'), (d) => d.setBalloon(sid, h.id, { at: [x, y] }));
+    else if (h.kind === 'autoBalloon') run(t('drawing.done.balloonMoved'), (d) => d.setAutoBalloon(sid, h.view!, h.definition!, { at: [x, y] }));
+    else run(t('drawing.done.balloonMoved'), (d) => d.setBalloon(sid, h.id, { at: [x, y] }));
   };
   const history = desc?.history;
 
@@ -1090,10 +1094,20 @@ export default function DrawingEditorApp({
                     </label>
                     {tool === 'baseline' && (
                       <label>
-                        {t('drawing.groupSpacing')} <input value={groupSpacing} onChange={(e) => setGroupSpacing(e.target.value)} size={4} />
+                        {t('drawing.groupSpacing')}{' '}
+                        <input
+                          type="number"
+                          min={7}
+                          step={1}
+                          value={groupSpacing}
+                          title={t('drawing.groupSpacingHint')}
+                          data-testid="group-spacing"
+                          onChange={(e) => setGroupSpacing(e.target.value)}
+                          size={4}
+                        />
                       </label>
                     )}
-                    <button data-testid="group-create" disabled={!canDimensionGroup(pickState)} onClick={() => createFromPicks(pickState)}>{t('drawing.groupCreate')}</button>
+                    <button data-testid="group-create" disabled={!canDimensionGroup(pickState) || (tool === 'baseline' && !(Number(groupSpacing) >= 7))} onClick={() => createFromPicks(pickState)}>{t('drawing.groupCreate')}</button>
                     <div className="dr-muted" data-testid="picks">{t('drawing.picks', { count: pickState.picks.length })}</div>
                   </>
                 )}
@@ -1207,8 +1221,13 @@ export default function DrawingEditorApp({
               <h2>{t('drawing.annotations')}</h2>
               <ul className="dr-list" data-testid="annotation-list">
                 {sheet.dimensions.map((d) => (
-                  <li key={d.id} className={d.state === 'dangling' ? 'dr-dangling' : ''} data-testid={`dimension-${d.id}`} data-value={d.value}>
+                  <li key={d.id} className={d.state === 'dangling' ? 'dr-dangling' : ''} data-testid={`dimension-${d.id}`} data-value={d.value} data-group={d.group ?? ''}>
                     <span>{d.id}</span> {t(`drawing.dimType.${d.type}`)} <strong>{d.text}</strong>
+                    {d.group && (
+                      <span className="dr-muted" title={t('drawing.groupHint')}>
+                        {' '}{t(d.groupMode === 'baseline' ? 'drawing.groupBaseline' : 'drawing.groupChain', { group: d.group })}
+                      </span>
+                    )}
                     {d.state === 'dangling' && <span className="dr-muted">{t('drawing.dangling', { reason: d.reason ?? '' })}</span>}
                     <input
                       className="dr-tol"

@@ -4,8 +4,9 @@
  * pan (middle button, or drag on the free sheet in the select tool). In the select tool a view is
  * selected by a click and moved by dragging: the ghost of the view (of the whole projection group
  * for a view in projection relation) follows the pointer, and on release the editor calls
- * moveView() of the kernel. Dimension texts and the shelves of manual positions have handles: in the
- * select tool they are dragged and on release the editor calls moveDimension() / setBalloon(). The
+ * moveView() of the kernel. Dimension texts and the shelves of positions (manual and automatic) have
+ * handles: in the select tool they are dragged and on release the editor calls moveDimension() (a
+ * chain/baseline dimension moves its whole group) / setBalloon() / setAutoBalloon(). The
  * outline of a local section (or the plane points of a stepped section) being drawn is shown.
  */
 
@@ -50,9 +51,13 @@ interface Props {
 }
 
 export interface Handle {
-  kind: 'dimension' | 'balloon';
+  kind: 'dimension' | 'balloon' | 'autoBalloon';
+  /** Dimension or manual position id; automatic position — "<view>-<definition>". */
   id: string;
   at: Point;
+  /** Automatic position: its view and part definition (setAutoBalloon). */
+  view?: string;
+  definition?: number;
 }
 
 interface Drag {

@@ -245,6 +245,24 @@ struct PlacedGroup {
 
 }  // namespace
 
+Status DrawingDocument::setAutoBalloon(const std::string& sheet, const std::string& view, assembly_v2::DefinitionId definition,
+                                      std::optional<Point2> at) {
+    SheetDef* sd = findSheet(sheet);
+    if (!sd) return invalid("move position shelf: no sheet '" + sheet + "'");
+    auto v = std::find_if(sd->views.begin(), sd->views.end(), [&](const ViewDef& x) { return x.id == view; });
+    if (v == sd->views.end()) return invalid("move position shelf: no view '" + view + "' on sheet '" + sheet + "'");
+    if (at && (!std::isfinite(at->x) || !std::isfinite(at->y))) return invalid("move position shelf: the point is not finite");
+    if (!at) {
+        v->balloonShelves.erase(definition);
+        return okStatus();
+    }
+    // Позиция могла быть перенесена на этот вид с вида с autoBalloons (скрытая часть на разрезе).
+    if (!v->autoBalloons && std::none_of(sd->views.begin(), sd->views.end(), [](const ViewDef& x) { return x.autoBalloons; }))
+        return invalid("move position shelf: view '" + view + "' has no positions by the specification");
+    v->balloonShelves[definition] = *at;
+    return okStatus();
+}
+
 Result<std::size_t> DrawingDocument::arrangeBalloons(const std::string& sheet, const std::string& view) {
     SheetDef* sd = findSheet(sheet);
     if (!sd) return invalid("arrange positions: no sheet '" + sheet + "'");
@@ -257,6 +275,12 @@ Result<std::size_t> DrawingDocument::arrangeBalloons(const std::string& sheet, c
         b.at.reset();
         ++n;
     }
+    // Полки автоматических позиций, перенесённые мышью, возвращаются на линию полок.
+    for (ViewDef& v : sd->views)
+        if (view.empty() || v.id == view) {
+            n += v.balloonShelves.size();
+            v.balloonShelves.clear();
+        }
     return n;
 }
 
@@ -287,8 +311,94 @@ Result<annotations::ArrangeResult> DrawingDocument::arrangeDimensions(const Mode
     }
     auto r = annotations::arrangeDimensions(defs, bindingR.value(), cv->sheetView, style, options);
     if (!r) return r.error();
-    for (std::size_t k = 0; k < items.size(); ++k) sd->dimensions[items[k]].def = r.value().defs[k];
+    // Размеры групп (цепочка, от базы): общий отсчёт offsetFrom возвращается, offset пересчитывается
+    // так, чтобы размерная линия осталась там, куда её поставила компоновка; звенья цепочки — на
+    // одной линии (самой дальней из поставленных), порядок линий от базы — при обновлении.
+    auto linePos = [&](const annotations::DimensionDef& def) -> std::optional<double> {
+        auto ev = annotations::evaluateDimension(def, bindingR.value(), cv->sheetView, style);
+        if (!ev || ev.value().state != DimensionState::Ok || ev.value().geometry.dimensionLines.empty()) return std::nullopt;
+        const LineSeg& l = ev.value().geometry.dimensionLines.front();
+        return def.type == annotations::DimensionType::Horizontal ? l.a.y : l.a.x;
+    };
+    std::map<std::string, std::vector<std::size_t>> groups;  // группа → индексы в items
+    for (std::size_t k = 0; k < items.size(); ++k) {
+        DimensionItem& it = sd->dimensions[items[k]];
+        annotations::DimensionDef def = r.value().defs[k];
+        if (!it.group.empty() && !it.def.offsetFrom.empty() &&
+            (def.type == annotations::DimensionType::Horizontal || def.type == annotations::DimensionType::Vertical)) {
+            const auto want = linePos(def);
+            annotations::DimensionDef g = def;
+            g.offsetFrom = it.def.offsetFrom;
+            const auto p0 = linePos(g);
+            annotations::DimensionDef g1 = g;
+            g1.offset += 1.0;
+            const auto p1 = linePos(g1);
+            if (want && p0 && p1 && std::abs(*p1 - *p0) > 1e-9) {
+                g.offset += (*want - *p0) / (*p1 - *p0);
+                def = g;
+                groups[it.group].push_back(k);
+            }
+        }
+        it.def = def;
+    }
+    for (const auto& [gid, ks] : groups) {
+        DimensionItem& head = sd->dimensions[items[ks.front()]];
+        if (head.groupMode != DimensionGroupMode::Chain) continue;
+        double far = 0.0;
+        for (std::size_t k : ks) {
+            const double o = sd->dimensions[items[k]].def.offset;
+            if (std::abs(o) > std::abs(far)) far = o;
+        }
+        for (std::size_t k : ks) sd->dimensions[items[k]].def.offset = far;
+    }
+    for (std::size_t k = 0; k < items.size(); ++k) r.value().defs[k] = sd->dimensions[items[k]].def;
     return r;
+}
+
+const char* toString(DimensionGroupMode mode) noexcept {
+    return mode == DimensionGroupMode::Baseline ? "baseline" : "chain";
+}
+
+Status DrawingDocument::moveDimension(const ModelSnapshot& model, const std::string& sheet, const std::string& id, Point2 target) {
+    if (!computed()) return invalid("move dimension: the drawing is not updated");
+    if (!std::isfinite(target.x) || !std::isfinite(target.y)) return invalid("move dimension: the point is not finite");
+    SheetDef* sd = findSheet(sheet);
+    const ComputedSheet* cs = nullptr;
+    for (const ComputedSheet& c : computed_)
+        if (c.id == sheet) cs = &c;
+    if (!sd || !cs) return invalid("move dimension: no sheet '" + sheet + "'");
+    auto it = std::find_if(sd->dimensions.begin(), sd->dimensions.end(), [&](const DimensionItem& d) { return d.id == id; });
+    if (it == sd->dimensions.end()) return invalid("move dimension: no dimension '" + id + "' on sheet '" + sheet + "'");
+    const ComputedView* cv = nullptr;
+    for (const ComputedView& v : cs->views)
+        if (v.id == it->view) cv = &v;
+    if (!cv) return invalid("move dimension: no view '" + it->view + "' on sheet '" + sheet + "'");
+    if (model.shape.isNull() || !model.named) return invalid("move dimension: empty model snapshot");
+    auto bindingR = model.historyNames ? ModelBinding::fromNamedShape(*model.named) : ModelBinding::fromShape(model.shape);
+    if (!bindingR) return bindingR.error();
+    annotations::AnnotationStyle style;
+    style.font = textMetrics(font_);
+    auto moved = annotations::moveDimensionTo(it->def, bindingR.value(), cv->sheetView, target, style);
+    if (!moved) return moved.error();
+    const double delta = moved.value().offset - it->def.offset;
+    if (it->group.empty()) {
+        it->def = std::move(moved).value();
+        return okStatus();
+    }
+    // Группа: все размерные линии — на ту же величину; сторона изображения не меняется.
+    std::vector<DimensionItem*> members;
+    for (DimensionItem& d : sd->dimensions)
+        if (d.group == it->group) members.push_back(&d);
+    double minAbs = 1e300;
+    for (const DimensionItem* d : members) minAbs = std::min(minAbs, std::abs(d->def.offset));
+    const double sign = it->def.offset >= 0 ? 1.0 : -1.0;
+    double step = delta * sign;  // приращение |offset|
+    // Как у одиночного размера (moveDimensionTo): линия, перешедшая бы через точки привязки на
+    // другую сторону, остаётся на прежней стороне в 2 мм.
+    if (minAbs + step <= 0.0) step = 2.0 - minAbs;
+    for (DimensionItem* d : members) d->def.offset += (d->def.offset >= 0 ? 1.0 : -1.0) * step;
+    it->def.textShift = moved.value().textShift;
+    return okStatus();
 }
 
 const char* toString(ViewKind kind) noexcept {
@@ -902,7 +1012,62 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             }
         }
 
-        // 5. Размеры: перепривязка ссылок к новой форме и пересчёт по виду.
+        // 5. Размеры: перепривязка ссылок к новой форме и пересчёт по виду. Группы цепочкой и
+        // от базы сначала перестраиваются по текущему положению своих точек (ГОСТ 2.307).
+        {
+            std::map<std::string, std::vector<std::size_t>> groups;
+            for (std::size_t di = 0; di < sd.dimensions.size(); ++di)
+                if (!sd.dimensions[di].group.empty()) groups[sd.dimensions[di].group].push_back(di);
+            for (const auto& [gid, idx] : groups) {
+                DimensionItem& head = sd.dimensions[idx.front()];
+                const annotations::DimensionType type = head.def.type;
+                if (type != annotations::DimensionType::Horizontal && type != annotations::DimensionType::Vertical) continue;
+                bool same = true;
+                for (std::size_t di : idx)
+                    same = same && sd.dimensions[di].view == head.view && sd.dimensions[di].def.type == type &&
+                           sd.dimensions[di].groupMode == head.groupMode && sd.dimensions[di].def.anchors.size() == 2;
+                std::vector<Anchor> pts = head.def.offsetFrom;
+                if (!same || pts.size() < 2 || !indexOf.count(head.view)) continue;
+                const ComputedView& gv = cs.views[indexOf.at(head.view)];
+                auto coord = [&](Anchor a) -> std::optional<double> {
+                    if (!annotations::rebindRef(a.ref, binding).ok) return std::nullopt;
+                    auto p = annotations::anchorPoint(a, binding, gv.sheetView.view);
+                    if (!p) return std::nullopt;
+                    return type == annotations::DimensionType::Horizontal ? p.value().x : p.value().y;
+                };
+                if (head.groupMode == DimensionGroupMode::Chain) {
+                    if (idx.size() + 1 != pts.size()) continue;  // звено удалено — пары не перестраиваются
+                    std::vector<std::pair<double, std::size_t>> order;
+                    for (std::size_t k = 0; k < pts.size(); ++k) {
+                        auto c = coord(pts[k]);
+                        if (!c) break;
+                        order.emplace_back(*c, k);
+                    }
+                    if (order.size() != pts.size()) continue;  // висячая точка — размер сообщит сам
+                    std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+                    for (std::size_t k = 0; k < idx.size(); ++k)
+                        sd.dimensions[idx[k]].def.anchors = {pts[order[k].second], pts[order[k + 1].second]};
+                } else {
+                    auto base = coord(pts.front());
+                    if (!base) continue;
+                    // Меньший размер — на ближнюю к контуру линию: линии группы (|offset|) остаются
+                    // те же, по ним заново раздаются размеры в порядке длины.
+                    std::vector<std::pair<double, std::size_t>> order;
+                    std::vector<double> lines;
+                    for (std::size_t di : idx) {
+                        auto c = coord(sd.dimensions[di].def.anchors[1]);
+                        if (!c) break;
+                        order.emplace_back(std::abs(*c - *base), di);
+                        lines.push_back(std::abs(sd.dimensions[di].def.offset));
+                    }
+                    if (order.size() != idx.size()) continue;
+                    std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+                    std::sort(lines.begin(), lines.end());
+                    const double sign = head.def.offset >= 0 ? 1.0 : -1.0;
+                    for (std::size_t r = 0; r < order.size(); ++r) sd.dimensions[order[r].second].def.offset = sign * lines[r];
+                }
+            }
+        }
         cs.dimensions.resize(sd.dimensions.size());
         for (std::size_t di = 0; di < sd.dimensions.size(); ++di) {
             DimensionItem& item = sd.dimensions[di];
@@ -1282,13 +1447,62 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 groups[vi].cands.push_back({b.definition, std::stoi(b.text), {b.target}});
                 groups[vi].manual.push_back(mi);
             }
+            // Препятствия для полок: размеры и размеры резьбы листа, ручные позиции с полкой в
+            // заданной точке, автоматические позиции с перенесённой полкой и полки видов,
+            // разнесённых раньше.
+            annotations::BalloonObstacles obstacles;
+            for (const DimensionResult& r : cs.dimensions)
+                if (r.state == DimensionState::Ok) annotations::addDimensionObstacles(obstacles, r.geometry, style);
+            for (const DimensionResult& r : cs.threadNotes)
+                if (r.state == DimensionState::Ok) annotations::addDimensionObstacles(obstacles, r.geometry, style);
+            auto addBalloonObstacle = [&](const annotations::Balloon& b) {
+                obstacles.boxes.push_back(annotations::balloonShelfBox(b, {}, style));
+                obstacles.lines.push_back({b.target, b.at});
+            };
+            {
+                std::set<std::size_t> arrangedIdx;
+                for (const auto& am : arrangedManual) arrangedIdx.insert(am.first);
+                for (std::size_t i = 0; i < cs.manualBalloons.size(); ++i)
+                    if (cs.manualBalloons[i] && !arrangedIdx.count(i)) addBalloonObstacle(*cs.manualBalloons[i]);
+            }
+            // Автоматические позиции с полкой, перенесённой мышью (ViewDef::balloonShelves): полка —
+            // в сохранённой точке, точка выноски — ближайшая к ней из точек изображения части.
+            for (std::size_t vi = 0; vi < cs.views.size(); ++vi) {
+                Group& g = groups[vi];
+                const std::map<assembly_v2::DefinitionId, Point2>& moved = cs.views[vi].def.balloonShelves;
+                if (moved.empty()) continue;
+                Group rest;
+                for (std::size_t k = 0; k < g.cands.size(); ++k) {
+                    auto f = moved.find(g.cands[k].definition);
+                    if (g.manual[k] || f == moved.end()) {
+                        rest.cands.push_back(g.cands[k]);
+                        rest.manual.push_back(g.manual[k]);
+                        continue;
+                    }
+                    annotations::Balloon b;
+                    b.definition = g.cands[k].definition;
+                    b.at = f->second;
+                    b.target = g.cands[k].targets.front();
+                    for (const Point2& t : g.cands[k].targets)
+                        if (std::hypot(t.x - b.at.x, t.y - b.at.y) < std::hypot(b.target.x - b.at.x, b.target.y - b.at.y)) b.target = t;
+                    b.text = std::to_string(g.cands[k].number);
+                    g.report.placed.emplace_back(g.cands[k].number, b.definition);
+                    g.reported = true;
+                    addBalloonObstacle(b);
+                    cs.balloons.push_back(std::move(b));
+                    cs.balloonViews.push_back(cs.views[vi].id);
+                    cs.balloonMoved.push_back(true);
+                }
+                g.cands = std::move(rest.cands);
+                g.manual = std::move(rest.manual);
+            }
             for (std::size_t vi = 0; vi < cs.views.size(); ++vi) {
                 Group& g = groups[vi];
                 const ComputedView& cv = cs.views[vi];
                 if (g.cands.empty()) {
                     // Silent when every part already has a manual position on this sheet.
                     if (cv.def.autoBalloons && (manualDefinitions.empty() || !g.report.withoutBalloon.empty()) &&
-                        g.report.movedTo.empty())
+                        g.report.movedTo.empty() && g.report.placed.empty())
                         report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': no assembly part is visible for positions");
                     if (g.reported) report.balloons.push_back(std::move(g.report));
                     continue;
@@ -1299,6 +1513,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 ao.view = {vb.minX, vb.minY, vb.maxX, vb.maxY};
                 ao.area = {reg.frame.x0 + 5.0, reg.frame.y0 + 5.0, reg.frame.x1 - 5.0, reg.frame.y1 - 5.0};
                 ao.style = style;
+                ao.obstacles = obstacles;
                 auto arranged = annotations::arrangeBalloons(g.cands, ao);
                 if (!arranged) {
                     report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + arranged.error().message);
@@ -1309,16 +1524,23 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 g.report.line = ar.line;
                 g.report.ordered = ar.ordered;
                 g.report.crossings = ar.crossings;
+                g.report.shelfHits = ar.shelfHits;
                 if (ar.crossings > 0)
                     report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + std::to_string(ar.crossings) +
                                               " crossing leader line(s) remain");
+                if (ar.shelfHits > 0)
+                    report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + std::to_string(ar.shelfHits) +
+                                              " position shelf(s) overlap dimensions");
                 for (std::size_t k = 0; k < ar.balloons.size(); ++k) {
+                    addBalloonObstacle(ar.balloons[k]);
                     if (g.manual[k]) {
                         cs.manualBalloons[*g.manual[k]]->at = ar.balloons[k].at;
                         continue;
                     }
                     g.report.placed.emplace_back(g.cands[k].number, ar.balloons[k].definition);
                     cs.balloons.push_back(ar.balloons[k]);
+                    cs.balloonViews.push_back(cv.id);
+                    cs.balloonMoved.push_back(false);
                 }
                 g.reported = g.reported || !g.report.placed.empty();
                 if (g.reported) report.balloons.push_back(std::move(g.report));

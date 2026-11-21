@@ -646,6 +646,7 @@ describe('local section, undo/redo, chain and baseline, drag', () => {
       const y0 = chain.map((id) => dimensionById(drawing, 'S1', id).labelPosition[1]);
       assert.ok(Math.abs(y0[0] - y0[1]) < 1e-6, 'chain on one line');
       const base = drawing.addDimensionGroup('S1', F, [left.index, inner.index, right.index], { mode: 'baseline', spacing: 8 });
+      expectKernelError(() => drawing.addDimensionGroup('S1', F, [left.index, inner.index], { mode: 'baseline', spacing: 5 }), 'InvalidInput', 'step below 7 mm (ГОСТ 2.307)');
       assert.deepEqual(values(base).map((x) => Math.round(x * 1e6) / 1e6), [P.T, P.A]);
       const yb = base.map((id) => dimensionById(drawing, 'S1', id).labelPosition[1]);
       assert.ok(Math.abs(Math.abs(yb[0] - yb[1]) - 8) < 1e-6, `baseline spacing ${yb}`);
@@ -659,6 +660,11 @@ describe('local section, undo/redo, chain and baseline, drag', () => {
       const d1 = dimensionById(drawing, 'S1', id);
       assert.ok(Math.hypot(d1.labelPosition[0] - target[0], d1.labelPosition[1] - target[1]) < 1e-6, `label ${d1.labelPosition}`);
       assert.equal(d1.value, d0.value);
+      // The other link of the chain moved with it: one dimension line, one group (ГОСТ 2.307).
+      const other = dimensionById(drawing, 'S1', chain[1]);
+      assert.ok(Math.abs(other.dimensionLine[0][1] - d1.dimensionLine[0][1]) < 1e-9, 'chain stays on one line');
+      assert.equal(other.group, d1.group);
+      assert.equal(d1.groupMode, 'chain');
       assert.equal(drawing.describe().history.undoLabel, 'moveDimension');
       drawing.undo();
       const d2 = dimensionById(drawing, 'S1', id);

@@ -3,7 +3,8 @@
 // module (tests/assembly-fixtures/shaft_unit.mjs) and opened in the drawing editor. The user turns
 // on the positions of the front view by the specification, puts a manual position with a leader
 // on the top line of the shaft, checks the specification tab, saves the drawing file and opens it
-// again.
+// again. The shelf of an automatic position is dragged off the line, undone, redone, saved and
+// put back by «Разнести позиции».
 import { expect, test, Page } from '@playwright/test';
 import { spawnSync } from 'child_process';
 import fs from 'fs';
@@ -15,6 +16,8 @@ const assemblyDir = path.resolve(process.env.BENDCORE_ASSEMBLY_WASM_DIR || path.
 
 interface Balloon {
   id: string | null;
+  view?: string | null;
+  moved?: boolean;
   definition: number;
   text: string;
   at: [number, number];
@@ -166,6 +169,40 @@ test('assembly drawing: positions by the specification and a manual position wit
   await page.getByTestId('view-balloon-line').selectOption('auto');
   await expectNoError(page);
 
+  // Drag of the shelf of an automatic position (position 1) by (40, −30) px: the shelf stays where
+  // it is dropped, off the line of shelves; the other shelves stay on their line.
+  await page.getByTestId('tool-select').click();
+  sheet = (await state(page)).description!.sheets[0];
+  const auto1 = sheet.balloons.find((b) => b.id === null && b.text === '1')!;
+  const autoHandle = page.getByTestId(`handle-autoBalloon-${auto1.view}-${auto1.definition}`);
+  await expect(autoHandle).toHaveCount(1);
+  const zoom = Number(await page.getByTestId('sheet').getAttribute('data-zoom'));
+  const ab = (await autoHandle.boundingBox())!;
+  const from = { x: ab.x + ab.width / 2, y: ab.y + ab.height / 2 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 20, from.y - 15, { steps: 3 });
+  await page.mouse.move(from.x + 40, from.y - 30, { steps: 3 });
+  await page.mouse.up();
+  await expect(page.getByTestId('status')).toContainText('Полка позиции перенесена');
+  await expectNoError(page);
+  sheet = (await state(page)).description!.sheets[0];
+  const moved1 = sheet.balloons.find((b) => b.text === '1')!;
+  expect(moved1.moved).toBe(true);
+  expect(moved1.at[0] - auto1.at[0]).toBeCloseTo(40 / zoom, 3);
+  expect(moved1.at[1] - auto1.at[1]).toBeCloseTo(30 / zoom, 3);
+  const others = sheet.balloons.filter((b) => b.text !== '1');
+  for (const b of others) expect(b.at[0]).toBeCloseTo(others[0].at[0], 6);
+  // Ctrl+Z puts the shelf back on the line, Ctrl+Y moves it again (saved with the file below).
+  await page.locator('body').press('Control+z');
+  await expect(page.getByTestId('status')).toContainText('Отменено');
+  sheet = (await state(page)).description!.sheets[0];
+  expect(sheet.balloons.find((b) => b.text === '1')!.moved).toBe(false);
+  await page.locator('body').press('Control+y');
+  await expect(page.getByTestId('status')).toContainText('Повторено');
+  sheet = (await state(page)).description!.sheets[0];
+  expect(sheet.balloons.find((b) => b.text === '1')!.moved).toBe(true);
+
   // The specification tab: every position once on the sheet.
   await page.getByTestId('tab-specification').click();
   for (const p of [1, 2, 3, 4, 5]) await expect(page.getByTestId(`spec-position-${p}`)).toHaveAttribute('data-balloons', '1');
@@ -183,6 +220,9 @@ test('assembly drawing: positions by the specification and a manual position wit
   expect(JSON.parse(fileJson.model).format).toBe('bendcore-assembly');
   const drawingDoc = JSON.parse(fileJson.drawing);
   expect(drawingDoc.sheets[0].balloons.map((b: { id: string }) => b.id)).toEqual(['P1']);
+  const shelves = drawingDoc.sheets[0].views[0].balloonShelves as { definition: number; at: [number, number] }[];
+  expect(shelves.map((x) => x.definition)).toEqual([moved1.definition]);
+  expect(shelves[0].at[0]).toBeCloseTo(moved1.at[0], 6);
 
   await page.getByTestId('open-model').setInputFiles(path.join(root, 'tests/wasm/fixtures/bracket.part.json'));
   await expect(page.getByTestId('balloon-P1')).toHaveCount(0);
@@ -190,6 +230,13 @@ test('assembly drawing: positions by the specification and a manual position wit
   await expect(page.getByTestId('balloon-P1')).toHaveAttribute('data-number', '2');
   await expectNoError(page);
   expect((await state(page)).description!.sheets[0].balloons.length).toBe(5);
+  const reopened = (await state(page)).description!.sheets[0].balloons.find((b) => b.text === '1')!;
+  expect(reopened.moved).toBe(true);
+  expect(reopened.at[1]).toBeCloseTo(moved1.at[1], 6);
+  // «Разнести позиции» puts the moved shelf back on the line of shelves.
+  await page.getByTestId('arrange-balloons').click();
+  await expect(page.getByTestId('status')).toContainText('Позиции разнесены');
+  expect((await state(page)).description!.sheets[0].balloons.find((b) => b.text === '1')!.moved).toBe(false);
 
   // Removing the manual position brings back the automatic one of the shaft.
   await page.getByTestId('balloon-P1').locator('button[title="Удалить"]').click();

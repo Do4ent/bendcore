@@ -198,6 +198,15 @@ export class DrawingHandle {
     return this.#call('setBalloon', sheet, id, text(changes));
   }
 
+  /**
+   * Moves the shelf of an automatic position (part definition on view, from describe().balloons):
+   * { at: [x, y] } — the shelf leaves the line of shelves and stays there; { at: null } — back
+   * on the line. arrangeBalloons puts all moved shelves of the sheet back.
+   */
+  setAutoBalloon(sheet, view, definition, changes) {
+    return this.#call('setAutoBalloon', sheet, view, definition, text(changes));
+  }
+
   removeAnnotation(sheet, id) {
     return this.#call('removeAnnotation', sheet, id);
   }

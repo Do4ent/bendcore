@@ -385,7 +385,8 @@ json updateReportJson(const dd::UpdateReport& r) {
         json moved = json::array();
         for (const auto& [def, view] : b.movedTo) moved.push_back({{"definition", def}, {"view", view}});
         balloons.push_back({{"sheet", b.sheet}, {"view", b.view}, {"placed", placed}, {"withoutBalloon", b.withoutBalloon},
-                            {"movedTo", moved}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings}});
+                            {"movedTo", moved}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings},
+                            {"shelfHits", b.shelfHits}});
     }
     return {{"modelChanged", r.modelChanged}, {"previousHash", r.previousHash}, {"currentHash", r.currentHash},
             {"revision", r.revision},         {"viewsComputed", r.viewsComputed}, {"viewsFromCache", r.viewsFromCache},
@@ -532,7 +533,12 @@ json describe(Session& s) {
                       {"toleranceDisplay", enumName(d.def.toleranceDisplay, kTolDisp)},
                       {"textOverride", d.def.textOverride ? json(*d.def.textOverride) : json(nullptr)},
                       {"decimals", d.def.decimals},
-                      {"lastValue", d.lastValue ? json(*d.lastValue) : json(nullptr)}};
+                      {"lastValue", d.lastValue ? json(*d.lastValue) : json(nullptr)},
+                      {"group", d.group.empty() ? json(nullptr) : json(d.group)}};
+            if (!d.group.empty()) {
+                j["groupMode"] = dd::toString(d.groupMode);
+                j["groupSpacing"] = d.groupSpacing;
+            }
             if (cs && di < cs->dimensions.size()) {
                 const an::DimensionResult& r = cs->dimensions[di];
                 j["state"] = r.state == an::DimensionState::Ok ? "ok" : "dangling";
@@ -540,6 +546,9 @@ json describe(Session& s) {
                 j["text"] = r.text;
                 j["reason"] = r.reason;
                 if (!r.geometry.labels.empty()) j["labelPosition"] = pointJson(r.geometry.labels.front().position);
+                // Размерная линия (первый отрезок) — для проверки цепочки и шага от базы.
+                if (!r.geometry.dimensionLines.empty())
+                    j["dimensionLine"] = json::array({pointJson(r.geometry.dimensionLines.front().a), pointJson(r.geometry.dimensionLines.front().b)});
             }
             dims.push_back(std::move(j));
         }
@@ -571,8 +580,16 @@ json describe(Session& s) {
         // ones (id of the BalloonItem), with the number from the specification.
         json balloons = json::array();
         if (cs)
-            for (const an::Balloon& b : cs->balloons)
-                balloons.push_back({{"id", nullptr}, {"definition", b.definition}, {"text", b.text}, {"at", pointJson(b.at)}, {"target", pointJson(b.target)}});
+            for (std::size_t i = 0; i < cs->balloons.size(); ++i) {
+                const an::Balloon& b = cs->balloons[i];
+                balloons.push_back({{"id", nullptr},
+                                    {"view", i < cs->balloonViews.size() ? json(cs->balloonViews[i]) : json(nullptr)},
+                                    {"moved", i < cs->balloonMoved.size() && cs->balloonMoved[i]},
+                                    {"definition", b.definition},
+                                    {"text", b.text},
+                                    {"at", pointJson(b.at)},
+                                    {"target", pointJson(b.target)}});
+            }
         json positions = json::array();
         for (std::size_t i = 0; i < sd.balloons.size(); ++i) {
             const auto& b = sd.balloons[i];
@@ -585,7 +602,7 @@ json describe(Session& s) {
                     p["text"] = c->text;
                     p["target"] = pointJson(c->target);
                     p["shelf"] = pointJson(c->at);
-                    balloons.push_back({{"id", b.id}, {"definition", c->definition}, {"text", c->text}, {"at", pointJson(c->at)}, {"target", pointJson(c->target)}});
+                    balloons.push_back({{"id", b.id}, {"view", b.view}, {"definition", c->definition}, {"text", c->text}, {"at", pointJson(c->at)}, {"target", pointJson(c->target)}});
                 }
             }
             positions.push_back(std::move(p));
@@ -1485,6 +1502,21 @@ std::string setBalloon(std::uint32_t handle, std::string sheetId, std::string id
     });
 }
 
+// Moves the shelf of an automatic position (part definition on view viewId) to at: [x, y] — it
+// leaves the line of shelves — or puts it back on the line (null); DrawingDocument::setAutoBalloon.
+std::string setAutoBalloon(std::uint32_t handle, std::string sheetId, std::string viewId, std::uint32_t definition, std::string text) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        const json j = parseArg(text, "position");
+        return transaction(s, "setAutoBalloon", [&]() -> json {
+            std::optional<dv::Point2> at;
+            if (j.contains("at") && !j.at("at").is_null()) at = point2From(j.at("at"), "at");
+            take(s.doc.setAutoBalloon(sheetId, viewId, definition, at));
+            return nullptr;
+        });
+    });
+}
+
 std::string removeAnnotation(std::uint32_t handle, std::string sheetId, std::string id) {
     return guarded([&]() -> json {
         Session& s = session(handle);
@@ -1571,11 +1603,9 @@ std::string moveDimension(std::uint32_t handle, std::string sheetId, std::string
             dd::SheetDef& sd = sheetOf(s, sheetId);
             for (auto& d : sd.dimensions) {
                 if (d.id != id) continue;
-                const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), d.view);
-                const an::ModelBinding binding = shownBinding(s);
-                an::AnnotationStyle style;
-                style.font = s.doc.textMetrics(&requireFont());
-                d.def = take(an::moveDimensionTo(d.def, binding, cv.sheetView, {x, y}, style));
+                if (!s.shown) throw InputError("drawing: the session has no model snapshot");
+                // A dimension of a chain/baseline group moves the whole group (DrawingDocument::moveDimension).
+                take(s.doc.moveDimension(*s.shown, sheetId, id, {x, y}));
                 return {{"offset", d.def.offset}, {"textShift", d.def.textShift}, {"leaderAngle", d.def.leaderAngleDeg}};
             }
             throw InputError("unknown dimension '" + id + "'");
@@ -1610,7 +1640,8 @@ std::string arrangeBalloons(std::uint32_t handle, std::string sheetId, std::stri
         json views = json::array();
         for (const dd::BalloonReport& b : s.lastReport.balloons) {
             if (b.sheet != sheetId || (!viewId.empty() && b.view != viewId)) continue;
-            views.push_back({{"view", b.view}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings}});
+            views.push_back({{"view", b.view}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings},
+                             {"shelfHits", b.shelfHits}});
         }
         out["views"] = views;
         return out;
@@ -1672,16 +1703,25 @@ std::string addDimensionGroup(std::uint32_t handle, std::string sheetId, std::st
                 defs = take(an::baselineDimensions(type, anchors.front(), rest, binding, cv.sheetView, offset,
                                                    numOr(opts, "spacing", 7.0)));
             }
+            // Group id: unused among the dimension groups of the document.
+            std::set<std::string> groups;
+            for (const dd::SheetDef& sh : s.doc.sheets())
+                for (const auto& d : sh.dimensions) groups.insert(d.group);
+            std::string group;
+            for (int i = 1; group.empty() || groups.count(group); ++i) group = "G" + std::to_string(i);
             json ids = json::array();
             for (an::DimensionDef& def : defs) {
                 dd::DimensionItem item;
                 item.id = freshId(s.doc, "D");
                 item.view = viewId;
                 item.def = std::move(def);
+                item.group = group;
+                item.groupMode = mode == "chain" ? dd::DimensionGroupMode::Chain : dd::DimensionGroupMode::Baseline;
+                item.groupSpacing = numOr(opts, "spacing", 7.0);
                 ids.push_back(item.id);
                 sd.dimensions.push_back(std::move(item));
             }
-            return {{"ids", ids}};
+            return {{"ids", ids}, {"group", group}};
         });
     });
 }
@@ -1962,6 +2002,7 @@ EMSCRIPTEN_BINDINGS(bendcore_drawing) {
     emscripten::function("removeAnnotation", &removeAnnotation);
     emscripten::function("addBalloon", &addBalloon);
     emscripten::function("setBalloon", &setBalloon);
+    emscripten::function("setAutoBalloon", &setAutoBalloon);
     emscripten::function("sheetPicture", &sheetPicture);
     emscripten::function("addLocalSection", &addLocalSection);
     emscripten::function("removeLocalSection", &removeLocalSection);

@@ -33,6 +33,7 @@
 using namespace bendcore::examples::gearbox;
 namespace asmv2 = bendcore::assembly_v2;
 namespace dd = bendcore::drawing_v2::document;
+namespace dv2 = bendcore::drawing_v2;
 namespace fs = std::filesystem;
 
 namespace {
@@ -376,6 +377,35 @@ TEST(E2EProductGearbox, PositionsMatchSpecification) {
     EXPECT_EQ(*numbers.begin(), 1);
     EXPECT_EQ(*numbers.rbegin(), 24);
     EXPECT_EQ(cs.title.designation, "РЦ.080.00.000 СБ");
+    // Полки с номерами не налезают на размеры листа (80±0,03 на А–А): ни на размерные и выносные
+    // линии, ни на надписи (шрифт листа).
+    dv2::annotations::AnnotationStyle style;
+    style.font = p.set.assembly.textMetrics(nullptr);
+    std::vector<dv2::annotations::Balloon> all(cs.balloons.begin(), cs.balloons.end());
+    for (const auto& b : cs.manualBalloons) all.push_back(*b);
+    std::size_t dims = 0;
+    for (const auto& d : cs.dimensions) {
+        if (d.state != dv2::annotations::DimensionState::Ok) continue;
+        ++dims;
+        dv2::annotations::BalloonObstacles obs;
+        dv2::annotations::addDimensionObstacles(obs, d.geometry, style);
+        for (const auto& b : all) {
+            const dv2::Rect box = dv2::annotations::balloonShelfBox(b, {}, style);
+            for (const auto& r : obs.boxes)
+                EXPECT_FALSE(std::min(r.x1, box.x1) > std::max(r.x0, box.x0) && std::min(r.y1, box.y1) > std::max(r.y0, box.y0))
+                    << "position " << b.text << " on the text of dimension " << d.text;
+            for (const auto& l : obs.lines) {
+                const double x0 = std::min(l.a.x, l.b.x), x1 = std::max(l.a.x, l.b.x), y0 = std::min(l.a.y, l.b.y),
+                             y1 = std::max(l.a.y, l.b.y);
+                // Отрезки размеров — горизонтальные, вертикальные или короткие (дуги, стрелки): габарит.
+                EXPECT_FALSE(x1 > box.x0 && x0 < box.x1 && y1 > box.y0 && y0 < box.y1 &&
+                             (std::abs(x1 - x0) < 1e-9 || std::abs(y1 - y0) < 1e-9))
+                    << "position " << b.text << " on a line of dimension " << d.text;
+            }
+        }
+    }
+    EXPECT_GT(dims, 0u);
+    for (const auto& w : p.summary.warnings) EXPECT_EQ(w.find("overlap dimensions"), std::string::npos) << w;
 }
 
 // Все размеры, знаки, позиции привязаны к модели; изменение длины выходного конца вала (L0:

@@ -705,3 +705,258 @@ TEST(DrawingAssemblyConventions, ArrangeManualPositions) {
     EXPECT_EQ(t2.value().sheets()[0].views[2].balloonLine, an::BalloonLine::Below);
     EXPECT_EQ(t2.value().sheets()[0].views[2].bearingSymbol, an::BearingSymbol::RollingElement);
 }
+
+namespace {
+
+// Сборка «корпус-кольцо 52×90×40 + вал ⌀25 × 100 (z = −20…80)».
+std::shared_ptr<AssemblyDocument> housingAndShaft(DefinitionId& housing, DefinitionId& shaft) {
+    auto doc = std::make_shared<AssemblyDocument>("Узел");
+    EXPECT_TRUE(doc->setProperties(doc->root(), {"У.01.000", "Узел", "", std::nullopt}).ok());
+    auto rod = makeRod(12.5, 100);
+    housing = doc->addPart("housing", {ring(52, 90, 40), nullptr}, {"У.01.001", "Корпус", "", 7200}).value();
+    shaft = doc->addPart("shaft", partDataFromDocument(*rod).value(), {"У.01.002", "Вал", "", 7850}).value();
+    const OccurrenceId ho = doc->addOccurrence(housing, Transform::identity(), "Корпус").value();
+    EXPECT_TRUE(doc->setFixed(ho, true).ok());
+    doc->addOccurrence(shaft, Transform::fromTranslation(bendcore::assembly_v2::Vec3(0, 0, -20)), "Вал").value();
+    return doc;
+}
+
+bool rectsOverlap(const Rect& a, const Rect& b) {
+    return std::min(a.x1, b.x1) > std::max(a.x0, b.x0) && std::min(a.y1, b.y1) > std::max(a.y0, b.y0);
+}
+
+// Отрезок (горизонтальный или вертикальный) проходит через прямоугольник.
+bool axisSegmentInRect(Point2 a, Point2 b, const Rect& r) {
+    const double x0 = std::min(a.x, b.x), x1 = std::max(a.x, b.x), y0 = std::min(a.y, b.y), y1 = std::max(a.y, b.y);
+    return x1 >= r.x0 && x0 <= r.x1 && y1 >= r.y0 && y0 <= r.y1;
+}
+
+}  // namespace
+
+// Препятствия: вертикальный размер справа от изображения (размерная линия в 17 мм от контура,
+// выносные линии, надпись) — колонна полок в 15 мм пересекла бы размерную линию. Полки
+// сдвигаются так, что ни полка, ни номер не задевают линий и надписи размера; полки — на одной
+// вертикали, по порядку номеров. Строка над изображением — выше горизонтального размера.
+TEST(DrawingAssemblyConventions, BalloonShelvesAvoidDimensionObstacles) {
+    an::BalloonArrangeOptions o;
+    o.line = an::BalloonLine::Right;
+    o.view = {0, 0, 100, 100};
+    o.area = {-200, -200, 400, 300};
+    an::DimensionGeometry g;
+    g.dimensionLines.push_back({{117, 20}, {117, 80}});
+    g.extensionLines.push_back({{101, 20}, {119, 20}});
+    g.extensionLines.push_back({{101, 80}, {119, 80}});
+    an::DimensionLabel lab;
+    lab.position = {116, 50};
+    lab.text = "60";
+    lab.height = 3.5;
+    lab.rotationDeg = 90;
+    lab.hAlign = HAlign::Center;
+    g.labels.push_back(lab);
+    an::addDimensionObstacles(o.obstacles, g);
+    ASSERT_EQ(o.obstacles.lines.size(), 3u);
+    ASSERT_EQ(o.obstacles.boxes.size(), 1u);
+    std::vector<an::BalloonCandidate> c{{7, 1, {{90, 60}}}, {8, 2, {{80, 45}}}, {9, 3, {{70, 40}}}};
+    {
+        // Без препятствий колонна в x = 115 задевает размерную линию x = 117.
+        an::BalloonArrangeOptions plain = o;
+        plain.obstacles = {};
+        auto r0 = an::arrangeBalloons(c, plain);
+        ASSERT_TRUE(r0.ok());
+        EXPECT_NEAR(r0.value().balloons[0].at.x, 115, 1e-12);
+        std::size_t hits = 0;
+        for (const an::Balloon& b : r0.value().balloons) hits += axisSegmentInRect({117, 20}, {117, 80}, an::balloonShelfBox(b)) ? 1 : 0;
+        ASSERT_GT(hits, 0u);
+    }
+    auto r = an::arrangeBalloons(c, o);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    EXPECT_EQ(r.value().shelfHits, 0u);
+    EXPECT_EQ(r.value().crossings, 0u);
+    EXPECT_TRUE(r.value().ordered);
+    const auto& b = r.value().balloons;
+    for (std::size_t i = 0; i < b.size(); ++i) {
+        EXPECT_NEAR(b[i].at.x, b[0].at.x, 1e-12);  // одна вертикаль
+        if (i > 0) EXPECT_GE(b[i - 1].at.y - b[i].at.y, 10.0 - 1e-9);
+        const Rect box = an::balloonShelfBox(b[i]);
+        for (const LineSeg& l : o.obstacles.lines) EXPECT_FALSE(axisSegmentInRect(l.a, l.b, box)) << "shelf " << b[i].text;
+        EXPECT_FALSE(rectsOverlap(o.obstacles.boxes[0], box)) << "shelf " << b[i].text;
+    }
+    an::BalloonArrangeOptions row = o;
+    row.line = an::BalloonLine::Above;
+    row.obstacles = {};
+    an::DimensionGeometry h;
+    h.dimensionLines.push_back({{0, 117}, {100, 117}});
+    h.extensionLines.push_back({{0, 101}, {0, 119}});
+    h.extensionLines.push_back({{100, 101}, {100, 119}});
+    an::addDimensionObstacles(row.obstacles, h);
+    auto rr = an::arrangeBalloons(c, row);
+    ASSERT_TRUE(rr.ok());
+    EXPECT_EQ(rr.value().shelfHits, 0u);
+    for (const an::Balloon& x : rr.value().balloons) {
+        EXPECT_NEAR(x.at.y, rr.value().balloons[0].at.y, 1e-12);
+        for (const LineSeg& l : row.obstacles.lines) EXPECT_FALSE(axisSegmentInRect(l.a, l.b, an::balloonShelfBox(x)));
+    }
+}
+
+// Сборочный разрез с размером между позициями: вертикальный размер 40 справа от разреза А–А стоит
+// там, где была бы колонна полок. После обновления ни полки, ни номера позиций не задевают
+// размерных и выносных линий и надписи размера (геометрия листа и DXF).
+TEST(DrawingAssemblyConventions, SectionBalloonsDoNotOverlapDimensions) {
+    const TrueTypeFont* font = dv2test::systemFont();
+    if (!font) GTEST_SKIP() << "no system TrueType font";
+    DefinitionId housing = 0, shaft = 0;
+    auto doc = housingAndShaft(housing, shaft);
+    auto snap = snapshotAssembly(doc);
+    ASSERT_TRUE(snap.ok());
+    const ModelSnapshot& m = snap.value();
+    DrawingDocument d;
+    d.model().kind = ModelKind::Assembly;
+    SheetDef s = sheetWithSection();
+    s.views[2].autoBalloons = true;
+    s.views[2].balloonLine = an::BalloonLine::Right;
+    // Высота корпуса 40 справа от разреза: offset < 0 — вправо, линия в 17 мм от контура.
+    auto v = [&](double x, double z) { return anchorOn(m, md::ElementKind::Vertex, vertexAt(m, {x, 0, z}), an::AnchorKind::Point); };
+    s.dimensions.push_back(dimension("D1", "A", an::DimensionType::Vertical, {v(45, 0), v(45, 40)}, -17.0));
+    d.sheets().push_back(s);
+    d.setFont(font);
+    views::ViewCache cache(16, 2);
+    auto rep = d.update(m, cache);
+    ASSERT_TRUE(rep.ok()) << rep.error().message;
+    const ComputedSheet& cs = d.computedSheets()[0];
+    ASSERT_EQ(cs.dimensions.size(), 1u);
+    ASSERT_EQ(cs.dimensions[0].state, an::DimensionState::Ok) << cs.dimensions[0].reason;
+    EXPECT_NEAR(cs.dimensions[0].value, 40.0, 1e-9);
+    ASSERT_EQ(cs.balloons.size(), 2u);
+    const views::Box2 vb = computedView(d, "A").sheetView.sheetBounds();
+    const an::DimensionGeometry& g = cs.dimensions[0].geometry;
+    ASSERT_FALSE(g.dimensionLines.empty());
+    // Размерная линия — там, где без учёта размеров стояла бы колонна полок (15 мм от изображения).
+    const double dimX = g.dimensionLines[0].a.x;
+    EXPECT_GT(dimX, vb.maxX + 15.0);
+    EXPECT_LT(dimX, vb.maxX + 22.0);
+    std::vector<LineSeg> lines = g.dimensionLines;
+    lines.insert(lines.end(), g.extensionLines.begin(), g.extensionLines.end());
+    an::AnnotationStyle style;
+    style.font = d.textMetrics(font);  // шрифт листа (ГОСТ 2.304 по умолчанию)
+    const auto labels = an::labelBoxes(g, style);
+    ASSERT_FALSE(labels.empty());
+    for (const an::Balloon& b : cs.balloons) {
+        const Rect box = an::balloonShelfBox(b, {}, style);
+        for (const LineSeg& l : lines) EXPECT_FALSE(axisSegmentInRect(l.a, l.b, box)) << "position " << b.text << " on a dimension line";
+        for (const auto& lb : labels)
+            EXPECT_FALSE(rectsOverlap(box, {lb.minX, lb.minY, lb.maxX, lb.maxY})) << "position " << b.text << " on the dimension text";
+        EXPECT_NEAR(b.at.x, cs.balloons[0].at.x, 1e-9);  // одна вертикаль
+    }
+    bool reported = false;
+    for (const BalloonReport& br : rep.value().balloons)
+        if (br.view == "A") {
+            reported = true;
+            EXPECT_EQ(br.shelfHits, 0u);
+        }
+    EXPECT_TRUE(reported);
+    // DXF: полки (горизонтальные отрезки от начала полки на ширину номера) есть; ни один отрезок
+    // слоя размеров не проходит через место полки с номером.
+    auto sheets = d.render(font);
+    ASSERT_TRUE(sheets.ok()) << sheets.error().message;
+    const std::string path = dv2test::outPath("section_balloons_dimensions.dxf");
+    ASSERT_TRUE(saveToFile(path, writeDxf(sheets.value()[0]).value()).ok());
+    const DxfContent dxf = readDxf(path);
+    EXPECT_NE(std::find(dxf.texts.begin(), dxf.texts.end(), "40"), dxf.texts.end());
+    std::size_t dimLines = 0;
+    for (const an::Balloon& b : cs.balloons) {
+        const Rect box = an::balloonShelfBox(b, {}, style);
+        bool shelf = false;
+        for (const auto& l : dxf.lines) {
+            // DXF — 6 знаков после запятой.
+            if (std::abs(l.y0 - b.at.y) < 1e-5 && std::abs(l.y1 - b.at.y) < 1e-5 &&
+                std::abs(std::min(l.x0, l.x1) - box.x0) < 1e-5 && std::abs(std::max(l.x0, l.x1) - box.x1) < 1e-5)
+                shelf = true;
+            if (l.layer != "DIM") continue;
+            // Полки и выноски самих позиций (тот же слой) — концом в начале полки.
+            bool own = false;
+            for (const an::Balloon& o : cs.balloons)
+                for (Point2 p : {Point2{l.x0, l.y0}, Point2{l.x1, l.y1}}) own = own || std::hypot(p.x - o.at.x, p.y - o.at.y) < 1e-5;
+            if (own) continue;
+            ++dimLines;
+            EXPECT_FALSE(axisSegmentInRect({l.x0, l.y0}, {l.x1, l.y1}, box)) << "DXF: position " << b.text;
+        }
+        EXPECT_TRUE(shelf) << "DXF: no shelf of position " << b.text;
+    }
+    EXPECT_GT(dimLines, 0u);
+}
+
+// Перенос полки автоматической позиции мышью: полка встаёт в заданную точку и сходит с линии,
+// точка выноски — ближайшая к полке точка изображения детали; положение сохраняется в файле;
+// «Разнести позиции» и at = nullopt возвращают полку на линию.
+TEST(DrawingAssemblyConventions, MovedAutomaticBalloonShelf) {
+    DefinitionId housing = 0, shaft = 0;
+    auto doc = housingAndShaft(housing, shaft);
+    auto snap = snapshotAssembly(doc);
+    ASSERT_TRUE(snap.ok());
+    DrawingDocument d;
+    d.model().kind = ModelKind::Assembly;
+    SheetDef s = sheetWithSection();
+    s.views[0].autoBalloons = true;
+    d.sheets().push_back(s);
+    views::ViewCache cache(16, 2);
+    ASSERT_TRUE(d.update(snap.value(), cache).ok());
+    ASSERT_EQ(d.computedSheets()[0].balloons.size(), 2u);
+    std::vector<Point2> before;
+    for (const an::Balloon& b : d.computedSheets()[0].balloons)
+        if (b.definition == shaft) before.push_back(b.target);
+    ASSERT_EQ(before.size(), 1u);
+    EXPECT_FALSE(d.setAutoBalloon("S9", "F", shaft, Point2{0, 0}).ok());
+    EXPECT_FALSE(d.setAutoBalloon("S1", "X", shaft, Point2{0, 0}).ok());
+    EXPECT_FALSE(d.setAutoBalloon("S1", "F", shaft, Point2{std::nan(""), 0}).ok());
+    ASSERT_TRUE(d.setAutoBalloon("S1", "F", shaft, Point2{60, 300}).ok());
+    auto rep = d.update(snap.value(), cache);
+    ASSERT_TRUE(rep.ok()) << rep.error().message;
+    {
+        const ComputedSheet& cs = d.computedSheets()[0];
+        ASSERT_EQ(cs.balloons.size(), 2u);
+        ASSERT_EQ(cs.balloonViews.size(), 2u);
+        ASSERT_EQ(cs.balloonMoved.size(), 2u);
+        std::optional<std::size_t> moved, other;
+        for (std::size_t i = 0; i < cs.balloons.size(); ++i) (cs.balloons[i].definition == shaft ? moved : other) = i;
+        ASSERT_TRUE(moved && other);
+        EXPECT_TRUE(cs.balloonMoved[*moved]);
+        EXPECT_FALSE(cs.balloonMoved[*other]);
+        EXPECT_EQ(cs.balloonViews[*moved], "F");
+        EXPECT_NEAR(cs.balloons[*moved].at.x, 60, 1e-12);
+        EXPECT_NEAR(cs.balloons[*moved].at.y, 300, 1e-12);
+        EXPECT_EQ(cs.balloons[*moved].text, "2");
+        // Точка выноски — на изображении вала (внутри габарита вида) и не дальше от полки, чем
+        // точка выноски до переноса.
+        const views::Box2 fb = computedView(d, "F").sheetView.sheetBounds();
+        const Point2 t = cs.balloons[*moved].target;
+        EXPECT_GE(t.x, fb.minX - 1e-6);
+        EXPECT_LE(t.x, fb.maxX + 1e-6);
+        EXPECT_GE(t.y, fb.minY - 1e-6);
+        EXPECT_LE(t.y, fb.maxY + 1e-6);
+        // До переноса выноска шла к полке на линии справа; теперь — к ближайшей к (60, 300) точке:
+        // не дальше прежней точки выноски вала.
+        for (const Point2& p : before) EXPECT_LE(std::hypot(t.x - 60, t.y - 300), std::hypot(p.x - 60, p.y - 300) + 1e-9);
+    }
+    // Файл: сохраняется и читается обратно.
+    auto text = d.toJson();
+    ASSERT_TRUE(text.ok());
+    EXPECT_NE(text.value().find("\"balloonShelves\""), std::string::npos);
+    auto back = DrawingDocument::fromJson(text.value());
+    ASSERT_TRUE(back.ok()) << back.error().message;
+    ASSERT_EQ(back.value().sheets()[0].views[0].balloonShelves.size(), 1u);
+    EXPECT_NEAR(back.value().sheets()[0].views[0].balloonShelves.at(shaft).y, 300, 1e-12);
+    EXPECT_EQ(back.value().toJson().value(), text.value());
+    // Разнести: полка обратно на линию (одна вертикаль с другой позицией).
+    auto n = d.arrangeBalloons("S1");
+    ASSERT_TRUE(n.ok());
+    EXPECT_EQ(n.value(), 1u);
+    EXPECT_TRUE(d.sheets()[0].views[0].balloonShelves.empty());
+    ASSERT_TRUE(d.update(snap.value(), cache).ok());
+    const ComputedSheet& c2 = d.computedSheets()[0];
+    ASSERT_EQ(c2.balloons.size(), 2u);
+    EXPECT_NEAR(c2.balloons[0].at.x, c2.balloons[1].at.x, 1e-9);
+    EXPECT_FALSE(c2.balloonMoved[0] || c2.balloonMoved[1]);
+    ASSERT_TRUE(d.setAutoBalloon("S1", "F", shaft, Point2{60, 300}).ok());
+    ASSERT_TRUE(d.setAutoBalloon("S1", "F", shaft, std::nullopt).ok());
+    EXPECT_TRUE(d.sheets()[0].views[0].balloonShelves.empty());
+}

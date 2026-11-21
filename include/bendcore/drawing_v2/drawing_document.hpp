@@ -228,17 +228,37 @@ struct ViewDef {
     // balloonLine.
     bool autoBalloons = false;
     annotations::BalloonLine balloonLine = annotations::BalloonLine::Auto;
+    // Полки автоматических позиций этого вида, перенесённые мышью: определение → начало полки
+    // (мм листа). Такая позиция не разносится на линию полок, точка выноски — ближайшая к полке
+    // точка изображения части; DrawingDocument::arrangeBalloons очищает список.
+    std::map<assembly_v2::DefinitionId, Point2> balloonShelves;
     views::HlrMethod method = views::HlrMethod::Exact;
     bool autoMethod = false;  // выбор алгоритма HLR по геометрии (views::chooseHlrMethod)
 };
 
 // Размер на виде. Ссылки — ModelRef::persistent (имя + сигнатура); индекс вычисляется при
 // обновлении (annotations::rebindRef).
+// Размеры цепочкой и от общей базы (ГОСТ 2.307-2011): размеры группы на одной размерной линии
+// (цепочка) или с шагом groupSpacing от контура, меньшие ближе (от базы).
+enum class DimensionGroupMode { Chain, Baseline };
+
+const char* toString(DimensionGroupMode mode) noexcept;
+
 struct DimensionItem {
     std::string id;
     std::string view;
     annotations::DimensionDef def;
     std::optional<double> lastValue;  // значение при предыдущем обновлении (сохраняется в файле)
+    // Группа размеров (пусто — одиночный размер). Точки группы — def.offsetFrom (общий у всех
+    // размеров группы; у группы от базы первая — база). При каждом обновлении группа
+    // перестраивается по модели: цепочка — точки сортируются вдоль оси и размеры соседних пар
+    // получают свои точки заново (после изменения модели звенья не перекрываются), от базы —
+    // линии группы (|offset|) раздаются размерам по длине: меньший — ближе к контуру. Шаг
+    // groupSpacing задаётся при создании (baselineDimensions); автокомпоновка (arrangeDimensions)
+    // ставит размеры группы по рядам и сохраняет группу (цепочка — на самом дальнем из рядов звеньев).
+    std::string group;
+    DimensionGroupMode groupMode = DimensionGroupMode::Chain;
+    double groupSpacing = 7.0;  // от базы: между параллельными размерными линиями, мм (≥ 7)
 };
 
 // Знак шероховатости на линии вида — изображении ребра модели (ГОСТ 2.309).
@@ -358,6 +378,9 @@ struct ComputedSheet {
     std::vector<std::optional<annotations::SymbolGeometry>> tolerances;  // по SheetDef::tolerances
     std::vector<std::optional<annotations::SymbolGeometry>> datums;      // по SheetDef::datums
     std::vector<annotations::Balloon> balloons;  // автоматические позиции видов
+    std::vector<std::string> balloonViews;       // вид каждой автоматической позиции (по balloons)
+    // По balloons: полка перенесена мышью (ViewDef::balloonShelves), не стоит на линии полок.
+    std::vector<bool> balloonMoved;
     // По SheetDef::balloons: номер, точка выноски и полка; nullopt — висячая позиция (ребро не
     // найдено или не видно, у его детали нет позиции в спецификации).
     std::vector<std::optional<annotations::Balloon>> manualBalloons;
@@ -389,6 +412,8 @@ struct BalloonReport {
     annotations::BalloonLine line = annotations::BalloonLine::Right;  // линия полок
     bool ordered = true;        // номера на полках по порядку
     std::size_t crossings = 0;  // пересечения линий-выносок (0 — разнесено)
+    // Полок, задевающих размеры листа (линии и надписи): 0 — линия полок обошла размеры.
+    std::size_t shelfHits = 0;
 };
 
 struct UpdateReport {
@@ -455,9 +480,16 @@ public:
     // Разнесение позиций листа (ГОСТ 2.109): ручные позиции листа (или только вида view, если он
     // задан) получают arranged = true — при обновлении их полки ставятся вместе с автоматическими
     // позициями своего вида на одну линию без пересечения выносок, по порядку номеров
-    // (annotations::arrangeBalloons). Возвращает число ручных позиций; после вызова нужен update.
-    // Ошибка InvalidInput — нет листа или вида.
+    // (annotations::arrangeBalloons); полки автоматических позиций, перенесённые мышью
+    // (ViewDef::balloonShelves), возвращаются на линию. Возвращает число ручных позиций и
+    // возвращённых полок; после вызова нужен update. Ошибка InvalidInput — нет листа или вида.
     Result<std::size_t> arrangeBalloons(const std::string& sheet, const std::string& view = {});
+
+    // Перенос полки автоматической позиции составной части definition на виде view (мышью):
+    // at — начало полки на листе, nullopt — обратно на линию полок вида. Ошибка InvalidInput —
+    // нет листа или вида, у вида нет позиций по спецификации (autoBalloons), точка не конечна.
+    Status setAutoBalloon(const std::string& sheet, const std::string& view, assembly_v2::DefinitionId definition,
+                          std::optional<Point2> at);
 
     // Автокомпоновка размеров вида (annotations::arrangeDimensions, ГОСТ 2.307): новые offset,
     // textShift и направление полок размеров вида view листа sheet по последнему обновлению;
@@ -466,6 +498,15 @@ public:
     Result<annotations::ArrangeResult> arrangeDimensions(const ModelSnapshot& model, const std::string& sheet,
                                                          const std::string& view,
                                                          const annotations::ArrangeOptions& options = {});
+
+    // Перенос размера мышью (annotations::moveDimensionTo): число встаёт в точку target листа.
+    // Размер группы (DimensionItem::group) переносит всю группу: цепочка — общая размерная линия
+    // (offset всех размеров), от базы — все размерные линии на ту же величину, шаг сохраняется;
+    // сдвиг вдоль линии (textShift) — только у перенесённого размера. Линии группы не переходят на
+    // другую сторону (как у одиночного размера: линия, перешедшая бы на другую сторону, — в 2 мм
+    // на прежней стороне). model — снимок последнего
+    // обновления. Ошибка InvalidInput — документ не обновлён, нет листа или размера, размер висячий.
+    Status moveDimension(const ModelSnapshot& model, const std::string& sheet, const std::string& id, Point2 target);
 
     bool computed() const { return !computed_.empty(); }
     const std::vector<ComputedSheet>& computedSheets() const { return computed_; }
