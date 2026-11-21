@@ -261,8 +261,10 @@ doc.undo();                          // W = 40, прежние результа�
 | Тип | Параметры | Ссылки / связи / опции | Функция |
 |---|---|---|---|
 | `Sketch` | `offset, originX/Y/Z` | `face`, `projected` (необяз.); связь `plane`; `plane = XY\|XZ\|YZ\|face\|datum` | `SketchPlacement`, `BoundSketch`, `SketchProfile`, `projectEdge` |
-| `DatumPlane` | `offset, angle` | `face, face2, edge`; связи `plane, axis`; `method = offset\|angle\|midway`, `base`, `axis` | `planeOffset`, `planeAtAngle`, `planeMidway`, `planeOfFace` |
+| `DatumPlane` | `offset, angle` | `face, face2, edge, vertex1..3`; связи `plane, axis, point1..3`; `method = offset\|angle\|midway\|threePoints\|tangent`, `base`, `axis`, `tangent = line\|direction\|angle`, `flip` | `planeOffset`, `planeAtAngle`, `planeMidway`, `planeOfFace`, `planeThroughPoints`, `planeTangentToCylinder*` |
 | `DatumAxis` | — | `face, edge`; связи `plane, plane2`; `method = X\|Y\|Z\|face\|edge\|planes` | `axisOfFace`, `axisOfEdge`, `axisOfPlaneIntersection` |
+| `DatumPoint` | `x, y, z` | `vertex, edge, face`; связи `plane, csys`; `method = coordinates\|vertex\|midpoint\|center\|edgePlane`, `base` | `pointOnEdge(0.5)`, `pointCenterOfEdge`, `pointEdgePlaneIntersection` |
+| `DatumCsys` | `x, y, z` | `vertex, edge, edge2, face`; связи `point, axis, axis2`; `method = directions\|faceEdge`, `origin = vertex\|datum\|coordinates`, `xDirection`, `xyDirection` | `coordinateSystemFromDirections`, `coordinateSystemFromFaceEdge` |
 | `Extrude` | `distance, distance2, draftAngle, thickness` | связь `sketch`; `limit` (грань); `mode = boss\|cut\|newBody`, `extent` (все 7 условий), `reversed`, `draftDirection`, `thin = none\|inside\|outside` | `extrude` по каждой области, истории объединяются |
 | `Revolve` | `angle, angle2, axisEntity` | связи `sketch, axis`; `axisEdge`; `mode`, `extent = full\|angle\|symmetric\|twoSided`, `axis = entity\|X\|Y\|Z\|edge\|datum`, `reversed` | `revolve` |
 | `Hole` | `diameter, depth, cbDiameter, cbDepth, csDiameter, csAngle, drillAngle, x, y, z` | `face`; связь `sketch` (центры — точки эскиза, не занятые кривыми); `type = simple\|counterbore\|countersink`, `end`, `drillPoint` | `hole` по каждой точке, грань размещения отслеживается по истории |
@@ -295,6 +297,39 @@ Back (YMax), Left (XMin), Right (XMax)`, `Cylinder` — `Top, Bottom, Side`; г�
 
 `basic_features.hpp` оставлен для совместимости: `basic::basicRegistry()` возвращает
 `partRegistry()` (Box, Cylinder, Fillet, Chamfer с прежними параметрами и именами).
+
+## Вспомогательная геометрия
+
+Узлы `DatumPlane`, `DatumAxis`, `DatumPoint`, `DatumCsys` (`sketch_features.cpp`) тело не
+меняют (`readsInputBody() == false`) и дают `DatumResult` (`part_sketch.hpp`): `plane`, `axis`,
+`point`, у ЛСК — `csys` и вместе с ним её плоскость XY (`plane`), ось Z (`axis`) и начало
+(`point`). Поэтому ЛСК подходит любой связи, принимающей её тип: плоскость эскиза (`Sketch`,
+связь `plane`, `plane = datum` — эскиз в плоскости XY с осями ЛСК), плоскость зеркала (`Mirror`,
+`BodyMirror`), нейтраль уклона (`Draft`), база плоскости и точки — связи с типами
+`{DatumPlane, DatumCsys}`; точки плоскости по трём точкам и начало ЛСК — `{DatumPoint,
+DatumCsys}`. Оси массивов и вращения принимают только `DatumAxis`. Ссылки на вершины, рёбра,
+грани — имена карты элементов, как у других операций; узел со ссылками зависит от тела и
+пересчитывается при его изменении (раздел «Инкрементальное перестроение»).
+
+- **`DatumPoint`**: `coordinates` — `(x, y, z)`; со связью `csys` — координаты в ЛСК
+  (`gp_Trsf::SetTransformation`, обратное преобразование); `vertex`; `midpoint` — точка на
+  половине длины ребра; `center` — центр окружности или дуги; `edgePlane` — пересечение ребра с
+  плоскостью `base` (`XY|XZ|YZ|face|datum`, грань — слот `face`, вспомогательная — связь
+  `plane`; прямое ребро — по его прямой).
+- **`DatumPlane`**: `threePoints` — точка `i` из связи `point<i>`, если она задана, иначе из
+  вершины `vertex<i>`; `tangent` — цилиндрическая грань `face`; `tangent = line` — линия из
+  опции `axis` (`edge` — слот `edge`, `datum` — связь `axis`, X/Y/Z), `direction` — направление
+  оси из той же опции, `angle` — база `base` (грань — слот `face2`, вспомогательная — связь
+  `plane`) и параметр `angle` (°); `flip = true` — второе решение (для `angle` — угол с
+  обратным знаком).
+- **`DatumCsys`**: начало `origin` — вершина `vertex`, связь `point` или `(x, y, z)`;
+  `directions` — X из `xDirection` (`edge` — слот `edge`, `datum` — связь `axis`, X/Y/Z),
+  второе направление из `xyDirection` (слот `edge2`, связь `axis2`); `faceEdge` — плоская грань
+  `face` и прямое ребро `edge`, начало проецируется на грань.
+
+Сериализация — общая: опции, параметры, ссылки и связи узла пишутся в `features`; результат
+пересчитывается при загрузке (в кэш не пишется). Старые файлы с `DatumPlane` загружаются:
+недостающие опции получают значения по умолчанию.
 
 ## Многотельная деталь
 
@@ -412,7 +447,8 @@ cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBENDCORE_W
   -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install
 cmake --build build-occt --target test_modeling_document_naming test_modeling_document_tree \
   test_modeling_document_io test_modeling_document_survival test_modeling_document_sketch \
-  test_modeling_document_reference_parts test_modeling_document_advanced test_modeling_document_multibody
+  test_modeling_document_reference_parts test_modeling_document_advanced test_modeling_document_multibody \
+  test_modeling_document_datum
 ctest --test-dir build-occt -R modeling_document --output-on-failure
 ```
 
@@ -446,6 +482,17 @@ ctest --test-dir build-occt -R modeling_document --output-on-failure
   размеров: `[advanced survival] scenarios: 13, references checked: 13, survived: 13, rate:
   100.0 %`; сохранение/загрузка атрибутов резьбы (с кэшем и без); ошибки (ветвящаяся и
   пересекающаяся траектория, одно сечение, номинал вне ISO 261).
+- `test_modeling_document_datum` — точки (координаты, вершина, середина ребра, центр
+  окружности бобышки, пересечение ребра с плоскостью H/3) после изменения W, H, D эскиза;
+  плоскость через вершины (W,0,0), (0,D,0), (0,0,H): нормаль `(DH, WH, WD)/|…|`, расстояние от
+  начала `WDH/|…|`; плоскость через три вершины верхней грани с эскизом и выдавливанием —
+  объём `WDH + abh` и положение граней при трёх наборах размеров; по трём узлам `DatumPoint`;
+  коллинеарные точки — ошибка; касательные к цилиндру R (через линию x = 20 — нормали
+  `(cos φ, ±sin φ, 0)`, `cos φ = R/20`, параллельно X, под 30° к XZ; расстояние от оси = R) при
+  R = 8 и 11, зеркало стержня в касательной плоскости — объём `2πR²L`, ось копии; ЛСК (X = +Y,
+  XY через +X → Z = −Z; по рёбрам; по грани и ребру с началом в точке центра), точка в
+  координатах ЛСК, эскиз на ЛСК и выдавливание — объём; ошибки; сохранение/загрузка с кэшем и
+  без.
 - `test_modeling_document_multibody` — плита + шип (`newBody`), вычитание с сохранением шипа,
   массив шипа, зеркало плиты с объединением, удаление копии; объёмы по именам тел в 5
   сценариях (`[multibody survival] … references checked: 20, survived: 20, rate: 100.0 %`),

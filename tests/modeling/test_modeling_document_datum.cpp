@@ -6,6 +6,8 @@
 
 #include "modeling_document_test_util.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <BRep_Tool.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS_Vertex.hxx>
@@ -387,4 +389,27 @@ TEST(ModelingDocumentDatum, SaveAndLoad) {
         EXPECT_EQ(info(d2, "Top").options.at("method"), "threePoints");
         EXPECT_EQ(info(d2, "Top").references.at("vertex3").size(), 1u);
     }
+}
+
+// A file written before the new datum options: a DatumPlane with only method, base and axis,
+// without the vertex slots and point links, loads with the defaults of the new options.
+TEST(ModelingDocumentDatum, OlderDatumPlaneLoads) {
+    PartDocument doc(partRegistry());
+    add(doc, spec("DatumPlane", "Up", {{"offset", "7"}}, {{"base", "XY"}}));
+    doc.rebuild();
+    auto json = nlohmann::json::parse(doc.toJson().value());
+    for (auto& f : json["features"]) {
+        f["options"] = {{"method", "offset"}, {"base", "XY"}, {"axis", "edge"}};
+        f["references"] = {{"face", nlohmann::json::array()}, {"face2", nlohmann::json::array()},
+                           {"edge", nlohmann::json::array()}};
+        f["links"] = nlohmann::json::object();
+    }
+    auto loaded = PartDocument::fromJson(json.dump(), partRegistry());
+    ASSERT_TRUE(loaded.ok()) << loaded.error().message;
+    const FeatureInfo up = info(loaded.value(), "Up");
+    EXPECT_EQ(up.state, FeatureState::Ok) << messages(up);
+    EXPECT_EQ(up.options.at("tangent"), "line");
+    EXPECT_EQ(up.options.at("flip"), "false");
+    ASSERT_TRUE(up.datum && up.datum->plane);
+    EXPECT_NEAR(up.datum->plane->Location().Z(), 7, 1e-12);
 }
