@@ -718,6 +718,141 @@ val docRemoveVariable(std::uint32_t handle, val name) {
                         [&](m::PartDocument& doc) { return status(doc.removeVariable(requireString(name, "variable name"))); });
 }
 
+// ------------------------------------------------------------------ configuration table
+
+val configurationsToJs(const m::PartDocument& doc) {
+    const m::ConfigurationTable& t = doc.configurationTable();
+    val out = val::object();
+    val cols = val::array();
+    for (const auto& c : t.columns) {
+        val o = val::object();
+        o.set("kind", std::string(m::toString(c.kind)));
+        o.set("target", c.target);
+        o.set("title", m::columnTitle(c));
+        cols.call<void>("push", o);
+    }
+    val rows = val::array();
+    for (std::size_t r = 0; r < t.rows.size(); ++r) {
+        val o = val::object();
+        o.set("designation", t.rows[r].designation);
+        o.set("fullDesignation", m::fullDesignation(t, r));
+        o.set("name", t.rows[r].name);
+        o.set("cells", stringArray(t.rows[r].cells));
+        rows.call<void>("push", o);
+    }
+    out.set("columns", cols);
+    out.set("rows", rows);
+    out.set("active", t.active);
+    out.set("material", doc.configurationMaterial());
+    return out;
+}
+
+m::ConfigurationTable configurationsFromJs(const val& v) {
+    if (!isObject(v)) throw InputError("configuration table must be an object");
+    m::ConfigurationTable t;
+    if (present(v["columns"])) {
+        for (const val& c : arrayItems(v["columns"], "table.columns")) {
+            if (!isObject(c)) throw InputError("table.columns[] must be objects");
+            const std::string kind = requireString(c["kind"], "table.columns[].kind");
+            auto k = m::configurationColumnKindFromString(kind);
+            if (!k) throw InputError("table.columns[].kind: unknown column kind '" + kind + "' (variable, suppression, material)");
+            t.columns.push_back({*k, present(c["target"]) ? requireString(c["target"], "table.columns[].target") : std::string()});
+        }
+    }
+    if (present(v["rows"])) {
+        for (const val& r : arrayItems(v["rows"], "table.rows")) {
+            if (!isObject(r)) throw InputError("table.rows[] must be objects");
+            m::Configuration row;
+            row.designation = requireString(r["designation"], "table.rows[].designation");
+            if (present(r["name"])) row.name = requireString(r["name"], "table.rows[].name");
+            if (present(r["cells"])) {
+                for (const val& cell : arrayItems(r["cells"], "table.rows[].cells")) {
+                    row.cells.push_back(present(cell) ? expression(cell, "table.rows[].cells[]") : std::string());
+                }
+            }
+            t.rows.push_back(std::move(row));
+        }
+    }
+    if (present(v["active"])) t.active = requireString(v["active"], "table.active");
+    return t;
+}
+
+val docConfigurations(std::uint32_t handle) {
+    return withDocument(handle, [](m::PartDocument& doc) { return success(configurationsToJs(doc)); });
+}
+
+val docSetConfigurations(std::uint32_t handle, val table) {
+    return withDocument(handle, [&](m::PartDocument& doc) { return status(doc.setConfigurationTable(configurationsFromJs(table))); });
+}
+
+val docSetConfigurationCell(std::uint32_t handle, val row, val column, val value) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        const int r = requireInt(row, "row"), c = requireInt(column, "column");
+        if (r < 0 || c < 0) throw InputError("row and column must be >= 0");
+        const std::string text = present(value) ? expression(value, "cell") : std::string();
+        return status(doc.setConfigurationCell(static_cast<std::size_t>(r), static_cast<std::size_t>(c), text));
+    });
+}
+
+val docAddConfigurationColumn(std::uint32_t handle, val column) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        if (!isObject(column)) throw InputError("column must be an object");
+        const std::string kind = requireString(column["kind"], "column.kind");
+        auto k = m::configurationColumnKindFromString(kind);
+        if (!k) throw InputError("column.kind: unknown column kind '" + kind + "' (variable, suppression, material)");
+        const std::string target = present(column["target"]) ? requireString(column["target"], "column.target") : std::string();
+        return status(doc.addConfigurationColumn({*k, target}));
+    });
+}
+
+val docActivateConfiguration(std::uint32_t handle, val designation) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        return status(doc.activateConfiguration(present(designation) ? requireString(designation, "designation") : std::string()));
+    });
+}
+
+val docCheckConfigurations(std::uint32_t handle) {
+    return withDocument(handle, [](m::PartDocument& doc) {
+        val out = val::array();
+        for (const auto& c : doc.checkConfigurations()) {
+            val o = val::object();
+            o.set("designation", c.designation);
+            o.set("fullDesignation", c.fullDesignation);
+            o.set("ok", c.ok);
+            o.set("problems", stringArray(c.problems));
+            o.set("volume", c.volume ? val(*c.volume) : val::null());
+            out.call<void>("push", o);
+        }
+        return success(out);
+    });
+}
+
+// CSV of the table: options {decimal: '.' | ',', bom: boolean}.
+val docExportConfigurationsCsv(std::uint32_t handle, val options) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        m::CsvOptions o;
+        if (present(options)) {
+            if (present(options["decimal"])) {
+                const std::string d = requireString(options["decimal"], "options.decimal");
+                if (d != "." && d != ",") throw InputError("options.decimal must be '.' or ','");
+                o.decimal = d[0];
+            }
+            o.byteOrderMark = optionalBool(options, "bom", true, "options");
+        }
+        return success(val(m::configurationTableToCsv(doc.configurationTable(), o)));
+    });
+}
+
+// Replaces the table by a CSV file; the active configuration is kept when the file still has it.
+val docImportConfigurationsCsv(std::uint32_t handle, val text) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        auto table = m::configurationTableFromCsv(requireString(text, "CSV text"));
+        if (!table) return failure(table.error());
+        if (table.value().rowOf(doc.activeConfiguration())) table.value().active = doc.activeConfiguration();
+        return status(doc.setConfigurationTable(std::move(table).value()));
+    });
+}
+
 val docFeatures(std::uint32_t handle) {
     return withDocument(handle, [](m::PartDocument& doc) {
         val out = val::array();
@@ -1151,4 +1286,12 @@ EMSCRIPTEN_BINDINGS(bendcore_modeling) {
     emscripten::function("docMeasure", &docMeasure);
     emscripten::function("docSection", &docSection);
     emscripten::function("materialLibrary", &materialLibrary);
+    emscripten::function("docConfigurations", &docConfigurations);
+    emscripten::function("docSetConfigurations", &docSetConfigurations);
+    emscripten::function("docSetConfigurationCell", &docSetConfigurationCell);
+    emscripten::function("docAddConfigurationColumn", &docAddConfigurationColumn);
+    emscripten::function("docActivateConfiguration", &docActivateConfiguration);
+    emscripten::function("docCheckConfigurations", &docCheckConfigurations);
+    emscripten::function("docExportConfigurationsCsv", &docExportConfigurationsCsv);
+    emscripten::function("docImportConfigurationsCsv", &docImportConfigurationsCsv);
 }

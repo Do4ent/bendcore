@@ -155,6 +155,12 @@ Result<DefinitionId> AssemblyDocument::addPartFromSource(std::string name, std::
     if (!resolver) return Error{ErrorCode::InvalidInput, "part resolver is empty"};
     auto data = resolver(source);
     if (!data) return Error{data.error().code, "cannot load part '" + source + "': " + data.error().message};
+    if (const auto& from = data.value().properties) {
+        if (properties.designation.empty()) properties.designation = from->designation;
+        if (properties.name.empty()) properties.name = from->name;
+        if (properties.material.empty()) properties.material = from->material;
+        if (!properties.density) properties.density = from->density;
+    }
     auto id = addPart(std::move(name), std::move(data).value(), std::move(properties));
     if (!id) return id;
     definitions_[id.value()].source = std::move(source);
@@ -790,6 +796,50 @@ Result<ReplaceReport> AssemblyDocument::replaceOccurrenceDefinition(OccurrenceId
     revalidateMates(report);
     if (auto u = updatePatterns(); !u) return u.error();
     return report;
+}
+
+Result<ReplaceReport> AssemblyDocument::setOccurrenceConfiguration(OccurrenceId id, const std::string& configuration,
+                                                                 const PartResolver& resolver) {
+    if (auto e = checkEditable(id); !e) return e.error();
+    const Occurrence* o = findOccurrence(id);
+    if (o->pattern) return Error{ErrorCode::InvalidInput, occName(id) + " is a pattern instance; set the configuration of the seed"};
+    const Definition& old = definitions_[o->definition];
+    if (old.kind != DefinitionKind::Part) return Error{ErrorCode::InvalidInput, occName(id) + " is not a part"};
+    if (old.source.empty()) {
+        return Error{ErrorCode::InvalidInput, occName(id) + " has no part document source: configurations need one"};
+    }
+    if (!resolver) return Error{ErrorCode::InvalidInput, "part resolver is empty"};
+    const std::string path = splitConfigurationSource(old.source).first;
+    const std::string source = configurationSource(path, configuration);
+    if (source == old.source) return ReplaceReport{};
+    std::optional<DefinitionId> target;
+    for (const Definition& d : definitions_) {
+        if (d.kind == DefinitionKind::Part && d.source == source && !d.external) target = d.id;
+    }
+    if (!target) {
+        auto data = resolver(source);
+        if (!data) return Error{data.error().code, "cannot load part '" + source + "': " + data.error().message};
+        // Свойства детали как сохранена (определение с источником без исполнения), иначе прежние.
+        PartProperties props = old.properties;
+        for (const Definition& d : definitions_) {
+            if (d.kind == DefinitionKind::Part && d.source == path && !d.external) props = d.properties;
+        }
+        if (const auto& from = data.value().properties) {
+            if (!from->designation.empty()) props.designation = from->designation;
+            if (!from->name.empty()) props.name = from->name;
+            if (!from->material.empty()) props.material = from->material;
+            if (from->density) props.density = from->density;
+        }
+        std::string name = splitConfigurationSource(old.name).first;
+        if (!configuration.empty()) name += "#" + configuration;
+        const std::optional<kernel::AssemblyColor> color = old.color;
+        auto added = addPart(std::move(name), std::move(data).value(), std::move(props));
+        if (!added) return added.error();
+        definitions_[added.value()].source = source;
+        definitions_[added.value()].color = color;
+        target = added.value();
+    }
+    return replaceOccurrenceDefinition(id, *target);
 }
 
 Result<ReplaceReport> AssemblyDocument::replacePartGeometry(DefinitionId id, PartData data) {

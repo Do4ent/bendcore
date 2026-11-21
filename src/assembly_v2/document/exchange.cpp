@@ -4,6 +4,7 @@
 #include <bendcore/assembly_v2/assembly_document.hpp>
 
 #include <bendcore/kernel/brep_io.hpp>
+#include <bendcore/kernel/material.hpp>
 #include <bendcore/kernel/step_io.hpp>
 #include <bendcore/modeling/part_document.hpp>
 
@@ -162,18 +163,76 @@ Result<AssemblyDocument> AssemblyDocument::importStep(std::string_view step) {
 
 // ---------------------------------------------------------------- источники деталей
 
+namespace {
+
+// Свойства активного исполнения документа детали; nullopt — исполнение не выбрано.
+std::optional<PartProperties> activeConfigurationProperties(const modeling::PartDocument& document) {
+    const modeling::ConfigurationTable& t = document.configurationTable();
+    if (t.active.empty()) return std::nullopt;
+    auto row = t.rowOf(t.active);
+    if (!row) return std::nullopt;
+    PartProperties p;
+    p.designation = modeling::fullDesignation(t, *row);
+    p.name = t.rows[*row].name;
+    const std::string material = document.configurationMaterial();
+    if (!material.empty()) {
+        for (const kernel::Material& m : kernel::builtInMaterials()) {
+            if (m.id == material) {
+                p.material = m.name;
+                p.density = m.density;
+            }
+        }
+    }
+    return p;
+}
+
+}  // namespace
+
 Result<PartData> partDataFromDocument(const modeling::PartDocument& document) {
     modeling::NamedShape named = document.finalShape();
     if (named.isNull()) return Error{ErrorCode::InvalidInput, "part document has no valid shape"};
     PartData data;
     data.shape = named.shape();
     data.elementMap = std::make_shared<const modeling::NamedShape>(std::move(named));
+    data.properties = activeConfigurationProperties(document);
     return data;
 }
 
+Result<PartData> partDataFromDocument(modeling::PartDocument& document, const std::string& configuration) {
+    if (!configuration.empty() && !document.configurationTable().rowOf(configuration)) {
+        return Error{ErrorCode::InvalidInput, "the part has no configuration '" + configuration + "'"};
+    }
+    if (document.activeConfiguration() != configuration) {
+        if (auto st = document.activateConfiguration(configuration); !st) return st.error();
+    }
+    const modeling::RebuildReport report = document.rebuild();
+    if (!report.failed.empty()) {
+        std::string why;
+        for (const std::string& id : report.failed) {
+            auto f = document.feature(id);
+            why += (why.empty() ? "" : "; ") + std::string("feature '") + id + "'";
+            if (f && !f.value().messages.empty()) why += ": " + f.value().messages.front();
+        }
+        return Error{ErrorCode::InvalidInput, "configuration '" + (configuration.empty() ? std::string("<base>") : configuration) +
+                                                  "' does not build: " + why};
+    }
+    return partDataFromDocument(static_cast<const modeling::PartDocument&>(document));
+}
+
+std::string configurationSource(const std::string& path, const std::string& configuration) {
+    return configuration.empty() ? path : path + "#" + configuration;
+}
+
+std::pair<std::string, std::string> splitConfigurationSource(const std::string& source) {
+    const auto hash = source.rfind('#');
+    if (hash == std::string::npos) return {source, {}};
+    return {source.substr(0, hash), source.substr(hash + 1)};
+}
+
 PartResolver filePartResolver(std::shared_ptr<const modeling::FeatureRegistry> registry, std::string baseDirectory) {
-    return [registry = std::move(registry), base = std::move(baseDirectory)](const std::string& source)
+    return [registry = std::move(registry), base = std::move(baseDirectory)](const std::string& fullSource)
                -> Result<PartData> {
+        const auto [source, configuration] = splitConfigurationSource(fullSource);
         std::filesystem::path path(source);
         if (path.is_relative() && !base.empty()) path = std::filesystem::path(base) / path;
         std::ifstream in(path, std::ios::binary);
@@ -187,7 +246,12 @@ PartResolver filePartResolver(std::shared_ptr<const modeling::FeatureRegistry> r
                 if (!registry) return Error{ErrorCode::InvalidInput, "no feature registry for part documents"};
                 auto doc = modeling::PartDocument::fromJson(text, registry);
                 if (!doc) return doc.error();
+                if (!configuration.empty()) return partDataFromDocument(doc.value(), configuration);
                 return partDataFromDocument(doc.value());
+            }
+            if (!configuration.empty()) {
+                return Error{ErrorCode::InvalidInput, "configuration '" + configuration + "' needs a part document (.json), not '" +
+                                                          ext + "'"};
             }
             if (ext == ".step" || ext == ".stp") {
                 auto s = kernel::readStep(text);
