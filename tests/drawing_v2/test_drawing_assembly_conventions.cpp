@@ -1042,4 +1042,20 @@ TEST(DrawingAssemblyConventions, BalloonLayoutTwelvePositionsOrderedWithoutCross
     EXPECT_EQ(r1.value().ordered, r1.value().outOfOrder.empty());
     EXPECT_EQ(r1.value().crossings, an::leaderCrossings(r1.value().balloons));
     EXPECT_TRUE(tb::unorderedNumbers(tb::shelfLines(r1.value().balloons, views)).empty() == r1.value().ordered);
+    // Другие расстановки номеров по клеткам — те же требования.
+    const int others[3][12] = {{12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+                               {1, 5, 9, 2, 6, 10, 3, 7, 11, 4, 8, 12},
+                               {3, 10, 6, 1, 12, 8, 2, 9, 5, 11, 4, 7}};
+    for (const auto& perm : others) {
+        std::vector<an::BalloonCandidate> cp = c;
+        for (std::size_t i = 0; i < cp.size(); ++i) cp[i].number = perm[i];
+        auto rp = an::arrangeBalloons(cp, o);
+        ASSERT_TRUE(rp.ok());
+        const auto& bp = rp.value().balloons;
+        EXPECT_TRUE(rp.value().ordered) << perm[0];
+        EXPECT_TRUE(tb::unorderedNumbers(tb::shelfLines(bp, views)).empty()) << tb::join(tb::unorderedNumbers(tb::shelfLines(bp, views)));
+        EXPECT_TRUE(tb::crossingLeaders(bp).empty()) << tb::join(tb::crossingLeaders(bp));
+        EXPECT_TRUE(tb::leadersCrossingLines(bp, dims).empty()) << tb::join(tb::leadersCrossingLines(bp, dims));
+        EXPECT_TRUE(tb::shelvesHitting(bp, o.obstacles.boxes, o.obstacles.lines, st).empty()) << perm[0];
+    }
 }

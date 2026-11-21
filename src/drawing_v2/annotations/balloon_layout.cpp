@@ -688,21 +688,23 @@ Result<BalloonArrangement> arrangeBalloons(const std::vector<BalloonCandidate>& 
                 }
             return true;
         };
-        std::vector<Line> cur;
-        if (build(assign, cur)) {
+        // Локальный поиск от начального распределения: перенос одной позиции на другую сторону.
+        auto search = [&](std::vector<std::size_t> as0) {
+            std::vector<Line> cur;
+            if (!build(as0, cur)) return;
             Score curScore = lay.evaluate(cur);
-            for (int pass = 0; pass < 3 && !curScore.perfect(); ++pass) {
+            for (int pass = 0; pass < 5 && !curScore.perfect(); ++pass) {
                 bool moved = false;
                 for (std::size_t i = 0; i < n; ++i)
                     for (std::size_t s = 0; s < sides.size(); ++s) {
-                        if (s == assign[i]) continue;
-                        std::vector<std::size_t> as = assign;
+                        if (s == as0[i]) continue;
+                        std::vector<std::size_t> as = as0;
                         as[i] = s;
                         std::vector<Line> trial;
                         if (!build(as, trial)) continue;
                         const Score ts = lay.evaluate(trial);
                         if (ts < curScore) {
-                            assign = std::move(as);
+                            as0 = std::move(as);
                             cur = std::move(trial);
                             curScore = ts;
                             moved = true;
@@ -711,7 +713,23 @@ Result<BalloonArrangement> arrangeBalloons(const std::vector<BalloonCandidate>& 
                 if (!moved) break;
             }
             consider(std::move(cur));
+        };
+        // Начала: ближайшая сторона; ближайшая из двух первых сторон (колонна и противоположная
+        // ей); все на основной стороне.
+        search(assign);
+        if (!bestScore.perfect() && sides.size() > 2) {
+            std::vector<std::size_t> two(n, 0);
+            for (std::size_t i = 0; i < n; ++i) {
+                double bd = 1e300;
+                for (std::size_t s = 0; s < 2; ++s)
+                    for (const Point2& p : cands[i].targets) {
+                        const double d = lay.toSide(p, sides[s]);
+                        if (d < bd - 1e-9) bd = d, two[i] = s;
+                    }
+            }
+            if (two != assign) search(two);
         }
+        if (!bestScore.perfect()) search(std::vector<std::size_t>(n, 0));
     }
     if (best.empty()) return firstError ? *firstError : invalid("positions: no room for shelves");
     // Пересечения остались — порядок номеров уступает непересечению на этих линиях.
