@@ -78,7 +78,8 @@ test('assembly configurations: grid, activation, BOM per configuration, CSV and 
   expect((await pageState(page)).error).toBeNull();
 
   // Activate -01: the second component is excluded, the first one is the block -01.
-  await page.getByTestId('asm-config-active-1').check();
+  await expect(page.locator('[data-testid^=asm-config-row-]')).toHaveCount(2);
+  await page.getByTestId('asm-config-active-1').click();
   await expect.poll(async () => (await pageState(page)).state?.configuration.active).toBe('-01');
   await expect(page.getByTestId('asm-config-active-designation')).toHaveText('Активно исполнение РЦ.700.00.000-01');
   await expect(page.getByTestId('asm-config-report')).toContainText('Исключено компонентов: 1');
@@ -90,7 +91,7 @@ test('assembly configurations: grid, activation, BOM per configuration, CSV and 
 
   // Back to the first row: two blocks of the base configuration.
   await page.getByTestId('tab-configurations').click();
-  await page.getByTestId('asm-config-active-0').check();
+  await page.getByTestId('asm-config-active-0').click();
   await expect.poll(async () => (await pageState(page)).state?.configuration.active).toBe('РЦ.700.00.000');
   rows = await bomRows(page);
   expect(rows.map((r) => [r[1], r[4]])).toEqual([['РЦ.080.00.010', '2']]);
@@ -106,7 +107,9 @@ test('assembly configurations: grid, activation, BOM per configuration, CSV and 
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('asm-config-export').click()]);
   const csv = fs.readFileSync((await download.path())!, 'utf8');
   expect(csv.charCodeAt(0)).toBe(0xfeff);
-  expect(csv).toContain(`designation;name;suppress:${second.name};configuration:${first.name}`);
+  // Both components carry the same name: the columns name them by id.
+  expect(first.name).toBe(second.name);
+  expect(csv).toContain(`designation;name;suppress:#${second.id};configuration:#${first.id}\r\n`);
   expect(csv).toContain('-01;;1;-01');
   const edited = csv.replace('-01;;1;-01', '-01;Без второго бруска;1;-01');
   const file = test.info().outputPath('configurations.csv');
