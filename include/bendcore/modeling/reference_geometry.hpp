@@ -57,6 +57,8 @@ kernel::Result<gp_Pln> planeTangentToCylinder(const TopoDS_Face& face, const gp_
 kernel::Result<gp_Pln> planeTangentToCylinder(const kernel::TopologyIndex& topology,
                                               std::uint32_t faceIndex, const gp_Pnt& near,
                                               const ReferenceTolerance& tol = {});
+// The three variants below orient the cylinder axis canonically (Z > 0, else Y > 0, else X > 0),
+// so the chosen solution does not depend on the parametrization of the face.
 // Plane tangent to a cylindrical face that contains a line parallel to the cylinder axis. A line
 // on the surface gives the tangent plane along it; a line outside gives two planes, `second`
 // chooses the one reached by turning clockwise about the cylinder axis (the first is

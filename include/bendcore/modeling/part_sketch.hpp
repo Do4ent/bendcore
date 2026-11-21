@@ -10,6 +10,8 @@
 #include <bendcore/modeling/sketch_profile.hpp>
 
 #include <gp_Ax1.hxx>
+#include <gp_Ax3.hxx>
+#include <gp_Pnt.hxx>
 #include <gp_Pln.hxx>
 
 #include <memory>
@@ -182,10 +184,14 @@ struct SketchResult {
     std::vector<double> constraintValues;  // by constraint: dimension value (driven: measured)
 };
 
-// Result of a datum plane or datum axis node.
+// Result of a datum node: DatumPlane (plane), DatumAxis (axis), DatumPoint (point) or DatumCsys
+// (csys; also its XY plane as `plane`, its Z axis as `axis` and its origin as `point`, so a
+// coordinate system serves every link that takes a plane, an axis or a point).
 struct DatumResult {
     std::optional<gp_Pln> plane;
     std::optional<gp_Ax1> axis;
+    std::optional<gp_Pnt> point;
+    std::optional<gp_Ax3> csys;
 };
 
 }  // namespace bendcore::modeling

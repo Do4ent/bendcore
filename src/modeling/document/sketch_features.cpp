@@ -1,4 +1,4 @@
-// Sketch, datum plane and datum axis nodes of the part document
+// Sketch and datum (plane, axis, point, coordinate system) nodes of the part document
 // (docs/modeling/PART_DOCUMENT.md, sections "Эскиз" and "Вспомогательная геометрия").
 
 #include "part_features_internal.hpp"
@@ -12,6 +12,7 @@
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
+#include <gp_Trsf.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -335,7 +336,7 @@ public:
     std::vector<OptionSpec> optionSpecs() const override {
         return {{"plane", {"XY", "XZ", "YZ", "face", "datum"}}, {"contour", {"closed", "open"}}};
     }
-    std::vector<LinkSlot> linkSlots() const override { return {{"plane", {"DatumPlane"}, true}}; }
+    std::vector<LinkSlot> linkSlots() const override { return {{"plane", {"DatumPlane", "DatumCsys"}, true}}; }
     bool hasSketchData() const override { return true; }
     bool readsInputBody() const override { return false; }
 
@@ -827,7 +828,40 @@ private:
     }
 };
 
-// ---------------------------------------------------------------- datum plane / axis
+// ---------------------------------------------------------------- datum plane / axis / point / csys
+
+// One element of a single reference slot, or an error naming the slot.
+Result<TopoDS_Shape> single(const FeatureContext& ctx, const char* slot, const char* what) {
+    const auto& refs = ctx.references(slot);
+    if (refs.size() != 1) {
+        return Error{ErrorCode::InvalidInput, std::string("reference '") + slot + "' must give one " + what + ", has " +
+                                                  std::to_string(refs.size())};
+    }
+    return refs.front();
+}
+
+// Point of a linked datum point (or coordinate system origin) when the link is set, else of the
+// vertex of the reference slot.
+Result<gp_Pnt> pointOf(const FeatureContext& ctx, const char* link, const char* vertexSlot) {
+    if (const LinkedFeature* l = ctx.link(link)) {
+        if (!l->datum || !l->datum->point) {
+            return Error{ErrorCode::InvalidInput, std::string("link '") + link + "' must name a datum point"};
+        }
+        return *l->datum->point;
+    }
+    auto v = single(ctx, vertexSlot, "vertex");
+    if (!v) return v.error();
+    return BRep_Tool::Pnt(TopoDS::Vertex(v.value()));
+}
+
+std::shared_ptr<DatumResult> csysResult(const gp_Ax3& cs) {
+    auto datum = std::make_shared<DatumResult>();
+    datum->csys = cs;
+    datum->plane = gp_Pln(cs);
+    datum->axis = cs.Axis();
+    datum->point = cs.Location();
+    return datum;
+}
 
 class DatumPlaneFeature final : public Feature {
 public:
@@ -835,17 +869,24 @@ public:
     bool readsInputBody() const override { return false; }
     std::vector<ParameterSpec> parameterSpecs() const override { return {{"offset", "0"}, {"angle", "0"}}; }
     std::vector<ReferenceSlot> referenceSlots() const override {
-        return {{"face", ElementKind::Face, false, true},
-                {"face2", ElementKind::Face, false, true},
-                {"edge", ElementKind::Edge, false, true}};
+        return {{"face", ElementKind::Face, false, true},      {"face2", ElementKind::Face, false, true},
+                {"edge", ElementKind::Edge, false, true},      {"vertex1", ElementKind::Vertex, false, true},
+                {"vertex2", ElementKind::Vertex, false, true}, {"vertex3", ElementKind::Vertex, false, true}};
     }
+    // method: offset / angle from a base plane, midway between two faces, through three points,
+    // tangent to a cylindrical face ("tangent": through a line, parallel to a direction or at an
+    // angle to the base plane; the base face of a tangent plane is 'face2').
     std::vector<OptionSpec> optionSpecs() const override {
-        return {{"method", {"offset", "angle", "midway"}},
+        return {{"method", {"offset", "angle", "midway", "threePoints", "tangent"}},
                 {"base", {"XY", "XZ", "YZ", "face", "datum"}},
-                {"axis", {"edge", "datum", "X", "Y", "Z"}}};
+                {"axis", {"edge", "datum", "X", "Y", "Z"}},
+                {"tangent", {"line", "parallel", "angle"}},
+                {"flip", {"false", "true"}}};
     }
     std::vector<LinkSlot> linkSlots() const override {
-        return {{"plane", {"DatumPlane"}, true}, {"axis", {"DatumAxis"}, true}};
+        return {{"plane", {"DatumPlane", "DatumCsys"}, true}, {"axis", {"DatumAxis"}, true},
+                {"point1", {"DatumPoint", "DatumCsys"}, true}, {"point2", {"DatumPoint", "DatumCsys"}, true},
+                {"point3", {"DatumPoint", "DatumCsys"}, true}};
     }
 
     Result<FeatureOutput> execute(const FeatureContext& ctx) const override {
@@ -856,6 +897,33 @@ public:
             const auto& b = ctx.references("face2");
             if (a.size() != 1 || b.size() != 1) return fail(ErrorCode::InvalidInput, "midway plane needs references 'face' and 'face2'");
             plane = planeMidway(TopoDS::Face(a.front()), TopoDS::Face(b.front()));
+        } else if (method == "threePoints") {
+            gp_Pnt p[3];
+            const char* links[3] = {"point1", "point2", "point3"};
+            const char* slots[3] = {"vertex1", "vertex2", "vertex3"};
+            for (int i = 0; i < 3; ++i) {
+                auto pi = pointOf(ctx, links[i], slots[i]);
+                if (!pi) return pi.error();
+                p[i] = pi.value();
+            }
+            plane = planeThroughPoints(p[0], p[1], p[2]);
+        } else if (method == "tangent") {
+            auto face = single(ctx, "face", "cylindrical face");
+            if (!face) return face.error();
+            const TopoDS_Face& cylinder = TopoDS::Face(face.value());
+            const std::string& how = ctx.option("tangent");
+            const bool flip = ctx.option("flip") == "true";
+            if (how == "angle") {
+                auto base = planeFromOption(ctx, ctx.option("base"), "face2", "plane");
+                if (!base) return base.error();
+                plane = planeTangentToCylinderAtAngle(cylinder, base.value(),
+                                                      (flip ? -1.0 : 1.0) * ctx.parameter("angle") * M_PI / 180.0);
+            } else {
+                auto axis = axisFromOption(ctx, ctx.option("axis"), "face2", "edge", "axis");
+                if (!axis) return axis.error();
+                plane = how == "line" ? planeTangentToCylinderThroughLine(cylinder, axis.value(), flip)
+                                      : planeTangentToCylinderParallelTo(cylinder, axis.value().Direction(), flip);
+            }
         } else {
             auto base = planeFromOption(ctx, ctx.option("base"), "face", "plane");
             if (!base) return base.error();
@@ -913,12 +981,135 @@ public:
     }
 };
 
+// Datum point: by coordinates (global, or in a linked coordinate system), at a vertex, at the
+// middle of an edge, at the centre of a circle or arc, at the intersection of an edge and a plane.
+class DatumPointFeature final : public Feature {
+public:
+    std::string type() const override { return "DatumPoint"; }
+    bool readsInputBody() const override { return false; }
+    std::vector<ParameterSpec> parameterSpecs() const override { return {{"x", "0"}, {"y", "0"}, {"z", "0"}}; }
+    std::vector<ReferenceSlot> referenceSlots() const override {
+        return {{"vertex", ElementKind::Vertex, false, true},
+                {"edge", ElementKind::Edge, false, true},
+                {"face", ElementKind::Face, false, true}};
+    }
+    std::vector<OptionSpec> optionSpecs() const override {
+        return {{"method", {"coordinates", "vertex", "midpoint", "center", "edgePlane"}},
+                {"base", {"XY", "XZ", "YZ", "face", "datum"}}};
+    }
+    std::vector<LinkSlot> linkSlots() const override {
+        return {{"plane", {"DatumPlane", "DatumCsys"}, true}, {"csys", {"DatumCsys"}, true}};
+    }
+
+    Result<FeatureOutput> execute(const FeatureContext& ctx) const override {
+        const std::string& method = ctx.option("method");
+        Result<gp_Pnt> point = Error{ErrorCode::InvalidInput, "no point"};
+        if (method == "coordinates") {
+            gp_Pnt p(ctx.parameter("x"), ctx.parameter("y"), ctx.parameter("z"));
+            if (const LinkedFeature* l = ctx.link("csys")) {
+                if (!l->datum || !l->datum->csys) return fail(ErrorCode::InvalidInput, "link 'csys' must name a coordinate system");
+                gp_Trsf toLocal;
+                toLocal.SetTransformation(*l->datum->csys);  // global -> local coordinates
+                p.Transform(toLocal.Inverted());
+            }
+            point = p;
+        } else if (method == "vertex") {
+            auto v = single(ctx, "vertex", "vertex");
+            if (!v) return v.error();
+            point = BRep_Tool::Pnt(TopoDS::Vertex(v.value()));
+        } else {
+            auto e = single(ctx, "edge", "edge");
+            if (!e) return e.error();
+            const TopoDS_Edge& edge = TopoDS::Edge(e.value());
+            if (method == "midpoint") {
+                point = pointOnEdge(edge, 0.5);
+            } else if (method == "center") {
+                point = pointCenterOfEdge(edge);
+            } else {
+                auto plane = planeFromOption(ctx, ctx.option("base"), "face", "plane");
+                if (!plane) return plane.error();
+                point = pointEdgePlaneIntersection(edge, plane.value());
+            }
+        }
+        if (!point) return point.error();
+        FeatureOutput out;
+        auto datum = std::make_shared<DatumResult>();
+        datum->point = point.value();
+        out.datum = datum;
+        return out;
+    }
+};
+
+// Local coordinate system: origin (vertex, datum point or coordinates), X axis and XY plane from
+// two directions (edges, datum axes, global axes) or from a planar face (Z = outward normal, origin
+// projected on it) and an edge (X = edge direction projected on the face).
+class DatumCsysFeature final : public Feature {
+public:
+    std::string type() const override { return "DatumCsys"; }
+    bool readsInputBody() const override { return false; }
+    std::vector<ParameterSpec> parameterSpecs() const override { return {{"x", "0"}, {"y", "0"}, {"z", "0"}}; }
+    std::vector<ReferenceSlot> referenceSlots() const override {
+        return {{"vertex", ElementKind::Vertex, false, true},
+                {"edge", ElementKind::Edge, false, true},
+                {"edge2", ElementKind::Edge, false, true},
+                {"face", ElementKind::Face, false, true}};
+    }
+    std::vector<OptionSpec> optionSpecs() const override {
+        return {{"method", {"directions", "faceEdge"}},
+                {"origin", {"vertex", "datum", "coordinates"}},
+                {"xDirection", {"edge", "datum", "X", "Y", "Z"}},
+                {"xyDirection", {"edge", "datum", "Y", "X", "Z"}}};
+    }
+    std::vector<LinkSlot> linkSlots() const override {
+        return {{"point", {"DatumPoint", "DatumCsys"}, true}, {"axis", {"DatumAxis"}, true}, {"axis2", {"DatumAxis"}, true}};
+    }
+
+    Result<FeatureOutput> execute(const FeatureContext& ctx) const override {
+        const std::string& from = ctx.option("origin");
+        Result<gp_Pnt> origin = Error{ErrorCode::InvalidInput, "no origin"};
+        if (from == "coordinates") {
+            origin = gp_Pnt(ctx.parameter("x"), ctx.parameter("y"), ctx.parameter("z"));
+        } else if (from == "datum") {
+            if (!ctx.link("point")) return fail(ErrorCode::InvalidInput, "link 'point' must name a datum point");
+            origin = pointOf(ctx, "point", "vertex");
+        } else {
+            auto v = single(ctx, "vertex", "vertex");
+            if (!v) return v.error();
+            origin = BRep_Tool::Pnt(TopoDS::Vertex(v.value()));
+        }
+        if (!origin) return origin.error();
+        Result<gp_Ax3> cs = Error{ErrorCode::InvalidInput, "no coordinate system"};
+        if (ctx.option("method") == "faceEdge") {
+            auto face = single(ctx, "face", "planar face");
+            if (!face) return face.error();
+            auto edge = single(ctx, "edge", "edge");
+            if (!edge) return edge.error();
+            auto plane = planeOfFace(TopoDS::Face(face.value()));
+            if (!plane) return plane.error();
+            cs = coordinateSystemFromFaceEdge(pointProjectedOnPlane(origin.value(), plane.value()),
+                                              TopoDS::Face(face.value()), TopoDS::Edge(edge.value()));
+        } else {
+            auto x = axisFromOption(ctx, ctx.option("xDirection"), "face", "edge", "axis");
+            if (!x) return x.error();
+            auto xy = axisFromOption(ctx, ctx.option("xyDirection"), "face", "edge2", "axis2");
+            if (!xy) return xy.error();
+            cs = coordinateSystemFromDirections(origin.value(), x.value().Direction(), xy.value().Direction());
+        }
+        if (!cs) return cs.error();
+        FeatureOutput out;
+        out.datum = csysResult(cs.value());
+        return out;
+    }
+};
+
 }  // namespace
 
 void addSketchFeatures(std::vector<std::pair<std::string, FeatureRegistry::Factory>>& all) {
     all.emplace_back("Sketch", [] { return std::make_unique<SketchFeature>(); });
     all.emplace_back("DatumPlane", [] { return std::make_unique<DatumPlaneFeature>(); });
     all.emplace_back("DatumAxis", [] { return std::make_unique<DatumAxisFeature>(); });
+    all.emplace_back("DatumPoint", [] { return std::make_unique<DatumPointFeature>(); });
+    all.emplace_back("DatumCsys", [] { return std::make_unique<DatumCsysFeature>(); });
 }
 
 }  // namespace features

@@ -189,6 +189,15 @@ Result<gp_Cylinder> cylinderOf(const TopoDS_Face& face) {
     }
 }
 
+// Axis with a direction independent of the surface parametrization: Z > 0, else Y > 0, else X > 0.
+gp_Ax1 canonical(gp_Ax1 axis) {
+    const gp_Dir d = axis.Direction();
+    constexpr double eps = 1e-12;
+    const bool flip = d.Z() < -eps || (std::abs(d.Z()) <= eps && (d.Y() < -eps || (std::abs(d.Y()) <= eps && d.X() < 0)));
+    if (flip) axis.Reverse();
+    return axis;
+}
+
 // Component of v perpendicular to the unit direction z.
 gp_Vec perpendicular(const gp_Vec& v, const gp_Dir& z) {
     const gp_Vec zv(z);
@@ -201,7 +210,7 @@ Result<gp_Pln> planeTangentToCylinderThroughLine(const TopoDS_Face& face, const 
                                                  const ReferenceTolerance& tol) {
     auto cyl = cylinderOf(face);
     if (!cyl.ok()) return cyl.error();
-    const gp_Ax1 axis = cyl.value().Axis();
+    const gp_Ax1 axis = canonical(cyl.value().Axis());
     const double r = cyl.value().Radius();
     if (!parallel(axis.Direction(), line.Direction(), tol.angular)) {
         return invalid<gp_Pln>("line is not parallel to the cylinder axis");
@@ -221,7 +230,7 @@ Result<gp_Pln> planeTangentToCylinderParallelTo(const TopoDS_Face& face, const g
                                                 const ReferenceTolerance& tol) {
     auto cyl = cylinderOf(face);
     if (!cyl.ok()) return cyl.error();
-    const gp_Ax1 axis = cyl.value().Axis();
+    const gp_Ax1 axis = canonical(cyl.value().Axis());
     const gp_Vec side = gp_Vec(axis.Direction()).Crossed(gp_Vec(direction));
     if (side.Magnitude() <= tol.angular) return invalid<gp_Pln>("direction is parallel to the cylinder axis");
     const gp_Vec radial = side.Normalized() * (flip ? -1.0 : 1.0);
@@ -233,7 +242,7 @@ Result<gp_Pln> planeTangentToCylinderAtAngle(const TopoDS_Face& face, const gp_P
     if (!std::isfinite(angle)) return invalid<gp_Pln>("angle is not finite");
     auto cyl = cylinderOf(face);
     if (!cyl.ok()) return cyl.error();
-    const gp_Ax1 axis = cyl.value().Axis();
+    const gp_Ax1 axis = canonical(cyl.value().Axis());
     const gp_Dir n = direct(base.Position()).Direction();
     if (std::abs(gp_Vec(n).Dot(gp_Vec(axis.Direction()))) > tol.angular) {
         return invalid<gp_Pln>("cylinder axis is not parallel to the base plane");
