@@ -75,6 +75,49 @@ export class PartDocumentHandle {
     return JSON.stringify(doc);
   }
 
+  /**
+   * Configuration table (docs/modeling/PART_DOCUMENT.md, "Таблица параметров"): { columns: [{ kind:
+   * 'variable' | 'suppression' | 'material', target, title }], rows: [{ designation, fullDesignation,
+   * name, cells }], active, material }.
+   */
+  configurations() {
+    return this.#call('docConfigurations');
+  }
+
+  /** Replaces the table { columns, rows, active } (checked against the document; one undo entry). */
+  setConfigurations(table) {
+    this.#call('docSetConfigurations', table);
+  }
+
+  setConfigurationCell(row, column, value) {
+    this.#call('docSetConfigurationCell', row, column, value);
+  }
+
+  /** Adds a column { kind, target }; every row takes the current base value. */
+  addConfigurationColumn(column) {
+    this.#call('docAddConfigurationColumn', column);
+  }
+
+  /** Makes a configuration active ('' — base values); call rebuild() afterwards. */
+  activateConfiguration(designation) {
+    this.#call('docActivateConfiguration', designation);
+  }
+
+  /** Builds every configuration: [{ designation, fullDesignation, ok, problems, volume }]. */
+  checkConfigurations() {
+    return this.#call('docCheckConfigurations');
+  }
+
+  /** CSV text of the table; options { decimal: '.' | ',', bom: boolean }. */
+  exportConfigurationsCsv(options = {}) {
+    return this.#call('docExportConfigurationsCsv', options);
+  }
+
+  /** Replaces the table by a CSV file (';' separator, decimal point or comma). */
+  importConfigurationsCsv(text) {
+    this.#call('docImportConfigurationsCsv', text);
+  }
+
   variables() {
     return this.#call('docVariables');
   }

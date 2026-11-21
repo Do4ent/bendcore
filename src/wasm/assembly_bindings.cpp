@@ -121,6 +121,20 @@ std::map<std::string, std::string>& sources() {
     return s;
 }
 
+// Part documents with a configuration table by source name (asmRegisterPartSource, insertPart of
+// such a document): configurations of components are built from them (setOccurrence
+// {configuration}).
+struct PartSource {
+    std::string text;
+    std::vector<std::pair<std::string, std::string>> configurations;  // {designation, full designation}
+    std::vector<std::string> names;
+};
+
+std::map<std::string, PartSource>& partSources() {
+    static std::map<std::string, PartSource> s;
+    return s;
+}
+
 std::map<const TopoDS_TShape*, MeshEntry>& meshKeys() {
     static std::map<const TopoDS_TShape*, MeshEntry> keys;
     return keys;
@@ -674,6 +688,25 @@ val stateToJs(const Session& s) {
         x.set("name", d.name);
         x.set("properties", propertiesToJs(d.properties));
         x.set("source", d.source);
+        {
+            const auto [path, configuration] = a::splitConfigurationSource(d.source);
+            x.set("configuration", configuration);
+            val cfgs = val::array();
+            auto it = d.kind == a::DefinitionKind::Part ? partSources().find(path) : partSources().end();
+            if (it != partSources().end()) {
+                x.set("partSource", path);
+                for (std::size_t i = 0; i < it->second.configurations.size(); ++i) {
+                    val c = val::object();
+                    c.set("designation", it->second.configurations[i].first);
+                    c.set("fullDesignation", it->second.configurations[i].second);
+                    c.set("name", it->second.names[i]);
+                    cfgs.call<void>("push", c);
+                }
+            } else {
+                x.set("partSource", val::null());
+            }
+            x.set("configurations", cfgs);
+        }
         x.set("external", d.external);
         x.set("readOnly", d.kind == a::DefinitionKind::Assembly && doc.isReadOnlyAssembly(d.id));
         x.set("loadError", d.loadError);
@@ -783,8 +816,38 @@ val loadReportToJs(const a::LoadReport& r) {
     return out;
 }
 
+// Resolver of registered part documents: "<name>" — as saved, "<name>#<configuration>".
+a::PartResolver memoryPartResolver() {
+    return [](const std::string& source) -> k::Result<a::PartData> {
+        const auto [path, configuration] = a::splitConfigurationSource(source);
+        auto it = partSources().find(path);
+        if (it == partSources().end()) {
+            return k::Error{k::ErrorCode::IoError, "part source '" + path + "' is not registered (registerPartSource)"};
+        }
+        auto doc = m::PartDocument::fromJson(it->second.text, registry());
+        if (!doc) return doc.error();
+        if (configuration.empty()) return a::partDataFromDocument(doc.value());
+        return a::partDataFromDocument(doc.value(), configuration);
+    };
+}
+
+// Registers a part document; returns its configurations.
+const PartSource& registerPartSource(const std::string& name, const std::string& text) {
+    auto doc = m::PartDocument::fromJson(text, registry());
+    if (!doc) throw KernelFailure(doc.error());
+    PartSource src;
+    src.text = text;
+    const m::ConfigurationTable& t = doc.value().configurationTable();
+    for (std::size_t r = 0; r < t.rows.size(); ++r) {
+        src.configurations.emplace_back(t.rows[r].designation, m::fullDesignation(t, r));
+        src.names.push_back(t.rows[r].name);
+    }
+    return partSources()[name] = std::move(src);
+}
+
 a::LoadOptions memoryLoadOptions() {
     a::LoadOptions o;
+    o.parts = memoryPartResolver();
     o.assemblies = [](const std::string& source) -> k::Result<std::string> {
         auto it = sources().find(source);
         if (it == sources().end()) {
@@ -956,6 +1019,26 @@ val asmRegisterSource(std::string name, std::string text) {
     if (name.empty()) return failure("InvalidInput", "source name is empty");
     sources()[name] = std::move(text);
     return success(val(true));
+}
+
+// A part document whose configurations components may use: {configurations: [{designation,
+// fullDesignation, name}]}.
+val asmRegisterPartSource(std::string name, std::string text) {
+    return guarded([&] {
+        if (name.empty() || name.find('#') != std::string::npos) throw InputError("part source name must be non-empty, without '#'");
+        const PartSource& src = registerPartSource(name, text);
+        val list = val::array();
+        for (std::size_t i = 0; i < src.configurations.size(); ++i) {
+            val c = val::object();
+            c.set("designation", src.configurations[i].first);
+            c.set("fullDesignation", src.configurations[i].second);
+            c.set("name", src.names[i]);
+            list.call<void>("push", c);
+        }
+        val out = val::object();
+        out.set("configurations", list);
+        return success(out);
+    });
 }
 
 val asmCreate(std::string name) {
@@ -1145,7 +1228,24 @@ val asmInsertPart(std::uint32_t handle, val spec) {
     return withSession(handle, [&](Session& s) {
         if (!isObject(spec)) throw InputError("part must be an object");
         const std::string name = optionalString(spec, "name", "Part", "part");
-        a::PartData data = partFromJs(spec);
+        // A part document with a configuration table becomes a registered source (spec.source,
+        // default "<name>.part.json"), so that components can switch configurations.
+        std::string source;
+        std::string configuration = optionalString(spec, "configuration", "", "part");
+        if (optionalString(spec, "format", "part-json", "part") == "part-json") {
+            const std::string text = requireString(spec["data"], "part.data");
+            auto probe = m::PartDocument::fromJson(text, registry());
+            if (!probe) throw KernelFailure(probe.error());
+            if (!probe.value().configurationTable().rows.empty() || present(spec["source"])) {
+                source = optionalString(spec, "source", name + ".part.json", "part");
+                if (source.find('#') != std::string::npos) throw InputError("part.source must not contain '#'");
+                registerPartSource(source, text);
+            }
+        }
+        if (!configuration.empty() && source.empty()) {
+            throw InputError("part.configuration needs a part document with a configuration table");
+        }
+        a::PartData data = source.empty() ? partFromJs(spec) : a::PartData{};
         const a::Transform placement = transformFromJs(spec["placement"], "part.placement");
         const bool fixed = optionalBool(spec, "fixed", false, "part");
         const bool beside = optionalBool(spec, "beside", false, "part");
@@ -1155,7 +1255,17 @@ val asmInsertPart(std::uint32_t handle, val spec) {
         a::DefinitionId def = 0;
         a::OccurrenceId occ = 0;
         edit(s, "Insert " + name, [&](a::AssemblyDocument& d) {
-            def = take(d.addPart(name, data, propertiesFromJs(spec["properties"], {})));
+            if (source.empty()) {
+                def = take(d.addPart(name, data, propertiesFromJs(spec["properties"], {})));
+            } else {
+                const std::string full = a::configurationSource(source, configuration);
+                std::optional<a::DefinitionId> existing;
+                for (const a::Definition& x : d.definitions())
+                    if (x.kind == a::DefinitionKind::Part && x.source == full && !x.external) existing = x.id;
+                def = existing ? *existing
+                               : take(d.addPartFromSource(name, full, memoryPartResolver(),
+                                                          propertiesFromJs(spec["properties"], {})));
+            }
             occ = take(d.addOccurrence(def, placement, name, parent));
             if (beside) placeBeside(d, occ);
             if (fixed) check(d.setFixed(occ, true));
@@ -1229,6 +1339,7 @@ val asmSetOccurrence(std::uint32_t handle, std::uint32_t id, val changes) {
         if (present(changes["suppressed"]))
             label = optionalBool(changes, "suppressed", false, "changes") ? "Suppress component" : "Unsuppress component";
         if (present(changes["placement"])) label = "Move component";
+        if (present(changes["configuration"])) label = "Component configuration";
         edit(s, label, [&](a::AssemblyDocument& d) {
             if (present(changes["fixed"])) check(d.setFixed(id, optionalBool(changes, "fixed", false, "changes")));
             if (present(changes["suppressed"]))
@@ -1238,6 +1349,10 @@ val asmSetOccurrence(std::uint32_t handle, std::uint32_t id, val changes) {
                 check(d.setOccurrenceDesignation(id, requireString(changes["designation"], "changes.designation")));
             if (present(changes["placement"]))
                 check(d.setPlacement(id, transformFromJs(changes["placement"], "changes.placement")));
+            if (present(changes["configuration"])) {
+                take(d.setOccurrenceConfiguration(id, requireString(changes["configuration"], "changes.configuration"),
+                                                  memoryPartResolver()));
+            }
             if (changes["color"].isNull()) check(d.setOccurrenceColor(id, std::nullopt));
             else if (present(changes["color"])) check(d.setOccurrenceColor(id, colorFromJs(changes["color"], "changes.color")));
         });
@@ -1742,6 +1857,7 @@ EMSCRIPTEN_BINDINGS(bendcore_assembly) {
     emscripten::function("fastenerDescribe", &fastenerDescribe);
     emscripten::function("asmRegisterSource", &asmRegisterSource);
     emscripten::function("asmCreate", &asmCreate);
+    emscripten::function("asmRegisterPartSource", &asmRegisterPartSource);
     emscripten::function("asmLoad", &asmLoad);
     emscripten::function("asmImportStep", &asmImportStep);
     emscripten::function("asmImportIges", &asmImportIges);

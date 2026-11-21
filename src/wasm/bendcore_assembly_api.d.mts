@@ -81,12 +81,24 @@ export interface PartProperties {
 
 export type Color = [number, number, number, number];
 
+export interface PartConfigurationInfo {
+  designation: string;
+  fullDesignation: string;
+  name: string;
+}
+
 export interface DefinitionInfo {
   id: number;
   kind: 'part' | 'assembly';
   name: string;
   properties: PartProperties;
   source: string;
+  /** Configuration of the part document ("<source>#<configuration>"); '' — as saved. */
+  configuration: string;
+  /** Registered part document of the definition (registerPartSource), or null. */
+  partSource: string | null;
+  /** Configurations of that part document (empty without one). */
+  configurations: PartConfigurationInfo[];
   external: boolean;
   readOnly: boolean;
   loadError: string;
@@ -346,6 +358,10 @@ export interface InsertPartSpec {
   parent?: number;
   /** Top level: move the new component next to the assembly along +X (20 mm gap). */
   beside?: boolean;
+  /** Part source name of a part document (default "<name>.part.json" when it has a configuration table). */
+  source?: string;
+  /** Configuration of the part document to insert ('' — as saved). */
+  configuration?: string;
 }
 
 export class AssemblyDocumentHandle {
@@ -380,6 +396,8 @@ export class AssemblyDocumentHandle {
       designation?: string;
       placement?: PlacementInput;
       color?: number[] | null;
+      /** Configuration of the component's part document ('' — as saved). */
+      configuration?: string;
     },
   ): void;
   setProperties(definition: number, properties: Partial<PartProperties>): void;
@@ -427,6 +445,8 @@ export class AssemblyKernel {
   fastenerCatalog(): FastenerStandardInfo[];
   describeFastener(spec: FastenerSpec): FastenerDescription;
   registerSource(name: string, text: string): void;
+  /** Part document whose configurations components may use. */
+  registerPartSource(name: string, text: string): { configurations: PartConfigurationInfo[] };
   createDocument(name?: string): AssemblyDocumentHandle;
   loadDocument(json: string): { document: AssemblyDocumentHandle; report: LoadReport };
   importStep(text: string): AssemblyDocumentHandle;
