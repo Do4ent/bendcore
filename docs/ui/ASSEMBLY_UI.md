@@ -100,7 +100,7 @@ try {
 | `insertPart({…, source, configuration})` | документ детали с таблицей параметров регистрируется как источник детали (`source`, по умолчанию `<name>.part.json`), определение получает источник `<source>` или `<source>#<configuration>` (`addPartFromSource`, свойства исполнения); повторная вставка того же источника и исполнения — то же определение |
 | `insertOccurrence({definition, …})` | ещё одно вхождение того же определения |
 | `insertSubassembly({source, …})` | `addSubassemblyFromSource`: текст файла подсборки берётся из `AssemblyKernel.registerSource(name, text)` |
-| `removeOccurrence`, `setOccurrence(id, {fixed, suppressed, name, designation, placement, color, configuration})`, `setProperties(def, {designation, name, material, density})` | правка состава; `configuration` — `setOccurrenceConfiguration` (исполнение документа детали, `''` — как сохранена; шаг истории «Component configuration») |
+| `removeOccurrence`, `setOccurrence(id, {fixed, suppressed, name, designation, placement, color, configuration})`, `setProperties(def, {designation, name, material, density})` | правка состава; `configuration` — `setOccurrenceConfiguration` (исполнение документа детали или внешней подсборки, `''` — как сохранена; шаг истории «Component configuration») |
 | `addMate`, `editMate`, `removeMate`, `setMateSuppressed`, `solve()` | сопряжения: `type` — `coincident`, `concentric`, `distance`, `angle` (значение в градусах), `parallel`, `perpendicular`, `tangent` (`internal`), `rigid`; `alignment` — `closest`, `aligned`, `anti-aligned`; ссылки `{path, kind: face/edge/vertex, index \| name, use: auto/axis/point}` |
 | `dragBegin(occ, point)`, `dragMove(target)`, `dragEnd()`, `dragCancel()` | перетаскивание: рабочая копия документа решается `AssemblyDocument::drag` (мягкая цель, затем жёсткие сопряжения); `dragEnd` записывает копию одним шагом «Drag component»; во время перетаскивания правки отклоняются |
 | `addPattern({kind: linear \| circular \| feature, seed, …})`, `removePattern` | массивы компонентов (угловой шаг кругового — в градусах) |
@@ -112,6 +112,11 @@ try {
 | `bom('flat' \| 'structured')` | `flatBom` / `structuredBom` с массами |
 | `findHoles`, `insertFasteners` | `findHoleSites` + `insertFastenerStacks`; определения крепежа с тем же обозначением используются повторно (одна позиция BOM); `holes` — только выбранные грани отверстий |
 | `undo()`, `redo()`, `save({embedGeometry})`, `exportStep({schema})`, `dispose()` | история, файлы |
+| `configurationTable()` | таблица исполнений сборки с текущими значениями (`docs/assembly/ASSEMBLY_DOCUMENT.md`, раздел 8.2): `columns [{kind: suppression \| configuration \| mateValue, target, title (заголовок CSV), label, unit (mm, deg, ratio), options (исполнения документа компонента)}]`, `rows [{designation, fullDesignation, name, cells}]`, `active`, `base` (базовые значения), `designation` (обозначение сборки в активном исполнении) |
+| `setConfigurationTable({columns: [{kind, target}], rows: [{designation, name, cells}], active})` | `AssemblyHistory::setConfigurationTable`: один шаг «Configuration table»; `active` активируется и решается |
+| `activateConfiguration(designation)` | `AssemblyHistory::activateConfiguration` (`''` — базовые значения): шаг «Activate configuration»; → `{designation, fullDesignation, excluded, disabledMates [{mate, occurrence}], brokenMates [{mate, occurrence, reason}], solve}` |
+| `configurationsToCsv({decimal, bom})`, `configurationsFromCsv(csv)` | CSV таблицы (`configurationTableToCsv`, `configurationTableFromCsv`); разобранная таблица не применяется — её передают в `setConfigurationTable` |
+| `configurationBom()` | `configurationBom`: состав всех исполнений `{configurations, rows, parts}` с количествами по исполнениям (групповая спецификация ГОСТ 2.113) |
 
 `AssemblyKernel`: `fastenerCatalog()` (стандарты: `id` вида `gost-7798`, `iso-4017`, вид
 изделия, ГОСТ/ISO, соответствие, ряд размеров, статус сверки таблиц), `describeFastener(spec)`
@@ -179,6 +184,24 @@ try {
   список недоступен (исполнение задаётся у исходного компонента). Состояние определения —
   `configuration`, `partSource`, `configurations [{designation, fullDesignation, name}]`.
   Подписи — `assembly.props.configuration*` (RU/EN).
+- **Исполнения сборки** (вкладка «Исполнения», панель «Исполнения сборки»,
+  `AssemblyConfigurationPanel.tsx`, правки таблицы — `src/ui/assembly/configurationTable.ts`
+  поверх общих функций строк и столбцов таблицы детали `src/ui/modeling/configurationTable.ts`):
+  сетка — переключатель активного исполнения, обозначение (подсказка — полное обозначение),
+  наименование и столбцы: «Включить: <компонент>» (как в базовом / включено / исключено),
+  «Исполнение: <компонент>» (как в базовом / как в файле компонента / исполнения документа
+  детали или подсборки с полным обозначением и наименованием), «Значение: <сопряжение>» (число,
+  мм или °). Строка «Базовые значения» показывает значения без исполнения и активирует их.
+  «+ Исполнение» (копия последней строки со следующим суффиксом «-01», «-02»…), «+ Столбец»
+  (компоненты верхнего уровня, кроме экземпляров массивов; компоненты с исполнениями;
+  сопряжения расстояния, угла и передачи), удаление строк и столбцов, «Отменить» (тот же стек
+  отмены, что Ctrl+Z), «Импорт CSV…» / «Экспорт CSV» (разделитель чисел — запятая или точка).
+  Каждая правка — одна таблица в `setConfigurationTable`, выбор исполнения —
+  `activateConfiguration`: состав меняется, сборка решается, под сеткой — число исключённых
+  компонентов и отключённые сопряжения («<сопряжение> — компонент <имя> исключён»), сломанные
+  ссылки с причиной. Состояние документа — `configuration {active, designation, count}`;
+  определение внешней подсборки с исполнениями — `assemblySource`, `configurations`. Подписи —
+  `assembly.config.*` (RU/EN, одинаковые параметры), ошибки ядра — шаблоны `kernel.msg.asm*`.
 - **Состояние для тестов**: `window.bendcoreAssembly.getState()` (статус, ошибка, состояние
   документа, слоты, отверстие, выбор, BOM, отчёт пересечений, разнесённый вид, отчёт решения
   во время перетаскивания, положения), `worldToClient`, `faceClientPoint(path, face)` (видимый
@@ -220,7 +243,7 @@ components»: вал в отверстии — угол между верхни�
 npm ci --ignore-scripts
 BENDCORE_ASSEMBLY_WASM_DIR=build-wasm/wasm_assembly npm run dev:assembly   # http://127.0.0.1:3120/
 
-ctest --test-dir build-wasm -R wasm_assembly_document --output-on-failure
+ctest --test-dir build-wasm -R 'wasm_assembly_(document|configurations|design_table)' --output-on-failure
 npm run test:assembly-wasm -- --module build-wasm/wasm_assembly
 npx jest src/ui/assembly
 PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome \
@@ -291,6 +314,29 @@ node tests/assembly-fixtures/make_parts.mjs --module build-wasm/wasm_modeling
 определение), второй компонент — «Свойства» → «Исполнение» «-01»: список из четырёх вариантов,
 обозначение «РЦ.080.00.010-01», плотность 2700; BOM — две строки с обозначениями исполнений и
 наименованиями, общая масса `V₀·7850 + V₁·2700`; «Отменить» — одна строка, количество 2.
+
+`tests/wasm/assembly_design_table.test.mjs` (2 теста): корпус `block.json` (фиксирован), вал
+`shaft.json` в отверстии (соосность; расстояние торца от низа корпуса — столбец), планка
+`plate.json` (столбец включения), брусок `configured_block.json` (столбец исполнения);
+исполнения РЦ.500.00.000 (планка, брусок как сохранён, 0) и -01 (без планки, брусок -01, 15).
+Заголовки CSV столбцов, исполнения бруска в столбце, полное обозначение «РЦ.500.00.000-01»;
+13 → 7 степеней свободы; торец вала на z = 0 и −15 (расстояние со знаком); BOM 4 → 3 строки,
+масса бруска -01 `V·2700` по формуле; туда и обратно — те же положения; отмена и повтор
+активации; `configurationBom` — количества [1, 0] и [0, 1], 4 и 3 детали; CSV туда и обратно с
+точкой и запятой, ошибка неизвестного имени; файл v3 — таблица, базовые значения, активное
+исполнение и положения базового. Вложенная подсборка: узел с двумя валами (второй исключён в
+базовом исполнении) зарегистрирован как `unit.json`, вставлен; у определения `assemblySource`
+и исполнения узла; «-01» у вхождения — источник `unit.json#-01`, обозначение
+«РЦ.600.00.000-01», валов в BOM 1 → 2, отмена → 1.
+
+`tests/e2e-assembly/assembly_configurations.spec.ts` (1 тест): брусок вставлен дважды; во
+вкладке «Исполнения» — столбцы «Включить: <второй>» и «Исполнение: <первый>» (базовые
+значения «включено», «как в файле компонента»), строки РЦ.700.00.000 и -01 (второй исключён,
+первый «-01», список из пяти вариантов); выбор -01 — «Активно исполнение РЦ.700.00.000-01»,
+«Исключено компонентов: 1», BOM — одна строка РЦ.080.00.010-01 с массой `V·2700`; первая
+строка — две строки бруска базового исполнения, масса `2·V·7850`; «Отменить» — снова -01;
+экспорт CSV с запятой (заголовок и строка «-01;;1;-01»), импорт исправленного текста меняет
+наименование -01, активное исполнение сохраняется.
 
 ## Выполнение в Web Worker (фаза 5)
 

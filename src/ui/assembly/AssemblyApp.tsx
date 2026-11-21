@@ -1031,7 +1031,9 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
               onExportCsv={(decimal) =>
                 void run(async (d) => {
                   const csv = await d.configurationsToCsv({ decimal });
-                  downloadText(`${state.name || 'assembly'}.configurations.csv`, csv, 'text/csv');
+                  // UTF-8 decoding of the module's string drops the byte order mark Excel needs.
+                  const text = csv.startsWith('\uFEFF') ? csv : `\uFEFF${csv}`;
+                  downloadText(`${state.name || 'assembly'}.configurations.csv`, text, 'text/csv');
                 })
               }
             />
