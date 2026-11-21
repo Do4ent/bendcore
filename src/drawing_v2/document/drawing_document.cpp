@@ -1656,6 +1656,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                     addBalloonObstacle(ar.balloons[k]);
                     if (g.manual[k]) {
                         cs.manualBalloons[*g.manual[k]]->at = ar.balloons[k].at;
+                        cs.manualBalloons[*g.manual[k]]->target = ar.balloons[k].target;
                         continue;
                     }
                     g.report.placed.emplace_back(g.cands[k].number, ar.balloons[k].definition);
