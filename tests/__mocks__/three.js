@@ -10,15 +10,14 @@
 // `three` is remapped to this file by jest.config.js moduleNameMapper, so the
 // real package has to be loaded by its resolved path, not by its bare name.
 const actualThree = jest.requireActual(
-  require('path').join(__dirname, '..', '..', 'node_modules', 'three', 'build', 'three.js')
+  require('path').join(__dirname, '..', '..', 'node_modules', 'three', 'build', 'three.cjs')
 );
 
 class WebGLRenderer {
   constructor(parameters = {}) {
     this.domElement = parameters.canvas || document.createElement('canvas');
     this.shadowMap = { enabled: false, autoUpdate: true, needsUpdate: false, type: actualThree.PCFShadowMap };
-    this.outputEncoding = actualThree.LinearEncoding;
-    this.outputColorSpace = '';
+    this.outputColorSpace = actualThree.SRGBColorSpace;
     this.toneMapping = actualThree.NoToneMapping;
     this.toneMappingExposure = 1;
     this.autoClear = true;

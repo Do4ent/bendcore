@@ -18,7 +18,8 @@
 
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { applyLegacyOutput, lightIntensity } from '../legacyLook';
 import { faceOfTriangle } from '../../wasm/bendcore_kernel_api.mjs';
 import type { KernelMesh } from '../../wasm/bendcore_kernel_api.mjs';
 import { packEdgePolylines } from './edgeBuffers';
@@ -254,6 +255,7 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     if (!container) return undefined;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
+    applyLegacyOutput(renderer);
     renderer.setClearColor(BACKGROUND, 1);
     container.appendChild(renderer.domElement);
 
@@ -262,8 +264,8 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 1000);
     camera.up.set(0, 0, 1);
     scene.add(camera);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.45));
-    const headlight = new THREE.DirectionalLight(0xffffff, 0.7);
+    scene.add(new THREE.AmbientLight(0xffffff, lightIntensity(0.45)));
+    const headlight = new THREE.DirectionalLight(0xffffff, lightIntensity(0.7));
     headlight.position.set(0.3, 0.6, 1);
     camera.add(headlight);
     const model = new THREE.Group();

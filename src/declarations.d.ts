@@ -201,6 +201,9 @@ declare module 'three' {
     background: Color | null;
   }
 
+  export const LinearSRGBColorSpace: string;
+  export const ColorManagement: { enabled: boolean };
+
   export class Color {
     constructor(color?: number | string);
     constructor(r: number, g: number, b: number);
@@ -264,6 +267,7 @@ declare module 'three' {
     clippingPlanes: Plane[];
     localClippingEnabled: boolean;
     shadowMap: { enabled: boolean; type: number };
+    outputColorSpace: string;
     setSize(width: number, height: number): void;
     setPixelRatio(ratio: number): void;
     setClearColor(color: number | string, alpha?: number): void;
@@ -362,8 +366,8 @@ declare module 'three' {
   }
 }
 
-// OrbitControls from the three.js examples (three/examples/jsm/controls/OrbitControls.js).
-declare module 'three/examples/jsm/controls/OrbitControls' {
+// OrbitControls from the three.js examples (three/addons/controls/OrbitControls.js).
+declare module 'three/addons/controls/OrbitControls.js' {
   import { Camera, Vector3 } from 'three';
   export class OrbitControls {
     constructor(camera: Camera, domElement: HTMLElement);
