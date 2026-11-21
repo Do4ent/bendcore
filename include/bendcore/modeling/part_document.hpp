@@ -4,6 +4,7 @@
 // топологию по именам (naming.hpp), состояниями, перестроением от изменённой операции,
 // откатом, подавлением, переносом и сохранением в JSON (docs/modeling/PART_DOCUMENT.md).
 
+#include <bendcore/modeling/configuration_table.hpp>
 #include <bendcore/modeling/features.hpp>
 #include <bendcore/modeling/gear.hpp>
 #include <bendcore/modeling/naming.hpp>
@@ -278,6 +279,32 @@ public:
     // Value at the last evaluation; errors carry the cause (cycle, unknown name, syntax).
     Result<double> variableValue(const std::string& name) const;
 
+    // ---- configuration table (docs/modeling/PART_DOCUMENT.md, "Таблица параметров").
+    // The active configuration overrides the variables and suppression flags named by its
+    // non-empty cells; empty cells keep the base values. variables() and feature().suppressed
+    // report the effective values; setVariable/setSuppressed on a value driven by a non-empty
+    // cell of the active configuration write that cell. Removing a variable or a feature removes
+    // its column. Every edit is recorded for undo and takes effect at the next rebuild().
+    const ConfigurationTable& configurationTable() const noexcept;
+    // Replaces the table after checking it against the document. InvalidInput naming the
+    // configuration and column: unknown variable, unknown feature, invalid value (expression
+    // that does not parse, suppression not 1/0, unknown material id), empty or repeated
+    // designation, repeated column, wrong number of cells, unknown active configuration.
+    Status setConfigurationTable(ConfigurationTable table);
+    Status setConfigurationCell(std::size_t row, std::size_t column, const std::string& value);
+    // Adds a column; the cells of every row take the current base value (variable expression,
+    // "1"/"0" of the suppression flag, empty material).
+    Status addConfigurationColumn(ConfigurationColumn column);
+    // Makes a configuration active ("" — the base values). InvalidInput: no such designation.
+    Status activateConfiguration(const std::string& designation);
+    const std::string& activeConfiguration() const noexcept;
+    // Material id of the active configuration (its non-empty material cell), else empty.
+    std::string configurationMaterial() const;
+    // Builds every configuration in turn and reports whether it builds, with the causes
+    // (cell errors, variable errors, failed features with their messages, no solid); then
+    // restores the active configuration and rebuilds. Undo history is not touched.
+    std::vector<ConfigurationCheck> checkConfigurations();
+
     // ---- tree editing; every edit takes effect at the next rebuild()
     // Inserts at `position` (default: at the rollback marker if set, else at the end).
     Result<std::string> addFeature(FeatureSpec spec, std::optional<std::size_t> position = std::nullopt);
@@ -327,7 +354,8 @@ public:
     std::vector<BodyInfo> bodies() const;
 
     // ---- persistence (format "bendcore-part", version kFormatVersion)
-    static constexpr int kFormatVersion = 3;
+    // Version 4 adds "configurations"; a document without a table is still written as v3.
+    static constexpr int kFormatVersion = 4;
     Result<std::string> toJson(const SaveOptions& options = {}) const;
     // Loads, migrates older versions and rebuilds. Errors: ParseError (not JSON, missing
     // fields), Unsupported (newer version, unknown feature type).
@@ -340,6 +368,11 @@ public:
 
 private:
     Status checkExpression(const std::string& expression) const;
+    Status validateTable(const ConfigurationTable& table) const;
+    // Variables with the overrides of the active configuration.
+    std::vector<std::pair<std::string, std::string>> effectiveVariables() const;
+    // Suppression of a node with the override of the active configuration.
+    bool effectiveSuppressed(const Node& node) const;
     Node* node(const std::string& id);
     const Node* node(const std::string& id) const;
     State captureState() const;
@@ -352,6 +385,7 @@ private:
     std::vector<std::pair<std::string, std::string>> variables_;
     std::map<std::string, Result<double>> variableValues_;
     std::optional<std::size_t> rollback_;
+    ConfigurationTable table_;
     std::unique_ptr<Transactions> transactions_;
 };
 
