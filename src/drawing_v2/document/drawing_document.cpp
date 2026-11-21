@@ -1817,17 +1817,14 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
         if (!dr) return dr.error();
         Drawing d = std::move(dr).value();
         d.setTextFont(settings_.textFont);
-        Result<TitleBlockLayout> lay = Error{ErrorCode::InvalidInput, "no title block"};
-        if (settings_.sheetStyle == SheetStyle::Iso7200) {
-            IsoFrameOptions io;
-            io.font = metrics;
-            lay = addIsoFrameAndTitleBlock(d, cs.isoTitle, io);
-        } else {
-            FrameOptions fo;
-            fo.form = si == 0 ? TitleBlockForm::Form1 : TitleBlockForm::Form2a;
-            fo.font = metrics;
-            lay = addFrameAndTitleBlock(d, cs.title, fo);
-        }
+        // Рамка и основная надпись: ЕСКД (ГОСТ 2.104, формы 1 и 2а) или ISO 5457 + ISO 7200.
+        IsoFrameOptions io;
+        io.font = metrics;
+        FrameOptions fo;
+        fo.form = si == 0 ? TitleBlockForm::Form1 : TitleBlockForm::Form2a;
+        fo.font = metrics;
+        Result<TitleBlockLayout> lay = settings_.sheetStyle == SheetStyle::Iso7200 ? addIsoFrameAndTitleBlock(d, cs.isoTitle, io)
+                                                                                 : addFrameAndTitleBlock(d, cs.title, fo);
         if (!lay) return Error{lay.error().code, "sheet '" + cs.id + "': " + lay.error().message};
         if (auto st = ensureViewLayers(d); !st) return st.error();
         std::map<std::string, const ComputedView*> byId;

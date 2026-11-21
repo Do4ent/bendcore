@@ -148,7 +148,11 @@ const Table<dd::ViewKind> kViewKinds = {{dd::ViewKind::Base, "base"},
                                         {dd::ViewKind::Projected, "projected"},
                                         {dd::ViewKind::Axonometric, "axonometric"},
                                         {dd::ViewKind::Section, "section"},
-                                        {dd::ViewKind::Detail, "detail"}};
+                                        {dd::ViewKind::Detail, "detail"},
+                                        {dd::ViewKind::Auxiliary, "auxiliary"}};
+const Table<vw::ProjectionMethod> kProjection = {{vw::ProjectionMethod::FirstAngle, "firstAngle"},
+                                                 {vw::ProjectionMethod::ThirdAngle, "thirdAngle"}};
+const Table<dd::SheetStyle> kSheetStyles = {{dd::SheetStyle::Eskd, "eskd"}, {dd::SheetStyle::Iso7200, "iso7200"}};
 const Table<vw::SheetSide> kSides = {{vw::SheetSide::Above, "above"},
                                      {vw::SheetSide::Below, "below"},
                                      {vw::SheetSide::LeftOf, "leftOf"},
@@ -258,14 +262,19 @@ json titleJson(const dd::TitleFields& t) {
     return {{"designation", t.designation}, {"name", t.name},         {"material", t.material},
             {"mass", t.mass},               {"litera", t.litera},     {"organization", t.organization},
             {"developer", row(t.developer)}, {"checker", row(t.checker)}, {"techControl", row(t.techControl)},
-            {"normControl", row(t.normControl)}, {"approver", row(t.approver)}};
+            {"normControl", row(t.normControl)}, {"approver", row(t.approver)},
+            // ISO 7200 fields (the shared ones are the ESKD fields above).
+            {"documentType", t.documentType}, {"documentStatus", t.documentStatus}, {"revision", t.revision},
+            {"issueDate", t.issueDate}, {"language", t.language}, {"department", t.department}};
 }
 // Only the fields present in j are changed.
 void titleApply(dd::TitleFields& t, const json& j) {
     if (!j.is_object()) throw InputError("title fields must be an object");
     for (auto [name, field] : std::initializer_list<std::pair<const char*, std::string*>>{
              {"designation", &t.designation}, {"name", &t.name}, {"material", &t.material},
-             {"mass", &t.mass}, {"litera", &t.litera}, {"organization", &t.organization}}) {
+             {"mass", &t.mass}, {"litera", &t.litera}, {"organization", &t.organization},
+             {"documentType", &t.documentType}, {"documentStatus", &t.documentStatus}, {"revision", &t.revision},
+             {"issueDate", &t.issueDate}, {"language", &t.language}, {"department", &t.department}}) {
         if (j.contains(name)) *field = strOr(j, name);
     }
     for (auto [name, row] : std::initializer_list<std::pair<const char*, dv::SignatureRow*>>{
@@ -491,6 +500,7 @@ json viewDefJson(const dd::ViewDef& v) {
         j["detailCenter"] = pointJson(v.detailCenter);
         j["detailRadius"] = v.detailRadius;
     }
+    if (v.kind == dd::ViewKind::Auxiliary) j["rotated"] = v.rotated;
     return j;
 }
 
@@ -519,6 +529,13 @@ json describe(Session& s) {
                 const vw::Box2 b = cv.sheetView.sheetBounds();
                 v["bounds"] = {{"minX", b.minX}, {"minY", b.minY}, {"maxX", b.maxX}, {"maxY", b.maxY}};
                 v["fromCache"] = cv.fromCache;
+                if (cv.kind == dd::ViewKind::Auxiliary) {
+                    v["letter"] = cv.letter;
+                    v["rotationDeg"] = cv.rotationDeg;
+                    if (cv.arrow)
+                        v["arrow"] = {{"tip", pointJson(cv.arrow->tip)}, {"tail", pointJson(cv.arrow->shaft.a)},
+                                      {"direction", pointJson(cv.arrow->direction)}, {"letterPosition", pointJson(cv.arrow->letterPos)}};
+                }
             }
             views.push_back(std::move(v));
         }
@@ -646,13 +663,21 @@ json describe(Session& s) {
             const dv::TitleBlockData& td = cs->title;
             sheet["titleShown"] = {{"designation", td.designation}, {"name", td.name}, {"material", td.material},
                                    {"mass", td.mass}, {"scale", td.scale}, {"sheet", td.sheet}, {"sheets", td.sheets}};
+            const dv::Iso7200Data& iso = cs->isoTitle;
+            sheet["isoTitleShown"] = {{"legalOwner", iso.legalOwner}, {"identification", iso.identification}, {"title", iso.title},
+                                      {"documentType", iso.documentType}, {"documentStatus", iso.documentStatus},
+                                      {"revision", iso.revision}, {"issueDate", iso.issueDate}, {"sheet", iso.sheet},
+                                      {"sheets", iso.sheets}, {"language", iso.language}, {"creator", iso.creator},
+                                      {"approver", iso.approver}, {"department", iso.department}, {"scale", iso.scale},
+                                      {"projectionSymbol", iso.projection == dv::ProjectionSymbol::ThirdAngle ? "thirdAngle" : "firstAngle"}};
         }
         sheets.push_back(std::move(sheet));
     }
     const dd::ModelLink& ml = s.doc.model();
     return {{"model", {{"kind", dd::toString(ml.kind)}, {"path", ml.path}, {"resultHash", ml.resultHash},
                        {"revision", ml.revision}, {"properties", propertiesJson(ml.properties)}}},
-            {"projection", s.doc.settings().projection == vw::ProjectionMethod::FirstAngle ? "firstAngle" : "thirdAngle"},
+            {"projection", enumName(s.doc.settings().projection, kProjection)},
+            {"sheetStyle", enumName(s.doc.settings().sheetStyle, kSheetStyles)},
             {"textFont", dv::toString(s.doc.settings().textFont)},
             {"dissolvedAssemblies", s.spec ? json(s.spec->settings().dissolved) : json::array()},
             {"sheets", sheets},
@@ -865,7 +890,9 @@ std::string setModelProperties(std::uint32_t handle, std::string text) {
 
 // ---- document settings
 
-// {textFont: "gost2304" | "truetype"} (undoable, part of the edit state) and, for an assembly,
+// {textFont: "gost2304" | "truetype", projection: "firstAngle" | "thirdAngle" (projected views move
+// to the opposite side of their parent), sheetStyle: "eskd" | "iso7200"} (undoable, part of the
+// edit state) and, for an assembly,
 // {dissolvedAssemblies: [component keys]} - sub-assemblies listed by their parts (GOST 2.106).
 std::string setSettings(std::uint32_t handle, std::string text) {
     return guarded([&]() -> json {
@@ -882,6 +909,8 @@ std::string setSettings(std::uint32_t handle, std::string text) {
                 if (!f) throw InputError("textFont must be 'gost2304' or 'truetype'");
                 s.doc.settings().textFont = *f;
             }
+            if (j.contains("sheetStyle")) s.doc.settings().sheetStyle = enumFrom(j.at("sheetStyle"), kSheetStyles, "sheet style");
+            if (j.contains("projection")) s.doc.setProjectionMethod(enumFrom(j.at("projection"), kProjection, "projection method"));
             if (j.contains("dissolvedAssemblies")) {
                 if (!s.spec) raise({k::ErrorCode::Unsupported, "dissolved sub-assemblies need an assembly model"});
                 std::set<std::string> keys;
@@ -895,6 +924,7 @@ std::string setSettings(std::uint32_t handle, std::string text) {
             s.history.record(std::move(before), "setSettings");
             return rep;
         } catch (...) {
+            dd::restoreEditState(s.doc, before);
             s.doc.settings() = backup;
             if (s.spec) s.spec->settings().dissolved = dissolvedBackup;
             try {
@@ -1059,6 +1089,28 @@ std::string addView(std::uint32_t handle, std::string sheetId, std::string text)
                     v.detailRadius = numOr(j, "detailRadius", 0.0);
                     if (v.detailRadius <= 0) throw InputError("detailRadius must be > 0");
                     break;
+                case dd::ViewKind::Auxiliary: {
+                    // Direction: toward (model, to the viewer) or the arrow angle on the parent view
+                    // (degrees counter-clockwise from the parent's x axis; the sight lies in its plane).
+                    v.rotated = boolOr(j, "rotated", false);
+                    if (j.contains("toward")) {
+                        v.toward = vec3From(j.at("toward"), "toward");
+                    } else {
+                        const double deg = numOr(j, "arrowAngle", std::nan(""));
+                        if (!std::isfinite(deg)) throw InputError("an auxiliary view needs toward or arrowAngle");
+                        const dd::ComputedView* parent = nullptr;
+                        for (const auto& cs : s.doc.computedSheets())
+                            if (cs.id == sd.id)
+                                for (const auto& cv : cs.views)
+                                    if (cv.id == v.parent) parent = &cv;
+                        if (!parent) throw InputError("view '" + v.parent + "' is not computed yet");
+                        const vw::ViewFrame& pf = parent->sheetView.view.frame;
+                        const double a = deg * 3.14159265358979323846 / 180.0;
+                        const vw::Vec3 sight = std::cos(a) * pf.right + std::sin(a) * pf.up();
+                        v.toward = -1.0 * sight;
+                    }
+                    break;
+                }
             }
             const std::string id = v.id;
             sd.views.push_back(std::move(v));
@@ -1183,6 +1235,10 @@ std::string setView(std::uint32_t handle, std::string sheetId, std::string viewI
                 else v->position = point2From(j.at("position"), "position");
             }
             if (j.contains("detailRadius") && v->kind == dd::ViewKind::Detail) v->detailRadius = numOr(j, "detailRadius", v->detailRadius);
+            if (j.contains("rotated")) {
+                if (v->kind != dd::ViewKind::Auxiliary) throw InputError("only an auxiliary view can be rotated");
+                v->rotated = boolOr(j, "rotated", false);
+            }
             return nullptr;
         });
     });

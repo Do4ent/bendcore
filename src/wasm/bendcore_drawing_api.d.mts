@@ -7,7 +7,11 @@ export { KernelError };
 
 export type GostFormat = 'A0' | 'A1' | 'A2' | 'A3' | 'A4';
 export type Orientation = 'portrait' | 'landscape';
-export type ViewKind = 'base' | 'projected' | 'axonometric' | 'section' | 'detail';
+export type ViewKind = 'base' | 'projected' | 'axonometric' | 'section' | 'detail' | 'auxiliary';
+/** Projection method (GOST 2.305 / ISO 128-30: first angle = method E, third angle = method A). */
+export type ProjectionMethod = 'firstAngle' | 'thirdAngle';
+/** Sheet style: ESKD (GOST 2.104 title block) or ISO (ISO 5457 frame, ISO 7200 title block). */
+export type SheetStyle = 'eskd' | 'iso7200';
 export type SheetSide = 'above' | 'below' | 'leftOf' | 'rightOf';
 export type StandardView = 'front' | 'top' | 'left' | 'right' | 'bottom' | 'rear';
 export type DimensionType = 'horizontal' | 'vertical' | 'aligned' | 'radius' | 'diameter' | 'angle';
@@ -46,6 +50,15 @@ export interface TitleFields {
   techControl: SignatureRow;
   normControl: SignatureRow;
   approver: SignatureRow;
+  /** ISO 7200 fields (legal owner = organization, creator = developer, approver = approver). */
+  documentType: string;
+  documentStatus: string;
+  revision: string;
+  /** YYYY-MM-DD (ISO 8601). */
+  issueDate: string;
+  /** ISO 639 code; empty - ru. */
+  language: string;
+  department: string;
 }
 export type TitleFieldsInput = Partial<Omit<TitleFields, 'developer' | 'checker' | 'techControl' | 'normControl' | 'approver'>> & {
   developer?: Partial<SignatureRow>;
@@ -100,6 +113,13 @@ export interface ViewInfo {
   stepPoints?: [number, number, number][];
   /** Local sections of the view: boundary in view coordinates (model mm), depth from the front. */
   localSections: LocalSectionInfo[];
+  /** Auxiliary view (GOST 2.305, 5.4-5.6): turned so that the parent's up is up on the sheet. */
+  rotated?: boolean;
+  /** Auxiliary view: designation letter, rotation from the arrow orientation (0 - not rotated). */
+  letter?: string;
+  rotationDeg?: number;
+  /** Auxiliary view: arrow on the parent view, sheet mm. */
+  arrow?: { tip: Point; tail: Point; direction: Point; letterPosition: Point };
 }
 export interface LocalSectionInfo {
   points: Point[];
@@ -204,17 +224,27 @@ export interface SheetInfo {
   computedScale?: ScaleInfo;
   /** Title block as printed: fields from the model where the sheet leaves them empty. */
   titleShown?: { designation: string; name: string; material: string; mass: string; scale: string; sheet: number; sheets: number };
+  /** ISO 7200 title block as printed (sheet style iso7200). */
+  isoTitleShown?: {
+    legalOwner: string; identification: string; title: string; documentType: string; documentStatus: string;
+    revision: string; issueDate: string; sheet: number; sheets: number; language: string; creator: string;
+    approver: string; department: string; scale: string; projectionSymbol: ProjectionMethod;
+  };
 }
 export type TextFont = 'gost2304' | 'truetype';
 
 export interface DrawingSettingsChanges {
   textFont?: TextFont;
+  /** Projected views move to the opposite side of their parent; each keeps its content. */
+  projection?: ProjectionMethod;
+  sheetStyle?: SheetStyle;
   dissolvedAssemblies?: string[];
 }
 
 export interface DrawingDescription {
   model: { kind: 'part' | 'assembly'; path: string; resultHash: string; revision: number; properties: ModelProperties };
-  projection: 'firstAngle' | 'thirdAngle';
+  projection: ProjectionMethod;
+  sheetStyle: SheetStyle;
   /** Text font of the sheets: single-stroke GOST 2.304 type B or the TrueType font of setFont. */
   textFont: TextFont;
   /** Sub-assemblies listed by their parts in the specification and positions (assembly only). */
@@ -321,6 +351,9 @@ export interface ViewSpec {
   detailCenter?: Point;
   detailRadius?: number;
   stepPoints?: [number, number, number][];
+  /** auxiliary: arrow direction on the parent view, degrees from its x axis (or toward). */
+  arrowAngle?: number;
+  rotated?: boolean;
   scale?: ScaleRatio | null;
   position?: Point | null;
   hidden?: boolean;
@@ -377,7 +410,7 @@ export class DrawingHandle {
   addView(sheet: string, spec: ViewSpec): string;
   removeView(sheet: string, view: string): string[];
   moveView(sheet: string, view: string, x: number, y: number): EditResult & { moved: string; group: boolean };
-  setView(sheet: string, view: string, changes: Partial<Pick<ViewSpec, 'scale' | 'position' | 'hidden' | 'centerLines' | 'autoBalloons' | 'detailRadius' | 'balloonLine' | 'bearings' | 'bearingSymbol'>>): EditResult;
+  setView(sheet: string, view: string, changes: Partial<Pick<ViewSpec, 'scale' | 'position' | 'hidden' | 'centerLines' | 'autoBalloons' | 'detailRadius' | 'balloonLine' | 'bearings' | 'bearingSymbol' | 'rotated'>>): EditResult;
   addDimension(sheet: string, view: string, picks: number[], options?: { id?: string; offset?: number; tolerance?: string; leaderAngle?: number }): string;
   setDimension(sheet: string, id: string, changes: { offset?: number; textShift?: number; decimals?: number; tolerance?: string | null; toleranceDisplay?: DimensionInfo['toleranceDisplay']; textOverride?: string | null; prefix?: string; suffix?: string }): EditResult;
   addRoughness(sheet: string, view: string, pick: number, spec?: RoughnessSpec & { id?: string; at?: number }): string;

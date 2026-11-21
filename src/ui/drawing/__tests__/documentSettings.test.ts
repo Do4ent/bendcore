@@ -3,7 +3,17 @@
  */
 // Text font and dissolved sub-assemblies of the drawing editor (docs/ui/DRAWING_UI.md).
 import type { SpecificationTable } from '../../../wasm/bendcore_drawing_api.mjs';
-import { componentKey, isTextFont, subassemblyRows, toggleDissolved } from '../documentSettings';
+import {
+  PROJECTION_METHODS,
+  SHEET_STYLES,
+  auxiliaryParent,
+  componentKey,
+  isProjectionMethod,
+  isSheetStyle,
+  isTextFont,
+  subassemblyRows,
+  toggleDissolved,
+} from '../documentSettings';
 import { en, ru } from '../../app/i18n';
 
 const item = (position: number, designation: string, name: string) => ({ format: 'А4', zone: '', position, designation, name, quantity: 1, note: '' });
@@ -64,5 +74,39 @@ describe('dissolved sub-assemblies', () => {
     expect(toggleDissolved(['ВТ.03.200', 'ВТ.03.100'], 'Б', true)).toEqual(['Б', 'ВТ.03.100', 'ВТ.03.200'].sort());
     expect(toggleDissolved(['ВТ.03.100', 'ВТ.03.200'], 'ВТ.03.100', false)).toEqual(['ВТ.03.200']);
     expect(toggleDissolved([], 'ВТ.03.100', false)).toEqual([]);
+  });
+});
+
+describe('sheet style and projection method', () => {
+  test('only the values of the kernel are accepted, with captions in both languages', () => {
+    expect(SHEET_STYLES).toEqual(['eskd', 'iso7200']);
+    expect(PROJECTION_METHODS).toEqual(['firstAngle', 'thirdAngle']);
+    expect(isSheetStyle('iso7200')).toBe(true);
+    expect(isSheetStyle('ansi')).toBe(false);
+    expect(isProjectionMethod('thirdAngle')).toBe(true);
+    expect(isProjectionMethod('third')).toBe(false);
+    for (const s of SHEET_STYLES) {
+      expect(ru[`drawing.sheetStyle.${s}`]).toBeTruthy();
+      expect(en[`drawing.sheetStyle.${s}`]).toBeTruthy();
+    }
+    for (const m of PROJECTION_METHODS) {
+      expect(ru[`drawing.projection.${m}`]).toBeTruthy();
+      expect(en[`drawing.projection.${m}`]).toBeTruthy();
+    }
+    expect(ru['drawing.projection.thirdAngle']).toMatch(/\(A\)/);
+    expect(ru['drawing.viewRotatedLabel']).toBe('{letter} (повернуто)');
+  });
+  test('the auxiliary view goes on the selected orthogonal view, else on the base view', () => {
+    const views = [
+      { id: 'V1', kind: 'base' as const },
+      { id: 'V2', kind: 'projected' as const },
+      { id: 'V3', kind: 'axonometric' as const },
+      { id: 'V4', kind: 'detail' as const },
+    ];
+    expect(auxiliaryParent(views, 'V2')).toBe('V2');
+    expect(auxiliaryParent(views, 'V3')).toBe('V1');
+    expect(auxiliaryParent(views, 'V4')).toBe('V1');
+    expect(auxiliaryParent(views, null)).toBe('V1');
+    expect(auxiliaryParent([], null)).toBeNull();
   });
 });
