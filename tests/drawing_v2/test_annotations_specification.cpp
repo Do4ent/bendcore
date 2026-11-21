@@ -3,6 +3,8 @@
 // перечень ISO 7573; синхронизация позиций с выносками.
 
 #include <bendcore/drawing_v2/specification.hpp>
+#include <bendcore/modeling/part_document.hpp>
+#include <bendcore/modeling/part_features.hpp>
 
 #include <BRepPrimAPI_MakeBox.hxx>
 
@@ -223,4 +225,58 @@ TEST(AnnotationsSpecification, PartsListAndBalloons) {
     EXPECT_EQ(balloons[2].text, "5");
     std::vector<Balloon> bad = {{g.gasket, {0, 0}, {1, 1}, ""}};
     EXPECT_FALSE(synchronizeBalloons(bad, spec).ok());
+}
+
+// Исполнения детали (таблица параметров документа детали) — отдельные строки раздела «Детали»
+// с обозначениями исполнений, по возрастанию обозначений, со своими количествами.
+TEST(Specification, PartConfigurationsAreSeparateRows) {
+    namespace md = bendcore::modeling;
+    md::PartDocument part(md::partRegistry());
+    ASSERT_TRUE(part.setVariable("W", "60").ok());
+    ASSERT_TRUE(part.addFeature({"Box", "Body", "", {{"length", "W"}, {"width", "40"}, {"height", "20"}}, {}, {}, false}).ok());
+    md::ConfigurationTable t;
+    t.columns = {{md::ConfigurationColumnKind::Variable, "W"}, {md::ConfigurationColumnKind::Material, ""}};
+    t.rows = {{"РЦ.080.00.010", "Планка", {"60", "steel_s235"}},
+              {"-01", "Планка", {"80", "steel_s235"}},
+              {"-02", "Планка короткая", {"40", ""}}};
+    t.active = "РЦ.080.00.010";
+    ASSERT_TRUE(part.setConfigurationTable(t).ok());
+    part.rebuild();
+    const std::string text = part.toJson().value();
+    // Источник в памяти: «plank.json#<исполнение>».
+    const asm2::PartResolver resolver = [&](const std::string& source) -> bendcore::kernel::Result<asm2::PartData> {
+        const auto [path, configuration] = asm2::splitConfigurationSource(source);
+        if (path != "plank.json") return bendcore::kernel::Error{bendcore::kernel::ErrorCode::IoError, "no " + path};
+        auto doc = md::PartDocument::fromJson(text, md::partRegistry());
+        if (!doc) return doc.error();
+        // Без «#» — деталь как сохранена (активное исполнение файла), как filePartResolver.
+        if (configuration.empty()) return asm2::partDataFromDocument(doc.value());
+        return asm2::partDataFromDocument(doc.value(), configuration);
+    };
+    asm2::AssemblyDocument doc("Рама");
+    ASSERT_TRUE(doc.setProperties(doc.root(), {"РЦ.080.00.000", "Рама", "", std::nullopt}).ok());
+    const auto plank = doc.addPartFromSource("Планка", "plank.json", resolver).value();
+    const auto I = asm2::Transform::identity();
+    std::vector<asm2::OccurrenceId> occ;
+    for (int i = 0; i < 5; ++i) occ.push_back(doc.addOccurrence(plank, I).value());
+    ASSERT_TRUE(doc.setOccurrenceConfiguration(occ[0], "-02", resolver).ok());
+    ASSERT_TRUE(doc.setOccurrenceConfiguration(occ[1], "-01", resolver).ok());
+    ASSERT_TRUE(doc.setOccurrenceConfiguration(occ[2], "-01", resolver).ok());
+
+    auto spec = buildSpecification(doc, {});
+    ASSERT_TRUE(spec.ok()) << spec.error().message;
+    const SpecSectionData* parts = spec.value().section(SpecSection::Parts);
+    ASSERT_NE(parts, nullptr);
+    ASSERT_EQ(parts->items.size(), 3u);
+    EXPECT_EQ(parts->items[0].designation, "РЦ.080.00.010");
+    EXPECT_EQ(parts->items[1].designation, "РЦ.080.00.010-01");
+    EXPECT_EQ(parts->items[2].designation, "РЦ.080.00.010-02");
+    EXPECT_EQ(parts->items[0].quantity, 2);
+    EXPECT_EQ(parts->items[1].quantity, 2);
+    EXPECT_EQ(parts->items[2].quantity, 1);
+    EXPECT_EQ(parts->items[2].name, "Планка короткая");
+    EXPECT_EQ(parts->items[0].position, 1);
+    EXPECT_EQ(parts->items[1].position, 2);
+    EXPECT_EQ(parts->items[2].position, 3);
+    EXPECT_EQ(spec.value().positionOf(doc.findOccurrence(occ[1])->definition), 2);
 }
