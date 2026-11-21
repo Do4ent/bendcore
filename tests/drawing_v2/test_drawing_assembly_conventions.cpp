@@ -837,7 +837,7 @@ TEST(DrawingAssemblyConventions, SectionBalloonsDoNotOverlapDimensions) {
     std::vector<LineSeg> lines = g.dimensionLines;
     lines.insert(lines.end(), g.extensionLines.begin(), g.extensionLines.end());
     an::AnnotationStyle style;
-    style.font = font;
+    style.font = d.textMetrics(font);  // шрифт листа (ГОСТ 2.304 по умолчанию)
     const auto labels = an::labelBoxes(g, style);
     ASSERT_FALSE(labels.empty());
     for (const an::Balloon& b : cs.balloons) {
@@ -867,10 +867,16 @@ TEST(DrawingAssemblyConventions, SectionBalloonsDoNotOverlapDimensions) {
         const Rect box = an::balloonShelfBox(b, {}, style);
         bool shelf = false;
         for (const auto& l : dxf.lines) {
-            if (std::abs(l.y0 - b.at.y) < 1e-6 && std::abs(l.y1 - b.at.y) < 1e-6 &&
-                std::abs(std::min(l.x0, l.x1) - box.x0) < 1e-6 && std::abs(std::max(l.x0, l.x1) - box.x1) < 1e-6)
+            // DXF — 6 знаков после запятой.
+            if (std::abs(l.y0 - b.at.y) < 1e-5 && std::abs(l.y1 - b.at.y) < 1e-5 &&
+                std::abs(std::min(l.x0, l.x1) - box.x0) < 1e-5 && std::abs(std::max(l.x0, l.x1) - box.x1) < 1e-5)
                 shelf = true;
             if (l.layer != "DIM") continue;
+            // Полки и выноски самих позиций (тот же слой) — концом в начале полки.
+            bool own = false;
+            for (const an::Balloon& o : cs.balloons)
+                for (Point2 p : {Point2{l.x0, l.y0}, Point2{l.x1, l.y1}}) own = own || std::hypot(p.x - o.at.x, p.y - o.at.y) < 1e-5;
+            if (own) continue;
             ++dimLines;
             EXPECT_FALSE(axisSegmentInRect({l.x0, l.y0}, {l.x1, l.y1}, box)) << "DXF: position " << b.text;
         }
