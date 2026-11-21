@@ -45,7 +45,13 @@ module.exports = {
     '/node_modules/',
     '/dist/',
   ],
+  // three.js >= 0.17x ships its core as an ES module (build/three.core.js): compile it to CommonJS.
+  transformIgnorePatterns: ['/node_modules/(?!three/)'],
   transform: {
+    '^.+/node_modules/three/.+\\.js$': [
+      'babel-jest',
+      { babelrc: false, configFile: false, plugins: ['@babel/plugin-transform-modules-commonjs'] },
+    ],
     // The JS API of the WASM modules (src/wasm/*_api.mjs) is ES module source: compiled to
     // CommonJS for the worker-protocol tests (src/ui/worker/__tests__).
     '^.+\\.mjs$': [

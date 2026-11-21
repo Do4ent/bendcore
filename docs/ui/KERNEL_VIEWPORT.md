@@ -138,14 +138,14 @@ message}`, исключения OCCT (`Standard_Failure`) и `std::exception` п
   соединяют соседние точки одной полилинии (`edgeBuffers.ts`). Грани рисуются с
   `polygonOffset`, чтобы рёбра были видны поверх.
 - **Выбор**: щелчок без перетаскивания (≤ 4 px) → `Raycaster.intersectObject` →
-  `faceIndex` треугольника (three.js r128 для индексированной геометрии даёт номер
+  `faceIndex` треугольника (three.js 0.187 для индексированной геометрии даёт номер
   треугольника) → `faceOfTriangle(faceSpans, t)`: двоичный поиск по `firstIndex` диапазонов,
   O(log n). Щелчок мимо модели снимает выбор.
 - **Подсветка**: у группы выбранной грани `materialIndex = 1`, без перестроения буферов.
 - **Панель «Грань»**: `shape.face(i)` — тип поверхности, площадь, ориентация, параметры
   поверхности, точка попадания. Панель «Модель»: число тел/граней/рёбер, объём (только при
   наличии тел), площадь, габарит, число треугольников.
-- **Камера**: `OrbitControls` (three/examples), Z вверх, изометрический вид по ограничивающей
+- **Камера**: `OrbitControls` (`three/addons/controls/OrbitControls.js`), Z вверх, изометрический вид по ограничивающей
   сфере сетки при открытии файла; отрисовка по событию (без постоянного цикла).
 
 ### Автоматическое вписывание
@@ -323,4 +323,12 @@ headless-режиме — через SwiftShader (`--use-angle=swiftshader`).
 - Типы three.js в проекте — собственные объявления `src/declarations.d.ts` (пакета
   `@types/three` нет); в них добавлены используемые вьюпортом члены (`addGroup`, `groups`,
   `boundingSphere`, `intersectObject`, массив материалов `Mesh`, модуль `OrbitControls`).
+- **three.js 0.187** (было 0.128). Внешний вид вьюпортов сохранён: `src/ui/legacyLook.ts`
+  выключает управление цветом (`ColorManagement.enabled = false`), ставит
+  `renderer.outputColorSpace = LinearSRGBColorSpace` (цвета палитры идут в кадр как записаны,
+  как до r152), а интенсивности `AmbientLight`/`DirectionalLight` умножает на π (физические
+  единицы без «старого» деления на π; значения 0,45 и 0,7 остались прежними). Снимки
+  `docs/ui/img/three-upgrade/before_*.png` и `after_*.png` совпадают попиксельно. `Geometry`
+  в коде не использовался (только `BufferGeometry`); `OrbitControls` — из `three/addons`.
+  Jest компилирует ES-модули `three` в CommonJS (`jest.config.js`).
 - Сквозной тест есть только для Chromium.

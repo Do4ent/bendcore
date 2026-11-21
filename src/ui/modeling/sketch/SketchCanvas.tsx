@@ -10,6 +10,7 @@
 
 import React, { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { applyLegacyOutput } from '../../legacyLook';
 import type { KernelMesh } from '../../../wasm/bendcore_kernel_api.mjs';
 import type { SketchPlacementInfo, SketchSolution, SketchSolvedCurve } from '../../../wasm/bendcore_modeling_api.mjs';
 import { packEdgePolylines } from '../../kernel/edgeBuffers';
@@ -189,6 +190,7 @@ const SketchCanvas = React.forwardRef<SketchCanvasHandle, SketchCanvasProps>((pr
     if (!host) return undefined;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
+    applyLegacyOutput(renderer);
     renderer.setClearColor(0xf8fafc, 1);
     host.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
