@@ -874,13 +874,13 @@ public:
                 {"vertex2", ElementKind::Vertex, false, true}, {"vertex3", ElementKind::Vertex, false, true}};
     }
     // method: offset / angle from a base plane, midway between two faces, through three points,
-    // tangent to a cylindrical face ("tangent": through a line, parallel to a direction or at an
-    // angle to the base plane; the base face of a tangent plane is 'face2').
+    // tangent to a cylindrical face (option "tangent": through a line, parallel to a direction or
+    // at an angle to the base plane; the base face of a tangent plane is 'face2').
     std::vector<OptionSpec> optionSpecs() const override {
         return {{"method", {"offset", "angle", "midway", "threePoints", "tangent"}},
                 {"base", {"XY", "XZ", "YZ", "face", "datum"}},
                 {"axis", {"edge", "datum", "X", "Y", "Z"}},
-                {"tangent", {"line", "parallel", "angle"}},
+                {"tangent", {"line", "direction", "angle"}},
                 {"flip", {"false", "true"}}};
     }
     std::vector<LinkSlot> linkSlots() const override {
@@ -908,7 +908,7 @@ public:
             }
             plane = planeThroughPoints(p[0], p[1], p[2]);
         } else if (method == "tangent") {
-            auto face = single(ctx, "face", "cylindrical face");
+            auto face = single(ctx, "face", "face");
             if (!face) return face.error();
             const TopoDS_Face& cylinder = TopoDS::Face(face.value());
             const std::string& how = ctx.option("tangent");
@@ -1080,7 +1080,7 @@ public:
         if (!origin) return origin.error();
         Result<gp_Ax3> cs = Error{ErrorCode::InvalidInput, "no coordinate system"};
         if (ctx.option("method") == "faceEdge") {
-            auto face = single(ctx, "face", "planar face");
+            auto face = single(ctx, "face", "face");
             if (!face) return face.error();
             auto edge = single(ctx, "edge", "edge");
             if (!edge) return edge.error();

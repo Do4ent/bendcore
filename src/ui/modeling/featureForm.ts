@@ -38,7 +38,7 @@ export function eligibleLinks(slot: LinkSlotSpec, features: readonly FeatureView
   return features.filter((f) => f.index < position && (slot.types.length === 0 || slot.types.includes(f.type)));
 }
 
-const NON_BODY = new Set(['Sketch', 'DatumPlane', 'DatumAxis']);
+const NON_BODY = new Set(['Sketch', 'DatumPlane', 'DatumAxis', 'DatumPoint', 'DatumCsys']);
 
 function defaultLink(slot: LinkSlotSpec, features: readonly FeatureView[], position: number): string {
   if (slot.optional) return '';
@@ -173,4 +173,19 @@ export function togglePick(
   const existing = current.findIndex((p) => p.ref.name === pick.ref.name && p.ref.kind === pick.ref.kind);
   if (existing >= 0) return current.filter((_, i) => i !== existing);
   return multiple ? [...current, pick] : [pick];
+}
+
+/**
+ * Slot to pick into after a pick was added to the single slot `slot`: the next empty reference
+ * slot of the same kind in catalog order (vertex 1 → 2 → 3 of a plane through three points, face →
+ * face 2 of a midway plane), else `slot` itself. A multiple slot keeps collecting.
+ */
+export function slotAfterPick(spec: FeatureTypeSpec, form: FeatureForm, slot: string): string {
+  const current = spec.references.find((r) => r.name === slot);
+  if (!current || current.multiple) return slot;
+  const at = spec.references.indexOf(current);
+  const next = spec.references
+    .slice(at + 1)
+    .find((r) => r.kind === current.kind && (form.references[r.name] ?? []).length === 0);
+  return next ? next.name : slot;
 }

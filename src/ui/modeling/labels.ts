@@ -20,6 +20,8 @@ export const TOOLBAR_TYPES = [
   'Draft',
   'DatumPlane',
   'DatumAxis',
+  'DatumPoint',
+  'DatumCsys',
 ];
 
 /**

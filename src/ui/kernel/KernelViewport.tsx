@@ -9,6 +9,10 @@
  * In edge mode a click selects the kernel edge nearest to the cursor on screen (edgePick.ts),
  * unless a face hides it; selected edges are drawn as a separate highlighted LineSegments.
  * An optional overlay mesh (sketch regions) is drawn translucent on top of the model.
+ * In vertex mode a click selects the vertex (`vertices`) nearest to the cursor on screen, unless a
+ * face hides it; the vertices are drawn as dots while the mode is on. Datum glyphs (`datums`:
+ * point markers, the three axes of a coordinate system, plane outlines, axis lines) are drawn
+ * over the model and are not pickable.
  *
  * Tools (docs/ui/KERNEL_VIEWPORT.md, "Измерения и сечение"): `clip` is a clipping plane of the
  * renderer (the section slider moves it without a kernel call; the faces and edges of the removed
@@ -39,7 +43,22 @@ export interface EdgePick {
   point: [number, number, number];
 }
 
-export type PickMode = 'face' | 'edge' | 'none';
+export interface VertexPick {
+  vertexIndex: number;
+  /** Position of the vertex, mm. */
+  point: [number, number, number];
+}
+
+export type PickMode = 'face' | 'edge' | 'vertex' | 'none';
+
+type Vec3 = [number, number, number];
+
+/** Datum geometry drawn over the model (docs/ui/PART_MODELING_UI.md, "Вспомогательная геометрия"). */
+export type DatumGlyph =
+  | { kind: 'point'; id: string; point: Vec3 }
+  | { kind: 'csys'; id: string; origin: Vec3; x: Vec3; y: Vec3; z: Vec3 }
+  | { kind: 'plane'; id: string; origin: Vec3; normal: Vec3 }
+  | { kind: 'axis'; id: string; origin: Vec3; direction: Vec3 };
 
 export interface KernelViewportHandle {
   /** Client (CSS pixel) coordinates of a model point in the current view. */
@@ -73,6 +92,13 @@ export interface KernelViewportProps {
   /** Further highlighted faces and edges (kernel indices of `mesh`). */
   selectedFaces?: readonly number[];
   selectedEdges?: readonly number[];
+  /** Vertex positions (xyz triples, index = kernel vertex index) for the vertex mode. */
+  vertices?: Float32Array | null;
+  /** Vertex mode: the picked vertex, or null when the click is not near a visible vertex. */
+  onPickVertex?: (pick: VertexPick | null) => void;
+  selectedVertices?: readonly number[];
+  /** Datum points, coordinate systems, planes and axes drawn over the model. */
+  datums?: readonly DatumGlyph[];
   /** Translucent mesh drawn over the model (e.g. sketch regions); not pickable. */
   overlay?: KernelMesh | null;
   /**
@@ -100,8 +126,13 @@ const EDGE_COLOR = 0x1d2733;
 const OVERLAY_COLOR = 0x2f7de1;
 const SECTION_COLOR = 0xd62828;
 const MEASURE_COLOR = 0x0b8a3e;
+const VERTEX_COLOR = 0x1d2733;
+const DATUM_COLOR = 0x7a3fd1;
+const AXIS_COLORS = [0xd62828, 0x2a9d38, 0x1f5fd6];
 /** Pointer distance (px) within which a click picks an edge. */
 const EDGE_TOLERANCE = 6;
+/** Pointer distance (px) within which a click picks a vertex. */
+const VERTEX_TOLERANCE = 10;
 const BACKGROUND = 0xf3f5f8;
 /** Pointer travel (px) up to which a press-release counts as a click, not an orbit drag. */
 const CLICK_TOLERANCE = 4;
@@ -118,6 +149,9 @@ interface SceneState {
   overlay: THREE.Group;
   /** section contour and measurement lines (not pickable) */
   tools: THREE.Group;
+  /** vertex dots of the vertex mode and selected vertices; datum glyphs (not pickable) */
+  marks: THREE.Group;
+  datums: THREE.Group;
   clip: THREE.Plane | null;
   /** measurement label: anchor in model coordinates, element placed over the viewport */
   label: { anchor: THREE.Vector3; element: HTMLDivElement } | null;
@@ -213,6 +247,62 @@ function placeLabel(state: SceneState | null, camera: THREE.Camera, canvas: HTML
   label.element.style.top = `${((1 - p.y) / 2) * canvas.clientHeight}px`;
 }
 
+function pointsObject(points: ArrayLike<number>, color: number, size: number, name: string): THREE.Points {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(points as ArrayLike<number>), 3));
+  const material = new THREE.PointsMaterial({ color, size, sizeAttenuation: false, depthTest: false });
+  const object = new THREE.Points(geometry, material);
+  object.renderOrder = 11;
+  object.name = name;
+  return object;
+}
+
+/**
+ * Objects of the datum glyphs; `size` is the length of a coordinate system axis (a fraction of the
+ * model size). Planes are square outlines 2·size wide, axes lines 3·size long.
+ */
+function buildDatums(datums: readonly DatumGlyph[], size: number): THREE.Object3D[] {
+  const out: THREE.Object3D[] = [];
+  const v = (a: Vec3) => new THREE.Vector3(...a);
+  const at = (o: THREE.Vector3, d: THREE.Vector3, k: number) => o.clone().addScaledVector(d, k);
+  for (const d of datums) {
+    if (d.kind === 'point') {
+      out.push(pointsObject(d.point, DATUM_COLOR, 9, `datum-point-${d.id}`));
+    } else if (d.kind === 'csys') {
+      const o = v(d.origin);
+      [d.x, d.y, d.z].forEach((axis, i) => {
+        const end = at(o, v(axis), size);
+        out.push(lineObject([o.x, o.y, o.z, end.x, end.y, end.z], AXIS_COLORS[i], `datum-csys-${d.id}-${'xyz'[i]}`));
+      });
+      out.push(pointsObject(d.origin, DATUM_COLOR, 7, `datum-csys-${d.id}-origin`));
+    } else if (d.kind === 'plane') {
+      const o = v(d.origin);
+      const n = v(d.normal).normalize();
+      const helper = Math.abs(n.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+      const u = new THREE.Vector3().crossVectors(n, helper).normalize();
+      const w = new THREE.Vector3().crossVectors(n, u);
+      const corners = [
+        [1, 1],
+        [-1, 1],
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+      ].flatMap(([a, b]) => {
+        const p = o.clone().addScaledVector(u, a * size).addScaledVector(w, b * size);
+        return [p.x, p.y, p.z];
+      });
+      out.push(lineObject(corners, DATUM_COLOR, `datum-plane-${d.id}`));
+    } else {
+      const o = v(d.origin);
+      const dir = v(d.direction).normalize();
+      const a = at(o, dir, -1.5 * size);
+      const b = at(o, dir, 1.5 * size);
+      out.push(lineObject([a.x, a.y, a.z, b.x, b.y, b.z], DATUM_COLOR, `datum-axis-${d.id}`));
+    }
+  }
+  return out;
+}
+
 function lineObject(points: ArrayLike<number>, color: number, name: string): THREE.Line {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(points as ArrayLike<number>), 3));
@@ -238,6 +328,10 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
   clip = null,
   sectionLines,
   measure = null,
+  vertices = null,
+  onPickVertex,
+  selectedVertices,
+  datums,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
@@ -246,6 +340,10 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
   onPickRef.current = onPick;
   const onPickEdgeRef = useRef(onPickEdge);
   onPickEdgeRef.current = onPickEdge;
+  const onPickVertexRef = useRef(onPickVertex);
+  onPickVertexRef.current = onPickVertex;
+  const verticesRef = useRef(vertices);
+  verticesRef.current = vertices;
   const pickModeRef = useRef(pickMode);
   pickModeRef.current = pickMode;
   meshRef.current = mesh;
@@ -276,6 +374,10 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     scene.add(overlayGroup);
     const toolsGroup = new THREE.Group();
     scene.add(toolsGroup);
+    const marksGroup = new THREE.Group();
+    scene.add(marksGroup);
+    const datumsGroup = new THREE.Group();
+    scene.add(datumsGroup);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.screenSpacePanning = true;
@@ -295,6 +397,8 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       highlight,
       overlay: overlayGroup,
       tools: toolsGroup,
+      marks: marksGroup,
+      datums: datumsGroup,
       clip: null,
       label: null,
       framed: false,
@@ -341,6 +445,33 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
         state.faces && current
           ? raycaster.intersectObject(state.faces, false).find((h) => !state.clip || state.clip.distanceToPoint(h.point) >= 0)
           : undefined;
+      if (mode === 'vertex') {
+        const points = verticesRef.current;
+        if (!points || points.length === 0) {
+          onPickVertexRef.current?.(null);
+          return;
+        }
+        const size = state.faces?.geometry.boundingSphere?.radius ?? 1;
+        const { origin, direction } = raycaster.ray;
+        // Nearest vertex on screen within the tolerance, not hidden by a face nor clipped away.
+        let best: { index: number; distance: number } | null = null;
+        for (let i = 0; i * 3 < points.length; ++i) {
+          const p = new THREE.Vector3(points[i * 3], points[i * 3 + 1], points[i * 3 + 2]);
+          if (state.clip && state.clip.distanceToPoint(p) < -size * 1e-6) continue;
+          const q = p.clone().project(camera);
+          if (!(q.z > -1 && q.z < 1)) continue;
+          const sx = rect.left + ((q.x + 1) / 2) * rect.width;
+          const sy = rect.top + ((1 - q.y) / 2) * rect.height;
+          const distance = Math.hypot(sx - e.clientX, sy - e.clientY);
+          if (distance > VERTEX_TOLERANCE || (best && distance >= best.distance)) continue;
+          const along = p.clone().sub(origin).dot(direction);
+          if (hit && along > hit.distance + size * 2e-3) continue;
+          best = { index: i, distance };
+        }
+        const k = best ? best.index * 3 : -1;
+        onPickVertexRef.current?.(best ? { vertexIndex: best.index, point: [points[k], points[k + 1], points[k + 2]] } : null);
+        return;
+      }
       if (mode === 'edge') {
         const buffers = state.edgeBuffers;
         if (!buffers || !current) {
@@ -410,6 +541,8 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       disposeModel(highlight);
       disposeModel(overlayGroup);
       disposeModel(toolsGroup);
+      disposeModel(marksGroup);
+      disposeModel(datumsGroup);
       state.label?.element.remove();
       renderer.dispose();
       container.removeChild(renderer.domElement);
@@ -484,6 +617,40 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     // faceKey and edgeKey stand for the selection arrays.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mesh, faceKey, edgeKey]);
+
+  // Vertex dots of the vertex mode and the selected vertices.
+  const vertexKey = (selectedVertices ?? []).join(',');
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    disposeModel(state.marks);
+    if (vertices && vertices.length > 0) {
+      if (pickMode === 'vertex') state.marks.add(pointsObject(vertices, VERTEX_COLOR, 5, 'kernel-vertices'));
+      const chosen = (selectedVertices ?? [])
+        .filter((i) => i * 3 + 2 < vertices.length)
+        .flatMap((i) => [vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]]);
+      if (chosen.length > 0) state.marks.add(pointsObject(chosen, SELECTED_COLOR, 10, 'kernel-selected-vertices'));
+    }
+    state.render();
+    // vertexKey stands for the selection array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vertices, pickMode, vertexKey]);
+
+  // Datum glyphs; their size follows the model (a fifth of its bounding radius, 10 mm without one).
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    disposeModel(state.datums);
+    const list = datums ?? [];
+    const radius = state.faces?.geometry.boundingSphere?.radius;
+    const size = radius && radius > 0 ? radius * 0.2 : 10;
+    for (const o of buildDatums(list, size)) state.datums.add(o);
+    const parent = state.renderer.domElement.parentElement;
+    parent?.setAttribute('data-datum-points', String(list.filter((d) => d.kind === 'point').length));
+    parent?.setAttribute('data-datum-csys', String(list.filter((d) => d.kind === 'csys').length));
+    parent?.setAttribute('data-datum-planes', String(list.filter((d) => d.kind === 'plane').length));
+    state.render();
+  }, [datums, mesh]);
 
   // Overlay (sketch regions): translucent faces and their boundary edges.
   useEffect(() => {

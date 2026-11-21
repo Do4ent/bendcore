@@ -257,7 +257,22 @@ export interface FeatureView {
   hasBody: boolean;
   sketch?: SketchData;
   sketchResult?: SketchResultInfo;
-  datum?: { planeOrigin?: Vec3; planeNormal?: Vec3; axisOrigin?: Vec3; axisDirection?: Vec3 };
+  datum?: DatumView;
+}
+
+/** Result of a datum node; a coordinate system also reports its XY plane, Z axis and origin. */
+export interface DatumView {
+  planeOrigin?: Vec3;
+  planeNormal?: Vec3;
+  axisOrigin?: Vec3;
+  axisDirection?: Vec3;
+  point?: Vec3;
+  csys?: { origin: Vec3; x: Vec3; y: Vec3; z: Vec3 };
+}
+
+/** Mesh of a part target: the kernel mesh plus vertex positions (xyz triples, index = element index). */
+export interface PartMesh extends KernelMesh {
+  vertices: Float32Array;
 }
 
 export interface FeatureSpecInput {
@@ -356,7 +371,7 @@ export class PartDocumentHandle {
   rebuild(): RebuildReport;
   makeReference(target: ShapeTarget, kind: ElementKind, index: number): TopoReference;
   element(target: ShapeTarget, kind: ElementKind, index: number): ElementRecord;
-  tessellate(target?: ShapeTarget, params?: TessellationParams): KernelMesh;
+  tessellate(target?: ShapeTarget, params?: TessellationParams): PartMesh;
   properties(target?: ShapeTarget, density?: number | null): PartProperties;
   exportFile(format: ExportFormat, options?: ExportOptions, target?: ShapeTarget): Uint8Array;
   massProperties(density: number, target?: ShapeTarget): MassProperties;

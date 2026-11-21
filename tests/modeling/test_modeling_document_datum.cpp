@@ -240,7 +240,7 @@ TEST(ModelingDocumentDatum, PlaneTangentToCylinder) {
                   {{"axis", "Line"}}, {{"face", {side}}}));
     add(doc, spec("DatumPlane", "ThroughLine2", {}, {{"method", "tangent"}, {"tangent", "line"}, {"axis", "datum"}, {"flip", "true"}},
                   {{"axis", "Line"}}, {{"face", {side}}}));
-    add(doc, spec("DatumPlane", "ParallelX", {}, {{"method", "tangent"}, {"tangent", "parallel"}, {"axis", "X"}}, {},
+    add(doc, spec("DatumPlane", "ParallelX", {}, {{"method", "tangent"}, {"tangent", "direction"}, {"axis", "X"}}, {},
                   {{"face", {side}}}));
     add(doc, spec("DatumPlane", "At30", {{"angle", "30"}}, {{"method", "tangent"}, {"tangent", "angle"}, {"base", "XZ"}}, {},
                   {{"face", {side}}}));

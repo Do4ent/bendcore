@@ -438,3 +438,80 @@ describe('tree editing', () => {
     assert.ok(catalog.find((c) => c.type === 'Sketch').hasSketch);
   });
 });
+
+// Datum nodes through the JS API (docs/modeling/PART_DOCUMENT.md, "Вспомогательная геометрия"):
+// vertex references made from the vertex positions of the tessellated result, a plane through
+// three vertices carrying a sketch, a point at an edge midpoint, a coordinate system; the datum
+// view reports the point and the axes; a change of the block follows through the references.
+describe('datum geometry', () => {
+  test('plane through three vertices, point, coordinate system', () => {
+    const doc = modeling.createDocument();
+    try {
+      setVariables(doc, { W: 40, D: 30, H: 20 });
+      doc.addFeature({
+        type: 'Sketch',
+        id: 'Profile',
+        options: { plane: 'XY' },
+        sketch: modeling.sketchTemplate({ profiles: [{ kind: 'rectangle', x: 0, y: 0, width: 'W', height: 'D' }] }),
+      });
+      doc.addFeature({ type: 'Extrude', id: 'Block', parameters: { distance: 'H' }, links: { sketch: 'Profile' } });
+      rebuildOk(doc);
+      const mesh = doc.tessellate('final', MESH);
+      assert.equal(mesh.vertices.length, 8 * 3, 'a block has 8 vertices');
+      const vertexAt = (x, y, z) => {
+        const found = [];
+        for (let i = 0; i < mesh.vertices.length / 3; ++i) {
+          const v = mesh.vertices.subarray(3 * i, 3 * i + 3);
+          if (near(v[0], x) && near(v[1], y) && near(v[2], z)) found.push(i);
+        }
+        assert.equal(found.length, 1, `vertex at ${x},${y},${z}`);
+        return doc.makeReference('final', 'vertex', found[0]);
+      };
+      // Top plane through (W, D, H), (0, D, H), (W, 0, H): normal +Z, origin at the first vertex.
+      doc.addFeature({
+        type: 'DatumPlane',
+        id: 'Top',
+        options: { method: 'threePoints' },
+        references: { vertex1: [vertexAt(40, 30, 20)], vertex2: [vertexAt(0, 30, 20)], vertex3: [vertexAt(40, 0, 20)] },
+      });
+      doc.addFeature({
+        type: 'Sketch',
+        id: 'PadSketch',
+        options: { plane: 'datum' },
+        links: { plane: 'Top' },
+        sketch: modeling.sketchTemplate({ profiles: [{ kind: 'rectangle', x: 2, y: 3, width: 12, height: 7 }] }),
+      });
+      doc.addFeature({ type: 'Extrude', id: 'Pad', parameters: { distance: 9 }, links: { sketch: 'PadSketch' } });
+      const topEdge = edgeWhere(mesh, (x, y, z) => near(y, 0) && near(z, 20), 'top edge along X');
+      doc.addFeature({
+        type: 'DatumPoint',
+        id: 'Mid',
+        options: { method: 'midpoint' },
+        references: { edge: [doc.makeReference('final', 'edge', topEdge)] },
+      });
+      doc.addFeature({ type: 'DatumCsys', id: 'Cs', options: { origin: 'datum', xDirection: 'Y', xyDirection: 'X' }, links: { point: 'Mid' } });
+      const check = (W, D, H) => {
+        rebuildOk(doc);
+        const plane = doc.feature('Top').datum;
+        assert.ok(near(plane.planeNormal[2], 1, 1e-12), `normal ${plane.planeNormal}`);
+        assert.ok(near(plane.planeOrigin[0], W) && near(plane.planeOrigin[1], D) && near(plane.planeOrigin[2], H));
+        relClose(volume(doc), W * D * H + 12 * 7 * 9, 1e-9, 'block + pad');
+        const mid = doc.feature('Mid').datum.point;
+        assert.ok(near(mid[0], W / 2) && near(mid[1], 0) && near(mid[2], H), `midpoint ${mid}`);
+        const cs = doc.feature('Cs').datum.csys;
+        assert.ok(near(cs.origin[0], W / 2) && near(cs.origin[2], H), `origin ${cs.origin}`);
+        assert.ok(near(cs.x[1], 1) && near(cs.y[0], 1) && near(cs.z[2], -1), 'X = +Y, Y = +X, Z = -Z');
+      };
+      check(40, 30, 20);
+      setVariables(doc, { W: 56, H: 15 });
+      check(56, 30, 15);
+      const catalog = modeling.catalog();
+      for (const type of ['DatumPoint', 'DatumCsys']) assert.ok(catalog.some((c) => c.type === type), `catalog has ${type}`);
+      const plane = catalog.find((c) => c.type === 'DatumPlane');
+      assert.ok(plane.options.find((o) => o.name === 'method').allowed.includes('threePoints'));
+      assert.equal(plane.references.find((r) => r.name === 'vertex1').kind, 'vertex');
+    } finally {
+      doc.dispose();
+    }
+  });
+});
