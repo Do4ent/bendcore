@@ -54,6 +54,8 @@ step "node assembly" node_test tests/wasm/assembly_document.test.mjs --module $W
 step "node exchange" node_test tests/wasm/exchange.test.mjs --module $W/wasm_kernel
 step "node drawing" node_test tests/wasm/drawing_document.test.mjs --module $W/wasm_drawing \
   --assembly-module $W/wasm_assembly
+step "node viewport tools" node_test tests/wasm/viewport_tools.test.mjs --modeling $W/wasm_modeling \
+  --kernel $W/wasm_kernel --assembly $W/wasm_assembly
 step "tsc" npx tsc --noEmit -p .
 step "jest" bash -c 'npx jest 2>&1 | grep -E "^Tests:"; exit ${PIPESTATUS[0]}'
 
