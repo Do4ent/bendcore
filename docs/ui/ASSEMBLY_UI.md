@@ -97,9 +97,10 @@ try {
 |---|---|
 | `state()` | определения (свойства, источник, число граней/рёбер), дерево вхождений (положение, фиксация, подавление, массив, `dof` и `dofShared` для верхнего уровня), сопряжения со `status` (`solved`, `redundant`, `conflicting`, `unsolved`, `broken`, `suppressed`), массивы, разнесённые виды, отчёт решения (подсистемы, избыточные и противоречивые), история |
 | `insertPart({name, format: 'part-json' \| 'step', data, placement, properties, fixed, parent, beside})` | `PartDocument::fromJson` + `partDataFromDocument` (карта имён элементов) или `kernel::readStep`; `addPart` + `addOccurrence`; `beside` — габарит детали на 20 мм правее габарита сборки по +X, низ на уровне низа сборки |
+| `insertPart({…, source, configuration})` | документ детали с таблицей параметров регистрируется как источник детали (`source`, по умолчанию `<name>.part.json`), определение получает источник `<source>` или `<source>#<configuration>` (`addPartFromSource`, свойства исполнения); повторная вставка того же источника и исполнения — то же определение |
 | `insertOccurrence({definition, …})` | ещё одно вхождение того же определения |
 | `insertSubassembly({source, …})` | `addSubassemblyFromSource`: текст файла подсборки берётся из `AssemblyKernel.registerSource(name, text)` |
-| `removeOccurrence`, `setOccurrence(id, {fixed, suppressed, name, designation, placement, color})`, `setProperties(def, {designation, name, material, density})` | правка состава |
+| `removeOccurrence`, `setOccurrence(id, {fixed, suppressed, name, designation, placement, color, configuration})`, `setProperties(def, {designation, name, material, density})` | правка состава; `configuration` — `setOccurrenceConfiguration` (исполнение документа детали, `''` — как сохранена; шаг истории «Component configuration») |
 | `addMate`, `editMate`, `removeMate`, `setMateSuppressed`, `solve()` | сопряжения: `type` — `coincident`, `concentric`, `distance`, `angle` (значение в градусах), `parallel`, `perpendicular`, `tangent` (`internal`), `rigid`; `alignment` — `closest`, `aligned`, `anti-aligned`; ссылки `{path, kind: face/edge/vertex, index \| name, use: auto/axis/point}` |
 | `dragBegin(occ, point)`, `dragMove(target)`, `dragEnd()`, `dragCancel()` | перетаскивание: рабочая копия документа решается `AssemblyDocument::drag` (мягкая цель, затем жёсткие сопряжения); `dragEnd` записывает копию одним шагом «Drag component»; во время перетаскивания правки отклоняются |
 | `addPattern({kind: linear \| circular \| feature, seed, …})`, `removePattern` | массивы компонентов (угловой шаг кругового — в градусах) |
@@ -114,7 +115,8 @@ try {
 
 `AssemblyKernel`: `fastenerCatalog()` (стандарты: `id` вида `gost-7798`, `iso-4017`, вид
 изделия, ГОСТ/ISO, соответствие, ряд размеров, статус сверки таблиц), `describeFastener(spec)`
-(обозначение, объём, масса, резьба, размеры модели), `registerSource`, `createDocument`,
+(обозначение, объём, масса, резьба, размеры модели), `registerSource`, `registerPartSource(name, text)`
+(документ детали для исполнений компонентов → `{configurations}`), `createDocument`,
 `loadDocument`, `importStep`, `info()`.
 
 **Индексы граней и рёбер** сетки определения — индексы `kernel::TopologyIndex` формы детали
@@ -168,6 +170,15 @@ try {
   (`KERNEL_VIEWPORT.md`, «Автоматическое вписывание»); перетаскивание, сопряжения и
   разнесённый вид камеру не меняют.
 - **Свойства**: имя вхождения, обозначение, наименование, материал, плотность определения.
+- **Исполнение компонента**: у детали, вставленной из документа детали с таблицей параметров,
+  в «Свойствах» — список «Исполнение»: «как в файле детали» и исполнения с полным обозначением и
+  наименованием («РЦ.080.00.010-01 — Брусок большой»). Выбор — `setOccurrence(id,
+  {configuration})`, одна запись истории (Ctrl+Z возвращает прежнее исполнение); обозначение,
+  наименование, материал и плотность компонента становятся свойствами исполнения, BOM и масса
+  считаются по нему (`docs/assembly/ASSEMBLY_DOCUMENT.md`, раздел 8.1). У экземпляра массива
+  список недоступен (исполнение задаётся у исходного компонента). Состояние определения —
+  `configuration`, `partSource`, `configurations [{designation, fullDesignation, name}]`.
+  Подписи — `assembly.props.configuration*` (RU/EN).
 - **Состояние для тестов**: `window.bendcoreAssembly.getState()` (статус, ошибка, состояние
   документа, слоты, отверстие, выбор, BOM, отчёт пересечений, разнесённый вид, отчёт решения
   во время перетаскивания, положения), `worldToClient`, `faceClientPoint(path, face)` (видимый
@@ -268,6 +279,19 @@ node tests/assembly-fixtures/make_parts.mjs --module build-wasm/wasm_modeling
 ползунке 0,5 и 1 (документ не меняется), сохранение в файл, новая сборка и открытие — те же
 сопряжения и 1 СС, два элемента одного компонента — кнопка «Добавить» недоступна.
 
+`tests/wasm/assembly_configurations.test.mjs` (2 теста): документ
+`tests/assembly-fixtures/configured_block.json` (брусок со скруглением R = 2 и отверстием r = 5,
+исполнения РЦ.080.00.010, -01, -02) вставлен, второе вхождение получает «-01»: источник
+`Брусок.part.json#-01`, обозначение, материал 6061-T6; BOM — 2 строки, объёмы и массы `V·ρ` по
+формуле, общая масса; «-02» без материала — плотность стали детали; возврат «как сохранена» —
+одно определение, количество 2; отмена; неизвестное исполнение — ошибка; сохранение и загрузка
+(`Loaded`), та же масса; вставка сразу в исполнении «-02», `registerPartSource`.
+
+`tests/e2e-assembly/configurations.spec.ts` (1 тест, ~5 с): брусок вставлен дважды (одно
+определение), второй компонент — «Свойства» → «Исполнение» «-01»: список из четырёх вариантов,
+обозначение «РЦ.080.00.010-01», плотность 2700; BOM — две строки с обозначениями исполнений и
+наименованиями, общая масса `V₀·7850 + V₁·2700`; «Отменить» — одна строка, количество 2.
+
 ## Выполнение в Web Worker (фаза 5)
 
 Страница вызывает модуль не напрямую, а через воркер (`docs/ui/APP_SHELL.md`): загрузчик
@@ -283,7 +307,10 @@ node tests/assembly-fixtures/make_parts.mjs --module build-wasm/wasm_modeling
   другом, — общее число подсистемы (отметка «*»); разложения по компонентам решатель не даёт.
 - Внешние подсборки при открытии берутся только из выбранных вместе файлов
   (`registerSource`); детали вставляются со встроенной геометрией, связи с файлами деталей
-  (`source`) страница не создаёт.
+  (`source`) страница не создаёт — кроме документа детали с таблицей параметров: он
+  регистрируется в модуле как источник (в пределах страницы; при открытии сохранённой сборки в
+  новой странице такая деталь берётся из встроенной геометрии, `MissingEmbedded`, пока документ
+  детали не вставлен заново).
 - Выбор вершин, выбор рамкой и фильтры выбора отсутствуют; перетаскивание — только вхождений
   верхнего уровня (вложенное перетаскивает свою подсборку).
 - Плоскость перетаскивания — плоскость грани или камеры; для движений, перпендикулярных
