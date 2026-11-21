@@ -726,4 +726,90 @@ describe('thread dimension', () => {
       drawing.dispose();
     }
   });
+
+  test('ISO 7200 sheet style, third-angle projection and an auxiliary view with an arrow', () => {
+    const drawing = kernel.createFromPart(partJson, { properties: PROPS });
+    try {
+      const F = drawing.addView('S1', { kind: 'base', standard: 'front' });
+      const T = drawing.addView('S1', { kind: 'projected', standard: 'top' });
+      const L = drawing.addView('S1', { kind: 'projected', standard: 'left' });
+      const at = (id) => centre(drawing.describe().sheets[0].views.find((x) => x.id === id).bounds);
+      // First angle (GOST 2.305): top view below the front view, left view right of it.
+      assert.equal(drawing.describe().projection, 'firstAngle');
+      assert.ok(at(T)[1] < at(F)[1] && at(L)[0] > at(F)[0]);
+      const topWidth = view(drawing.sheetPicture('S1'), T).bounds.maxX - view(drawing.sheetPicture('S1'), T).bounds.minX;
+      // Third angle (ISO 128-30, method A): top above, left on the left; the images stay the same.
+      const r = drawing.setSettings({ projection: 'thirdAngle' });
+      assert.ok(r.warnings.some((w) => w.includes('third-angle')), 'ESKD sheet: warning');
+      assert.equal(drawing.describe().projection, 'thirdAngle');
+      assert.ok(at(T)[1] > at(F)[1], 'top view above the front view');
+      assert.ok(at(L)[0] < at(F)[0], 'left view left of the front view');
+      assert.ok(Math.abs(at(T)[0] - at(F)[0]) < EPS);
+      const tv = view(drawing.sheetPicture('S1'), T);
+      assert.ok(Math.abs(tv.bounds.maxX - tv.bounds.minX - topWidth) < EPS);
+      assert.ok(Math.abs(tv.frame.toward[2] - 1) < EPS, 'still the view from above');
+      // ISO sheet: ISO 5457 frame, ISO 7200 title block with the third-angle symbol.
+      drawing.setSettings({ sheetStyle: 'iso7200' });
+      drawing.setSheet('S1', { title: { revision: 'B', issueDate: '2026-11-21', language: 'en', department: 'KB-3' } });
+      const desc = drawing.describe();
+      assert.equal(desc.sheetStyle, 'iso7200');
+      const iso = desc.sheets[0].isoTitleShown;
+      assert.equal(iso.identification, PROPS.designation);
+      assert.equal(iso.title, PROPS.name);
+      assert.equal(iso.documentType, 'Detail drawing');
+      assert.equal(iso.projectionSymbol, 'thirdAngle');
+      assert.equal(desc.sheets[0].title.revision, 'B');
+      const pairs = dxfPairs(new TextDecoder().decode(drawing.exportSheet('S1', 'dxf')));
+      const texts = pairs.filter(([c]) => c === 1).map(([, v]) => v.replace(/\\U\+([0-9A-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))));
+      for (const want of ['Legal owner', 'Identification number', 'Date of issue', '2026-11-21', 'KB-3', '1/1', PROPS.designation])
+        assert.ok(texts.includes(want), `DXF text ${want}`);
+      assert.ok(!texts.includes('Разраб.'), 'no GOST 2.104 title block');
+      // Symbol circles (h = 2.5: radii 1.25 and 2.5) left of the cone (third angle): x = 20 + 7.5 − 3.75.
+      const circles = [];
+      for (let i = 0; i < pairs.length; ++i) if (pairs[i][0] === 0 && pairs[i][1] === 'CIRCLE') {
+        const get = (code) => { for (let j = i + 1; j < pairs.length && pairs[j][0] !== 0; ++j) if (pairs[j][0] === code) return Number(pairs[j][1]); return NaN; };
+        circles.push([get(10), get(20), get(40)]);
+      }
+      const symbol = circles.filter(([x, y]) => y > 10 && y < 46 && x > 230);
+      assert.deepEqual(symbol.map((c) => c[2]).sort(), [1.25, 2.5]);
+      for (const [x] of symbol) assert.ok(Math.abs(x - (230 + 7.5 - 3.75)) < 1e-6, `circle x ${x}`);
+
+      // Auxiliary view: arrow at −45° on the front view (sight right-down), letter А, label А.
+      const A = drawing.addView('S1', { kind: 'auxiliary', parent: F, arrowAngle: -45 });
+      let av = drawing.describe().sheets[0].views.find((x) => x.id === A);
+      assert.equal(av.kind, 'auxiliary');
+      assert.equal(av.letter, 'А');
+      assert.equal(av.label, 'А');
+      assert.equal(av.rotationDeg, 0);
+      const k = Math.SQRT1_2;
+      assert.ok(Math.abs(av.arrow.direction[0] - k) < EPS && Math.abs(av.arrow.direction[1] + k) < EPS);
+      const fb = drawing.describe().sheets[0].views.find((x) => x.id === F).bounds;
+      assert.ok(av.arrow.tip[0] < fb.minX || av.arrow.tip[1] > fb.maxY, 'arrow outside the front view, upper left');
+      const pf = view(drawing.sheetPicture('S1'), A).frame;
+      assert.ok(Math.abs(pf.toward[0] + k) < EPS && Math.abs(pf.toward[2] - k) < EPS, 'sight (1, 0, −1)/√2');
+      // Rotated: the front view's up is up on the sheet; −45°; undo restores.
+      drawing.setView('S1', A, { rotated: true });
+      av = drawing.describe().sheets[0].views.find((x) => x.id === A);
+      assert.equal(av.rotated, true);
+      assert.ok(Math.abs(av.rotationDeg + 45) < 1e-9);
+      assert.ok(Math.abs(view(drawing.sheetPicture('S1'), A).frame.up[2] - k) < EPS);
+      drawing.undo();
+      assert.equal(drawing.describe().sheets[0].views.find((x) => x.id === A).rotationDeg, 0);
+      expectKernelError(() => drawing.setView('S1', F, { rotated: true }), 'InvalidInput', 'only an auxiliary view');
+      expectKernelError(() => drawing.addView('S1', { kind: 'auxiliary', parent: F }), 'InvalidInput', 'no direction');
+      expectKernelError(() => drawing.setSettings({ projection: 'third' }), 'InvalidInput', 'unknown method');
+      // Saved and loaded with the model: style, method, rotation flag.
+      const back = kernel.load(drawing.save(), drawing.saveModel());
+      try {
+        const d2 = back.drawing.describe();
+        assert.equal(d2.sheetStyle, 'iso7200');
+        assert.equal(d2.projection, 'thirdAngle');
+        assert.equal(d2.sheets[0].views.find((x) => x.id === A).kind, 'auxiliary');
+      } finally {
+        back.drawing.dispose();
+      }
+    } finally {
+      drawing.dispose();
+    }
+  });
 });
