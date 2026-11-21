@@ -280,6 +280,7 @@ Status AssemblyDocument::removeOccurrence(OccurrenceId id) {
                  mates_.end());
     auto& occs = definitions_[*parent].occurrences;
     occs.erase(std::remove_if(occs.begin(), occs.end(), [&](const Occurrence& x) { return x.id == id; }), occs.end());
+    pruneConfigurationColumns();
     return ok();
 }
 
@@ -528,6 +529,7 @@ Status AssemblyDocument::removeMate(MateId id) {
     auto it = std::find_if(mates_.begin(), mates_.end(), [&](const DocumentMate& m) { return m.id == id; });
     if (it == mates_.end()) return fail(ErrorCode::InvalidInput, "unknown mate " + std::to_string(id));
     mates_.erase(it);
+    pruneConfigurationColumns();
     return ok();
 }
 
@@ -548,9 +550,15 @@ Result<AssemblyDocument::SolverModel> AssemblyDocument::buildSolverModel() const
         model.occurrenceOf.push_back(o.id);
     }
     for (const DocumentMate& m : mates_) {
-        const Occurrence* oa = findOccurrence(m.spec.a.path[0]);
-        const Occurrence* ob = findOccurrence(m.spec.b.path[0]);
-        if (m.suppressed || (oa && oa->suppressed) || (ob && ob->suppressed)) {
+        // Сопряжение со ссылкой через подавленное (исключённое) вхождение на любом уровне пути
+        // отключается без ошибки.
+        auto through = [&](const OccurrencePath& path) {
+            return std::any_of(path.begin(), path.end(), [&](OccurrenceId id) {
+                const Occurrence* o = findOccurrence(id);
+                return o && o->suppressed;
+            });
+        };
+        if (m.suppressed || through(m.spec.a.path) || through(m.spec.b.path)) {
             model.suppressedMates.push_back(m.id);
             continue;
         }
@@ -808,7 +816,6 @@ Result<ReplaceReport> AssemblyDocument::setOccurrenceConfiguration(OccurrenceId 
     if (old.source.empty()) {
         return Error{ErrorCode::InvalidInput, occName(id) + " has no part document source: configurations need one"};
     }
-    if (!resolver) return Error{ErrorCode::InvalidInput, "part resolver is empty"};
     const std::string path = splitConfigurationSource(old.source).first;
     const std::string source = configurationSource(path, configuration);
     if (source == old.source) return ReplaceReport{};
@@ -817,6 +824,7 @@ Result<ReplaceReport> AssemblyDocument::setOccurrenceConfiguration(OccurrenceId 
         if (d.kind == DefinitionKind::Part && d.source == source && !d.external) target = d.id;
     }
     if (!target) {
+        if (!resolver) return Error{ErrorCode::InvalidInput, "part resolver is empty"};
         auto data = resolver(source);
         if (!data) return Error{data.error().code, "cannot load part '" + source + "': " + data.error().message};
         // Свойства детали как сохранена (определение с источником без исполнения), иначе прежние.

@@ -168,4 +168,70 @@ Result<Bom> structuredBom(const AssemblyDocument& document) {
     return bom;
 }
 
+namespace {
+
+void addRow(std::vector<ConfigurationBomRow>& rows, const BomRow& r, std::size_t column, std::size_t columns) {
+    // Одна строка на определение; определения с теми же видом, обозначением, наименованием,
+    // материалом и объёмом — одна строка (встроенная деталь в двух исполнениях внешней
+    // подсборки — разные определения одной и той же детали).
+    auto same = [&](const ConfigurationBomRow& x) {
+        if (x.definition == r.definition) return true;
+        return x.kind == r.kind && x.designation == r.designation && x.name == r.name && x.material == r.material &&
+               std::abs(x.unitVolume - r.unitVolume) <= 1e-9 * std::max(1.0, std::abs(r.unitVolume)) &&
+               x.unitMass.has_value() == r.unitMass.has_value() &&
+               (!x.unitMass || std::abs(*x.unitMass - *r.unitMass) <= 1e-12 * std::max(1.0, *r.unitMass));
+    };
+    auto it = std::find_if(rows.begin(), rows.end(), same);
+    if (it == rows.end()) {
+        ConfigurationBomRow n;
+        n.definition = r.definition;
+        n.kind = r.kind;
+        n.designation = r.designation;
+        n.name = r.name;
+        n.material = r.material;
+        n.quantities.assign(columns, 0);
+        n.unitVolume = r.unitVolume;
+        n.unitMass = r.unitMass;
+        rows.push_back(std::move(n));
+        it = rows.end() - 1;
+    }
+    it->quantities[column] += r.quantity;
+}
+
+}  // namespace
+
+Result<ConfigurationBom> configurationBom(const AssemblyDocument& document, const LoadOptions& options) {
+    AssemblyDocument work = document;
+    const AssemblyConfigurationTable table = work.configurationTable();
+    ConfigurationBom out;
+    const std::size_t n = std::max<std::size_t>(table.rows.size(), 1);
+    ActivationOptions quiet;
+    quiet.solve = false;
+    for (std::size_t i = 0; i < n; ++i) {
+        ConfigurationBomColumn col;
+        if (!table.rows.empty()) {
+            const AssemblyConfiguration& r = table.rows[i];
+            auto a = work.activateConfiguration(r.designation, options, quiet);
+            if (!a) return Error{a.error().code, "configuration '" + r.designation + "': " + a.error().message};
+            col.designation = r.designation;
+            col.fullDesignation = work.configurationFullDesignation(i);
+            col.name = r.name;
+        } else {
+            col.designation = col.fullDesignation = work.configurationProperties().designation;
+            col.name = work.configurationProperties().name;
+        }
+        auto structured = structuredBom(work);
+        if (!structured) return Error{structured.error().code, (col.designation.empty() ? std::string() : "configuration '" + col.designation + "': ") + structured.error().message};
+        auto flat = flatBom(work);
+        if (!flat) return flat.error();
+        for (const BomRow& r : structured.value().rows) addRow(out.rows, r, i, n);
+        for (const BomRow& r : flat.value().rows) addRow(out.parts, r, i, n);
+        col.totalMass = flat.value().totalMass;
+        col.totalVolume = flat.value().totalVolume;
+        col.totalParts = flat.value().totalParts;
+        out.configurations.push_back(std::move(col));
+    }
+    return out;
+}
+
 }  // namespace bendcore::assembly_v2

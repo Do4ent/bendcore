@@ -20,6 +20,7 @@ add_library(bendcore_assembly_document STATIC
   ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/interference.cpp
   ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/bom.cpp
   ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/serialization.cpp
+  ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/configurations.cpp
   ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/history.cpp)
 target_compile_features(bendcore_assembly_document PUBLIC cxx_std_20)
 target_include_directories(bendcore_assembly_document PUBLIC "${BENDCORE_ASSEMBLY_DOC_ROOT}/include")
@@ -36,7 +37,7 @@ if(NOT GTest_FOUND)
   return()
 endif()
 
-foreach(_t mates patterns interference bom exchange io history configurations)
+foreach(_t mates patterns interference bom exchange io history configurations assembly_configurations)
   add_executable(test_assembly_document_${_t}
     ${BENDCORE_ASSEMBLY_DOC_ROOT}/tests/assembly_v2/test_assembly_document_${_t}.cpp)
   target_link_libraries(test_assembly_document_${_t} PRIVATE bendcore_assembly_document GTest::gtest GTest::gtest_main)

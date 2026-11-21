@@ -424,8 +424,11 @@ LoadOptions nestedOptions(const LoadOptions& outer, const std::string& dir) {
     return o;
 }
 
-Result<LoadedAssembly> loadExternal(const std::string& source, const LoadOptions& options) {
+// Документ внешней подсборки по источнику «<путь>[#<исполнение>]»: с исполнением — оно
+// активируется в загруженном документе (подстановка и решение его сопряжений).
+Result<LoadedAssembly> loadExternal(const std::string& sourceWithConfiguration, const LoadOptions& options) {
     if (!options.assemblies) return Error{ErrorCode::InvalidInput, "no reader for subassembly documents"};
+    const auto [source, configuration] = splitConfigurationSource(sourceWithConfiguration);
     const std::string key = joinSource(g_loadPrefix, source);
     if (std::find(g_loadStack.begin(), g_loadStack.end(), key) != g_loadStack.end()) {
         std::string chain;
@@ -438,9 +441,22 @@ Result<LoadedAssembly> loadExternal(const std::string& source, const LoadOptions
     g_loadStack.push_back(key);
     g_loadPrefix = directoryOf(key);
     auto loaded = AssemblyDocument::fromJson(text.value(), nestedOptions(options, directoryOf(source)));
+    if (!loaded) {
+        g_loadStack.pop_back();
+        g_loadPrefix = savedPrefix;
+        return Error{loaded.error().code, "subassembly '" + source + "': " + loaded.error().message};
+    }
+    if (!configuration.empty()) {
+        auto a = loaded.value().document.activateConfiguration(configuration, nestedOptions(options, directoryOf(source)));
+        if (!a) {
+            g_loadStack.pop_back();
+            g_loadPrefix = savedPrefix;
+            return Error{a.error().code, "subassembly '" + source + "', configuration '" + configuration +
+                                             "': " + a.error().message};
+        }
+    }
     g_loadStack.pop_back();
     g_loadPrefix = savedPrefix;
-    if (!loaded) return Error{loaded.error().code, "subassembly '" + source + "': " + loaded.error().message};
     return loaded;
 }
 
@@ -521,13 +537,62 @@ Result<DefinitionId> AssemblyDocument::addSubassemblyFromSource(std::string name
     const AssemblyDocument& sub = loaded.value().document;
     if (properties.designation.empty() && properties.name.empty() && properties.material.empty() &&
         !properties.density)
-        properties = sub.definitions_[0].properties;
+        properties = sub.configurationProperties();
     auto id = addSubassembly(name.empty() ? sub.name() : std::move(name), std::move(properties));
     if (!id) return id;
     definitions_[id.value()].source = source;
     definitions_[id.value()].color = sub.definitions_[0].color;
     if (auto m = mergeExternal(id.value(), sub, source); !m) return m.error();
     return id;
+}
+
+Result<ReplaceReport> AssemblyDocument::setOccurrenceConfiguration(OccurrenceId id, const std::string& configuration,
+                                                                 const LoadOptions& options) {
+    if (auto e = checkEditable(id); !e) return e.error();
+    const Occurrence* o = findOccurrence(id);
+    if (definitions_[o->definition].kind == DefinitionKind::Part)
+        return setOccurrenceConfiguration(id, configuration, options.parts);
+    if (o->pattern) return Error{ErrorCode::InvalidInput, "occurrence " + std::to_string(id) + " is a pattern instance; set the configuration of the seed"};
+    const Definition& old = definitions_[o->definition];
+    if (old.source.empty() || old.external)
+        return Error{ErrorCode::InvalidInput, "occurrence " + std::to_string(id) +
+                                                  " is a subassembly without a source document: configurations need one"};
+    const std::string path = splitConfigurationSource(old.source).first;
+    const std::string source = configurationSource(path, configuration);
+    if (source == old.source) return ReplaceReport{};
+    std::optional<DefinitionId> target;
+    for (const Definition& d : definitions_)
+        if (d.kind == DefinitionKind::Assembly && d.source == source && !d.external) target = d.id;
+    if (!target) {
+        auto loaded = loadExternal(source, options);
+        if (!loaded) return loaded.error();
+        const AssemblyDocument& sub = loaded.value().document;
+        // Свойства исполнения подсборки (обозначение и наименование строки её таблицы) поверх
+        // свойств прежнего определения; материал и плотность сборки — прежние.
+        PartProperties props = old.properties;
+        const PartProperties from = configuration.empty() ? sub.definitions_[0].properties : sub.configurationProperties();
+        if (!from.designation.empty()) props.designation = from.designation;
+        if (!from.name.empty()) props.name = from.name;
+        std::string name = splitConfigurationSource(old.name).first;
+        if (!configuration.empty()) name += "#" + configuration;
+        const std::optional<kernel::AssemblyColor> color = old.color;
+        auto added = addSubassembly(std::move(name), std::move(props));
+        if (!added) return added.error();
+        definitions_[added.value()].source = source;
+        definitions_[added.value()].color = color;
+        if (auto m = mergeExternal(added.value(), sub, source); !m) return m.error();
+        target = added.value();
+    }
+    // Ссылки сопряжений внутрь подсборки — на вхождения нового состава (по ID в файле).
+    for (DocumentMate& m : mates_)
+        for (GeometryRef* r : {&m.spec.a, &m.spec.b})
+            if (r->path.size() > 1 && r->path[0] == id)
+                if (auto p = remapPathInto(r->path, *target)) r->path = std::move(*p);
+    for (ComponentPattern& p : patterns_)
+        if (auto* f = std::get_if<FeaturePatternSpec>(&p.spec))
+            if (f->seedHole.path.size() > 1 && f->seedHole.path[0] == id)
+                if (auto np = remapPathInto(f->seedHole.path, *target)) f->seedHole.path = std::move(*np);
+    return replaceOccurrenceDefinition(id, *target);
 }
 
 // ---------------------------------------------------------------- сохранение
@@ -658,6 +723,25 @@ Result<std::string> AssemblyDocument::toJson(const SaveOptions& options) const {
             views.push_back({{"name", v.name}, {"steps", std::move(steps)}});
         }
         doc["explodedViews"] = std::move(views);
+
+        if (!configurations_.empty()) {
+            const AssemblyConfigurationTable table = configurationTable();
+            json cols = json::array();
+            for (const AssemblyConfigurationColumn& c : table.columns)
+                cols.push_back({{"kind", toString(c.kind)}, {"target", c.target}});
+            json rows = json::array();
+            for (const AssemblyConfiguration& r : table.rows)
+                rows.push_back({{"designation", r.designation}, {"name", r.name}, {"cells", r.cells}});
+            json placements = json::array();
+            for (const auto& [designation, poses] : configurationPlacements_) {
+                if (designation == table.active) continue;  // положения активного — в вхождениях
+                json list = json::array();
+                for (const auto& [id, t] : poses) list.push_back({{"occurrence", id}, {"placement", placementJson(t)}});
+                placements.push_back({{"configuration", designation}, {"occurrences", std::move(list)}});
+            }
+            doc["configurations"] = {{"columns", std::move(cols)}, {"rows", std::move(rows)}, {"active", table.active},
+                                     {"base", configurationBase()}, {"placements", std::move(placements)}};
+        }
         return doc.dump(options.indent);
     } catch (const Standard_Failure& e) {
         return Error{ErrorCode::OperationFailed, std::string("OCCT exception while saving: ") + e.what()};
@@ -702,6 +786,7 @@ public:
             readMates(j);
             readPatterns(j);
             readViews(j);
+            readConfigurations(j);
             finish();
             return out;
         } catch (const FormatError& e) {
@@ -1096,6 +1181,57 @@ private:
             }
             doc_->views_.push_back(std::move(view));
         }
+    }
+
+    // Таблица исполнений (v3). Состояние вхождений и сопряжений в файле — активного
+    // исполнения; base — значения без исполнения, placements — положения других исполнений.
+    void readConfigurations(const json& j) {
+        if (!j.contains("configurations")) return;
+        const json& c = j.at("configurations");
+        if (!c.is_object()) bad("configurations must be an object");
+        AssemblyConfigurationTable table;
+        for (const json& col : field(c, "columns")) {
+            AssemblyConfigurationColumn column;
+            const std::string kind = text(col, "kind");
+            const auto k = assemblyColumnKindFromString(kind);
+            if (!k) bad("configurations: unknown column kind '" + kind + "'");
+            column.kind = *k;
+            column.target = uid(field(col, "target"), "configuration column target");
+            table.columns.push_back(column);
+        }
+        for (const json& r : field(c, "rows")) {
+            AssemblyConfiguration row;
+            row.designation = text(r, "designation");
+            row.name = text(r, "name");
+            for (const json& cell : field(r, "cells")) {
+                if (!cell.is_string()) bad("configurations: cells must be strings");
+                row.cells.push_back(cell.get<std::string>());
+            }
+            table.rows.push_back(std::move(row));
+        }
+        table.active = text(c, "active");
+        if (auto s = doc_->checkConfigurationTable(table); !s) bad("configurations: " + s.error().message);
+        std::vector<std::string> base;
+        if (c.contains("base")) {
+            for (const json& cell : c.at("base")) {
+                if (!cell.is_string()) bad("configurations: base values must be strings");
+                base.push_back(cell.get<std::string>());
+            }
+            if (base.size() != table.columns.size()) bad("configurations: base has " + std::to_string(base.size()) +
+                                                         " values, the table has " + std::to_string(table.columns.size()) +
+                                                         " columns");
+        }
+        if (c.contains("placements")) {
+            for (const json& p : c.at("placements")) {
+                auto& poses = doc_->configurationPlacements_[text(p, "configuration")];
+                for (const json& o : field(p, "occurrences"))
+                    poses[uid(field(o, "occurrence"), "occurrence id")] = placementFrom(field(o, "placement"), version_);
+            }
+        }
+        doc_->configurations_ = std::move(table);
+        doc_->configurationBase_ = std::move(base);
+        // Без base (файл записан не этой программой): базовые значения — состояние в файле.
+        doc_->captureConfiguration();
     }
 
     // Перепроверка сопряжений, затронутых изменёнными/отсутствующими источниками, и отчёт.

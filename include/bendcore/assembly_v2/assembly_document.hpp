@@ -6,6 +6,7 @@
 // компонента с переносом сопряжений, массивы компонентов (линейный, круговой, по отверстиям
 // детали), импорт и экспорт STEP через bendcore_kernel_xcaf.
 
+#include <bendcore/assembly_v2/assembly_configurations.hpp>
 #include <bendcore/assembly_v2/occt_entities.hpp>
 #include <bendcore/assembly_v2/solver.hpp>
 #include <bendcore/kernel/result.hpp>
@@ -373,6 +374,27 @@ struct LoadReport {
 class AssemblyDocument;
 struct LoadedAssembly;
 
+// ---- исполнения сборки (раздел 8.2)
+
+struct ActivationOptions {
+    bool solve = true;  // решить сопряжения после смены состава
+    SolverOptions solver;
+};
+
+// Итог смены исполнения (activateConfiguration).
+struct ConfigurationActivation {
+    std::string designation;      // как в таблице; пусто — базовые значения
+    std::string fullDesignation;  // с обозначением первой строки
+    // Вхождения, исключённые в этом исполнении (подавлены), в порядке столбцов.
+    std::vector<OccurrenceId> excluded;
+    // Сопряжения, отключённые из-за исключённых компонентов (сами не подавлены): не решаются,
+    // не ошибка; вместе с вхождением, из-за которого отключены.
+    std::vector<std::pair<MateId, OccurrenceId>> disabledMates;
+    // Вхождения, сменившие исполнение детали или подсборки, с отчётом о ссылках сопряжений.
+    std::vector<std::pair<OccurrenceId, ReplaceReport>> replaced;
+    std::optional<DocumentSolveReport> solve;  // если ActivationOptions::solve
+};
+
 class AssemblyDocument {
 public:
     explicit AssemblyDocument(std::string name = "Assembly");
@@ -466,6 +488,40 @@ public:
     // деталь, нет источника, нет исполнения, исполнение не строится (с причиной).
     kernel::Result<ReplaceReport> setOccurrenceConfiguration(OccurrenceId id, const std::string& configuration,
                                                              const PartResolver& resolver);
+    // То же для детали (options.parts) и для внешней подсборки: вхождение переходит на
+    // определение-сборку с источником «<путь>#<исполнение>» (документ сборки загружается через
+    // options.assemblies, в нём активируется исполнение, сопряжения решаются, состав вставляется
+    // как при addSubassemblyFromSource). Ссылки сопряжений внутрь подсборки переносятся по ID
+    // вхождений в её файле (sourceId); пропавшее вхождение — сопряжение сломано с причиной.
+    // Ошибки InvalidInput: не деталь и не внешняя подсборка, нет исполнения, ошибки загрузки.
+    kernel::Result<ReplaceReport> setOccurrenceConfiguration(OccurrenceId id, const std::string& configuration,
+                                                             const LoadOptions& options);
+
+    // ---- исполнения сборки (таблица исполнений, раздел 8.2)
+    // Таблица с текущими значениями: ячейки активного исполнения и базовые значения
+    // синхронизированы с документом (правка вхождения или сопряжения при активном исполнении
+    // пишет непустую ячейку этого исполнения, иначе — базовое значение).
+    AssemblyConfigurationTable configurationTable() const;
+    // Базовые значения столбцов (состояние без исполнения), по одному на столбец.
+    std::vector<std::string> configurationBase() const;
+    // Новая таблица: проверка (ошибки InvalidInput: неизвестное или не редактируемое вхождение,
+    // сопряжение без значения, повтор столбца, пустое или повторённое обозначение, число ячеек,
+    // недопустимое значение ячейки, нет активного исполнения), возврат к базовым значениям,
+    // затем активация table.active. При ошибке документ не меняется.
+    Status setConfigurationTable(AssemblyConfigurationTable table, const LoadOptions& options = {},
+                                 const ActivationOptions& activation = {});
+    // Делает исполнение активным (пусто — базовые значения): подавление, исполнения
+    // компонентов, значения сопряжений; положения, которые были у этого исполнения в прошлый
+    // раз, восстанавливаются; затем решение сопряжений. При ошибке документ не меняется.
+    kernel::Result<ConfigurationActivation> activateConfiguration(const std::string& designation,
+                                                                  const LoadOptions& options = {},
+                                                                  const ActivationOptions& activation = {});
+    const std::string& activeConfiguration() const { return configurations_.active; }
+    // Свойства корня с обозначением и наименованием активного исполнения (спецификация, BOM
+    // подсборки-исполнения).
+    PartProperties configurationProperties() const;
+    // Полное обозначение строки row таблицы (с обозначением сборки, если первая строка — суффикс).
+    std::string configurationFullDesignation(std::size_t row) const;
 
     // ---- массивы
     kernel::Result<PatternId> addLinearPattern(const LinearPatternSpec& spec);
@@ -499,7 +555,8 @@ public:
     Status saveFile(const std::string& path, const SaveOptions& options = {}) const;
     static kernel::Result<LoadedAssembly> loadFile(const std::string& path,
                                                    std::shared_ptr<const modeling::FeatureRegistry> registry);
-    static constexpr int kFormatVersion = 2;
+    // v3 — таблица исполнений «configurations» (v1, v2 читаются).
+    static constexpr int kFormatVersion = 3;
 
     // ---- обмен STEP (структура, имена, цвета, положения; сопряжения в STEP не пишутся)
     kernel::Result<kernel::AssemblyDocument> toXcaf() const;
@@ -529,6 +586,16 @@ private:
     kernel::Result<BoundElement> remapSide(const GeometryRef& ref, const BoundElement& old,
                                            DefinitionId newDefinition) const;
     kernel::Result<Mate> solverMate(const DocumentMate& mate, ComponentId a, ComponentId b) const;
+    // Исполнения сборки (configurations.cpp).
+    Status checkConfigurationTable(const AssemblyConfigurationTable& table) const;
+    kernel::Result<std::string> columnValue(const AssemblyConfigurationColumn& column) const;
+    Status writeColumnValue(const AssemblyConfigurationColumn& column, const std::string& value,
+                            const LoadOptions& options, ConfigurationActivation& report);
+    void captureConfiguration();
+    void pruneConfigurationColumns();  // столбцы удалённых вхождений и сопряжений
+    kernel::Result<ConfigurationActivation> applyConfiguration(const std::string& designation, const LoadOptions& options,
+                                                               const ActivationOptions& activation);
+    std::optional<OccurrencePath> remapPathInto(const OccurrencePath& path, DefinitionId newDefinition) const;
 
     std::vector<Definition> definitions_;
     std::vector<DocumentMate> mates_;
@@ -537,6 +604,11 @@ private:
     OccurrenceId nextOccurrence_ = 1;
     MateId nextMate_ = 1;
     PatternId nextPattern_ = 1;
+    AssemblyConfigurationTable configurations_;
+    std::vector<std::string> configurationBase_;  // по столбцу configurations_
+    // Положения вхождений верхнего уровня, которые были у исполнения при уходе с него
+    // (ключ — обозначение, «» — базовые значения).
+    std::map<std::string, std::map<OccurrenceId, Transform>> configurationPlacements_;
 };
 
 // Положение ↔ TopLoc_Location. Ошибка Unsupported — масштаб или отражение.
@@ -552,5 +624,17 @@ kernel::Result<Transform> fromLocation(const TopLoc_Location& location);
 // clamp(progress − s, 0, 1); смещения шагов суммируются. Документ не меняется.
 kernel::Result<std::map<OccurrenceId, Transform>> explodedPlacements(const AssemblyDocument& document,
                                                                      const ExplodedView& view, double progress);
+
+// CSV таблицы исполнений сборки — тем же кодом, что у деталей (modeling::configurationTableToCsv,
+// configurationTableFromCsv: «;», RFC 4180, CRLF, BOM, десятичная запятая). Заголовок:
+// «designation;name;<столбцы>», столбцы — «suppress:<вхождение>», «configuration:<вхождение>»,
+// «mate:<сопряжение>» (при чтении также «подавить:», «исполнение:», «сопряжение:»); вхождение и
+// сопряжение — по имени, если оно однозначно, иначе «#<ID>». Активное исполнение в CSV не пишется.
+std::string configurationTableToCsv(const AssemblyDocument& document, const AssemblyConfigurationTable& table,
+                                    char decimal = '.', bool byteOrderMark = true);
+// Ошибки ParseError: формат CSV (с номером строки), неизвестный вид столбца (material),
+// неизвестное или неоднозначное имя вхождения/сопряжения. Значения проверяет setConfigurationTable.
+kernel::Result<AssemblyConfigurationTable> configurationTableFromCsv(const AssemblyDocument& document,
+                                                                     std::string_view csv);
 
 }  // namespace bendcore::assembly_v2
