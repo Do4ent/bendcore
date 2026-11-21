@@ -400,7 +400,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     if (!spec || !doc || panelRef.current) return;
     const position = snapshot.doc?.rollback ?? snapshot.features.length;
     const form = newFeatureForm(spec, snapshot.features, position);
-    const firstSlot = spec.references.find((r) => !r.optional && r.kind !== 'vertex');
+    const firstSlot = spec.references.find((r) => !r.optional);
     const p: PanelState = { mode: 'add', type, featureId: null, position, form, activeSlot: firstSlot?.name ?? null };
     void run((d) => d.beginTransaction(t('part.tx.add', { feature: caption(t, 'part.feature.', type) })), p).then((ok) => ok && setPanel(p));
   };
