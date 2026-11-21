@@ -7,6 +7,7 @@
 // чертёж), чтение всех записанных файлов обратно в bendcore, PDF (pdfinfo, pdftotext).
 
 #include "gearbox.hpp"
+#include "../drawing_v2/balloon_checks.hpp"
 
 #include <bendcore/assembly_v2/bom.hpp>
 #include <bendcore/assembly_v2/interference.hpp>
@@ -406,6 +407,84 @@ TEST(E2EProductGearbox, PositionsMatchSpecification) {
     }
     EXPECT_GT(dims, 0u);
     for (const auto& w : p.summary.warnings) EXPECT_EQ(w.find("overlap dimensions"), std::string::npos) << w;
+}
+
+// Раскладка позиций сборочного чертежа (ГОСТ 2.109-73): в каждой колонне и строке полок номера
+// по возрастанию (сверху вниз, слева направо), линии-выноски попарно не пересекаются и не
+// пересекают размерные и выносные линии, полки не налезают на буквы и стрелки обозначений
+// разрезов, знаки шероховатости и баз.
+TEST(E2EProductGearbox, BalloonLayoutOrderedWithoutCrossings) {
+    namespace tb = dv2::test_balloons;
+    Product& p = product();
+    const auto& cs = p.set.assembly.computedSheets()[0];
+    const auto& sd = p.set.assembly.sheets()[0];
+    std::vector<dv2::annotations::Balloon> all(cs.balloons.begin(), cs.balloons.end());
+    std::vector<std::string> viewOf(cs.balloonViews.begin(), cs.balloonViews.end());
+    ASSERT_EQ(cs.manualBalloons.size(), sd.balloons.size());
+    for (std::size_t i = 0; i < cs.manualBalloons.size(); ++i) {
+        ASSERT_TRUE(cs.manualBalloons[i].has_value());
+        all.push_back(*cs.manualBalloons[i]);
+        viewOf.push_back(sd.balloons[i].view);
+    }
+    ASSERT_EQ(all.size(), 24u);
+    const auto lines = tb::shelfLines(all, viewOf);
+    std::size_t inLines = 0;
+    for (const auto& l : lines) inLines += l.balloons.size() > 1 ? l.balloons.size() : 0;
+    EXPECT_EQ(inLines, all.size()) << "every position stands on a column or a row of shelves";
+    EXPECT_TRUE(tb::unorderedNumbers(lines).empty()) << tb::join(tb::unorderedNumbers(lines));
+    EXPECT_TRUE(tb::crossingLeaders(all).empty()) << tb::join(tb::crossingLeaders(all));
+    std::vector<dv2::LineSeg> dimLines;
+    for (const auto* list : {&cs.dimensions, &cs.threadNotes})
+        for (const auto& d : *list) {
+            if (d.state != dv2::annotations::DimensionState::Ok) continue;
+            dimLines.insert(dimLines.end(), d.geometry.dimensionLines.begin(), d.geometry.dimensionLines.end());
+            dimLines.insert(dimLines.end(), d.geometry.extensionLines.begin(), d.geometry.extensionLines.end());
+        }
+    ASSERT_FALSE(dimLines.empty());
+    EXPECT_TRUE(tb::leadersCrossingLines(all, dimLines).empty()) << tb::join(tb::leadersCrossingLines(all, dimLines));
+    // Обозначения разрезов (буквы, стрелки, штрихи) — тексты и линии слоя SYMBOLS отрисованного
+    // листа; знаки шероховатости и баз — их геометрия.
+    dv2::annotations::AnnotationStyle style;
+    style.font = p.set.assembly.textMetrics(nullptr);
+    auto drawings = p.set.assembly.render(nullptr);
+    ASSERT_TRUE(drawings.ok()) << drawings.error().message;
+    std::vector<dv2::Rect> boxes;
+    std::vector<dv2::LineSeg> marks;
+    std::size_t letters = 0;
+    for (const auto& e : drawings.value()[0].entities()) {
+        if (e.layer != "SYMBOLS") continue;
+        if (const auto* t = std::get_if<dv2::Text>(&e.geometry)) {
+            const double w = dv2::annotations::estimateTextWidth(t->utf8, t->height, style.font);
+            const double x0 = t->hAlign == dv2::HAlign::Left ? t->position.x
+                              : t->hAlign == dv2::HAlign::Center ? t->position.x - w / 2 : t->position.x - w;
+            const double y0 = t->vAlign == dv2::VAlign::Baseline ? t->position.y
+                              : t->vAlign == dv2::VAlign::Middle ? t->position.y - t->height / 2 : t->position.y - t->height;
+            boxes.push_back({x0, y0, x0 + w, y0 + t->height});
+            ++letters;
+        } else if (const auto* l = std::get_if<dv2::LineSeg>(&e.geometry)) {
+            marks.push_back(*l);
+        } else if (const auto* pl = std::get_if<dv2::Polyline>(&e.geometry)) {
+            for (std::size_t k = 0; k + 1 < pl->points.size(); ++k) marks.push_back({pl->points[k], pl->points[k + 1]});
+        }
+    }
+    EXPECT_GE(letters, 8u);  // А, Б, В, Г у стрелок и над разрезами
+    for (const auto* list : {&cs.roughness, &cs.datums})
+        for (const auto& g : *list) {
+            if (!g) continue;
+            marks.insert(marks.end(), g->lines.begin(), g->lines.end());
+            for (const auto& pl : g->polylines)
+                for (std::size_t k = 0; k + 1 < pl.points.size(); ++k) marks.push_back({pl.points[k], pl.points[k + 1]});
+        }
+    EXPECT_TRUE(tb::shelvesHitting(all, boxes, marks, style).empty()) << tb::join(tb::shelvesHitting(all, boxes, marks, style));
+    std::vector<std::string> throughLetters;
+    for (const auto& b : all)
+        for (const auto& r : boxes)
+            if (tb::segmentHitsRect(b.target, b.at, r)) {
+                throughLetters.push_back(b.text);
+                break;
+            }
+    EXPECT_TRUE(throughLetters.empty()) << tb::join(throughLetters);
+    for (const auto& w : p.summary.warnings) EXPECT_EQ(w.find("out of order"), std::string::npos) << w;
 }
 
 // Все размеры, знаки, позиции привязаны к модели; изменение длины выходного конца вала (L0:
