@@ -365,11 +365,24 @@ TEST(DrawingDocumentDimensionLayout, ChainAndBaselineGroups) {
     EXPECT_FALSE(d.moveDimension(m, "S1", "nope", {0, 0}).ok());
     ASSERT_TRUE(d.update(m, cache).ok());
     check(20);
-    // Автокомпоновка не трогает группы.
+    // Автокомпоновка: группы остаются группами — цепочка на одной линии, от базы меньший ближе,
+    // между линиями не меньше 7 мм, общий отсчёт сохранён; повторная ничего не меняет.
+    auto arranged = d.arrangeDimensions(m, "S1", "F");
+    ASSERT_TRUE(arranged.ok()) << arranged.error().message;
+    EXPECT_EQ(arranged.value().collisions, 0u);
+    EXPECT_NEAR(dims[0].def.offset, dims[1].def.offset, 1e-9);
+    for (std::size_t i = 0; i < 4; ++i) EXPECT_EQ(dims[i].def.offsetFrom.size(), 3u) << i;
+    ASSERT_TRUE(d.update(m, cache).ok());
+    {
+        const auto& c3 = d.computedSheets()[0];
+        EXPECT_NEAR(c3.dimensions[0].geometry.dimensionLines[0].a.y, c3.dimensions[1].geometry.dimensionLines[0].a.y, 1e-9);
+        const double yB1 = c3.dimensions[2].geometry.dimensionLines[0].a.y, yB2 = c3.dimensions[3].geometry.dimensionLines[0].a.y;
+        EXPECT_GE(yB1 - yB2, 7.0 - 1e-6);
+    }
     const std::vector<double> before{dims[0].def.offset, dims[1].def.offset, dims[2].def.offset, dims[3].def.offset};
     ASSERT_TRUE(d.arrangeDimensions(m, "S1", "F").ok());
-    for (std::size_t i = 0; i < 4; ++i) EXPECT_NEAR(dims[i].def.offset, before[i], 1e-12) << i;
-    EXPECT_EQ(dims[0].def.offsetFrom.size(), 3u);
+    for (std::size_t i = 0; i < 4; ++i) EXPECT_NEAR(dims[i].def.offset, before[i], 1e-9) << i;
+    ASSERT_TRUE(d.update(m, cache).ok());
     // Файл.
     auto text = d.toJson();
     ASSERT_TRUE(text.ok());

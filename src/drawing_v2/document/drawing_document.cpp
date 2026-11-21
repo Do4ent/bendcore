@@ -305,14 +305,53 @@ Result<annotations::ArrangeResult> DrawingDocument::arrangeDimensions(const Mode
     std::vector<std::size_t> items;
     std::vector<annotations::DimensionDef> defs;
     for (std::size_t i = 0; i < sd->dimensions.size(); ++i) {
-        // Размеры цепочкой и от базы уже стоят по ГОСТ 2.307 своей группой и не переставляются.
-        if (sd->dimensions[i].view != view || !sd->dimensions[i].group.empty()) continue;
+        if (sd->dimensions[i].view != view) continue;
         items.push_back(i);
         defs.push_back(sd->dimensions[i].def);
     }
     auto r = annotations::arrangeDimensions(defs, bindingR.value(), cv->sheetView, style, options);
     if (!r) return r.error();
-    for (std::size_t k = 0; k < items.size(); ++k) sd->dimensions[items[k]].def = r.value().defs[k];
+    // Размеры групп (цепочка, от базы): общий отсчёт offsetFrom возвращается, offset пересчитывается
+    // так, чтобы размерная линия осталась там, куда её поставила компоновка; звенья цепочки — на
+    // одной линии (самой дальней из поставленных), порядок линий от базы — при обновлении.
+    auto linePos = [&](const annotations::DimensionDef& def) -> std::optional<double> {
+        auto ev = annotations::evaluateDimension(def, bindingR.value(), cv->sheetView, style);
+        if (!ev || ev.value().state != DimensionState::Ok || ev.value().geometry.dimensionLines.empty()) return std::nullopt;
+        const LineSeg& l = ev.value().geometry.dimensionLines.front();
+        return def.type == annotations::DimensionType::Horizontal ? l.a.y : l.a.x;
+    };
+    std::map<std::string, std::vector<std::size_t>> groups;  // группа → индексы в items
+    for (std::size_t k = 0; k < items.size(); ++k) {
+        DimensionItem& it = sd->dimensions[items[k]];
+        annotations::DimensionDef def = r.value().defs[k];
+        if (!it.group.empty() && !it.def.offsetFrom.empty() &&
+            (def.type == annotations::DimensionType::Horizontal || def.type == annotations::DimensionType::Vertical)) {
+            const auto want = linePos(def);
+            annotations::DimensionDef g = def;
+            g.offsetFrom = it.def.offsetFrom;
+            const auto p0 = linePos(g);
+            annotations::DimensionDef g1 = g;
+            g1.offset += 1.0;
+            const auto p1 = linePos(g1);
+            if (want && p0 && p1 && std::abs(*p1 - *p0) > 1e-9) {
+                g.offset += (*want - *p0) / (*p1 - *p0);
+                def = g;
+                groups[it.group].push_back(k);
+            }
+        }
+        it.def = def;
+    }
+    for (const auto& [gid, ks] : groups) {
+        DimensionItem& head = sd->dimensions[items[ks.front()]];
+        if (head.groupMode != DimensionGroupMode::Chain) continue;
+        double far = 0.0;
+        for (std::size_t k : ks) {
+            const double o = sd->dimensions[items[k]].def.offset;
+            if (std::abs(o) > std::abs(far)) far = o;
+        }
+        for (std::size_t k : ks) sd->dimensions[items[k]].def.offset = far;
+    }
+    for (std::size_t k = 0; k < items.size(); ++k) r.value().defs[k] = sd->dimensions[items[k]].def;
     return r;
 }
 
@@ -354,7 +393,9 @@ Status DrawingDocument::moveDimension(const ModelSnapshot& model, const std::str
     for (const DimensionItem* d : members) minAbs = std::min(minAbs, std::abs(d->def.offset));
     const double sign = it->def.offset >= 0 ? 1.0 : -1.0;
     double step = delta * sign;  // приращение |offset|
-    step = std::max(step, 2.0 - minAbs);
+    // Как у одиночного размера (moveDimensionTo): линия, перешедшая бы через точки привязки на
+    // другую сторону, остаётся на прежней стороне в 2 мм.
+    if (minAbs + step <= 0.0) step = 2.0 - minAbs;
     for (DimensionItem* d : members) d->def.offset += (d->def.offset >= 0 ? 1.0 : -1.0) * step;
     it->def.textShift = moved.value().textShift;
     return okStatus();
@@ -1009,20 +1050,21 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 } else {
                     auto base = coord(pts.front());
                     if (!base) continue;
+                    // Меньший размер — на ближнюю к контуру линию: линии группы (|offset|) остаются
+                    // те же, по ним заново раздаются размеры в порядке длины.
                     std::vector<std::pair<double, std::size_t>> order;
-                    double minAbs = 1e300;
+                    std::vector<double> lines;
                     for (std::size_t di : idx) {
                         auto c = coord(sd.dimensions[di].def.anchors[1]);
                         if (!c) break;
                         order.emplace_back(std::abs(*c - *base), di);
-                        minAbs = std::min(minAbs, std::abs(sd.dimensions[di].def.offset));
+                        lines.push_back(std::abs(sd.dimensions[di].def.offset));
                     }
                     if (order.size() != idx.size()) continue;
                     std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+                    std::sort(lines.begin(), lines.end());
                     const double sign = head.def.offset >= 0 ? 1.0 : -1.0;
-                    const double spacing = std::max(head.groupSpacing, 7.0);
-                    for (std::size_t r = 0; r < order.size(); ++r)
-                        sd.dimensions[order[r].second].def.offset = sign * (minAbs + double(r) * spacing);
+                    for (std::size_t r = 0; r < order.size(); ++r) sd.dimensions[order[r].second].def.offset = sign * lines[r];
                 }
             }
         }
