@@ -238,11 +238,25 @@ struct ViewDef {
 
 // Размер на виде. Ссылки — ModelRef::persistent (имя + сигнатура); индекс вычисляется при
 // обновлении (annotations::rebindRef).
+// Размеры цепочкой и от общей базы (ГОСТ 2.307-2011): размеры группы на одной размерной линии
+// (цепочка) или с шагом groupSpacing от контура, меньшие ближе (от базы).
+enum class DimensionGroupMode { Chain, Baseline };
+
+const char* toString(DimensionGroupMode mode) noexcept;
+
 struct DimensionItem {
     std::string id;
     std::string view;
     annotations::DimensionDef def;
     std::optional<double> lastValue;  // значение при предыдущем обновлении (сохраняется в файле)
+    // Группа размеров (пусто — одиночный размер). Точки группы — def.offsetFrom (общий у всех
+    // размеров группы; у группы от базы первая — база). При каждом обновлении группа
+    // перестраивается по модели: цепочка — точки сортируются вдоль оси и размеры соседних пар
+    // получают свои точки заново (после изменения модели звенья не перекрываются), от базы —
+    // меньший размер ставится ближе к контуру, шаг groupSpacing от наименьшего |offset| группы.
+    std::string group;
+    DimensionGroupMode groupMode = DimensionGroupMode::Chain;
+    double groupSpacing = 7.0;  // от базы: между параллельными размерными линиями, мм (≥ 7)
 };
 
 // Знак шероховатости на линии вида — изображении ребра модели (ГОСТ 2.309).
@@ -482,6 +496,14 @@ public:
     Result<annotations::ArrangeResult> arrangeDimensions(const ModelSnapshot& model, const std::string& sheet,
                                                          const std::string& view,
                                                          const annotations::ArrangeOptions& options = {});
+
+    // Перенос размера мышью (annotations::moveDimensionTo): число встаёт в точку target листа.
+    // Размер группы (DimensionItem::group) переносит всю группу: цепочка — общая размерная линия
+    // (offset всех размеров), от базы — все размерные линии на ту же величину, шаг сохраняется;
+    // сдвиг вдоль линии (textShift) — только у перенесённого размера. Линии группы не переходят на
+    // другую сторону изображения (наименьший |offset| — не меньше 2 мм). model — снимок последнего
+    // обновления. Ошибка InvalidInput — документ не обновлён, нет листа или размера, размер висячий.
+    Status moveDimension(const ModelSnapshot& model, const std::string& sheet, const std::string& id, Point2 target);
 
     bool computed() const { return !computed_.empty(); }
     const std::vector<ComputedSheet>& computedSheets() const { return computed_; }

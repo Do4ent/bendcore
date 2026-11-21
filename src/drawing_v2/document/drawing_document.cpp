@@ -305,7 +305,8 @@ Result<annotations::ArrangeResult> DrawingDocument::arrangeDimensions(const Mode
     std::vector<std::size_t> items;
     std::vector<annotations::DimensionDef> defs;
     for (std::size_t i = 0; i < sd->dimensions.size(); ++i) {
-        if (sd->dimensions[i].view != view) continue;
+        // Размеры цепочкой и от базы уже стоят по ГОСТ 2.307 своей группой и не переставляются.
+        if (sd->dimensions[i].view != view || !sd->dimensions[i].group.empty()) continue;
         items.push_back(i);
         defs.push_back(sd->dimensions[i].def);
     }
@@ -313,6 +314,50 @@ Result<annotations::ArrangeResult> DrawingDocument::arrangeDimensions(const Mode
     if (!r) return r.error();
     for (std::size_t k = 0; k < items.size(); ++k) sd->dimensions[items[k]].def = r.value().defs[k];
     return r;
+}
+
+const char* toString(DimensionGroupMode mode) noexcept {
+    return mode == DimensionGroupMode::Baseline ? "baseline" : "chain";
+}
+
+Status DrawingDocument::moveDimension(const ModelSnapshot& model, const std::string& sheet, const std::string& id, Point2 target) {
+    if (!computed()) return invalid("move dimension: the drawing is not updated");
+    if (!std::isfinite(target.x) || !std::isfinite(target.y)) return invalid("move dimension: the point is not finite");
+    SheetDef* sd = findSheet(sheet);
+    const ComputedSheet* cs = nullptr;
+    for (const ComputedSheet& c : computed_)
+        if (c.id == sheet) cs = &c;
+    if (!sd || !cs) return invalid("move dimension: no sheet '" + sheet + "'");
+    auto it = std::find_if(sd->dimensions.begin(), sd->dimensions.end(), [&](const DimensionItem& d) { return d.id == id; });
+    if (it == sd->dimensions.end()) return invalid("move dimension: no dimension '" + id + "' on sheet '" + sheet + "'");
+    const ComputedView* cv = nullptr;
+    for (const ComputedView& v : cs->views)
+        if (v.id == it->view) cv = &v;
+    if (!cv) return invalid("move dimension: no view '" + it->view + "' on sheet '" + sheet + "'");
+    if (model.shape.isNull() || !model.named) return invalid("move dimension: empty model snapshot");
+    auto bindingR = model.historyNames ? ModelBinding::fromNamedShape(*model.named) : ModelBinding::fromShape(model.shape);
+    if (!bindingR) return bindingR.error();
+    annotations::AnnotationStyle style;
+    style.font = textMetrics(font_);
+    auto moved = annotations::moveDimensionTo(it->def, bindingR.value(), cv->sheetView, target, style);
+    if (!moved) return moved.error();
+    const double delta = moved.value().offset - it->def.offset;
+    if (it->group.empty()) {
+        it->def = std::move(moved).value();
+        return okStatus();
+    }
+    // Группа: все размерные линии — на ту же величину; сторона изображения не меняется.
+    std::vector<DimensionItem*> members;
+    for (DimensionItem& d : sd->dimensions)
+        if (d.group == it->group) members.push_back(&d);
+    double minAbs = 1e300;
+    for (const DimensionItem* d : members) minAbs = std::min(minAbs, std::abs(d->def.offset));
+    const double sign = it->def.offset >= 0 ? 1.0 : -1.0;
+    double step = delta * sign;  // приращение |offset|
+    step = std::max(step, 2.0 - minAbs);
+    for (DimensionItem* d : members) d->def.offset += (d->def.offset >= 0 ? 1.0 : -1.0) * step;
+    it->def.textShift = moved.value().textShift;
+    return okStatus();
 }
 
 const char* toString(ViewKind kind) noexcept {
@@ -926,7 +971,61 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             }
         }
 
-        // 5. Размеры: перепривязка ссылок к новой форме и пересчёт по виду.
+        // 5. Размеры: перепривязка ссылок к новой форме и пересчёт по виду. Группы цепочкой и
+        // от базы сначала перестраиваются по текущему положению своих точек (ГОСТ 2.307).
+        {
+            std::map<std::string, std::vector<std::size_t>> groups;
+            for (std::size_t di = 0; di < sd.dimensions.size(); ++di)
+                if (!sd.dimensions[di].group.empty()) groups[sd.dimensions[di].group].push_back(di);
+            for (const auto& [gid, idx] : groups) {
+                DimensionItem& head = sd.dimensions[idx.front()];
+                const annotations::DimensionType type = head.def.type;
+                if (type != annotations::DimensionType::Horizontal && type != annotations::DimensionType::Vertical) continue;
+                bool same = true;
+                for (std::size_t di : idx)
+                    same = same && sd.dimensions[di].view == head.view && sd.dimensions[di].def.type == type &&
+                           sd.dimensions[di].groupMode == head.groupMode && sd.dimensions[di].def.anchors.size() == 2;
+                std::vector<Anchor> pts = head.def.offsetFrom;
+                if (!same || pts.size() < 2 || !indexOf.count(head.view)) continue;
+                const ComputedView& gv = cs.views[indexOf.at(head.view)];
+                auto coord = [&](Anchor a) -> std::optional<double> {
+                    if (!annotations::rebindRef(a.ref, binding).ok) return std::nullopt;
+                    auto p = annotations::anchorPoint(a, binding, gv.sheetView.view);
+                    if (!p) return std::nullopt;
+                    return type == annotations::DimensionType::Horizontal ? p.value().x : p.value().y;
+                };
+                if (head.groupMode == DimensionGroupMode::Chain) {
+                    if (idx.size() + 1 != pts.size()) continue;  // звено удалено — пары не перестраиваются
+                    std::vector<std::pair<double, std::size_t>> order;
+                    for (std::size_t k = 0; k < pts.size(); ++k) {
+                        auto c = coord(pts[k]);
+                        if (!c) break;
+                        order.emplace_back(*c, k);
+                    }
+                    if (order.size() != pts.size()) continue;  // висячая точка — размер сообщит сам
+                    std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+                    for (std::size_t k = 0; k < idx.size(); ++k)
+                        sd.dimensions[idx[k]].def.anchors = {pts[order[k].second], pts[order[k + 1].second]};
+                } else {
+                    auto base = coord(pts.front());
+                    if (!base) continue;
+                    std::vector<std::pair<double, std::size_t>> order;
+                    double minAbs = 1e300;
+                    for (std::size_t di : idx) {
+                        auto c = coord(sd.dimensions[di].def.anchors[1]);
+                        if (!c) break;
+                        order.emplace_back(std::abs(*c - *base), di);
+                        minAbs = std::min(minAbs, std::abs(sd.dimensions[di].def.offset));
+                    }
+                    if (order.size() != idx.size()) continue;
+                    std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+                    const double sign = head.def.offset >= 0 ? 1.0 : -1.0;
+                    const double spacing = std::max(head.groupSpacing, 7.0);
+                    for (std::size_t r = 0; r < order.size(); ++r)
+                        sd.dimensions[order[r].second].def.offset = sign * (minAbs + double(r) * spacing);
+                }
+            }
+        }
         cs.dimensions.resize(sd.dimensions.size());
         for (std::size_t di = 0; di < sd.dimensions.size(); ++di) {
             DimensionItem& item = sd.dimensions[di];

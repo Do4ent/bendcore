@@ -142,6 +142,12 @@ export interface DimensionInfo {
   text?: string;
   reason?: string;
   labelPosition?: Point;
+  /** First dimension line segment on the sheet (mm). */
+  dimensionLine?: [Point, Point];
+  /** Chain / baseline group (ГОСТ 2.307) the dimension belongs to; null — a single dimension. */
+  group: string | null;
+  groupMode?: 'chain' | 'baseline';
+  groupSpacing?: number;
 }
 export interface SymbolInfo {
   id: string;

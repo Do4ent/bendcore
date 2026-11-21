@@ -1003,7 +1003,8 @@ Result<std::vector<DimensionDef>> baselineDimensions(DimensionType type, const A
         return invalid("baseline dimensions: type must be Horizontal or Vertical");
     }
     if (points.empty()) return invalid("baseline dimensions: no points");
-    if (!(spacing > 0)) return invalid("baseline dimensions: spacing must be positive");
+    // ГОСТ 2.307-2011, разд. 4: между параллельными размерными линиями — не менее 7 мм.
+    if (!(spacing >= 7.0 - 1e-9)) return invalid("baseline dimensions: spacing must be at least 7 mm (GOST 2.307)");
     auto pb = anchorPoint(base, m, v.view);
     if (!pb) return pb.error();
     const double b = type == DimensionType::Horizontal ? pb.value().x : pb.value().y;

@@ -425,6 +425,11 @@ Result<std::string> DrawingDocument::toJson() const {
                           {"suffix", def.suffix},
                           {"decimals", def.decimals},
                           {"lastValue", d.lastValue ? json(*d.lastValue) : json(nullptr)}});
+            if (!d.group.empty()) {
+                ds.back()["group"] = d.group;
+                ds.back()["groupMode"] = toString(d.groupMode);
+                if (d.groupMode == DimensionGroupMode::Baseline) ds.back()["groupSpacing"] = d.groupSpacing;
+            }
         }
         js["dimensions"] = std::move(ds);
         json rs = json::array();
@@ -626,6 +631,15 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                     def.suffix = str(jd, "suffix");
                     def.decimals = integer(jd, "decimals", 2);
                     if (jd.contains("lastValue") && !jd.at("lastValue").is_null()) di.lastValue = jd.at("lastValue").get<double>();
+                    di.group = str(jd, "group");
+                    if (!di.group.empty()) {
+                        const std::string mode = str(jd, "groupMode");
+                        if (mode == "baseline") di.groupMode = DimensionGroupMode::Baseline;
+                        else if (mode == "chain" || mode.empty()) di.groupMode = DimensionGroupMode::Chain;
+                        else fail("unknown dimension group mode '" + mode + "'");
+                        di.groupSpacing = num(jd, "groupSpacing", 7.0);
+                        if (!(di.groupSpacing >= 7.0 - 1e-9)) fail("dimension group spacing must be at least 7 mm (GOST 2.307)");
+                    }
                     s.dimensions.push_back(std::move(di));
                 }
             }

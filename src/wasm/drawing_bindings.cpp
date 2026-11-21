@@ -533,7 +533,12 @@ json describe(Session& s) {
                       {"toleranceDisplay", enumName(d.def.toleranceDisplay, kTolDisp)},
                       {"textOverride", d.def.textOverride ? json(*d.def.textOverride) : json(nullptr)},
                       {"decimals", d.def.decimals},
-                      {"lastValue", d.lastValue ? json(*d.lastValue) : json(nullptr)}};
+                      {"lastValue", d.lastValue ? json(*d.lastValue) : json(nullptr)},
+                      {"group", d.group.empty() ? json(nullptr) : json(d.group)}};
+            if (!d.group.empty()) {
+                j["groupMode"] = dd::toString(d.groupMode);
+                j["groupSpacing"] = d.groupSpacing;
+            }
             if (cs && di < cs->dimensions.size()) {
                 const an::DimensionResult& r = cs->dimensions[di];
                 j["state"] = r.state == an::DimensionState::Ok ? "ok" : "dangling";
@@ -541,6 +546,9 @@ json describe(Session& s) {
                 j["text"] = r.text;
                 j["reason"] = r.reason;
                 if (!r.geometry.labels.empty()) j["labelPosition"] = pointJson(r.geometry.labels.front().position);
+                // Размерная линия (первый отрезок) — для проверки цепочки и шага от базы.
+                if (!r.geometry.dimensionLines.empty())
+                    j["dimensionLine"] = json::array({pointJson(r.geometry.dimensionLines.front().a), pointJson(r.geometry.dimensionLines.front().b)});
             }
             dims.push_back(std::move(j));
         }
@@ -1595,11 +1603,9 @@ std::string moveDimension(std::uint32_t handle, std::string sheetId, std::string
             dd::SheetDef& sd = sheetOf(s, sheetId);
             for (auto& d : sd.dimensions) {
                 if (d.id != id) continue;
-                const dd::ComputedView& cv = computedViewOf(computedSheetOf(s, sheetId), d.view);
-                const an::ModelBinding binding = shownBinding(s);
-                an::AnnotationStyle style;
-                style.font = s.doc.textMetrics(&requireFont());
-                d.def = take(an::moveDimensionTo(d.def, binding, cv.sheetView, {x, y}, style));
+                if (!s.shown) throw InputError("drawing: the session has no model snapshot");
+                // A dimension of a chain/baseline group moves the whole group (DrawingDocument::moveDimension).
+                take(s.doc.moveDimension(*s.shown, sheetId, id, {x, y}));
                 return {{"offset", d.def.offset}, {"textShift", d.def.textShift}, {"leaderAngle", d.def.leaderAngleDeg}};
             }
             throw InputError("unknown dimension '" + id + "'");
@@ -1697,16 +1703,25 @@ std::string addDimensionGroup(std::uint32_t handle, std::string sheetId, std::st
                 defs = take(an::baselineDimensions(type, anchors.front(), rest, binding, cv.sheetView, offset,
                                                    numOr(opts, "spacing", 7.0)));
             }
+            // Group id: unused among the dimension groups of the document.
+            std::set<std::string> groups;
+            for (const dd::SheetDef& sh : s.doc.sheets())
+                for (const auto& d : sh.dimensions) groups.insert(d.group);
+            std::string group;
+            for (int i = 1; group.empty() || groups.count(group); ++i) group = "G" + std::to_string(i);
             json ids = json::array();
             for (an::DimensionDef& def : defs) {
                 dd::DimensionItem item;
                 item.id = freshId(s.doc, "D");
                 item.view = viewId;
                 item.def = std::move(def);
+                item.group = group;
+                item.groupMode = mode == "chain" ? dd::DimensionGroupMode::Chain : dd::DimensionGroupMode::Baseline;
+                item.groupSpacing = numOr(opts, "spacing", 7.0);
                 ids.push_back(item.id);
                 sd.dimensions.push_back(std::move(item));
             }
-            return {{"ids", ids}};
+            return {{"ids", ids}, {"group", group}};
         });
     });
 }

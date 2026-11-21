@@ -289,3 +289,105 @@ TEST(DrawingDocumentDimensionLayout, FlangeTopViewCirclesAndHolePitch) {
     EXPECT_NEAR(values(d).at("p"), R, 1e-6);
     EXPECT_NEAR(values(d).at("v"), 2 * R * std::sin(kPi / 3), 1e-6);
 }
+
+// Размеры цепочкой и от базы как группа документа (ГОСТ 2.307): цепочка — одна размерная линия,
+// звенья — соседние точки (перестраиваются при обновлении, даже если пары перепутаны); от базы —
+// меньший размер ближе к контуру, шаг 7 мм; изменение модели (T: 8 → 20) меняет значения, группа
+// остаётся на месте; перенос одного размера переносит группу; группа сохраняется в файле и не
+// переставляется автокомпоновкой; шаг < 7 мм — ошибка.
+TEST(DrawingDocumentDimensionLayout, ChainAndBaselineGroups) {
+    auto part = makeBracket();
+    ModelSnapshot m = snapshotPart(*part, {"РД.01", "Кронштейн", "Сталь 45", 7850}).value();
+    DrawingDocument d = sheetWith({base(), top()});
+    auto v = [&](double x, double y, double z) { return anchorOn(m, ElementKind::Vertex, vertexAt(m, {x, y, z}), AnchorKind::Point); };
+    const auto p0 = v(0, -15, 0), pT = v(8, -15, 50), pA = v(60, -15, 0);
+    auto& dims = d.sheets()[0].dimensions;
+    auto add = [&](const std::string& id, DimensionType t, std::vector<annotations::Anchor> a, double off,
+                   std::vector<annotations::Anchor> pts, const std::string& group, DimensionGroupMode mode) {
+        DimensionItem it = dimension(id, "F", t, std::move(a), off);
+        it.def.offsetFrom = std::move(pts);
+        it.group = group;
+        it.groupMode = mode;
+        dims.push_back(std::move(it));
+    };
+    // Цепочка с перепутанными звеньями (как после изменения порядка точек в модели).
+    add("C1", DimensionType::Horizontal, {p0, pA}, -10, {p0, pT, pA}, "G1", DimensionGroupMode::Chain);
+    add("C2", DimensionType::Horizontal, {pA, pT}, -10, {p0, pT, pA}, "G1", DimensionGroupMode::Chain);
+    // От базы x = 0 над изображением; длинный размер ближе к контуру — неверно, будет переставлен.
+    add("B1", DimensionType::Horizontal, {p0, pA}, 10, {p0, pT, pA}, "G2", DimensionGroupMode::Baseline);
+    add("B2", DimensionType::Horizontal, {p0, pT}, 17, {p0, pT, pA}, "G2", DimensionGroupMode::Baseline);
+    dims.push_back(dimension("H", "F", DimensionType::Vertical, {p0, v(0, -15, 50)}, 10));
+    vw::ViewCache cache(8, 1);
+    auto rep = d.update(m, cache);
+    ASSERT_TRUE(rep.ok()) << rep.error().message;
+    auto check = [&](double T) {
+        const auto& cs = d.computedSheets()[0];
+        auto val = values(d);
+        EXPECT_NEAR(val.at("C1"), T, 1e-6);
+        EXPECT_NEAR(val.at("C2"), 60 - T, 1e-6);
+        EXPECT_NEAR(val.at("B1"), 60, 1e-6);
+        EXPECT_NEAR(val.at("B2"), T, 1e-6);
+        // Цепочка — одна прямая: размерные линии на одной высоте, звенья стыкуются.
+        const auto& l1 = cs.dimensions[0].geometry.dimensionLines[0];
+        const auto& l2 = cs.dimensions[1].geometry.dimensionLines[0];
+        EXPECT_NEAR(l1.a.y, l2.a.y, 1e-9);
+        EXPECT_NEAR(std::max(l1.a.x, l1.b.x), std::min(l2.a.x, l2.b.x), 1e-6);
+        // От базы: меньший (B2) ближе к изображению на 7 мм.
+        const double yB1 = cs.dimensions[2].geometry.dimensionLines[0].a.y, yB2 = cs.dimensions[3].geometry.dimensionLines[0].a.y;
+        EXPECT_NEAR(yB1 - yB2, 7.0, 1e-6);
+        EXPECT_GT(yB2, cs.views[0].sheetView.sheetBounds().maxY);
+    };
+    check(8);
+    EXPECT_NEAR(dims[2].def.offset, 17, 1e-12);
+    EXPECT_NEAR(dims[3].def.offset, 10, 1e-12);
+    // Модель: T = 20 — значения новые, группа на месте.
+    setVariable(*part, "T", 20);
+    ASSERT_TRUE(part->rebuild().failed.empty());
+    m = snapshotPart(*part, {"РД.01", "Кронштейн", "Сталь 45", 7850}).value();
+    rep = d.update(m, cache);
+    ASSERT_TRUE(rep.ok()) << rep.error().message;
+    EXPECT_TRUE(rep.value().dangling.empty()) << rep.value().dangling.front();
+    check(20);
+    // Перенос размера цепочки: вся цепочка на новой линии.
+    const Point2 lp = d.computedSheets()[0].dimensions[1].geometry.labels[0].position;
+    ASSERT_TRUE(d.moveDimension(m, "S1", "C2", {lp.x, lp.y - 5}).ok());
+    EXPECT_NEAR(dims[0].def.offset, dims[1].def.offset, 1e-9);
+    EXPECT_LT(dims[0].def.offset, -12);
+    // Перенос размера от базы: обе линии, шаг сохраняется.
+    const Point2 lb = d.computedSheets()[0].dimensions[3].geometry.labels[0].position;
+    ASSERT_TRUE(d.moveDimension(m, "S1", "B2", {lb.x, lb.y + 4}).ok());
+    EXPECT_NEAR(dims[2].def.offset - dims[3].def.offset, 7.0, 1e-9);
+    EXPECT_GT(dims[3].def.offset, 12);
+    // Не переходит на другую сторону изображения.
+    ASSERT_TRUE(d.moveDimension(m, "S1", "B2", {lb.x, lb.y - 200}).ok());
+    EXPECT_GE(dims[3].def.offset, 2.0 - 1e-9);
+    EXPECT_NEAR(dims[2].def.offset - dims[3].def.offset, 7.0, 1e-9);
+    EXPECT_FALSE(d.moveDimension(m, "S1", "nope", {0, 0}).ok());
+    ASSERT_TRUE(d.update(m, cache).ok());
+    check(20);
+    // Автокомпоновка не трогает группы.
+    const std::vector<double> before{dims[0].def.offset, dims[1].def.offset, dims[2].def.offset, dims[3].def.offset};
+    ASSERT_TRUE(d.arrangeDimensions(m, "S1", "F").ok());
+    for (std::size_t i = 0; i < 4; ++i) EXPECT_NEAR(dims[i].def.offset, before[i], 1e-12) << i;
+    EXPECT_EQ(dims[0].def.offsetFrom.size(), 3u);
+    // Файл.
+    auto text = d.toJson();
+    ASSERT_TRUE(text.ok());
+    EXPECT_NE(text.value().find("\"groupMode\": \"baseline\""), std::string::npos);
+    auto back = DrawingDocument::fromJson(text.value());
+    ASSERT_TRUE(back.ok()) << back.error().message;
+    EXPECT_EQ(back.value().sheets()[0].dimensions[2].group, "G2");
+    EXPECT_EQ(back.value().sheets()[0].dimensions[2].groupMode, DimensionGroupMode::Baseline);
+    EXPECT_EQ(back.value().toJson().value(), text.value());
+    std::string bad = text.value();
+    const std::size_t at = bad.find("\"groupSpacing\": 7");
+    ASSERT_NE(at, std::string::npos);
+    bad.replace(at, 17, "\"groupSpacing\": 5");
+    EXPECT_FALSE(DrawingDocument::fromJson(bad).ok());
+    // Шаг от базы меньше 7 мм — ошибка ядра.
+    const auto& fv = d.computedSheets()[0].views[0];
+    auto binding = annotations::ModelBinding::fromNamedShape(*m.named);
+    ASSERT_TRUE(binding.ok());
+    EXPECT_FALSE(annotations::baselineDimensions(DimensionType::Horizontal, p0, {pT}, binding.value(), fv.sheetView, 10, 5).ok());
+    EXPECT_TRUE(annotations::baselineDimensions(DimensionType::Horizontal, p0, {pT}, binding.value(), fv.sheetView, 10, 7).ok());
+}
