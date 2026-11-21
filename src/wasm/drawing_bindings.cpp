@@ -386,7 +386,7 @@ json updateReportJson(const dd::UpdateReport& r) {
         for (const auto& [def, view] : b.movedTo) moved.push_back({{"definition", def}, {"view", view}});
         balloons.push_back({{"sheet", b.sheet}, {"view", b.view}, {"placed", placed}, {"withoutBalloon", b.withoutBalloon},
                             {"movedTo", moved}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings},
-                            {"shelfHits", b.shelfHits}});
+                            {"shelfHits", b.shelfHits}, {"lineCount", b.lineCount}, {"outOfOrder", b.outOfOrder}});
     }
     return {{"modelChanged", r.modelChanged}, {"previousHash", r.previousHash}, {"currentHash", r.currentHash},
             {"revision", r.revision},         {"viewsComputed", r.viewsComputed}, {"viewsFromCache", r.viewsFromCache},
@@ -1641,7 +1641,7 @@ std::string arrangeBalloons(std::uint32_t handle, std::string sheetId, std::stri
         for (const dd::BalloonReport& b : s.lastReport.balloons) {
             if (b.sheet != sheetId || (!viewId.empty() && b.view != viewId)) continue;
             views.push_back({{"view", b.view}, {"line", an::toString(b.line)}, {"ordered", b.ordered}, {"crossings", b.crossings},
-                             {"shelfHits", b.shelfHits}});
+                             {"shelfHits", b.shelfHits}, {"lineCount", b.lineCount}, {"outOfOrder", b.outOfOrder}});
         }
         out["views"] = views;
         return out;

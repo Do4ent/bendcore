@@ -6,6 +6,7 @@
 // Эталоны — размеры деталей и положения в сборке (аналитика), а не результат кода.
 
 #include "test_drawing_document_support.hpp"
+#include "balloon_checks.hpp"
 
 #include <bendcore/drawing_v2/balloon_layout.hpp>
 #include <bendcore/drawing_v2/bearings.hpp>
@@ -297,22 +298,21 @@ TEST(DrawingAssemblyConventions, BearingsInAssemblySection) {
     EXPECT_EQ(cs.balloons.size(), 4u);
     EXPECT_EQ(byView["F"].size(), 2u);
     EXPECT_EQ(byView["A"].size(), 2u);
-    // Выноски не пересекаются. На F номера сверху вниз; на А–А подшипники один над другим на одной
-    // вертикали: позиция 3 (нижний) над 4 без пересечения невозможна — порядок уступает.
-    std::map<std::string, bool> ordered;
+    // Выноски не пересекаются, номера на каждой линии полок по порядку. На А–А подшипники один над
+    // другим: позиция 3 (нижний) над 4 на одной колонне без пересечения невозможна — позиции
+    // разносятся на разные стороны вида (ГОСТ 2.109: порядок уступает, только если иначе никак).
     for (const BalloonReport& br : rep.value().balloons) {
         EXPECT_EQ(br.crossings, 0u) << br.view;
-        ordered[br.view] = br.ordered;
+        EXPECT_TRUE(br.ordered) << br.view;
+        EXPECT_TRUE(br.outOfOrder.empty()) << br.view;
     }
-    EXPECT_TRUE(ordered["F"]);
     for (auto& [v, list] : byView) {
         EXPECT_EQ(an::leaderCrossings(list), 0u) << v;
-        std::sort(list.begin(), list.end(), [](const auto& x, const auto& y) { return std::stoi(x.text) < std::stoi(y.text); });
-        for (std::size_t i = 1; i < list.size(); ++i) {
-            EXPECT_NEAR(list[i].at.x, list[0].at.x, 1e-9) << v;  // одна вертикаль
-            EXPECT_GE(std::abs(list[i - 1].at.y - list[i].at.y), 10.0 - 1e-9) << v;
-            if (ordered[v]) EXPECT_GT(list[i - 1].at.y, list[i].at.y) << v;  // номера сверху вниз
-        }
+        const auto lines = bendcore::drawing_v2::test_balloons::shelfLines(list, std::vector<std::string>(list.size(), v));
+        EXPECT_TRUE(bendcore::drawing_v2::test_balloons::unorderedNumbers(lines).empty()) << v;
+        for (const auto& l : lines)
+            for (std::size_t i = 1; i < l.balloons.size(); ++i)
+                if (l.column) EXPECT_GE(l.balloons[i - 1]->at.y - l.balloons[i]->at.y, 10.0 - 1e-9) << v;
     }
 
     // DXF: контур подшипников на слое VISIBLE, диагонали на THIN, штриховки внутри контура нет.
@@ -959,4 +959,103 @@ TEST(DrawingAssemblyConventions, MovedAutomaticBalloonShelf) {
     ASSERT_TRUE(d.setAutoBalloon("S1", "F", shaft, Point2{60, 300}).ok());
     ASSERT_TRUE(d.setAutoBalloon("S1", "F", shaft, std::nullopt).ok());
     EXPECT_TRUE(d.sheets()[0].views[0].balloonShelves.empty());
+}
+
+// Сборка из 12 позиций (ГОСТ 2.109): детали — клетки 4 × 3 на виде, номера не совпадают с
+// положением, у каждой детали 5 допустимых точек выноски. Справа между видом и полками — размер
+// (размерная линия, выносные, надпись), рядом буква и стрелка обозначения разреза. Раскладка:
+// в каждой колонне и строке номера по возрастанию, выноски попарно не пересекаются (геометрическая
+// проверка отрезков), не пересекают размерные и выносные линии, полки не налезают на букву и
+// стрелку, выноски не проходят через букву.
+TEST(DrawingAssemblyConventions, BalloonLayoutTwelvePositionsOrderedWithoutCrossings) {
+    namespace tb = bendcore::drawing_v2::test_balloons;
+    an::BalloonArrangeOptions o;
+    o.view = {0, 0, 200, 99};
+    o.area = {-150, -100, 400, 220};
+    const int numbers[12] = {7, 2, 11, 4, 9, 1, 12, 5, 3, 10, 6, 8};
+    std::vector<an::BalloonCandidate> c;
+    for (int r = 0; r < 3; ++r)
+        for (int q = 0; q < 4; ++q) {
+            const double x0 = 50.0 * q, y0 = 33.0 * r, x1 = x0 + 50, y1 = y0 + 33, xc = x0 + 25, yc = y0 + 16.5;
+            const int k = r * 4 + q;
+            c.push_back({std::uint32_t(100 + k), numbers[k], {{x0 + 3, yc}, {x1 - 3, yc}, {xc, y0 + 3}, {xc, y1 - 3}, {xc + 4, yc + 2}}});
+        }
+    // Размер 60 справа: выносные от контура, размерная линия x = 210.
+    an::DimensionGeometry g;
+    g.dimensionLines.push_back({{210, 20}, {210, 80}});
+    g.extensionLines.push_back({{201, 20}, {212, 20}});
+    g.extensionLines.push_back({{201, 80}, {212, 80}});
+    an::DimensionLabel lab;
+    lab.position = {209, 50};
+    lab.text = "60";
+    lab.rotationDeg = 90;
+    lab.hAlign = HAlign::Center;
+    g.labels.push_back(lab);
+    an::addDimensionObstacles(o.obstacles, g);
+    // Обозначение разреза справа внизу: буква «Б» (7 мм) и стрелка.
+    const Rect letter{214, 2, 221, 9};
+    o.obstacles.boxes.push_back(letter);
+    o.obstacles.lines.push_back({{205, 12}, {217, 12}});
+    o.obstacles.lines.push_back({{205, 10}, {205, 14}});
+    auto r = an::arrangeBalloons(c, o);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    const auto& b = r.value().balloons;
+    ASSERT_EQ(b.size(), 12u);
+    EXPECT_TRUE(r.value().ordered) << r.value().outOfOrder.size();
+    EXPECT_EQ(r.value().crossings, 0u);
+    EXPECT_EQ(r.value().shelfHits, 0u);
+    // Независимая проверка по итоговой геометрии.
+    const std::vector<std::string> views(b.size(), "V");
+    const auto lines = tb::shelfLines(b, views);
+    EXPECT_TRUE(tb::unorderedNumbers(lines).empty()) << tb::join(tb::unorderedNumbers(lines));
+    EXPECT_TRUE(tb::crossingLeaders(b).empty()) << tb::join(tb::crossingLeaders(b));
+    std::vector<LineSeg> dims = g.dimensionLines;
+    dims.insert(dims.end(), g.extensionLines.begin(), g.extensionLines.end());
+    EXPECT_TRUE(tb::leadersCrossingLines(b, dims).empty()) << tb::join(tb::leadersCrossingLines(b, dims));
+    an::AnnotationStyle st;
+    EXPECT_TRUE(tb::shelvesHitting(b, o.obstacles.boxes, o.obstacles.lines, st).empty())
+        << tb::join(tb::shelvesHitting(b, o.obstacles.boxes, o.obstacles.lines, st));
+    for (const auto& x : b) EXPECT_FALSE(tb::segmentHitsRect(x.target, x.at, letter)) << x.text;
+    // Каждая точка выноски — одна из допустимых точек своей детали; полка вне изображения; сторона
+    // в lines — та, где стоит полка.
+    ASSERT_EQ(r.value().lines.size(), b.size());
+    for (std::size_t i = 0; i < b.size(); ++i) {
+        EXPECT_EQ(b[i].text, std::to_string(c[i].number));
+        EXPECT_NE(std::find_if(c[i].targets.begin(), c[i].targets.end(),
+                               [&](const Point2& t) { return std::hypot(t.x - b[i].target.x, t.y - b[i].target.y) < 1e-12; }),
+                  c[i].targets.end());
+        switch (r.value().lines[i]) {
+            case an::BalloonLine::Right: EXPECT_GT(b[i].at.x, o.view.x1) << b[i].text; break;
+            case an::BalloonLine::Left: EXPECT_LT(b[i].at.x, o.view.x0) << b[i].text; break;
+            case an::BalloonLine::Above: EXPECT_GT(b[i].at.y, o.view.y1) << b[i].text; break;
+            default: EXPECT_LT(b[i].at.y, o.view.y0) << b[i].text; break;
+        }
+    }
+    // Одна колонна справа (без разбиения): если порядок уступил, номера перечислены, а
+    // оставшиеся пересечения сосчитаны верно.
+    an::BalloonArrangeOptions one = o;
+    one.line = an::BalloonLine::Right;
+    one.obstacles = {};
+    auto r1 = an::arrangeBalloons(c, one);
+    ASSERT_TRUE(r1.ok());
+    EXPECT_EQ(r1.value().lineCount, 1u);
+    EXPECT_EQ(r1.value().ordered, r1.value().outOfOrder.empty());
+    EXPECT_EQ(r1.value().crossings, an::leaderCrossings(r1.value().balloons));
+    EXPECT_TRUE(tb::unorderedNumbers(tb::shelfLines(r1.value().balloons, views)).empty() == r1.value().ordered);
+    // Другие расстановки номеров по клеткам — те же требования.
+    const int others[3][12] = {{12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+                               {1, 5, 9, 2, 6, 10, 3, 7, 11, 4, 8, 12},
+                               {3, 10, 6, 1, 12, 8, 2, 9, 5, 11, 4, 7}};
+    for (const auto& perm : others) {
+        std::vector<an::BalloonCandidate> cp = c;
+        for (std::size_t i = 0; i < cp.size(); ++i) cp[i].number = perm[i];
+        auto rp = an::arrangeBalloons(cp, o);
+        ASSERT_TRUE(rp.ok());
+        const auto& bp = rp.value().balloons;
+        EXPECT_TRUE(rp.value().ordered) << perm[0];
+        EXPECT_TRUE(tb::unorderedNumbers(tb::shelfLines(bp, views)).empty()) << tb::join(tb::unorderedNumbers(tb::shelfLines(bp, views)));
+        EXPECT_TRUE(tb::crossingLeaders(bp).empty()) << tb::join(tb::crossingLeaders(bp));
+        EXPECT_TRUE(tb::leadersCrossingLines(bp, dims).empty()) << tb::join(tb::leadersCrossingLines(bp, dims));
+        EXPECT_TRUE(tb::shelvesHitting(bp, o.obstacles.boxes, o.obstacles.lines, st).empty()) << perm[0];
+    }
 }
