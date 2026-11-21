@@ -275,3 +275,127 @@ TEST(ModelingReferenceCoordinateSystem, AllKinds) {
     EXPECT_TRUE(onPlane.Direct());
     expectPnt(onPlane.Location(), gp_Pnt(4, 5, 0));
 }
+
+// Tangent planes to a cylinder R5 about (1, 2, z): through a line, parallel to a direction, at an
+// angle to a plane. Every tangent plane is parallel to the axis at distance R from it.
+TEST(ModelingReferencePlane, TangentToCylinderVariants) {
+    const double r = 5;
+    const Indexed cyl = index(BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(1, 2, 0), gp_Dir(0, 0, 1)), r, 10).Shape());
+    const auto side = faceOfType(cyl.topology, kernel::SurfaceType::Cylinder);
+    ASSERT_TRUE(side);
+    const TopoDS_Face face = cyl.topology.faces()[*side].face;
+    auto tangentToAxis = [&](const gp_Pln& p) {
+        EXPECT_NEAR(p.Distance(gp_Pnt(1, 2, 0)), r, 1e-9);
+        EXPECT_NEAR(p.Distance(gp_Pnt(1, 2, 10)), r, 1e-9);
+        EXPECT_NEAR(gp_Vec(p.Axis().Direction()).Dot(gp_Vec(0, 0, 1)), 0, 1e-12);
+    };
+
+    // Through a line parallel to the axis at d = 10 on +X: cos(phi) = R/d, the tangent normals
+    // are rotated by +-phi from +X, and both planes contain the line.
+    const double d = 10, phi = std::acos(r / d);
+    const gp_Ax1 line(gp_Pnt(1 + d, 2, 3), gp_Dir(0, 0, 1));
+    for (bool second : {false, true}) {
+        auto p = planeTangentToCylinderThroughLine(face, line, second);
+        ASSERT_TRUE(p.ok()) << p.error().message;
+        tangentToAxis(p.value());
+        const double a = second ? -phi : phi;
+        expectDir(p.value().Axis().Direction(), gp_Dir(std::cos(a), std::sin(a), 0), 1e-12);
+        EXPECT_NEAR(p.value().Distance(line.Location()), 0, 1e-9);
+    }
+    // A line on the surface: the tangent plane along it.
+    auto on = planeTangentToCylinderThroughLine(face, gp_Ax1(gp_Pnt(1, 2 + r, 0), gp_Dir(0, 0, -1)));
+    ASSERT_TRUE(on.ok()) << on.error().message;
+    expectDir(on.value().Axis().Direction(), gp_Dir(0, 1, 0));
+    EXPECT_NEAR(on.value().Location().Y(), 2 + r, 1e-9);
+    EXPECT_FALSE(planeTangentToCylinderThroughLine(face, gp_Ax1(gp_Pnt(2, 2, 0), gp_Dir(0, 0, 1))).ok());
+    EXPECT_FALSE(planeTangentToCylinderThroughLine(face, gp_Ax1(gp_Pnt(20, 2, 0), gp_Dir(0, 1, 1))).ok());
+
+    // Parallel to X: the normal is +-(Z x X) = +-Y.
+    auto par = planeTangentToCylinderParallelTo(face, gp_Dir(1, 0, 0));
+    ASSERT_TRUE(par.ok()) << par.error().message;
+    tangentToAxis(par.value());
+    expectDir(par.value().Axis().Direction(), gp_Dir(0, 1, 0));
+    auto parFlip = planeTangentToCylinderParallelTo(face, gp_Dir(1, 0, 0), true);
+    ASSERT_TRUE(parFlip.ok());
+    expectDir(parFlip.value().Axis().Direction(), gp_Dir(0, -1, 0));
+    EXPECT_NEAR(parFlip.value().Location().Y(), 2 - r, 1e-9);
+    EXPECT_FALSE(planeTangentToCylinderParallelTo(face, gp_Dir(0, 0, 1)).ok());
+
+    // At 30 deg to the XZ plane (normal -Y): the normal is -Y rotated by 30 deg about +Z.
+    const gp_Pln xz(gp_Ax3(gp::Origin(), gp_Dir(0, -1, 0), gp_Dir(1, 0, 0)));
+    const double a = kPi / 6;
+    auto ang = planeTangentToCylinderAtAngle(face, xz, a);
+    ASSERT_TRUE(ang.ok()) << ang.error().message;
+    tangentToAxis(ang.value());
+    expectDir(ang.value().Axis().Direction(), gp_Dir(std::sin(a), -std::cos(a), 0));
+    EXPECT_NEAR(std::acos(std::abs(gp_Vec(ang.value().Axis().Direction()).Dot(gp_Vec(0, -1, 0)))), a, 1e-12);
+    EXPECT_FALSE(planeTangentToCylinderAtAngle(face, gp_Pln(), a).ok());  // XY is normal to the axis
+    const auto top = faceOfType(cyl.topology, kernel::SurfaceType::Plane);
+    EXPECT_FALSE(planeTangentToCylinderParallelTo(cyl.topology.faces()[*top].face, gp_Dir(1, 0, 0)).ok());
+}
+
+TEST(ModelingReferencePoint, EdgePlaneIntersection) {
+    const Indexed box = index(BRepPrimAPI_MakeBox(10, 20, 30).Shape());
+    const Indexed cyl = index(BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(1, 2, 3), gp_Dir(0, 0, 1)), 5, 10).Shape());
+    const gp_Pln slanted(gp_Pnt(0, 0, 12), gp_Dir(1, 0, 1));  // x + z = 12
+    int straight = 0;
+    for (const auto& e : box.topology.edges()) {
+        auto axis = axisOfEdge(e.edge);
+        ASSERT_TRUE(axis.ok());
+        auto p = pointEdgePlaneIntersection(e.edge, slanted);
+        const gp_Dir dir = axis.value().Direction();
+        if (std::abs(dir.Y()) > 0.5) {
+            // Edges along Y are parallel to the plane.
+            EXPECT_FALSE(p.ok());
+            continue;
+        }
+        ASSERT_TRUE(p.ok()) << p.error().message;
+        EXPECT_NEAR(p.value().X() + p.value().Z(), 12, 1e-9);
+        ++straight;
+    }
+    EXPECT_EQ(straight, 8);
+    // A circle R5 about (1, 2) at z = 3 crossed by the plane x = 4: y = 2 +- 4.
+    for (const auto& e : cyl.topology.edges()) {
+        if (e.curve != kernel::CurveType::Circle) continue;
+        auto p = pointEdgePlaneIntersection(e.edge, gp_Pln(gp_Pnt(4, 0, 0), gp_Dir(1, 0, 0)));
+        ASSERT_TRUE(p.ok()) << p.error().message;
+        EXPECT_NEAR(p.value().X(), 4, 1e-9);
+        EXPECT_NEAR(std::abs(p.value().Y() - 2), 4, 1e-9);
+        EXPECT_FALSE(pointEdgePlaneIntersection(e.edge, gp_Pln(gp_Pnt(7, 0, 0), gp_Dir(1, 0, 0))).ok());
+        // The circle in its own plane.
+        const double z = std::abs(p.value().Z() - 3) < 1e-9 ? 3 : 13;
+        EXPECT_FALSE(pointEdgePlaneIntersection(e.edge, gp_Pln(gp_Pnt(0, 0, z), gp_Dir(0, 0, 1))).ok());
+    }
+}
+
+TEST(ModelingReferenceCoordinateSystem, DirectionsAndFaceEdge) {
+    auto cs = coordinateSystemFromDirections(gp_Pnt(1, 2, 3), gp_Dir(0, 1, 0), gp_Dir(1, 1, 0));
+    ASSERT_TRUE(cs.ok());
+    expectDir(cs.value().XDirection(), gp_Dir(0, 1, 0));
+    expectDir(cs.value().YDirection(), gp_Dir(1, 0, 0));
+    expectDir(cs.value().Direction(), gp_Dir(0, 0, -1));
+    EXPECT_TRUE(cs.value().Direct());
+    EXPECT_FALSE(coordinateSystemFromDirections(gp_Pnt(), gp_Dir(1, 0, 0), gp_Dir(-1, 0, 0)).ok());
+
+    const Indexed box = index(BRepPrimAPI_MakeBox(10, 20, 30).Shape());
+    const auto top = faceWithCentroid(box.topology, gp_Pnt(5, 10, 30));
+    ASSERT_TRUE(top);
+    const TopoDS_Face face = box.topology.faces()[*top].face;
+    bool sawX = false, sawZ = false;
+    for (const auto& e : box.topology.edges()) {
+        auto axis = axisOfEdge(e.edge);
+        ASSERT_TRUE(axis.ok());
+        auto fe = coordinateSystemFromFaceEdge(gp_Pnt(0, 0, 30), face, e.edge);
+        if (std::abs(axis.value().Direction().Z()) > 0.5) {
+            EXPECT_FALSE(fe.ok());
+            sawZ = true;
+            continue;
+        }
+        ASSERT_TRUE(fe.ok()) << fe.error().message;
+        expectDir(fe.value().Direction(), gp_Dir(0, 0, 1));
+        expectDir(fe.value().XDirection(), axis.value().Direction());
+        EXPECT_TRUE(fe.value().Direct());
+        sawX = true;
+    }
+    EXPECT_TRUE(sawX && sawZ);
+}

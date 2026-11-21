@@ -57,6 +57,24 @@ kernel::Result<gp_Pln> planeTangentToCylinder(const TopoDS_Face& face, const gp_
 kernel::Result<gp_Pln> planeTangentToCylinder(const kernel::TopologyIndex& topology,
                                               std::uint32_t faceIndex, const gp_Pnt& near,
                                               const ReferenceTolerance& tol = {});
+// Plane tangent to a cylindrical face that contains a line parallel to the cylinder axis. A line
+// on the surface gives the tangent plane along it; a line outside gives two planes, `second`
+// chooses the one reached by turning clockwise about the cylinder axis (the first is
+// counter-clockwise from the direction axis -> line). Error when the line is not parallel to the
+// axis or lies inside the cylinder.
+kernel::Result<gp_Pln> planeTangentToCylinderThroughLine(const TopoDS_Face& face, const gp_Ax1& line,
+                                                         bool second = false,
+                                                         const ReferenceTolerance& tol = {});
+// Plane tangent to a cylindrical face and parallel to `direction` (not parallel to the axis):
+// the tangent generator lies on the side of axis x direction (`flip` = the opposite side).
+kernel::Result<gp_Pln> planeTangentToCylinderParallelTo(const TopoDS_Face& face, const gp_Dir& direction,
+                                                        bool flip = false,
+                                                        const ReferenceTolerance& tol = {});
+// Plane tangent to a cylindrical face at `angle` (rad) to a base plane parallel to the cylinder
+// axis: the radial direction of the tangent generator is the base normal rotated by `angle`
+// about the cylinder axis (right-hand rule). Error when the axis is not parallel to the base.
+kernel::Result<gp_Pln> planeTangentToCylinderAtAngle(const TopoDS_Face& face, const gp_Pln& base,
+                                                     double angle, const ReferenceTolerance& tol = {});
 
 // Plane halfway between two parallel planes, normal of the first. Error when not parallel or
 // coincident.
@@ -105,6 +123,12 @@ kernel::Result<gp_Pnt> pointCentroidOfFace(const TopoDS_Face& face);
 // Intersection of an axis with a plane. Error when the axis is parallel to the plane.
 kernel::Result<gp_Pnt> pointAxisPlaneIntersection(const gp_Ax1& axis, const gp_Pln& plane,
                                                   const ReferenceTolerance& tol = {});
+// Intersection of an edge with a plane. A straight edge is taken as its infinite line (the point
+// may lie on its extension); a curved edge must cross the plane within its bounds, the crossing
+// nearest to its first vertex is returned. Error when there is no crossing or the edge lies in
+// (or is parallel to) the plane.
+kernel::Result<gp_Pnt> pointEdgePlaneIntersection(const TopoDS_Edge& edge, const gp_Pln& plane,
+                                                  const ReferenceTolerance& tol = {});
 // Orthogonal projection of a point onto a plane.
 gp_Pnt pointProjectedOnPlane(const gp_Pnt& point, const gp_Pln& plane);
 
@@ -119,6 +143,17 @@ kernel::Result<gp_Ax3> coordinateSystem(const gp_Pnt& origin, const gp_Dir& zDir
 kernel::Result<gp_Ax3> coordinateSystemFromPoints(const gp_Pnt& origin, const gp_Pnt& onX,
                                                   const gp_Pnt& inXYPlane,
                                                   const ReferenceTolerance& tol = {});
+// Origin, X direction and a second direction in the XY plane (Y is on its side):
+// Z = x x inXY. Error when the directions are parallel.
+kernel::Result<gp_Ax3> coordinateSystemFromDirections(const gp_Pnt& origin, const gp_Dir& xDirection,
+                                                      const gp_Dir& inXYDirection,
+                                                      const ReferenceTolerance& tol = {});
+// Z = outward normal of a planar face, X = direction of a straight edge projected on the face
+// (edge orientation honoured). Error when the face is not planar, the edge not straight or normal
+// to the face.
+kernel::Result<gp_Ax3> coordinateSystemFromFaceEdge(const gp_Pnt& origin, const TopoDS_Face& face,
+                                                    const TopoDS_Edge& edge,
+                                                    const ReferenceTolerance& tol = {});
 // Origin projected on the plane, axes of the plane.
 gp_Ax3 coordinateSystemOnPlane(const gp_Pln& plane, const gp_Pnt& origin);
 
