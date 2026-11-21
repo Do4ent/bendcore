@@ -326,6 +326,92 @@ Status renderViewLabel(Drawing& drawing, const SheetView& view, const std::strin
     return addEntity(drawing, std::move(t), o.symbolLayer, LineType::SolidThin);
 }
 
+RotationSignGeometry rotationSignGeometry(Point2 center, double h, bool ccw) {
+    // Дуга 270° радиуса h/2 с разрывом справа сверху; стрелка — на конце дуги по касательной.
+    RotationSignGeometry g;
+    g.center = center;
+    const double r = h / 2.0;
+    // Одна и та же дуга 270° (Arc — против часовой стрелки от 90° через 180°, 270° к 0°), разрыв —
+    // в правой верхней четверти; стрелка — на конце по направлению поворота: против часовой
+    // стрелки — в точке 0° вверх, по часовой — в точке 90° вправо.
+    g.arc = Arc{center, r, 90.0, 0.0};
+    const double endDeg = ccw ? 0.0 : 90.0;
+    const double a = endDeg * std::numbers::pi / 180.0;
+    const Point2 tip{center.x + r * std::cos(a), center.y + r * std::sin(a)};
+    // Касательная в конце по направлению обхода: ccw — (−sin, cos); cw — (sin, −cos).
+    const Point2 t = ccw ? Point2{-std::sin(a), std::cos(a)} : Point2{std::sin(a), -std::cos(a)};
+    const Point2 n{-t.y, t.x};
+    const double len = h / 2.0, half = h / 8.0;
+    const Point2 tipFwd = add(tip, mul(len / 2.0, t));
+    const Point2 base = add(tip, mul(-len / 2.0, t));
+    g.head = Polyline{{tipFwd, add(base, mul(half, n)), add(base, mul(-half, n))}, true};
+    return g;
+}
+
+Result<std::optional<RotationSignGeometry>> renderAuxiliaryLabel(Drawing& drawing, const SheetView& view,
+                                                                 const std::string& text, double rotationDeg,
+                                                                 const TextMetrics* font, const RenderOptions& o) {
+    using R = Result<std::optional<RotationSignGeometry>>;
+    if (auto st = renderViewLabel(drawing, view, text, o); !st) return st.error();
+    if (rotationDeg == 0.0) return R(std::optional<RotationSignGeometry>{});
+    const Box2 b = view.sheetBounds();
+    const double h = o.letterHeight;
+    double w = 0.0;
+    auto cps = decodeUtf8(text);
+    if (!cps) return cps.error();
+    w = font ? font->textWidthMm(cps.value(), h) : 0.7 * h * double(cps.value().size());
+    // Наклон букв 75° выносит верх строки вправо на h·ctg 75°.
+    const double slant = h / std::tan(75.0 * std::numbers::pi / 180.0);
+    const Point2 c{0.5 * (b.minX + b.maxX) + w / 2.0 + slant + h / 2.0 + h / 2.0, b.maxY + 5.0 + h / 2.0};
+    RotationSignGeometry g = rotationSignGeometry(c, h, rotationDeg > 0.0);
+    if (auto st = addEntity(drawing, g.arc, o.symbolLayer, LineType::SolidThin); !st) return st.error();
+    if (auto st = addEntity(drawing, g.head, o.symbolLayer, LineType::SolidThin); !st) return st.error();
+    return R(std::optional<RotationSignGeometry>{g});
+}
+
+Result<ViewArrowGeometry> viewArrowGeometry(const SheetView& parent, Point2 arrow, double letterHeight) {
+    using R = Result<ViewArrowGeometry>;
+    const double len = std::hypot(arrow.x, arrow.y);
+    if (!(len > 1e-9) || !std::isfinite(len)) return R::failure(ErrorCode::InvalidInput, "view arrow: zero direction");
+    const Point2 d{arrow.x / len, arrow.y / len};
+    const Box2 b = parent.sheetBounds();
+    if (b.empty) return R::failure(ErrorCode::InvalidInput, "view arrow: empty parent view");
+    const Point2 c{0.5 * (b.minX + b.maxX), 0.5 * (b.minY + b.maxY)};
+    const double hw = 0.5 * (b.maxX - b.minX), hh = 0.5 * (b.maxY - b.minY);
+    // Расстояние от центра до края габарита против направления взгляда.
+    double t = 1e300;
+    if (std::abs(d.x) > 1e-12) t = std::min(t, hw / std::abs(d.x));
+    if (std::abs(d.y) > 1e-12) t = std::min(t, hh / std::abs(d.y));
+    const double clear = 3.0, shaft = 12.0, head = 5.0, halfW = 1.25;
+    ViewArrowGeometry g;
+    g.direction = d;
+    g.tip = add(c, mul(-(t + clear), d));
+    const Point2 base = add(g.tip, mul(-head, d));
+    const Point2 tail = add(g.tip, mul(-shaft, d));
+    const Point2 perp{-d.y, d.x};
+    g.shaft = LineSeg{tail, base};
+    g.head = Polyline{{g.tip, add(base, mul(halfW, perp)), add(base, mul(-halfW, perp))}, true};
+    // Буква — сбоку от середины стержня: выше стрелки (правее для вертикальной).
+    Point2 side = perp;
+    if (side.y < -1e-9 || (std::abs(side.y) <= 1e-9 && side.x < 0)) side = mul(-1.0, side);
+    g.letterPos = add(add(g.tip, mul(-0.5 * shaft, d)), mul(halfW + 1.0 + 0.5 * letterHeight, side));
+    return g;
+}
+
+Status renderViewArrow(Drawing& drawing, const ViewArrowGeometry& g, const std::string& letter, const RenderOptions& o) {
+    Status st = ensureViewLayers(drawing, o);
+    if (!st) return st;
+    if (st = addEntity(drawing, g.shaft, o.symbolLayer, LineType::SolidThin); !st) return st;
+    if (st = addEntity(drawing, g.head, o.symbolLayer, LineType::SolidThin); !st) return st;
+    Text txt;
+    txt.position = g.letterPos;
+    txt.utf8 = letter;
+    txt.height = o.letterHeight;
+    txt.hAlign = HAlign::Center;
+    txt.vAlign = VAlign::Middle;
+    return addEntity(drawing, std::move(txt), o.symbolLayer, LineType::SolidThin);
+}
+
 Result<SectionMarkGeometry> renderCuttingPlaneMark(Drawing& drawing, const SheetView& parent,
                                                    const CuttingPlane& plane,
                                                    const std::string& letter, double strokeLen,

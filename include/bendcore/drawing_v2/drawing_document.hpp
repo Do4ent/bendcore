@@ -163,6 +163,15 @@ struct TitleFields {
     std::string litera;
     std::string organization;
     SignatureRow developer, checker, techControl, normControl, approver;
+    // Поля основной надписи ISO 7200 (SheetStyle::Iso7200), которых нет в форме ГОСТ 2.104.
+    // Остальные поля ISO берутся из граф ЕСКД: владелец — organization, обозначение — designation,
+    // наименование — name, автор — developer.surname, утвердивший — approver.surname.
+    std::string documentType;    // пусто — «Чертёж детали» / «Сборочный чертёж» (по языку)
+    std::string documentStatus;
+    std::string revision;
+    std::string issueDate;       // ГГГГ-ММ-ДД (ISO 8601)
+    std::string language;        // ISO 639; пусто — «ru»
+    std::string department;
 };
 
 // Место над изображением под надпись разреза и выносного элемента («А–А», «Б (4:1)»), мм листа:
@@ -175,6 +184,10 @@ enum class ViewKind {
     Axonometric,  // аксонометрия ГОСТ 2.317 относительно parent
     Section,      // разрез/сечение (ГОСТ 2.305, разд. 6, 7)
     Detail,       // выносной элемент parent (ГОСТ 2.305, разд. 8)
+    // Дополнительный вид (ГОСТ 2.305, п. 5.4–5.6; ISO 128-30): направление взгляда −toward,
+    // стрелка с буквой на parent, надпись «А» над видом (повернутый — со знаком «повернуто»);
+    // вне проекционной связи.
+    Auxiliary,
 };
 const char* toString(ViewKind kind) noexcept;
 
@@ -202,7 +215,9 @@ struct ViewDef {
     // Detail: окружность в координатах вида parent (мм модели).
     Point2 detailCenter;
     double detailRadius = 0.0;
-    std::string letter;  // Section/Detail: пусто — по порядку букв ГОСТ 2.316
+    std::string letter;  // Section/Detail/Auxiliary: пусто — по порядку букв ГОСТ 2.316
+    // Auxiliary: повернуть вид («вверх» parent — вверх листа, views::auxiliaryViewFrame).
+    bool rotated = false;
     // Масштаб вида вне проекционной связи (аксонометрия, разрез без side, выносной элемент);
     // пусто — масштаб листа (выносной — ближайший ряда ГОСТ 2.302 не меньше 2× листа), если
     // вид не помещается — наибольший помещающийся.
@@ -334,9 +349,18 @@ struct SheetDef {
     bool partsList = false;  // перечень составных частей ISO 7573 над основной надписью (сборка)
 };
 
+// Оформление листа: ЕСКД (рамка ГОСТ 2.301/2.104, основная надпись форм 1 и 2а) или ISO (рамка
+// ISO 5457, основная надпись ISO 7200 со знаком метода проекций ISO 5456-2).
+enum class SheetStyle { Eskd, Iso7200 };
+const char* toString(SheetStyle style) noexcept;  // "eskd", "iso7200"
+
 struct DrawingSettings {
     double lineThickness = 0.5;  // s, ГОСТ 2.303
+    // Метод проекций (ГОСТ 2.305 — первый угол; ISO 128-30: E — первый, A — третий). Менять —
+    // DrawingDocument::setProjectionMethod: проекционные виды переходят на противоположную
+    // сторону родителя и сохраняют своё содержание (вид сверху остаётся видом сверху).
     views::ProjectionMethod projection = views::ProjectionMethod::FirstAngle;
+    SheetStyle sheetStyle = SheetStyle::Eskd;
     double viewGap = 30.0;   // зазор между видами в проекционной связи, мм листа (место размеров)
     double margin = 15.0;    // отступ области видов от рамки, мм
     views::ScaleRatio maxScale{5, 1};  // наибольший масштаб при автоматическом выборе
@@ -362,6 +386,9 @@ struct ComputedView {
     std::vector<annotations::GearImage> gears;      // зубчатые венцы ГОСТ 2.402 на виде
     std::vector<annotations::GearMesh> gearMeshes;  // зацепления на виде (сборка)
     std::vector<annotations::BearingImage> bearings;  // подшипники ГОСТ 2.420 в разрезе
+    // Auxiliary: поворот относительно ориентации по стрелке (0 — не повернут) и стрелка на parent.
+    double rotationDeg = 0.0;
+    std::optional<views::ViewArrowGeometry> arrow;
     bool fromCache = false;
 };
 
@@ -372,6 +399,7 @@ struct ComputedSheet {
     int index = 1;  // номер листа
     int count = 1;  // листов в чертеже
     TitleBlockData title;
+    Iso7200Data isoTitle;  // основная надпись ISO 7200 (DrawingSettings::sheetStyle == Iso7200)
     std::vector<ComputedView> views;
     std::vector<annotations::DimensionResult> dimensions;  // по SheetDef::dimensions
     std::vector<std::optional<annotations::SymbolGeometry>> roughness;  // nullopt — висячий
@@ -509,6 +537,12 @@ public:
     // на прежней стороне). model — снимок последнего
     // обновления. Ошибка InvalidInput — документ не обновлён, нет листа или размера, размер висячий.
     Status moveDimension(const ModelSnapshot& model, const std::string& sheet, const std::string& id, Point2 target);
+
+    // Метод проекций документа: проекционные виды и разрезы в проекционной связи (side) переходят
+    // на противоположную сторону родителя (сверху ↔ снизу, слева ↔ справа) — изображение каждого
+    // вида не меняется, меняется раскладка (ГОСТ 2.305, разд. 5; ISO 128-30, п. 5). Положения
+    // видов (position) сохраняются. Возвращает число перенесённых видов; после вызова нужен update.
+    std::size_t setProjectionMethod(views::ProjectionMethod method);
 
     bool computed() const { return !computed_.empty(); }
     const std::vector<ComputedSheet>& computedSheets() const { return computed_; }

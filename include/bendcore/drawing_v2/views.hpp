@@ -73,6 +73,22 @@ ViewFrame projectedFrame(const ViewFrame& parent, SheetSide side, ProjectionMeth
 // модели), upHint — желаемое направление «вверх» (проецируется на плоскость вида).
 Result<ViewFrame> auxiliaryFrame(Vec3 sight, Vec3 upHint);
 
+// Дополнительный вид по стрелке на виде parent (ГОСТ 2.305-2008, п. 5.4–5.6; ISO 128-30, п. 6.4):
+// toward — от модели к наблюдателю (направление взгляда — −toward). Без поворота вид
+// ориентирован так, как получился бы в проекционной связи по направлению стрелки: направление
+// toward вида parent на листе дополнительного вида совпадает с направлением стрелки (d — проекция
+// направления взгляда на плоскость parent). Поворот (rotated) — «вверх» вида parent проецируется
+// на плоскость вида вверх листа (auxiliaryFrame), если взгляд ему не параллелен, иначе «вправо»
+// parent — вправо. rotationDeg — угол поворота повернутого вида относительно неповернутого
+// против часовой стрелки (0 — повернутый совпал с неповернутым). Ошибка InvalidInput: toward
+// нулевой или почти перпендикулярен плоскости parent (|d| < 0,05 — стрелку не поставить).
+struct AuxiliaryOrientation {
+    ViewFrame frame;
+    Point2 arrow;  // единичное направление стрелки на виде parent (координаты вида)
+    double rotationDeg = 0.0;
+};
+Result<AuxiliaryOrientation> auxiliaryViewFrame(const ViewFrame& parent, Vec3 toward, bool rotated);
+
 // Аксонометрия ГОСТ 2.317-2011.
 enum class Axonometry { Isometric, Dimetric };
 // С какой стороны от главного вида смотрит наблюдатель: спереди-справа-сверху или

@@ -148,8 +148,9 @@ TEST(DrawingV2TitleBlockIso, FieldTextsInTheirCellsWithoutCompression) {
                     EXPECT_LE(p.y, c.y1 + 1e-6) << v;
                 }
         }
-        // Обозначение — h = 7 (120…180 × 9…27), наименование — 7; прочие значения — 3,5 и меньше.
-        EXPECT_DOUBLE_EQ(texts.at("АБВГ.123456.001")->height, 7.0);
+        // Наименование — h = 7; обозначение при 7 не помещается (96d = 67,2 мм > 59 мм) — 5;
+        // прочие значения — 3,5.
+        EXPECT_DOUBLE_EQ(texts.at("АБВГ.123456.001")->height, 5.0);
         EXPECT_DOUBLE_EQ(texts.at("Кронштейн")->height, 7.0);
         EXPECT_DOUBLE_EQ(texts.at("Иванов")->height, 3.5);
         // Наименования полей — h = 2,5 у верхнего края ячейки, по языку документа.

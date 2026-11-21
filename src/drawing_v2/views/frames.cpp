@@ -106,6 +106,46 @@ Result<ViewFrame> auxiliaryFrame(Vec3 sight, Vec3 upHint) {
     return ViewFrame{n, cross(up, n)};
 }
 
+Result<AuxiliaryOrientation> auxiliaryViewFrame(const ViewFrame& parent, Vec3 toward, bool rotated) {
+    using R = Result<AuxiliaryOrientation>;
+    if (!finite(toward) || length(toward) < 1e-12) return R::failure(ErrorCode::InvalidInput, "auxiliary view: zero or non-finite direction");
+    const Vec3 t = unit(toward);
+    const Vec3 s = -1.0 * t;  // направление взгляда
+    const Vec3 pr = parent.right, pu = parent.up(), pn = parent.toward;
+    Point2 d{dot(s, pr), dot(s, pu)};
+    const double dl = std::hypot(d.x, d.y);
+    if (dl < 0.05)
+        return R::failure(ErrorCode::InvalidInput,
+                          "auxiliary view: the view direction is perpendicular to the parent view, the arrow cannot be shown");
+    d = {d.x / dl, d.y / dl};
+    // n — составляющая toward вида parent в плоскости дополнительного вида; на листе — вдоль d.
+    Vec3 n = pn - dot(pn, t) * t;
+    if (length(n) < 1e-9) return R::failure(ErrorCode::InvalidInput, "auxiliary view: degenerate direction");
+    n = unit(n);
+    const Vec3 m = cross(t, n);
+    AuxiliaryOrientation out;
+    out.frame = ViewFrame{t, d.x * n - d.y * m};
+    out.arrow = d;
+    if (rotated) {
+        Vec3 up = pu - dot(pu, t) * t;
+        ViewFrame turned;
+        if (length(up) > 1e-6) {
+            up = unit(up);
+            turned = ViewFrame{t, cross(up, t)};
+        } else {
+            Vec3 r = pr - dot(pr, t) * t;
+            r = unit(r);
+            turned = ViewFrame{t, r};
+        }
+        // Угол от неповернутого к повернутому: направление «вправо» повернутого в осях неповернутого.
+        const Vec3 u0 = out.frame.up();
+        const double a = std::atan2(dot(turned.right, u0), dot(turned.right, out.frame.right)) * 180.0 / 3.14159265358979323846;
+        out.rotationDeg = std::abs(a) < 0.5 ? 0.0 : a;
+        if (out.rotationDeg != 0.0) out.frame = turned;
+    }
+    return out;
+}
+
 ViewFrame axonometricFrame(const ViewFrame& main, Axonometry type, AxonometricCorner corner) {
     const double s = corner == AxonometricCorner::FrontRightTop ? 1.0 : -1.0;
     const Vec3 n = main.toward, r = main.right, u = main.up();

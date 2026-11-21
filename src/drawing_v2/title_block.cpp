@@ -463,7 +463,9 @@ Result<TitleBlockLayout> addIsoFrameAndTitleBlock(Drawing& drawing, const Iso720
         const bool centered = c.field == F::Revision || c.field == F::Language || c.field == F::Sheet;
         const std::string v = value(c.field);
         const std::string name = label.empty() ? "value" : label;
-        BC_TRY(b.text(Rect{c.r.x0, c.r.y0, c.r.x1, c.r.y1 - kLabelStrip}, v, big ? 7.0 : 3.5,
+        // Значение — ниже полосы наименования, 0,5 мм над нижней линией поля (место нижних
+        // выносных элементов строчных букв шрифта ГОСТ 2.304).
+        BC_TRY(b.text(Rect{c.r.x0, c.r.y0 + 0.5, c.r.x1, c.r.y1 - kLabelStrip}, v, big ? 7.0 : 3.5,
                       big || centered ? HAlign::Center : HAlign::Left, false, name.c_str()));
     }
     if (data.projection != ProjectionSymbol::None) {
