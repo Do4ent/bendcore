@@ -152,7 +152,7 @@ std::optional<assembly_v2::DefinitionId> childPosition(const ModelSnapshot& mode
 }
 
 // Составные части, видимые на виде, и точки выносок на их изображении (мм листа): середины самых
-// длинных видимых прямых участков линий (до 6 на деталь), точки внутри фигур сечения деталей,
+// длинных видимых прямых участков линий и точки на 1/4 и 3/4 длинных участков (до 12 на деталь), точки внутри фигур сечения деталей,
 // точки внутри контура условного изображения подшипника (ГОСТ 2.420).
 std::map<assembly_v2::DefinitionId, std::vector<Point2>> shownParts(const ModelSnapshot& model,
                                                                      const annotations::Specification& spec,
@@ -166,6 +166,11 @@ std::map<assembly_v2::DefinitionId, std::vector<Point2>> shownParts(const ModelS
         const auto owner = childPosition(model, *c, spec);
         if (!owner) continue;
         if (auto p = pickPoint(e.curve)) lines[*owner].push_back({p->second, cv.sheetView.toSheet(p->first)});
+        // На длинном прямом участке (на листе > 16 мм) — ещё точки на 1/4 и 3/4 длины: выбор
+        // точки выноски без пересечений (ГОСТ 2.109).
+        if (auto sp = straightPiece(e.curve); sp && sp->length * cv.sheetView.scale > 16.0)
+            for (double f : {0.25, 0.75})
+                lines[*owner].push_back({0.99 * sp->length, cv.sheetView.toSheet({sp->a.x + f * (sp->b.x - sp->a.x), sp->a.y + f * (sp->b.y - sp->a.y)})});
     }
     if (cv.section && cv.section->regionOwner.size() == cv.section->regions.size() && !model.childOwner.empty()) {
         for (std::size_t i = 0; i < cv.section->regions.size(); ++i) {
@@ -188,9 +193,85 @@ std::map<assembly_v2::DefinitionId, std::vector<Point2>> shownParts(const ModelS
     }
     for (auto& [owner, pts] : lines) {
         std::stable_sort(pts.begin(), pts.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
-        for (std::size_t k = 0; k < pts.size() && k < 6; ++k) out[owner].push_back(pts[k].second);
+        for (std::size_t k = 0; k < pts.size() && k < 12; ++k) out[owner].push_back(pts[k].second);
     }
     return out;
+}
+
+// Надпись над видом и обозначения, которые вид ставит на других видах: секущая плоскость разреза
+// (штрихи, стрелки, буквы — ГОСТ 2.305, разд. 6), окружность и буква выносного элемента (разд. 8).
+Status renderViewMarks(Drawing& d, const ComputedView& cv, const std::map<std::string, const ComputedView*>& byId,
+                       const RenderOptions& ro) {
+    if (!cv.label.empty())
+        if (auto st = renderViewLabel(d, cv.sheetView, cv.label, ro); !st) return st;
+    if (cv.kind == ViewKind::Section && byId.count(cv.def.markView)) {
+        const SheetView& parent = byId.at(cv.def.markView)->sheetView;
+        if (cv.def.stepPoints.empty()) {
+            const CuttingPlane plane{cv.def.planePoint, -1.0 * cv.sheetView.view.frame.toward};
+            auto mk = renderCuttingPlaneMark(d, parent, plane, cv.letter, 12.0, ro);
+            if (!mk) return mk.error();
+        } else {
+            std::vector<CuttingPlane> planes{{cv.def.planePoint, -1.0 * cv.sheetView.view.frame.toward}};
+            for (const Vec3& p : cv.def.stepPoints) planes.push_back({p, -1.0 * cv.sheetView.view.frame.toward});
+            auto mk = renderSteppedPlaneMark(d, parent, planes, cv.letter, 12.0, ro);
+            if (!mk) return mk.error();
+        }
+    }
+    if (cv.kind == ViewKind::Detail && byId.count(cv.def.parent))
+        if (auto st = renderDetailMark(d, byId.at(cv.def.parent)->sheetView, cv.def.detailCenter, cv.def.detailRadius, cv.letter, ro);
+            !st)
+            return st;
+    return okStatus();
+}
+
+// Габарит строки текста (с поворотом — габарит повёрнутого прямоугольника).
+Rect textBox(Point2 at, const std::string& utf8, double height, double rotationDeg, HAlign ha, VAlign va,
+             const TextMetrics* font) {
+    const double w = annotations::estimateTextWidth(utf8, height, font);
+    const double x0 = ha == HAlign::Left ? 0.0 : ha == HAlign::Center ? -w / 2.0 : -w;
+    const double y0 = va == VAlign::Baseline ? 0.0 : va == VAlign::Middle ? -height / 2.0 : -height;
+    const double a = rotationDeg * 3.14159265358979323846 / 180.0, c = std::cos(a), s = std::sin(a);
+    Rect r{1e300, 1e300, -1e300, -1e300};
+    for (double u : {x0, x0 + w})
+        for (double v : {y0, y0 + height}) {
+            const double x = at.x + u * c - v * s, y = at.y + u * s + v * c;
+            r = {std::min(r.x0, x), std::min(r.y0, y), std::max(r.x1, x), std::max(r.y1, y)};
+        }
+    return r;
+}
+
+void addPolylineObstacles(annotations::BalloonObstacles& obs, const std::vector<Point2>& pts, bool closed) {
+    for (std::size_t k = 0; k + 1 < pts.size(); ++k) obs.lines.push_back({pts[k], pts[k + 1]});
+    if (closed && pts.size() > 2) obs.lines.push_back({pts.back(), pts.front()});
+}
+
+// Примитив обозначения как препятствие полкам и выноскам позиций: текст — габарит, линии —
+// отрезками, окружность — 36 хордами.
+void addEntityObstacles(annotations::BalloonObstacles& obs, const Entity& e, const TextMetrics* font) {
+    if (const auto* t = std::get_if<Text>(&e.geometry)) {
+        obs.boxes.push_back(textBox(t->position, t->utf8, t->height, t->rotationDeg, t->hAlign, t->vAlign, font));
+    } else if (const auto* l = std::get_if<LineSeg>(&e.geometry)) {
+        obs.lines.push_back(*l);
+    } else if (const auto* p = std::get_if<Polyline>(&e.geometry)) {
+        addPolylineObstacles(obs, p->points, p->closed);
+    } else if (const auto* c = std::get_if<Circle>(&e.geometry)) {
+        Point2 prev{c->center.x + c->radius, c->center.y};
+        for (int k = 1; k <= 36; ++k) {
+            const double a = k * 3.14159265358979323846 / 18.0;
+            const Point2 q{c->center.x + c->radius * std::cos(a), c->center.y + c->radius * std::sin(a)};
+            obs.lines.push_back({prev, q});
+            prev = q;
+        }
+    }
+}
+
+// Знаки шероховатости, допусков и баз (ГОСТ 2.309, 2.308) как препятствия.
+void addSymbolObstacles(annotations::BalloonObstacles& obs, const annotations::SymbolGeometry& g, const TextMetrics* font) {
+    for (const LineSeg& l : g.lines) obs.lines.push_back(l);
+    for (const Polyline& p : g.polylines) addPolylineObstacles(obs, p.points, p.closed);
+    for (const SolidFill& f : g.fills) addPolylineObstacles(obs, f.points, true);
+    for (const annotations::DimensionLabel& lb : g.labels)
+        obs.boxes.push_back(textBox(lb.position, lb.text, lb.height, lb.rotationDeg, lb.hAlign, VAlign::Baseline, font));
 }
 
 struct SheetRegions {
@@ -1444,7 +1525,13 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             for (const auto& [mi, viewId] : arrangedManual) {
                 const std::size_t vi = indexOf.at(viewId);
                 const annotations::Balloon& b = *cs.manualBalloons[mi];
-                groups[vi].cands.push_back({b.definition, std::stoi(b.text), {b.target}});
+                // Точка на выбранном ребре — первая; допустимы и другие точки изображения части на
+                // этом виде (линии, фигуры сечения), если с ними выноски не пересекаются.
+                std::vector<Point2> targets{b.target};
+                if (auto f = shown[vi].find(b.definition); f != shown[vi].end())
+                    for (const Point2& t : f->second)
+                        if (std::hypot(t.x - b.target.x, t.y - b.target.y) > 0.5) targets.push_back(t);
+                groups[vi].cands.push_back({b.definition, std::stoi(b.text), std::move(targets)});
                 groups[vi].manual.push_back(mi);
             }
             // Препятствия для полок: размеры и размеры резьбы листа, ручные позиции с полкой в
@@ -1455,6 +1542,24 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 if (r.state == DimensionState::Ok) annotations::addDimensionObstacles(obstacles, r.geometry, style);
             for (const DimensionResult& r : cs.threadNotes)
                 if (r.state == DimensionState::Ok) annotations::addDimensionObstacles(obstacles, r.geometry, style);
+            // Обозначения разрезов и выносных элементов (буквы, стрелки, штрихи), надписи видов,
+            // знаки шероховатости, допусков и баз: полки на них не ставятся, выноски их обходят.
+            {
+                std::map<std::string, const ComputedView*> byId;
+                for (const ComputedView& v : cs.views) byId[v.id] = &v;
+                auto scratch = Drawing::create(cs.sheet, settings_.lineThickness);
+                if (scratch) {
+                    Drawing& sd2 = scratch.value();
+                    RenderOptions ro;
+                    if (ensureViewLayers(sd2, ro))
+                        for (const ComputedView& v : cs.views)
+                            (void)renderViewMarks(sd2, v, byId, ro);  // ошибка обозначения — в render()
+                    for (const Entity& e : sd2.entities()) addEntityObstacles(obstacles, e, style.font);
+                }
+                for (const auto* list : {&cs.roughness, &cs.tolerances, &cs.datums})
+                    for (const auto& g : *list)
+                        if (g) addSymbolObstacles(obstacles, *g, style.font);
+            }
             auto addBalloonObstacle = [&](const annotations::Balloon& b) {
                 obstacles.boxes.push_back(annotations::balloonShelfBox(b, {}, style));
                 obstacles.lines.push_back({b.target, b.at});
@@ -1522,12 +1627,20 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 }
                 const annotations::BalloonArrangement& ar = arranged.value();
                 g.report.line = ar.line;
+                g.report.lineCount = ar.lineCount;
+                g.report.outOfOrder = ar.outOfOrder;
                 g.report.ordered = ar.ordered;
                 g.report.crossings = ar.crossings;
                 g.report.shelfHits = ar.shelfHits;
                 if (ar.crossings > 0)
                     report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + std::to_string(ar.crossings) +
                                               " crossing leader line(s) remain");
+                if (!ar.outOfOrder.empty()) {
+                    std::string list;
+                    for (int num : ar.outOfOrder) list += (list.empty() ? "" : ", ") + std::to_string(num);
+                    report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': positions out of order (otherwise leaders cross): " +
+                                              list);
+                }
                 if (ar.shelfHits > 0)
                     report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + std::to_string(ar.shelfHits) +
                                               " position shelf(s) overlap dimensions");
@@ -1631,23 +1744,8 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
                 if (auto st = annotations::renderBearings(d, cv.sheetView, cv.bearings, ro, cv.def.bearingSymbol); !st)
                     return fail(st.error());
             }
-            if (!cv.label.empty()) {
-                if (auto st = renderViewLabel(d, cv.sheetView, cv.label, ro); !st) return fail(st.error());
-            }
-            if (cv.kind == ViewKind::Section && cv.def.stepPoints.empty()) {
-                const CuttingPlane plane{cv.def.planePoint, -1.0 * cv.sheetView.view.frame.toward};
-                auto mk = renderCuttingPlaneMark(d, byId.at(cv.def.markView)->sheetView, plane, cv.letter, 12.0, ro);
-                if (!mk) return fail(mk.error());
-            } else if (cv.kind == ViewKind::Section) {
-                std::vector<CuttingPlane> planes{{cv.def.planePoint, -1.0 * cv.sheetView.view.frame.toward}};
-                for (const Vec3& p : cv.def.stepPoints) planes.push_back({p, -1.0 * cv.sheetView.view.frame.toward});
-                auto mk = renderSteppedPlaneMark(d, byId.at(cv.def.markView)->sheetView, planes, cv.letter, 12.0, ro);
-                if (!mk) return fail(mk.error());
-            }
+            if (auto st = renderViewMarks(d, cv, byId, ro); !st) return fail(st.error());
             if (cv.kind == ViewKind::Detail) {
-                const ComputedView& parent = *byId.at(cv.def.parent);
-                if (auto st = renderDetailMark(d, parent.sheetView, cv.def.detailCenter, cv.def.detailRadius, cv.letter, ro); !st)
-                    return fail(st.error());
                 if (auto st = renderDetailBoundary(d, cv.sheetView, cv.def.detailCenter, cv.def.detailRadius, ro); !st)
                     return fail(st.error());
             }

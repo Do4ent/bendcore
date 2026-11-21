@@ -409,8 +409,10 @@ struct BalloonReport {
     // Составные части, скрытые на этом виде, позиции которых поставлены на другом виде листа
     // (ближайшем разрезе): определение → вид.
     std::vector<std::pair<assembly_v2::DefinitionId, std::string>> movedTo;
-    annotations::BalloonLine line = annotations::BalloonLine::Right;  // линия полок
+    annotations::BalloonLine line = annotations::BalloonLine::Right;  // линия полок (большинства позиций)
+    std::size_t lineCount = 1;  // линий полок вида (стороны вида — при разбиении)
     bool ordered = true;        // номера на полках по порядку
+    std::vector<int> outOfOrder;  // номера не на своём месте (порядок уступил непересечению)
     std::size_t crossings = 0;  // пересечения линий-выносок (0 — разнесено)
     // Полок, задевающих размеры листа (линии и надписи): 0 — линия полок обошла размеры.
     std::size_t shelfHits = 0;
