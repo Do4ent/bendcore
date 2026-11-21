@@ -284,18 +284,27 @@ public:
             lines = std::move(uniq);
             if (lines.size() > 24) lines.resize(24);
         }
+        // Сдвиги всей линии слотов вдоль линии (выноска обходит надписи и размеры выбором места
+        // полок): 0, ±15, ±30 мм в пределах area.
+        const double sMin = column ? -(area.y1 - h_ - 1.0) : area.x0 + maxW;
+        const double sMax = column ? -(area.y0 + 1.0) : area.x1 - maxW;
         bool have = false;
-        for (double L : lines) {
-            const double lineShift = double(n) * std::abs(L - L0);  // сдвиг линии — n · расстояние
-            if (have && out.score.perfect() && lineShift >= out.score.cost) continue;
-            Line cand = place(side, members, ideal, L, maxW, env, allowReorder);
-            cand.shift += lineShift;
-            cand.score.cost += lineShift;
-            if (!have || cand.score < out.score) {
-                out = std::move(cand);
-                have = true;
+        for (double L : lines)
+            for (double d : {0.0, -15.0, 15.0, -30.0, 30.0}) {
+                if (d != 0.0 && (ideal.front() + d < sMin || ideal.back() + d > sMax)) continue;
+                // Сдвиг линии — n · расстояние, сдвиг слотов вдоль линии — n · |d| / 2.
+                const double lineShift = double(n) * (std::abs(L - L0) + 0.5 * std::abs(d));
+                if (have && out.score.perfect() && lineShift >= out.score.cost) continue;
+                std::vector<double> moved = ideal;
+                for (double& x : moved) x += d;
+                Line cand = place(side, members, moved, L, maxW, env, allowReorder);
+                cand.shift += lineShift;
+                cand.score.cost += lineShift;
+                if (!have || cand.score < out.score) {
+                    out = std::move(cand);
+                    have = true;
+                }
             }
-        }
         return out;
     }
 

@@ -224,16 +224,18 @@ Status renderViewMarks(Drawing& d, const ComputedView& cv, const std::map<std::s
     return okStatus();
 }
 
-// Габарит строки текста (с поворотом — габарит повёрнутого прямоугольника).
+// Габарит строки текста (с поворотом — габарит повёрнутого прямоугольника) с запасом: наклон
+// букв 75° (ГОСТ 2.304) выносит верх строки вправо на h · ctg 75°, и 0,5 мм со всех сторон.
 Rect textBox(Point2 at, const std::string& utf8, double height, double rotationDeg, HAlign ha, VAlign va,
              const TextMetrics* font) {
     const double w = annotations::estimateTextWidth(utf8, height, font);
     const double x0 = ha == HAlign::Left ? 0.0 : ha == HAlign::Center ? -w / 2.0 : -w;
     const double y0 = va == VAlign::Baseline ? 0.0 : va == VAlign::Middle ? -height / 2.0 : -height;
     const double a = rotationDeg * 3.14159265358979323846 / 180.0, c = std::cos(a), s = std::sin(a);
+    const double slant = height / std::tan(kGostTextSlantDeg * 3.14159265358979323846 / 180.0), pad = 0.5;
     Rect r{1e300, 1e300, -1e300, -1e300};
-    for (double u : {x0, x0 + w})
-        for (double v : {y0, y0 + height}) {
+    for (double u : {x0 - pad, x0 + w + slant + pad})
+        for (double v : {y0 - pad, y0 + height + pad}) {
             const double x = at.x + u * c - v * s, y = at.y + u * s + v * c;
             r = {std::min(r.x0, x), std::min(r.y0, y), std::max(r.x1, x), std::max(r.y1, y)};
         }
@@ -1619,6 +1621,12 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 ao.area = {reg.frame.x0 + 5.0, reg.frame.y0 + 5.0, reg.frame.x1 - 5.0, reg.frame.y1 - 5.0};
                 ao.style = style;
                 ao.obstacles = obstacles;
+                // Изображения других видов листа: полки на них не ставятся, выноски их не пересекают.
+                for (std::size_t vj = 0; vj < cs.views.size(); ++vj) {
+                    if (vj == vi) continue;
+                    const Box2 ob = cs.views[vj].sheetView.sheetBounds();
+                    if (!ob.empty) ao.obstacles.boxes.push_back({ob.minX, ob.minY, ob.maxX, ob.maxY});
+                }
                 auto arranged = annotations::arrangeBalloons(g.cands, ao);
                 if (!arranged) {
                     report.warnings.push_back("sheet '" + sd.id + "', view '" + cv.id + "': " + arranged.error().message);

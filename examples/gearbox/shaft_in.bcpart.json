@@ -569,7 +569,9 @@
    "options": {
     "axis": "edge",
     "base": "XY",
-    "method": "offset"
+    "flip": "false",
+    "method": "offset",
+    "tangent": "line"
    },
    "parameters": {
     "angle": "0",
@@ -578,7 +580,10 @@
    "references": {
     "edge": [],
     "face": [],
-    "face2": []
+    "face2": [],
+    "vertex1": [],
+    "vertex2": [],
+    "vertex3": []
    },
    "suppressed": false,
    "type": "DatumPlane"
