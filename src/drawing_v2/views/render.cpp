@@ -394,7 +394,7 @@ Result<ViewArrowGeometry> viewArrowGeometry(const SheetView& parent, Point2 arro
     // Буква — сбоку от середины стержня: выше стрелки (правее для вертикальной).
     Point2 side = perp;
     if (side.y < -1e-9 || (std::abs(side.y) <= 1e-9 && side.x < 0)) side = mul(-1.0, side);
-    g.letterPos = add(add(g.tip, mul(-0.5 * shaft, d)), mul(halfW + 1.0 + 0.5 * letterHeight, side));
+    g.letterPos = add(add(g.tip, mul(-0.5 * shaft, d)), mul(halfW + 1.5 + 0.75 * letterHeight, side));
     return g;
 }
 
