@@ -15,11 +15,7 @@ namespace bendcore::modeling {
 
 namespace {
 
-Status fail(std::string message) { return Status::failure(ErrorCode::InvalidInput, std::move(message)); }
-
-std::string where(const ConfigurationTable& t, std::size_t row, std::size_t column) {
-    return "configuration '" + t.rows[row].designation + "', column '" + columnTitle(t.columns[column]) + "'";
-}
+Status fail(ErrorCode code, std::string message) { return Status::failure(code, std::move(message)); }
 
 }  // namespace
 
@@ -34,53 +30,60 @@ Status PartDocument::validateTable(const ConfigurationTable& t) const {
             case ConfigurationColumnKind::Variable: {
                 const bool known = std::any_of(variables_.begin(), variables_.end(),
                                                [&](const auto& v) { return v.first == c.target; });
-                if (!known) return fail("column " + std::to_string(k + 1) + ": unknown variable '" + c.target + "'");
+                if (!known) return fail(ErrorCode::InvalidInput, "column " + std::to_string(k + 1) + ": unknown variable '" + c.target + "'");
                 break;
             }
             case ConfigurationColumnKind::Suppression:
-                if (!node(c.target)) return fail("column " + std::to_string(k + 1) + ": unknown feature '" + c.target + "'");
+                if (!node(c.target)) return fail(ErrorCode::InvalidInput, "column " + std::to_string(k + 1) + ": unknown feature '" + c.target + "'");
                 break;
             case ConfigurationColumnKind::Material:
-                if (!c.target.empty()) return fail("column " + std::to_string(k + 1) + ": a material column has no target");
+                if (!c.target.empty()) return fail(ErrorCode::InvalidInput, "column " + std::to_string(k + 1) + ": a material column has no target");
                 break;
         }
         for (std::size_t j = 0; j < k; ++j) {
-            if (t.columns[j] == c) return fail("repeated column '" + columnTitle(c) + "'");
+            if (t.columns[j] == c) return fail(ErrorCode::InvalidInput, "repeated column '" + columnTitle(c) + "'");
         }
     }
     std::set<std::string> designations;
     for (std::size_t r = 0; r < t.rows.size(); ++r) {
         const Configuration& row = t.rows[r];
-        if (row.designation.empty()) return fail("configuration " + std::to_string(r + 1) + " has no designation");
-        if (!designations.insert(row.designation).second) return fail("repeated designation '" + row.designation + "'");
+        if (row.designation.empty()) return fail(ErrorCode::InvalidInput, "configuration " + std::to_string(r + 1) + " has no designation");
+        if (!designations.insert(row.designation).second) return fail(ErrorCode::InvalidInput, "repeated designation '" + row.designation + "'");
         if (row.cells.size() != t.columns.size()) {
-            return fail("configuration '" + row.designation + "' has " + std::to_string(row.cells.size()) +
+            return fail(ErrorCode::InvalidInput, "configuration '" + row.designation + "' has " + std::to_string(row.cells.size()) +
                         " cells, the table has " + std::to_string(t.columns.size()) + " columns");
         }
         for (std::size_t k = 0; k < row.cells.size(); ++k) {
             const std::string& cell = row.cells[k];
             if (cell.empty()) continue;
+            const std::string& d = row.designation;
+            const std::string c = columnTitle(t.columns[k]);
             switch (t.columns[k].kind) {
                 case ConfigurationColumnKind::Variable:
                     if (auto st = checkExpression(cell); !st) {
-                        return fail(where(t, r, k) + ": invalid value '" + cell + "': " + st.error().message);
+                        return fail(ErrorCode::InvalidInput, "configuration '" + d + "', column '" + c + "': invalid value '" + cell +
+                                                                "': " + st.error().message);
                     }
                     break;
                 case ConfigurationColumnKind::Suppression:
                     if (!parseSuppressionCell(cell)) {
-                        return fail(where(t, r, k) + ": invalid value '" + cell + "' (expected 1 or 0)");
+                        return fail(ErrorCode::InvalidInput, "configuration '" + d + "', column '" + c + "': invalid value '" + cell +
+                                                                "' (expected 1 or 0)");
                     }
                     break;
                 case ConfigurationColumnKind::Material: {
                     const auto& lib = kernel::builtInMaterials();
                     const bool known = std::any_of(lib.begin(), lib.end(), [&](const kernel::Material& m) { return m.id == cell; });
-                    if (!known) return fail(where(t, r, k) + ": unknown material '" + cell + "'");
+                    if (!known) {
+                        return fail(ErrorCode::InvalidInput,
+                                    "configuration '" + d + "', column '" + c + "': unknown material '" + cell + "'");
+                    }
                     break;
                 }
             }
         }
     }
-    if (!t.active.empty() && !t.rowOf(t.active)) return fail("no configuration '" + t.active + "'");
+    if (!t.active.empty() && !t.rowOf(t.active)) return fail(ErrorCode::InvalidInput, "no configuration '" + t.active + "'");
     return std::monostate{};
 }
 
@@ -93,8 +96,8 @@ Status PartDocument::setConfigurationTable(ConfigurationTable table) {
 }
 
 Status PartDocument::setConfigurationCell(std::size_t row, std::size_t column, const std::string& value) {
-    if (row >= table_.rows.size()) return fail("no configuration row " + std::to_string(row));
-    if (column >= table_.columns.size()) return fail("no configuration column " + std::to_string(column));
+    if (row >= table_.rows.size()) return fail(ErrorCode::InvalidInput, "no configuration row " + std::to_string(row));
+    if (column >= table_.columns.size()) return fail(ErrorCode::InvalidInput, "no configuration column " + std::to_string(column));
     ConfigurationTable t = table_;
     t.rows[row].cells[column] = value;
     if (auto st = validateTable(t); !st) return st;
@@ -125,7 +128,7 @@ Status PartDocument::addConfigurationColumn(ConfigurationColumn column) {
 }
 
 Status PartDocument::activateConfiguration(const std::string& designation) {
-    if (!designation.empty() && !table_.rowOf(designation)) return fail("no configuration '" + designation + "'");
+    if (!designation.empty() && !table_.rowOf(designation)) return fail(ErrorCode::InvalidInput, "no configuration '" + designation + "'");
     if (designation == table_.active) return std::monostate{};
     State before = captureState();
     table_.active = designation;

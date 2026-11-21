@@ -219,16 +219,13 @@ kernel::Result<ConfigurationTable> configurationTableFromCsv(std::string_view cs
     if (!records) return records.error();
     if (records.value().empty()) return Error{ErrorCode::ParseError, "CSV is empty: expected a header line"};
     const CsvRecord& header = records.value().front();
-    auto headerError = [&](const std::string& msg) {
-        return Error{ErrorCode::ParseError, "CSV line " + std::to_string(header.line) + ": " + msg};
-    };
-    if (header.cells.size() < 2) return headerError("the header needs the columns 'designation;name'");
+    if (header.cells.size() < 2) return Error{ErrorCode::ParseError, "CSV line " + std::to_string(header.line) + ": the header needs the columns 'designation;name'"};
     const std::string h0 = asciiLower(header.cells[0]);
     const std::string h1 = asciiLower(header.cells[1]);
     if ((h0 != "designation" && header.cells[0] != "Обозначение" && header.cells[0] != "обозначение") ||
         (h1 != "name" && header.cells[1] != "Наименование" && header.cells[1] != "наименование")) {
-        return headerError("the first two columns must be 'designation' and 'name', found '" + header.cells[0] + "' and '" +
-                           header.cells[1] + "'");
+        return Error{ErrorCode::ParseError, "CSV line " + std::to_string(header.line) + ": the first two columns must be 'designation' and 'name', found '" +
+                                                header.cells[0] + "' and '" + header.cells[1] + "'"};
     }
     ConfigurationTable table;
     for (std::size_t k = 2; k < header.cells.size(); ++k) {
@@ -251,12 +248,12 @@ kernel::Result<ConfigurationTable> configurationTableFromCsv(std::string_view cs
             col.target = title;
             if (col.target.front() == '$') col.target.erase(0, 1);
         } else {
-            return headerError("column " + std::to_string(k + 1) + " has an empty title");
+            return Error{ErrorCode::ParseError, "CSV line " + std::to_string(header.line) + ": column " + std::to_string(k + 1) + " has an empty title"};
         }
         if (col.kind != ConfigurationColumnKind::Material && col.target.empty()) {
-            return headerError("column " + std::to_string(k + 1) + " '" + title + "' names no feature");
+            return Error{ErrorCode::ParseError, "CSV line " + std::to_string(header.line) + ": column " + std::to_string(k + 1) + " '" + title + "' names no feature"};
         }
-        if (table.columnOf(col)) return headerError("column '" + title + "' is repeated");
+        if (table.columnOf(col)) return Error{ErrorCode::ParseError, "CSV line " + std::to_string(header.line) + ": column '" + title + "' is repeated"};
         table.columns.push_back(std::move(col));
     }
     for (std::size_t r = 1; r < records.value().size(); ++r) {
