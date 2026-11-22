@@ -61,8 +61,20 @@ export function singleKind(type: MeasureType): PickKind | null {
  * edges: a pick of the other kind than the first replaces it.
  */
 export function addPick(picks: readonly MeasurePick[], pick: MeasurePick, type: MeasureType): MeasurePick[] {
+  // Two points on a mesh are the same pick only when they are within the snapping distance (two
+  // points of one triangle are two picks).
+  const samePoint = (a: MeasurePick, b: MeasurePick) => {
+    if (a.kind !== 'mesh') return true;
+    const p = a.point ?? [0, 0, 0];
+    const q = b.point ?? [0, 0, 0];
+    return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) <= Math.max(a.snap ?? 0, 1e-9);
+  };
   const same = (a: MeasurePick, b: MeasurePick) =>
-    a.kind === b.kind && a.index === b.index && a.mesh === b.mesh && (a.path ?? []).join('/') === (b.path ?? []).join('/');
+    a.kind === b.kind &&
+    a.index === b.index &&
+    a.mesh === b.mesh &&
+    (a.path ?? []).join('/') === (b.path ?? []).join('/') &&
+    samePoint(a, b);
   if (pick.kind === 'mesh' && !acceptsMesh(type)) return [...picks];
   const wanted = singleKind(type);
   if (wanted && pick.kind !== wanted) return [...picks];
