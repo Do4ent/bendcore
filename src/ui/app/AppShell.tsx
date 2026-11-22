@@ -676,6 +676,7 @@ const AppShell: React.FC = () => {
             exportRequest={tab.exportRequest}
             importFile={tab.importAssembly ?? null}
             partLibrary={partLibrary}
+            defaultMaterial={tab.defaultMaterial ?? null}
             onOpenPart={(part) => openTab('part', part)}
           />
         );
