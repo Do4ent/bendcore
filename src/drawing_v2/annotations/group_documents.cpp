@@ -97,7 +97,7 @@ Result<GroupTableLayout> addGroupTable(Drawing& d, Point2 br, const Rect& frame,
     double total = 0.0;
     for (double w : widths.value()) total += w;
     const double x0 = br.x - total, y0 = br.y, y1 = y0 + groupTableHeight(t, o);
-    if (x0 < frame.x0 - 1e-9 || y1 > frame.y1 + 1e-9) return invalid("group table does not fit the frame");
+    if (x0 < frame.x0 - 1e-9 || y1 > frame.y1 + 1e-9) return Error{ErrorCode::InvalidInput, "group table does not fit the frame"};
     BC_TRY(ensureLayer(d, o.layer, 7));
     auto line = [&](double ax, double ay, double bx, double by, bool thick) {
         return d.add(Entity{LineSeg{{ax, ay}, {bx, by}}, o.layer, thick ? LineType::SolidThick : LineType::SolidThin});
@@ -209,7 +209,7 @@ Result<GroupSpecification> buildGroupSpecification(const assembly_v2::Configurat
     }
     for (const auto& row : bom.rows) {
         if (o.dissolve.count(row.definition))
-            return invalid("group specification: dissolved subassemblies are not supported ('" + row.name + "')");
+            return Error{ErrorCode::InvalidInput, "group specification: dissolved subassemblies are not supported ('" + row.name + "')"};
         if (row.quantities.size() != n)
             return invalid("group specification: row '" + row.name + "' has " + std::to_string(row.quantities.size()) +
                            " quantities, expected " + std::to_string(n));
@@ -261,7 +261,9 @@ Result<GroupSpecification> buildGroupSpecification(const assembly_v2::Configurat
 
 Result<std::vector<double>> groupSpecColumnWidths(std::size_t n) {
     if (n == 0) return invalid("group specification: no configurations");
-    if (n > 7) return invalid("group specification: " + std::to_string(n) + " configurations do not fit the quantity columns (at most 7)");
+    if (n > 7)
+        return Error{ErrorCode::InvalidInput,
+                     "group specification: " + std::to_string(n) + " configurations do not fit the quantity columns (at most 7)"};
     const double q = n <= 4 ? 10.0 : 8.0;
     const double note = n <= 4 ? 22.0 : 12.0;
     const double name = 185.0 - (6 + 6 + 8 + 70) - note - q * double(n);

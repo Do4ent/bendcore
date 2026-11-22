@@ -62,7 +62,8 @@ Result<ModelSnapshot> snapshotPartConfigurations(const modeling::PartDocument& d
         const std::string prefix = "configuration '" + row.designation + "': ";
         if (auto st = copy.activateConfiguration(row.designation); !st) return Error{st.error().code, prefix + st.error().message};
         const modeling::RebuildReport rep = copy.rebuild();
-        if (!rep.failed.empty()) return Error{ErrorCode::OperationFailed, prefix + "feature '" + rep.failed.front() + "' failed"};
+        if (!rep.failed.empty())
+            return Error{ErrorCode::OperationFailed, "configuration '" + row.designation + "': feature '" + rep.failed.front() + "' failed"};
         ModelProperties props = properties;
         const std::string materialId = copy.configurationMaterial();
         if (!materialId.empty()) {
@@ -157,8 +158,8 @@ Result<GroupDrawingResult> DrawingDocument::computeGroup(const ModelSnapshot& mo
             gd.id = item.id;
             gd.letter = item.groupLetter;
             if (!gd.letter.empty() && !used.insert(gd.letter).second)
-                return invalid("group drawing: letter '" + gd.letter + "' of dimension '" + gd.sheet + "/" + gd.id +
-                               "' is already used");
+                return Error{ErrorCode::InvalidInput, "group drawing: letter '" + gd.letter + "' of dimension '" + gd.sheet + "/" +
+                                                          gd.id + "' is already used"};
             for (std::size_t c = 0; c < n; ++c) {
                 gd.values.push_back(value[c][si][di]);
                 gd.texts.push_back(text[c][si][di]);
