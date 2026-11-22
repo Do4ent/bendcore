@@ -24,13 +24,12 @@ type Translate = (key: MessageKey, params?: Record<string, string | number>) => 
 type Run = (label: string, action: (d: Drawing) => unknown) => Promise<boolean>;
 
 /** Text input that commits on Enter or blur when the value changed. */
-function CommitInput(props: { value: string; placeholder?: string; title?: string; testId: string; size?: number; onCommit: (v: string) => void }) {
-  const { value, placeholder, title, testId, size, onCommit } = props;
+function CommitInput(props: { value: string; title?: string; testId: string; size?: number; onCommit: (v: string) => void }) {
+  const { value, title, testId, size, onCommit } = props;
   return (
     <input
       key={value}
       defaultValue={value}
-      placeholder={placeholder}
       title={title}
       size={size}
       data-testid={testId}
