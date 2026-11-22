@@ -235,9 +235,15 @@ export class AssemblyDocumentHandle {
     return this.#call('asmActivateConfiguration', designation);
   }
 
-  /** { decimal: '.' | ',', bom } → CSV text of the table. */
+  /**
+   * { decimal: '.' | ',', bom } → CSV text of the table. With the byte order mark (default) the
+   * text starts with U+FEFF: the module's UTF-8 decoding of a string drops the mark the kernel
+   * wrote, so it is restored here, the same way as in the part API.
+   */
   configurationsToCsv(options = {}) {
-    return this.#call('asmConfigurationsToCsv', options);
+    const csv = this.#call('asmConfigurationsToCsv', options);
+    const bom = !options || options.bom === undefined || options.bom === null ? true : Boolean(options.bom);
+    return bom && typeof csv === 'string' && !csv.startsWith('\uFEFF') ? `\uFEFF${csv}` : csv;
   }
 
   /** CSV text → table (not applied; pass it to setConfigurationTable). */

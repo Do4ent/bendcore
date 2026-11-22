@@ -108,9 +108,15 @@ export class PartDocumentHandle {
     return this.#call('docCheckConfigurations');
   }
 
-  /** CSV text of the table; options { decimal: '.' | ',', bom: boolean }. */
+  /**
+   * CSV text of the table; options { decimal: '.' | ',', bom: boolean }. With the byte order mark
+   * (default) the text starts with U+FEFF: the module's UTF-8 decoding of a string drops the mark
+   * the kernel wrote, so it is restored here, the same way as in the assembly API.
+   */
   exportConfigurationsCsv(options = {}) {
-    return this.#call('docExportConfigurationsCsv', options);
+    const csv = this.#call('docExportConfigurationsCsv', options);
+    const bom = !options || options.bom === undefined || options.bom === null ? true : Boolean(options.bom);
+    return bom && typeof csv === 'string' && !csv.startsWith('\uFEFF') ? `\uFEFF${csv}` : csv;
   }
 
   /** Replaces the table by a CSV file (';' separator, decimal point or comma). */
