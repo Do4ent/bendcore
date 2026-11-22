@@ -484,11 +484,14 @@ Status DrawingDocument::moveDimension(const ModelSnapshot& model, const std::str
     if (!bindingR) return bindingR.error();
     annotations::AnnotationStyle style;
     style.font = textMetrics(font_);
-    auto moved = annotations::moveDimensionTo(it->def, bindingR.value(), cv->sheetView, target, style);
+    annotations::DimensionDef lettered = it->def;
+    lettered.letter = groupLetterOf(sheet, id);  // ширина надписи группового чертежа — по букве
+    auto moved = annotations::moveDimensionTo(lettered, bindingR.value(), cv->sheetView, target, style);
     if (!moved) return moved.error();
     const double delta = moved.value().offset - it->def.offset;
     if (it->group.empty()) {
         it->def = std::move(moved).value();
+        it->def.letter.clear();
         return okStatus();
     }
     // Группа: все размерные линии — на ту же величину; сторона изображения не меняется.
