@@ -209,6 +209,10 @@ test('CSV and file round trips without loss; old files without a table', () => {
     const before = doc.configurations();
     for (const decimal of ['.', ',']) {
       const csv = doc.exportConfigurationsCsv({ decimal });
+      // The byte order mark is not lost on the way from the module (its string decoding drops it).
+      assert.equal(csv.charCodeAt(0), 0xfeff, 'the CSV starts with the byte order mark');
+      assert.equal(doc.exportConfigurationsCsv().charCodeAt(0), 0xfeff, 'the mark is the default');
+      assert.ok(!doc.exportConfigurationsCsv({ decimal, bom: false }).startsWith('\uFEFF'), 'bom: false leaves it out');
       assert.ok(csv.includes(decimal === ',' ? ';80,5;' : ';80.5;'), csv);
       doc.setConfigurations({ columns: [], rows: [], active: '' });
       doc.importConfigurationsCsv(csv);

@@ -9,9 +9,11 @@
  */
 
 import type { DocKind, DocumentFile } from './editorHost';
+import type { AnyTemplate } from './templates';
 
 export const DB_NAME = 'bendcore-app';
-export const DB_VERSION = 1;
+/** 2: the store of user templates (docs/ui/APP_SHELL.md, "Шаблоны"). */
+export const DB_VERSION = 2;
 export const RECENT_LIMIT = 12;
 
 export interface RecentEntry {
@@ -114,6 +116,19 @@ export class AppStore {
     return this.delete('drafts', id);
   }
 
+  /** User templates (the built-in ones are not stored), oldest first. */
+  async templates(): Promise<AnyTemplate[]> {
+    return (await this.all<AnyTemplate>('templates')).sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  putTemplate(template: AnyTemplate): Promise<void> {
+    return this.put('templates', template);
+  }
+
+  removeTemplate(id: string): Promise<void> {
+    return this.delete('templates', id);
+  }
+
   async clearDrafts(): Promise<void> {
     const tx = this.db.transaction('drafts', 'readwrite');
     tx.objectStore('drafts').clear();
@@ -129,6 +144,7 @@ export async function openAppStore(): Promise<{ store: AppStore | null; reason: 
       const db = req.result;
       if (!db.objectStoreNames.contains('recent')) db.createObjectStore('recent', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('templates')) db.createObjectStore('templates', { keyPath: 'id' });
     };
     const db = await request(req);
     return { store: new AppStore(db), reason: null };

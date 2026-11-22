@@ -50,6 +50,7 @@ import BusyIndicator from '../app/BusyIndicator';
 import { useHotkeys } from '../app/hotkeys';
 import { useI18n } from '../app/i18n';
 import type { DocumentFile, EditorHostProps, PartSource } from '../app/editorHost';
+import { defaultComponentProperties } from '../app/templates';
 import { downloadText } from '../app/editorHost';
 import { useFaultReport } from '../app/faultReport';
 import ExportDialog from '../exchange/ExportDialog';
@@ -130,6 +131,8 @@ function findOccurrence(list: OccurrenceInfo[], id: number): OccurrenceInfo | nu
 export interface AssemblyAppProps extends EditorHostProps {
   /** Parts the shell can insert without a file dialog (open part tabs, recent part files). */
   partLibrary?: PartSource[];
+  /** Assembly template: material and density of inserted parts that have none of their own. */
+  defaultMaterial?: { name: string; density: number } | null;
   /** STEP/IGES assembly opened at start ("Import STEP/IGES" of the shell) instead of `initial`. */
   importFile?: { name: string; format: ImportFormat; text: string } | null;
 }
@@ -147,6 +150,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   onOpenPart,
   onFault,
   partLibrary,
+  defaultMaterial = null,
   importFile = null,
   exportRequest,
 }) => {
@@ -163,6 +167,8 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   const savedRef = useRef<string | null>(null);
   /** Part JSON of definitions inserted from bendcore parts ("open component part"). */
   const partsRef = useRef<PartSource[]>(initial?.parts ?? []);
+  const defaultMaterialRef = useRef(defaultMaterial);
+  defaultMaterialRef.current = defaultMaterial;
   const hostRef = useRef({ onChange, onFile, onOpenPart });
   hostRef.current = { onChange, onFile, onOpenPart };
   const openInputRef = useRef<HTMLInputElement | null>(null);
@@ -391,7 +397,8 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
       const exchange = importFormatOf(fileName);
       const first = (await doc.state()).occurrences.length === 0;
       const name = baseName(fileName.replace(/\.bcpart\.json$/i, '.json'));
-      const r = await doc.insertPart({ name, format: exchange ?? 'part-json', data: text, fixed: first, beside: !first });
+      const properties = defaultComponentProperties(text, defaultMaterialRef.current ?? null);
+      const r = await doc.insertPart({ name, format: exchange ?? 'part-json', data: text, fixed: first, beside: !first, ...(properties ? { properties } : {}) });
       if (!exchange) partsRef.current = [...partsRef.current.filter((p) => p.definition !== r.definition), { definition: r.definition, name: fileName, text }];
     });
 
@@ -1031,9 +1038,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
               onExportCsv={(decimal) =>
                 void run(async (d) => {
                   const csv = await d.configurationsToCsv({ decimal });
-                  // UTF-8 decoding of the module's string drops the byte order mark Excel needs.
-                  const text = csv.startsWith('\uFEFF') ? csv : `\uFEFF${csv}`;
-                  downloadText(`${state.name || 'assembly'}.configurations.csv`, text, 'text/csv');
+                  downloadText(`${state.name || 'assembly'}.configurations.csv`, csv, 'text/csv');
                 })
               }
             />

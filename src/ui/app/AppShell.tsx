@@ -30,6 +30,12 @@ import { I18nContext, LANGS, storeLang, storedLang, translate } from './i18n';
 import type { I18n, Lang, MessageKey } from './i18n';
 import { useHotkeys } from './hotkeys';
 import { AppStore, DraftEntry, RecentEntry, detectKind, openAppStore, recentId } from './storage';
+import { BUILTIN_TEMPLATES, newTemplateId, parseTemplateFile, serializeTemplate, templateFileName } from './templates';
+import type { AnyTemplate } from './templates';
+import { buildAssembly, buildDrawing, buildPart, settingsOfDocument } from './templateService';
+import { SaveTemplateDialog, TemplatePanel, templateTitle } from './TemplatePanel';
+import type { TemplateModelChoice } from './TemplatePanel';
+import { downloadText } from './editorHost';
 import { migrateDrawingDocument, packDrawingFile, readDrawingFiles } from '../drawing/drawingFile';
 import type { ModuleFaultInfo } from './faultReport';
 import type { ModuleKind } from '../worker/protocol';
@@ -59,6 +65,8 @@ interface Tab {
   importAssembly?: { name: string; format: ImportFormat; text: string } | null;
   /** Incremented by "Export…" of the shell (EditorHostProps.exportRequest). */
   exportRequest: number;
+  /** Assembly made from a template: material and density of inserted parts that have none. */
+  defaultMaterial?: { name: string; density: number } | null;
 }
 
 interface TabFault extends ModuleFaultInfo {
@@ -82,6 +90,7 @@ export interface AppShellState {
   storage: 'loading' | 'ready' | 'unavailable';
   offeredDrafts: { id: string; kind: DocKind; name: string }[];
   recent: { id: string; kind: DocKind; name: string }[];
+  templates: { id: string; kind: DocKind; name: string; builtin: boolean }[];
   notifications: Notification[];
   lang: Lang;
 }
@@ -137,6 +146,11 @@ const AppShell: React.FC = () => {
   const [storageReason, setStorageReason] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [offered, setOffered] = useState<DraftEntry[]>([]);
+  const [userTemplates, setUserTemplates] = useState<AnyTemplate[]>([]);
+  const [templateBusy, setTemplateBusy] = useState<string | null>(null);
+  const [saveTemplateFor, setSaveTemplateFor] = useState<string | null>(null);
+  /** Tabs made from a template that are not saved yet: the file the editor reports first is not a "recent" one. */
+  const freshTabs = useRef(new Map<string, DocumentFile>());
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [menu, setMenu] = useState<{ tab: string; x: number; y: number } | null>(null);
@@ -168,10 +182,11 @@ const AppShell: React.FC = () => {
         return;
       }
       try {
-        const [r, d] = await Promise.all([s.recent(), s.drafts()]);
+        const [r, d, tpl] = await Promise.all([s.recent(), s.drafts(), s.templates()]);
         if (!live) return;
         setRecent(r);
         setOffered(d);
+        setUserTemplates(tpl);
         for (const x of d) storedDrafts.current.add(x.id);
         setStore(s);
         setStorage('ready');
@@ -465,6 +480,135 @@ const AppShell: React.FC = () => {
     return out;
   }, [tabs, recent]);
 
+  // ------------------------------------------------------------ templates
+
+  const setTemplateDefaults = (id: string, material: { name: string; density: number } | null) =>
+    setTabs((list) => list.map((x) => (x.id === id ? { ...x, defaultMaterial: material } : x)));
+
+  const allTemplates = useMemo<AnyTemplate[]>(() => [...BUILTIN_TEMPLATES, ...userTemplates], [userTemplates]);
+
+  /** Models a drawing from a template can be made of: open part and assembly tabs, then recent files. */
+  const templateModels = useMemo<TemplateModelChoice[]>(() => {
+    const out: TemplateModelChoice[] = [];
+    for (const tab of tabs) {
+      if ((tab.kind === 'part' || tab.kind === 'assembly') && tab.snapshot) {
+        out.push({ key: `tab:${tab.id}`, kind: tab.kind, name: tab.snapshot.name, source: 'open' });
+      }
+    }
+    for (const r of recent) {
+      if (r.file.kind === 'part' || r.file.kind === 'assembly') out.push({ key: `recent:${r.id}`, kind: r.file.kind, name: r.file.name, source: 'recent' });
+    }
+    return out;
+  }, [tabs, recent]);
+
+  const failText = (e: unknown) => {
+    const r = e as { code?: string; detail?: string; message?: string } | undefined;
+    return r?.code ? kernelMessageLine(localizeKernelError(t, r)) : String(r?.message ?? e);
+  };
+
+  /** Builds a document of the template with the kernel and opens it in a new tab (not saved yet). */
+  const createFromTemplate = async (template: AnyTemplate, choice: TemplateModelChoice | null) => {
+    const title = templateTitle(t, template);
+    setTemplateBusy(template.id);
+    try {
+      let file: DocumentFile;
+      if (template.kind === 'part') {
+        file = await buildPart(template.settings, t('part.newFile'));
+      } else if (template.kind === 'assembly') {
+        file = await buildAssembly(template.settings, t('assembly.defaultName'), `${t('assembly.defaultName')}.bcasm.json`);
+      } else {
+        const source = choice
+          ? choice.source === 'open'
+            ? tabsRef.current.find((x) => `tab:${x.id}` === choice.key)?.snapshot
+            : recent.find((x) => `recent:${x.id}` === choice.key)?.file
+          : null;
+        if (!source || (source.kind !== 'part' && source.kind !== 'assembly')) {
+          notify('error', t('template.noModel'));
+          return;
+        }
+        file = await buildDrawing(template.settings, source);
+      }
+      const id = openTab(file.kind, file, { dirty: true });
+      freshTabs.current.set(id, file);
+      if (template.kind === 'assembly') setTemplateDefaults(id, template.settings.material);
+    } catch (e) {
+      notify('error', t('template.createFailed', { name: title, reason: failText(e) }));
+    } finally {
+      setTemplateBusy(null);
+    }
+  };
+
+  const saveAsTemplate = async (name: string) => {
+    const tab = tabsRef.current.find((x) => x.id === saveTemplateFor);
+    const s = storeRef.current;
+    if (!tab || !tab.snapshot || tab.kind === 'viewer') return;
+    if (!s) {
+      notify('error', t('template.saveFailed', { reason: storageReason ?? 'IndexedDB is not available' }));
+      setSaveTemplateFor(null);
+      return;
+    }
+    setTemplateBusy('save');
+    try {
+      const doc = await settingsOfDocument(tab.snapshot);
+      if (typeof doc === 'string') throw new Error(doc);
+      const template = {
+        format: 'bendcore-template',
+        version: 1,
+        id: newTemplateId(),
+        kind: doc.kind,
+        name,
+        builtin: false,
+        createdAt: Date.now(),
+        settings: doc.settings,
+      } as AnyTemplate;
+      await s.putTemplate(template);
+      setUserTemplates((list) => [...list, template]);
+      notify('info', t('template.saved', { name }));
+      setSaveTemplateFor(null);
+    } catch (e) {
+      notify('error', t('template.saveFailed', { reason: failText(e) }));
+    } finally {
+      setTemplateBusy(null);
+    }
+  };
+
+  const exportTemplate = (template: AnyTemplate) => {
+    const file = templateFileName(template.name, template.id);
+    downloadText(file, serializeTemplate(template), 'application/json');
+    notify('info', t('template.exported', { name: template.name, file }));
+  };
+
+  const deleteTemplate = (template: AnyTemplate) => {
+    const s = storeRef.current;
+    if (!s || !window.confirm(t('template.confirmDelete', { name: template.name }))) return;
+    s.removeTemplate(template.id).then(
+      () => {
+        setUserTemplates((list) => list.filter((x) => x.id !== template.id));
+        notify('info', t('template.deleted', { name: template.name }));
+      },
+      (e: unknown) => notify('error', failText(e)),
+    );
+  };
+
+  const importTemplates = async (list: FileList | null) => {
+    const s = storeRef.current;
+    for (const f of list ? [...list] : []) {
+      const r = parseTemplateFile(await f.text(), { id: newTemplateId(), now: Date.now() });
+      if (!r.ok) {
+        notify('error', t('template.importFailed', { name: f.name, reason: r.error }));
+        continue;
+      }
+      try {
+        if (!s) throw new Error(storageReason ?? 'IndexedDB is not available');
+        await s.putTemplate(r.template);
+        setUserTemplates((l) => [...l, r.template]);
+        notify('info', t('template.imported', { name: r.template.name }));
+      } catch (e) {
+        notify('error', t('template.saveFailed', { reason: failText(e) }));
+      }
+    }
+  };
+
   // ------------------------------------------------------------ test hook
 
   const stateRef = useRef<AppShellState | null>(null);
@@ -482,6 +626,7 @@ const AppShell: React.FC = () => {
     storage,
     offeredDrafts: offered.map((d) => ({ id: d.id, kind: d.file.kind, name: d.file.name })),
     recent: recent.map((r) => ({ id: r.id, kind: r.file.kind, name: r.file.name })),
+    templates: allTemplates.map((x) => ({ id: x.id, kind: x.kind, name: templateTitle(t, x), builtin: x.builtin })),
     notifications,
     lang,
   };
@@ -506,7 +651,14 @@ const AppShell: React.FC = () => {
       initial: tab.initial,
       initialDirty: tab.initialDirty,
       onChange: (file: DocumentFile, dirty: boolean) => onEditorChange(tab.id, file, dirty),
-      onFile: recordFile,
+      onFile: (file: DocumentFile) => {
+        // A document made from a template is not a recent file until it is saved.
+        if (freshTabs.current.get(tab.id) === file) {
+          freshTabs.current.delete(tab.id);
+          return;
+        }
+        recordFile(file);
+      },
       onFault: (info: ModuleFaultInfo) => onModuleFault(tab.id, info),
     };
     switch (tab.kind) {
@@ -524,6 +676,7 @@ const AppShell: React.FC = () => {
             exportRequest={tab.exportRequest}
             importFile={tab.importAssembly ?? null}
             partLibrary={partLibrary}
+            defaultMaterial={tab.defaultMaterial ?? null}
             onOpenPart={(part) => openTab('part', part)}
           />
         );
@@ -595,6 +748,11 @@ const AppShell: React.FC = () => {
               {t('exchange.export')}
             </button>
           )}
+          {activeTab && activeTab.kind !== 'viewer' && activeTab.snapshot && (
+            <button type="button" className="app-tab-action" onClick={() => setSaveTemplateFor(activeTab.id)} data-testid="shell-save-template">
+              {t('template.saveAs')}
+            </button>
+          )}
           {activeTab?.kind === 'part' && (
             <button type="button" className="app-tab-action" aria-pressed={massOpen} onClick={() => setMassOpen((o) => !o)} data-testid="shell-mass">
               {t('exchange.mass')}
@@ -657,6 +815,17 @@ const AppShell: React.FC = () => {
               </div>
             )}
             <div className="app-start-grid">
+              <TemplatePanel
+                templates={allTemplates}
+                models={templateModels}
+                canStore={storage === 'ready'}
+                storageReason={storageReason}
+                busy={templateBusy}
+                onCreate={(template, model) => void createFromTemplate(template, model)}
+                onExport={exportTemplate}
+                onDelete={deleteTemplate}
+                onImport={(files) => void importTemplates(files)}
+              />
               <div className="app-card">
                 <h2>{t('start.new')}</h2>
                 <button type="button" className="app-primary" onClick={() => openTab('part', null, { title: t('part.newFile') })} data-testid="new-part">
@@ -801,6 +970,15 @@ const AppShell: React.FC = () => {
             />
           )}
         </main>
+        {saveTemplateFor && activeTab && (
+          <SaveTemplateDialog
+            documentName={activeTab.snapshot?.name ?? activeTab.title}
+            initialName={(activeTab.snapshot?.name ?? activeTab.title).replace(/(\.bcpart|\.bcasm|\.bcdrw)?\.json$/i, '') || t('template.untitled', { kind: t(KIND_KEY[activeTab.kind]) })}
+            busy={templateBusy !== null}
+            onSave={(name) => void saveAsTemplate(name)}
+            onCancel={() => setSaveTemplateFor(null)}
+          />
+        )}
         <footer className="app-status" data-testid="app-status">
           <span data-testid="app-status-doc">
             {activeTab

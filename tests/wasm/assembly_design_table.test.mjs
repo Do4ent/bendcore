@@ -167,9 +167,11 @@ test('configurations: composition, BOM, mass, DOF, switching back and forth, und
     for (const decimal of ['.', ',']) {
       table = doc.configurationTable();
       const csv = doc.configurationsToCsv({ decimal });
-      // The module writes the UTF-8 byte order mark; the UTF-8 decoding of the returned string
-      // (TextDecoder) drops it, so the page adds it to the downloaded file.
-      assert.equal(csv.replace(/^\uFEFF/, '').split('\r\n')[0], 'designation;name;suppress:Планка;configuration:Брусок;mate:Вылет');
+      // The module writes the UTF-8 byte order mark; the module's UTF-8 decoding of the returned
+      // string drops it, so the JS API restores it (the same as the part API).
+      assert.equal(csv.charCodeAt(0), 0xfeff, 'the CSV starts with the byte order mark');
+      assert.equal(csv.slice(1).split('\r\n')[0], 'designation;name;suppress:Планка;configuration:Брусок;mate:Вылет');
+      assert.ok(!doc.configurationsToCsv({ decimal, bom: false }).startsWith('\uFEFF'), 'bom: false leaves it out');
       const back = doc.configurationsFromCsv(csv);
       assert.deepEqual(back.columns.map((c) => [c.kind, c.target]), table.columns.map((c) => [c.kind, c.target]));
       assert.deepEqual(back.rows.map((r) => [r.designation, r.name, r.cells]), table.rows.map((r) => [r.designation, r.name, r.cells]));
