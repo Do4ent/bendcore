@@ -1220,17 +1220,195 @@ val docMassProperties(std::uint32_t handle, val target, val density) {
     });
 }
 
+// Placed reference mesh of the part by id (a string key from the page).
+bendcore::wasm_analysis::MeshLookup meshLookup(const m::PartDocument& doc) {
+    return [&doc](const val& key) -> k::Result<std::shared_ptr<const k::TriangleMesh>> {
+        if (!key.isString()) return k::Error{k::ErrorCode::InvalidInput, "mesh must be a reference mesh id"};
+        return doc.placedReferenceMesh(key.as<std::string>());
+    };
+}
+
 // Measurement between elements of a target shape (analysis_common.hpp): spec {type, a: {kind,
-// index}, b: {kind, index}} with kernel indices of `target`.
+// index}, b: {kind, index}} with kernel indices of `target`; an element may be a point on a
+// reference mesh {kind: 'mesh', mesh: id, triangle, point, snap?} (distance only).
 val docMeasure(std::uint32_t handle, val target, val spec) {
     return withDocument(handle, [&](m::PartDocument& doc) {
+        namespace wa = bendcore::wasm_analysis;
         const m::NamedShape shape = targetShape(doc, target);
-        if (shape.isNull()) throw InputError("the part has no body to measure");
-        auto topo = k::TopologyIndex::build(k::Shape(shape.shape()));
-        if (!topo) return failure(topo.error());
-        auto result = bendcore::wasm_analysis::measureElements(topo.value(), spec);
+        std::optional<k::TopologyIndex> topo;
+        if (!shape.isNull()) {
+            auto t = k::TopologyIndex::build(k::Shape(shape.shape()));
+            if (!t) return failure(t.error());
+            topo = std::move(t).value();
+        }
+        auto element = [&](const val& ref, const std::string& what) -> k::Result<TopoDS_Shape> {
+            if (!topo) return k::Error{k::ErrorCode::InvalidInput, "the part has no body to measure"};
+            return wa::elementOf(*topo, ref, what);
+        };
+        auto plain = [&]() -> k::Result<val> {
+            if (!topo) return k::Error{k::ErrorCode::InvalidInput, "the part has no body to measure"};
+            return wa::measureElements(*topo, spec);
+        };
+        auto result = wa::measureWithMeshes(spec, meshLookup(doc), element, plain);
         if (!result) return failure(result.error());
         return success(result.value());
+    });
+}
+
+// ------------------------------------------------------------------ reference meshes
+
+val meshInfoJs(const m::ReferenceMeshInfo& i) {
+    namespace wa = bendcore::wasm_analysis;
+    val o = val::object();
+    o.set("id", i.id);
+    o.set("label", i.label);
+    o.set("fileName", i.fileName);
+    o.set("format", std::string(k::toString(i.format)));
+    o.set("bytes", static_cast<double>(i.bytes));
+    o.set("unit", i.unit);
+    o.set("rotation", point(i.rotationDegrees));
+    o.set("translation", point(i.translation));
+    o.set("visible", i.visible);
+    o.set("opacity", i.opacity);
+    o.set("report", wa::meshReportToJs(i.report));
+    o.set("properties", wa::meshPropertiesToJs(i.properties));
+    return o;
+}
+
+k::Point3 vec3Arg(const val& v, const std::string& what) {
+    auto p = bendcore::wasm_analysis::readVec3(v, what);
+    if (!p) throw InputError(p.error().message);
+    return p.value();
+}
+
+// Reference meshes of the part: [{id, label, fileName, format, bytes, unit, rotation,
+// translation, visible, opacity, report, properties}] (docs/ui/PART_MODELING_UI.md).
+val docMeshes(std::uint32_t handle) {
+    return withDocument(handle, [](m::PartDocument& doc) {
+        val out = val::array();
+        for (const std::string& id : doc.referenceMeshIds()) {
+            auto i = doc.referenceMesh(id);
+            if (!i) return failure(i.error());
+            out.call<void>("push", meshInfoJs(i.value()));
+        }
+        return success(out);
+    });
+}
+
+// spec {fileName, data: Uint8Array, format?: 'stl'|'3mf' (default: by the file name), label?,
+// unit?, rotation?, translation?, visible?, opacity?} -> id.
+val docAddMesh(std::uint32_t handle, val spec) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        if (!isObject(spec)) throw InputError("mesh spec must be an object");
+        m::ReferenceMeshSpec s;
+        s.fileName = present(spec["fileName"]) ? requireString(spec["fileName"], "spec.fileName") : std::string();
+        if (present(spec["format"])) {
+            const auto f = k::meshFileFormatFromString(requireString(spec["format"], "spec.format"));
+            if (!f) throw InputError("spec.format must be 'stl' or '3mf'");
+            s.format = *f;
+        } else {
+            const auto f = k::meshFileFormatOfName(s.fileName);
+            if (!f) throw InputError("mesh file '" + s.fileName + "' is neither .stl nor .3mf");
+            s.format = *f;
+        }
+        try {
+            s.data = bendcore::wasm_exchange::bytesFromJs(spec["data"], "spec.data");
+        } catch (const bendcore::wasm_exchange::OptionError& e) {
+            throw InputError(e.what());
+        }
+        if (present(spec["label"])) s.label = requireString(spec["label"], "spec.label");
+        if (present(spec["unit"])) s.unit = requireString(spec["unit"], "spec.unit");
+        if (present(spec["rotation"])) s.rotationDegrees = vec3Arg(spec["rotation"], "spec.rotation");
+        if (present(spec["translation"])) s.translation = vec3Arg(spec["translation"], "spec.translation");
+        s.visible = optionalBool(spec, "visible", true, "spec");
+        if (present(spec["opacity"])) {
+            if (!spec["opacity"].isNumber()) throw InputError("spec.opacity must be a number");
+            s.opacity = spec["opacity"].as<double>();
+        }
+        auto id = doc.addReferenceMesh(std::move(s));
+        if (!id) return failure(id.error());
+        return success(val(id.value()));
+    });
+}
+
+val docRemoveMesh(std::uint32_t handle, val id) {
+    return withDocument(handle, [&](m::PartDocument& doc) { return status(doc.removeReferenceMesh(requireString(id, "id"))); });
+}
+
+// edits {label?, unit?, rotation?, translation?, visible?, opacity?}: one undo entry.
+val docEditMesh(std::uint32_t handle, val idValue, val edits) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        const std::string id = requireString(idValue, "id");
+        if (!isObject(edits)) throw InputError("edits must be an object");
+        auto info = doc.referenceMesh(id);
+        if (!info) return failure(info.error());
+        const m::ReferenceMeshInfo& i = info.value();
+        const std::string unit = present(edits["unit"]) ? requireString(edits["unit"], "edits.unit") : i.unit;
+        const k::Point3 rot = present(edits["rotation"]) ? vec3Arg(edits["rotation"], "edits.rotation") : i.rotationDegrees;
+        const k::Point3 tr = present(edits["translation"]) ? vec3Arg(edits["translation"], "edits.translation") : i.translation;
+        const bool visible = optionalBool(edits, "visible", i.visible, "edits");
+        double opacity = i.opacity;
+        if (present(edits["opacity"])) {
+            if (!edits["opacity"].isNumber()) throw InputError("edits.opacity must be a number");
+            opacity = edits["opacity"].as<double>();
+        }
+        auto begun = doc.beginTransaction("edit mesh " + id);
+        if (!begun) return failure(begun.error());
+        auto apply = [&]() -> m::Status {
+            if (present(edits["label"])) {
+                if (auto st = doc.setReferenceMeshLabel(id, requireString(edits["label"], "edits.label")); !st) return st;
+            }
+            if (unit != i.unit || rot != i.rotationDegrees || tr != i.translation) {
+                if (auto st = doc.setReferenceMeshPlacement(id, unit, rot, tr); !st) return st;
+            }
+            if (visible != i.visible || opacity != i.opacity) {
+                if (auto st = doc.setReferenceMeshDisplay(id, visible, opacity); !st) return st;
+            }
+            return std::monostate{};
+        };
+        m::Status st = m::Status::failure(k::ErrorCode::OperationFailed, "edit failed");
+        try {
+            st = apply();
+        } catch (...) {
+            doc.abortTransaction();
+            throw;
+        }
+        if (!st) {
+            doc.abortTransaction();
+            return failure(st.error());
+        }
+        return status(doc.commitTransaction());
+    });
+}
+
+// Placed mesh for display: {positions, indices}.
+val docMeshGeometry(std::uint32_t handle, val id) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        auto mesh = doc.placedReferenceMesh(requireString(id, "id"));
+        if (!mesh) return failure(mesh.error());
+        return success(bendcore::wasm_analysis::meshToJs(*mesh.value()));
+    });
+}
+
+// Section of the placed mesh by {origin, normal}: {area, length, polylines, closed}.
+val docMeshSection(std::uint32_t handle, val id, val plane) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        auto mesh = doc.placedReferenceMesh(requireString(id, "id"));
+        if (!mesh) return failure(mesh.error());
+        auto r = bendcore::wasm_analysis::sectionMeshJs(*mesh.value(), plane);
+        if (!r) return failure(r.error());
+        return success(r.value());
+    });
+}
+
+// Section by the base plane 'XY'|'XZ'|'YZ' at `offset` (mm) as a new sketch of construction
+// lines -> sketch id (PartDocument::addMeshSectionSketch).
+val docMeshSectionSketch(std::uint32_t handle, val id, val plane, val offset) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        if (!offset.isNumber()) throw InputError("offset must be a number");
+        auto r = doc.addMeshSectionSketch(requireString(id, "id"), requireString(plane, "plane"), offset.as<double>());
+        if (!r) return failure(r.error());
+        return success(val(r.value()));
     });
 }
 
@@ -1285,6 +1463,13 @@ EMSCRIPTEN_BINDINGS(bendcore_modeling) {
     emscripten::function("docMassProperties", &docMassProperties);
     emscripten::function("docMeasure", &docMeasure);
     emscripten::function("docSection", &docSection);
+    emscripten::function("docMeshes", &docMeshes);
+    emscripten::function("docAddMesh", &docAddMesh);
+    emscripten::function("docRemoveMesh", &docRemoveMesh);
+    emscripten::function("docEditMesh", &docEditMesh);
+    emscripten::function("docMeshGeometry", &docMeshGeometry);
+    emscripten::function("docMeshSection", &docMeshSection);
+    emscripten::function("docMeshSectionSketch", &docMeshSectionSketch);
     emscripten::function("materialLibrary", &materialLibrary);
     emscripten::function("docConfigurations", &docConfigurations);
     emscripten::function("docSetConfigurations", &docSetConfigurations);

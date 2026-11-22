@@ -1,11 +1,12 @@
 // Types of bendcore_assembly_api.mjs (docs/ui/ASSEMBLY_UI.md).
 
 import { KernelError, faceOfTriangle } from './bendcore_kernel_api.mjs';
-import type { Measurement } from './bendcore_kernel_api.mjs';
+import type { Measurement, MeshPointElement, MeshGeometry, MeshProperties, MeshReadReport, MeshSectionResult, MeshUnit, SectionPlane } from './bendcore_kernel_api.mjs';
 import type { ExportFormat, ExportOptions, KernelMesh, MassProperties, Vec3 } from './bendcore_kernel_api.mjs';
 
 export { KernelError, faceOfTriangle };
 export type { ExportFormat, ExportOptions, KernelMesh, MassProperties, Vec3 };
+export type { MeshPointElement, MeshGeometry, MeshProperties, MeshReadReport, MeshSectionResult, MeshUnit };
 
 export interface AssemblyMassProperties {
   /** mm³ and mm² of all part occurrences. */
@@ -192,6 +193,41 @@ export interface AssemblyState {
   dragging: number | null;
   /** Assembly configuration: active designation ('' — base values), its full designation, rows. */
   configuration: { active: string; designation: string; count: number };
+  /** Reference meshes (docs/assembly/ASSEMBLY_DOCUMENT.md, section 14): not parts, not in BOM. */
+  referenceMeshes: ReferenceMeshInfo[];
+}
+
+export interface ReferenceMeshInfo {
+  id: number;
+  name: string;
+  fileName: string;
+  format: 'stl' | '3mf';
+  bytes: number;
+  unit: MeshUnit;
+  /** world placement of the mesh (file units scaled to mm first) */
+  placement: Placement;
+  visible: boolean;
+  opacity: number;
+  report: MeshReadReport;
+  /** of the world mesh */
+  properties: MeshProperties | null;
+}
+
+export interface ReferenceMeshSpec {
+  fileName: string;
+  data: Uint8Array;
+  format?: 'stl' | '3mf';
+  name?: string;
+  unit?: MeshUnit;
+  placement?: PlacementInput;
+}
+
+export interface ReferenceMeshChanges {
+  name?: string;
+  unit?: MeshUnit;
+  placement?: PlacementInput;
+  visible?: boolean;
+  opacity?: number;
 }
 
 export type AssemblyColumnKind = 'suppression' | 'configuration' | 'mateValue';
@@ -305,6 +341,7 @@ export interface TessellateOptions extends ExplodeOptions {
 
 export type AssemblyMeasureElement = { path: number[]; kind: ElementKind; index: number };
 export type AssemblyMeasureSpec =
+  | { type: 'distance'; a: AssemblyMeasureElement | MeshPointElement; b: AssemblyMeasureElement | MeshPointElement }
   | { type: 'distance' | 'angle'; a: AssemblyMeasureElement; b: AssemblyMeasureElement }
   | { type: 'length' | 'area' | 'radius'; a: AssemblyMeasureElement };
 
@@ -506,6 +543,11 @@ export class AssemblyDocumentHandle {
   element(ref: GeometryRef): ElementInfo;
   /** Measurement between elements of placed parts, world coordinates; mm and degrees. */
   measure(spec: AssemblyMeasureSpec): Measurement;
+  insertMesh(spec: ReferenceMeshSpec): number;
+  setMesh(id: number, changes: ReferenceMeshChanges): void;
+  removeMesh(id: number): void;
+  meshGeometry(id: number): MeshGeometry;
+  meshSection(id: number, plane: SectionPlane): MeshSectionResult;
   interference(options?: {
     reportTouching?: boolean;
     includeSameTopLevel?: boolean;

@@ -688,6 +688,26 @@ val occurrencesToJs(const a::AssemblyDocument& doc, const a::Definition& def, co
     return list;
 }
 
+// Reference mesh component (docs/assembly/ASSEMBLY_DOCUMENT.md, section 14): {id, name, fileName,
+// format, bytes, unit, placement, visible, opacity, report, properties (world mesh)}.
+val referenceMeshToJs(const a::AssemblyDocument& doc, const a::ReferenceMeshComponent& m) {
+    namespace wa = bendcore::wasm_analysis;
+    val x = val::object();
+    x.set("id", static_cast<double>(m.id));
+    x.set("name", m.name);
+    x.set("fileName", m.fileName);
+    x.set("format", std::string(k::toString(m.format)));
+    x.set("bytes", static_cast<double>(m.data->size()));
+    x.set("unit", m.unit);
+    x.set("placement", transformToJs(m.placement));
+    x.set("visible", m.visible);
+    x.set("opacity", m.opacity);
+    x.set("report", wa::meshReportToJs(m.parsed->report));
+    auto world = doc.worldReferenceMesh(m.id);
+    x.set("properties", world ? wa::meshPropertiesToJs(k::meshProperties(world.value())) : val::null());
+    return x;
+}
+
 val stateToJs(const Session& s) {
     const a::AssemblyDocument& doc = s.active();
     const a::DocumentSolveReport report = currentReport(doc);
@@ -812,6 +832,9 @@ val stateToJs(const Session& s) {
     cfg.set("designation", doc.configurationProperties().designation);
     cfg.set("count", static_cast<double>(doc.configurationCount()));
     out.set("configuration", cfg);
+    val meshes = val::array();
+    for (const a::ReferenceMeshComponent& m : doc.referenceMeshes()) meshes.call<void>("push", referenceMeshToJs(doc, m));
+    out.set("referenceMeshes", meshes);
     return out;
 }
 
@@ -1734,20 +1757,116 @@ TopoDS_Shape worldElement(const a::AssemblyDocument& doc, const val& ref, const 
 }
 
 // Measurement between elements of placed parts, world coordinates (analysis_common.hpp): spec
-// {type: distance | angle | length | area | radius, a: {path, kind, index}, b: {path, kind, index}}.
+// {type: distance | angle | length | area | radius, a: {path, kind, index}, b: {path, kind, index}};
+// a distance element may be a point on a reference mesh {kind: 'mesh', mesh: id, triangle, point}.
 val asmMeasure(std::uint32_t handle, val spec) {
     return withSession(handle, [&](Session& s) {
+        namespace wa = bendcore::wasm_analysis;
         const a::AssemblyDocument& doc = s.active();
         if (!isObject(spec)) throw InputError("spec must be an object");
         const std::string type = requireString(spec["type"], "spec.type");
-        const TopoDS_Shape first = worldElement(doc, spec["a"], "spec.a");
-        if (type == "length" || type == "area" || type == "radius") {
-            auto r = bendcore::wasm_analysis::measureShapes(type, first, nullptr);
-            if (!r) return failure(r.error());
-            return success(r.value());
+        auto plain = [&]() -> k::Result<val> {
+            const TopoDS_Shape first = worldElement(doc, spec["a"], "spec.a");
+            if (type == "length" || type == "area" || type == "radius") return wa::measureShapes(type, first, nullptr);
+            const TopoDS_Shape second = worldElement(doc, spec["b"], "spec.b");
+            return wa::measureShapes(type, first, &second);
+        };
+        auto lookup = [&doc](const val& key) -> k::Result<std::shared_ptr<const k::TriangleMesh>> {
+            if (!key.isNumber()) return k::Error{k::ErrorCode::InvalidInput, "mesh must be a reference mesh id"};
+            auto m = doc.worldReferenceMesh(static_cast<a::ReferenceMeshId>(key.as<double>()));
+            if (!m) return m.error();
+            return std::make_shared<const k::TriangleMesh>(std::move(m).value());
+        };
+        auto element = [&](const val& ref, const std::string& what) -> k::Result<TopoDS_Shape> {
+            return worldElement(doc, ref, what);
+        };
+        auto r = wa::measureWithMeshes(spec, lookup, element, plain);
+        if (!r) return failure(r.error());
+        return success(r.value());
+    });
+}
+
+// ------------------------------------------------------------------ reference meshes
+
+// spec {fileName, data: Uint8Array, format?, name?, unit?, placement?} -> mesh id. Not a part:
+// no BOM, mass, interference or mates; one history step without solving.
+val asmInsertMesh(std::uint32_t handle, val spec) {
+    return withSession(handle, [&](Session& s) {
+        if (!isObject(spec)) throw InputError("spec must be an object");
+        const std::string fileName = optionalString(spec, "fileName", "", "spec");
+        k::MeshFileFormat format = k::MeshFileFormat::Stl;
+        if (present(spec["format"])) {
+            const auto f = k::meshFileFormatFromString(requireString(spec["format"], "spec.format"));
+            if (!f) throw InputError("spec.format must be 'stl' or '3mf'");
+            format = *f;
+        } else {
+            const auto f = k::meshFileFormatOfName(fileName);
+            if (!f) throw InputError("mesh file '" + fileName + "' is neither .stl nor .3mf");
+            format = *f;
         }
-        const TopoDS_Shape second = worldElement(doc, spec["b"], "spec.b");
-        auto r = bendcore::wasm_analysis::measureShapes(type, first, &second);
+        std::string data;
+        try {
+            data = bendcore::wasm_exchange::bytesFromJs(spec["data"], "spec.data");
+        } catch (const bendcore::wasm_exchange::OptionError& e) {
+            throw InputError(e.what());
+        }
+        const std::string name = optionalString(spec, "name", "", "spec");
+        const std::string unit = optionalString(spec, "unit", "mm", "spec");
+        const a::Transform placement = transformFromJs(spec["placement"], "spec.placement");
+        a::ReferenceMeshId id = 0;
+        edit(s, "Insert mesh", [&](a::AssemblyDocument& d) {
+            auto r = d.addReferenceMesh(name, fileName, format, std::move(data), unit, placement);
+            if (!r) throw KernelFailure{r.error()};
+            id = r.value();
+        }, false);
+        return success(val(static_cast<double>(id)));
+    });
+}
+
+// changes {name?, unit?, placement?, visible?, opacity?}: one history step.
+val asmSetMesh(std::uint32_t handle, std::uint32_t id, val changes) {
+    return withSession(handle, [&](Session& s) {
+        if (!isObject(changes)) throw InputError("changes must be an object");
+        const std::string label = present(changes["placement"]) ? "Move mesh" : "Edit mesh";
+        edit(s, label, [&](a::AssemblyDocument& d) {
+            const a::ReferenceMeshComponent* m = d.findReferenceMesh(id);
+            if (!m) throw InputError("no reference mesh " + std::to_string(id));
+            if (present(changes["name"])) check(d.setReferenceMeshName(id, requireString(changes["name"], "changes.name")));
+            if (present(changes["unit"])) check(d.setReferenceMeshUnit(id, requireString(changes["unit"], "changes.unit")));
+            if (present(changes["placement"]))
+                check(d.setReferenceMeshPlacement(id, transformFromJs(changes["placement"], "changes.placement")));
+            if (present(changes["visible"]) || present(changes["opacity"])) {
+                m = d.findReferenceMesh(id);
+                check(d.setReferenceMeshDisplay(id, optionalBool(changes, "visible", m->visible, "changes"),
+                                                optionalNumber(changes, "opacity", m->opacity, "changes")));
+            }
+        }, false);
+        return success(val(true));
+    });
+}
+
+val asmRemoveMesh(std::uint32_t handle, std::uint32_t id) {
+    return withSession(handle, [&](Session& s) {
+        edit(s, "Remove mesh", [&](a::AssemblyDocument& d) { check(d.removeReferenceMesh(id)); }, false);
+        return success(val(true));
+    });
+}
+
+// World mesh for display: {positions, indices}.
+val asmMeshGeometry(std::uint32_t handle, std::uint32_t id) {
+    return withSession(handle, [&](Session& s) {
+        auto m = s.active().worldReferenceMesh(id);
+        if (!m) return failure(m.error());
+        return success(bendcore::wasm_analysis::meshToJs(m.value()));
+    });
+}
+
+// Section of the world mesh by {origin, normal}: {area, length, polylines, closed}.
+val asmMeshSection(std::uint32_t handle, std::uint32_t id, val plane) {
+    return withSession(handle, [&](Session& s) {
+        auto m = s.active().worldReferenceMesh(id);
+        if (!m) return failure(m.error());
+        auto r = bendcore::wasm_analysis::sectionMeshJs(m.value(), plane);
         if (!r) return failure(r.error());
         return success(r.value());
     });
@@ -2176,6 +2295,11 @@ EMSCRIPTEN_BINDINGS(bendcore_assembly) {
     emscripten::function("asmTessellate", &asmTessellate);
     emscripten::function("asmPlacements", &asmPlacements);
     emscripten::function("asmElement", &asmElement);
+    emscripten::function("asmInsertMesh", &asmInsertMesh);
+    emscripten::function("asmSetMesh", &asmSetMesh);
+    emscripten::function("asmRemoveMesh", &asmRemoveMesh);
+    emscripten::function("asmMeshGeometry", &asmMeshGeometry);
+    emscripten::function("asmMeshSection", &asmMeshSection);
     emscripten::function("asmMeasure", &asmMeasure);
     emscripten::function("asmInterference", &asmInterference);
     emscripten::function("asmBom", &asmBom);

@@ -209,6 +209,34 @@ export class AssemblyDocumentHandle {
     return this.#call('asmMeasure', spec);
   }
 
+  /**
+   * Reference mesh component (docs/assembly/ASSEMBLY_DOCUMENT.md, section 14): an STL/3MF file
+   * embedded in the document, placed by moving only; not in BOM, mass, interference or mates.
+   * spec { fileName, data: Uint8Array, format?, name?, unit?, placement? } -> mesh id.
+   */
+  insertMesh(spec) {
+    return this.#call('asmInsertMesh', spec);
+  }
+
+  /** changes { name?, unit?, placement?, visible?, opacity? } as one undo step. */
+  setMesh(id, changes) {
+    this.#call('asmSetMesh', id, changes);
+  }
+
+  removeMesh(id) {
+    this.#call('asmRemoveMesh', id);
+  }
+
+  /** World mesh for display: { positions, indices }. */
+  meshGeometry(id) {
+    return this.#call('asmMeshGeometry', id);
+  }
+
+  /** Section of the world mesh by { origin, normal }: { area, length, polylines, closed }. */
+  meshSection(id, plane) {
+    return this.#call('asmMeshSection', id, plane);
+  }
+
   /** { parts, pairs: [{ a, b, kind, volume, distance }], totalPairs, candidatePairs, totalVolume } */
   interference(options = {}) {
     return this.#call('asmInterference', options);

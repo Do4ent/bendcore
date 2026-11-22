@@ -244,6 +244,44 @@ export class PartDocumentHandle {
   }
 
   /**
+   * Reference meshes (docs/modeling/PART_DOCUMENT.md, "Справочная сетка"): STL/3MF files embedded
+   * in the document, outside the feature tree (no body, no mass). Each entry: { id, label,
+   * fileName, format, bytes, unit, rotation, translation, visible, opacity, report, properties }.
+   */
+  meshes() {
+    return this.#call('docMeshes');
+  }
+
+  /** Inserts a mesh file: { fileName, data: Uint8Array, unit?, rotation?, translation?, ... } -> id. */
+  addMesh(spec) {
+    return this.#call('docAddMesh', spec);
+  }
+
+  removeMesh(id) {
+    return this.#call('docRemoveMesh', id);
+  }
+
+  /** { label?, unit?, rotation?, translation?, visible?, opacity? } as one undo step. */
+  editMesh(id, edits) {
+    return this.#call('docEditMesh', id, edits);
+  }
+
+  /** Placed mesh for display: { positions, indices } in part mm. */
+  meshGeometry(id) {
+    return this.#call('docMeshGeometry', id);
+  }
+
+  /** Section of the placed mesh by { origin, normal }: { area, length, polylines, closed }. */
+  meshSection(id, plane) {
+    return this.#call('docMeshSection', id, plane);
+  }
+
+  /** Section by a base plane ('XY' | 'XZ' | 'YZ') at `offset` mm as a sketch of construction lines -> sketch id. */
+  meshSectionSketch(id, plane, offset) {
+    return this.#call('docMeshSectionSketch', id, plane, offset);
+  }
+
+  /**
    * Solves sketch data in the context of sketch node `featureId` (variables, placement, projected
    * edges) without changing the document (docs/ui/SKETCH_EDITOR.md): solved points and curves,
    * intersections, dof, definition, conflicting/redundant constraints, profile regions and the

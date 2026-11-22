@@ -166,7 +166,54 @@ export interface Measurement {
   /** distance: nearest points; angle: vertex, point on the first, on the second; length: start, end, middle. */
   points: Vec3[];
   diameter?: number;
+  /** distance with a reference mesh point: the point snapped to a mesh vertex */
+  vertexA?: boolean;
+  vertexB?: boolean;
 }
+/**
+ * Point on a reference mesh (part and assembly modules): the point of triangle `triangle` nearest
+ * to `point`, snapped to a corner within `snap` mm. `mesh` is the mesh id of the document.
+ */
+export type MeshPointElement = { kind: 'mesh'; mesh: string | number; triangle: number; point: Vec3; snap?: number };
+/** Measure spec of the part and assembly modules: a distance may use points on reference meshes. */
+export type MeasureSpecWithMesh<E = MeasureElement> =
+  | { type: 'distance'; a: E | MeshPointElement; b: E | MeshPointElement }
+  | { type: 'angle'; a: E; b: E }
+  | { type: 'length' | 'area' | 'radius'; a: E };
+/** Reference mesh for display: xyz positions and 3 indices per triangle (world/part mm). */
+export interface MeshGeometry {
+  positions: Float32Array;
+  indices: Uint32Array;
+}
+export interface MeshProperties {
+  vertices: number;
+  triangles: number;
+  min: Vec3;
+  max: Vec3;
+  size: Vec3;
+  /** mm^2 */
+  area: number;
+  /** mm^3 by the divergence theorem; null unless the mesh is closed */
+  volume: number | null;
+  closed: boolean;
+  openEdges: number;
+}
+export interface MeshReadReport {
+  encoding: 'binary' | 'ascii' | '3mf';
+  facetsRead: number;
+  degenerateDropped: number;
+  objects: number;
+}
+export interface MeshSectionResult {
+  /** net enclosed area (closed, consistently oriented mesh), mm^2 */
+  area: number;
+  /** total contour length, mm */
+  length: number;
+  /** xyz triples; a closed contour repeats its first point */
+  polylines: Float32Array[];
+  closed: boolean[];
+}
+export type MeshUnit = 'mm' | 'cm' | 'm' | 'in';
 export interface SectionPlane {
   origin: Vec3;
   normal: Vec3;
