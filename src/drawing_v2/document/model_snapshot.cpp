@@ -199,6 +199,8 @@ ModelLoader fileModelLoader(std::string baseDirectory) {
             if (!text) return text.error();
             auto doc = modeling::PartDocument::fromJson(text.value(), modeling::partRegistry());
             if (!doc) return doc.error();
+            // Групповой чертёж ГОСТ 2.113: все исполнения таблицы параметров.
+            if (link.withConfigurations) return snapshotPartConfigurations(doc.value(), link.properties);
             return snapshotPart(doc.value(), link.properties);
         }
         auto loaded = assembly_v2::AssemblyDocument::loadFile(p.string(), modeling::partRegistry());

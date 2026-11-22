@@ -12,6 +12,7 @@ endforeach()
 add_library(bendcore_drawing_document STATIC
   src/drawing_v2/document/model_snapshot.cpp
   src/drawing_v2/document/drawing_document.cpp
+  src/drawing_v2/document/group_drawing.cpp
   src/drawing_v2/document/serialization.cpp
   src/drawing_v2/document/specification_document.cpp
   src/drawing_v2/document/section_rules.cpp
@@ -47,6 +48,7 @@ add_executable(test_drawing_document
   tests/drawing_v2/test_drawing_document_iso.cpp
   tests/drawing_v2/test_drawing_document_section_dims.cpp
   tests/drawing_v2/test_drawing_document_dim_layout.cpp
+  tests/drawing_v2/test_drawing_document_group.cpp
 )
 target_include_directories(test_drawing_document PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawing_v2
                            ${CMAKE_CURRENT_SOURCE_DIR}/third_party)

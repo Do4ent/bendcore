@@ -8,13 +8,15 @@
  *     "modelName": "кронштейн.bcpart.json",
  *     "drawing": "<bendcore-drawing JSON, as DrawingHandle.save() wrote it>",
  *     "model":   "<bendcore-part or bendcore-assembly JSON, as DrawingHandle.saveModel() wrote it>",
- *     "specification": { "dissolvedAssemblies": ["УВ.02.000"] }      (optional, assembly drawings)
+ *     "specification": { "dissolvedAssemblies": ["УВ.02.000"],      (optional, assembly drawings)
+ *                        "groupSpecification": { "enabled": true, "layout": "columns", "columnHeaders": [] } }
  *   }
  *
  * "specification" keeps the settings of the specification document of the session that the
  * drawing document does not hold: the sub-assemblies listed by their parts (setSettings
- * {dissolvedAssemblies}); the editor applies them again after DrawingKernel.load. It is written
- * only when the list is not empty, so files without dissolved sub-assemblies stay as before.
+ * {dissolvedAssemblies}) and the group specification of GOST 2.113 (setSettings
+ * {groupSpecification}); the editor applies them again after DrawingKernel.load. Each is written
+ * only when it is not the default, so files without them stay as before.
  *
  * Why the model is embedded and not referenced by a relative path: a page in the browser cannot
  * open a file by path (only files the user picks), drafts, recent files and the "part → drawing"
@@ -44,6 +46,21 @@ export interface DrawingFileContent {
   modelName: string;
   /** Sub-assemblies listed by their parts in the specification (component keys); none if absent. */
   dissolvedAssemblies?: string[];
+  /** Group specification of GOST 2.113 (assembly configurations); absent — off. */
+  groupSpecification?: GroupSpecificationSettings;
+}
+
+export interface GroupSpecificationSettings {
+  enabled: boolean;
+  layout: 'columns' | 'variableData';
+  columnHeaders: string[];
+}
+
+/** The group specification settings worth keeping in the file: null when they are the defaults. */
+export function storedGroupSpecification(g: GroupSpecificationSettings | null | undefined): GroupSpecificationSettings | null {
+  if (!g) return null;
+  if (!g.enabled && g.layout === 'columns' && g.columnHeaders.length === 0) return null;
+  return { enabled: g.enabled, layout: g.layout, columnHeaders: [...g.columnHeaders] };
 }
 
 export type DrawingFileError =
@@ -77,13 +94,19 @@ export function packDrawingFile(content: DrawingFileContent): string {
       modelName: content.modelName,
       drawing: content.drawing,
       model: content.model,
-      ...(content.dissolvedAssemblies && content.dissolvedAssemblies.length > 0
-        ? { specification: { dissolvedAssemblies: [...content.dissolvedAssemblies] } }
-        : {}),
+      ...specificationField(content),
     },
     null,
     1,
   );
+}
+
+function specificationField(content: DrawingFileContent): { specification?: Record<string, unknown> } {
+  const spec: Record<string, unknown> = {};
+  if (content.dissolvedAssemblies && content.dissolvedAssemblies.length > 0) spec.dissolvedAssemblies = [...content.dissolvedAssemblies];
+  const group = storedGroupSpecification(content.groupSpecification);
+  if (group) spec.groupSpecification = group;
+  return Object.keys(spec).length > 0 ? { specification: spec } : {};
 }
 
 /** Content of a drawing file text (format "bendcore-drawing-file"). */
@@ -115,8 +138,13 @@ export function unpackDrawingFile(text: string): DrawingFileResult {
   if (dissolved === null) {
     return { ok: false, error: { code: 'invalid', detail: 'the field "specification.dissolvedAssemblies" must be a list of texts' } };
   }
+  const group = groupSpecificationOf(specification);
+  if (group === undefined) {
+    return { ok: false, error: { code: 'invalid', detail: 'the field "specification.groupSpecification" must be {enabled, layout, columnHeaders}' } };
+  }
   const content: DrawingFileContent = { drawing, model, modelName: typeof modelName === 'string' ? modelName : '' };
   if (dissolved.length > 0) content.dissolvedAssemblies = dissolved;
+  if (group) content.groupSpecification = group;
   return { ok: true, content, migrated: false };
 }
 
@@ -128,6 +156,18 @@ function dissolvedOf(specification: unknown): string[] | null {
   if (list === undefined) return [];
   if (!Array.isArray(list) || !list.every((k) => typeof k === 'string')) return null;
   return list as string[];
+}
+
+/** Group specification of the optional "specification" field: null — absent, undefined — malformed. */
+function groupSpecificationOf(specification: unknown): GroupSpecificationSettings | null | undefined {
+  if (typeof specification !== 'object' || specification === null) return null;
+  const g = (specification as { groupSpecification?: unknown }).groupSpecification;
+  if (g === undefined) return null;
+  if (typeof g !== 'object' || g === null || Array.isArray(g)) return undefined;
+  const { enabled, layout, columnHeaders } = g as Record<string, unknown>;
+  if (typeof enabled !== 'boolean' || (layout !== 'columns' && layout !== 'variableData')) return undefined;
+  if (!Array.isArray(columnHeaders) || !columnHeaders.every((h) => typeof h === 'string')) return undefined;
+  return { enabled, layout, columnHeaders: columnHeaders as string[] };
 }
 
 export interface NamedText {

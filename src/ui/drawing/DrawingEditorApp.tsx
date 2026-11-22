@@ -17,6 +17,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type {
+  ConfigurationTableInfo,
   DrawingDescription,
   DrawingHandle,
   DrawingKernel,
@@ -32,6 +33,7 @@ import type {
   ViewSpec,
 } from '../../wasm/bendcore_drawing_api.mjs';
 import SheetCanvas, { Handle, SheetCanvasHandle } from './SheetCanvas';
+import { GroupDrawingPanel, GroupSpecificationPanel } from './GroupPanels';
 import { FONT_FAMILY, FONT_FILE, defaultDrawingBaseUrl, loadDrawingFrom } from './drawingLoader';
 import { printDocument, printHtml } from './printSheet';
 import { CHARACTERISTICS, SCALES, SHEET_SIDES, STANDARD_VIEWS } from './labels';
@@ -73,8 +75,8 @@ import { useI18n } from '../app/i18n';
 import type { MessageKey } from '../app/i18n';
 import type { DocumentFile, EditorHostProps } from '../app/editorHost';
 import { useFaultReport } from '../app/faultReport';
-import { DRAWING_FILE_EXTENSION, drawingFileName, packDrawingFile, readDrawingFiles, unpackDrawingFile } from './drawingFile';
-import type { DrawingFileContent, DrawingFileError } from './drawingFile';
+import { DRAWING_FILE_EXTENSION, drawingFileName, packDrawingFile, readDrawingFiles, storedGroupSpecification, unpackDrawingFile } from './drawingFile';
+import type { DrawingFileContent, DrawingFileError, GroupSpecificationSettings } from './drawingFile';
 import './DrawingEditor.css';
 
 type Variable = { name: string; expression: string; value: number | null; error: string | null };
@@ -117,7 +119,8 @@ function download(bytes: Uint8Array | string, name: string, type: string) {
 }
 
 /** What "saved" compares: the drawing document and the dissolved sub-assemblies of the session. */
-const savedKey = (drawing: string, dissolved: readonly string[]) => JSON.stringify([drawing, dissolved]);
+const savedKey = (drawing: string, dissolved: readonly string[], group?: GroupSpecificationSettings | null) =>
+  JSON.stringify([drawing, dissolved, storedGroupSpecification(group)]);
 
 /**
  * Loads a drawing on its model and applies the specification settings kept beside it in the file
@@ -128,11 +131,17 @@ async function loadWithSettings(
   drawing: string,
   model: string,
   dissolvedAssemblies: string[] | undefined,
+  groupSpecification?: GroupSpecificationSettings | null,
 ): Promise<{ drawing: Remote<DrawingHandle>; report: UpdateReport }> {
   const r = await m.load(drawing, model);
-  if (dissolvedAssemblies && dissolvedAssemblies.length > 0) {
+  const group = storedGroupSpecification(groupSpecification);
+  if ((dissolvedAssemblies && dissolvedAssemblies.length > 0) || group) {
     try {
-      return { drawing: r.drawing, report: await r.drawing.setSettings({ dissolvedAssemblies }) };
+      const changes = {
+        ...(dissolvedAssemblies && dissolvedAssemblies.length > 0 ? { dissolvedAssemblies } : {}),
+        ...(group ? { groupSpecification: group } : {}),
+      };
+      return { drawing: r.drawing, report: await r.drawing.setSettings(changes) };
     } catch (e) {
       await r.drawing.dispose().catch(() => undefined);
       throw e;
@@ -204,7 +213,16 @@ export default function DrawingEditorApp({
   /** Serialises drawing bodies: one runs at a time, in click order. */
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
   /** Drawing and model JSON after the last completed change (cancel restores them). */
-  const snapshotRef = useRef<{ text: string; model: string; name: string; modelName: string; dissolvedAssemblies: string[] } | null>(null);
+  const snapshotRef = useRef<{
+    text: string;
+    model: string;
+    name: string;
+    modelName: string;
+    dissolvedAssemblies: string[];
+    groupSpecification: GroupSpecificationSettings | null;
+  } | null>(null);
+  // Group specification of GOST 2.113 (assembly): kept beside the documents in the file.
+  const groupSpecRef = useRef<GroupSpecificationSettings | null>(null);
   const savedRef = useRef<string | null>(null);
   /** Dissolved sub-assemblies of the session (the drawing document does not hold them). */
   const dissolvedRef = useRef<string[]>([]);
@@ -222,6 +240,8 @@ export default function DrawingEditorApp({
   const [pickState, setPickState] = useState<PickState>(emptyPicks);
   const [selectedView, setSelectedView] = useState<string | null>(null);
   const [variables, setVariables] = useState<Variable[]>([]);
+  // Configuration table of a part model (group drawing, GOST 2.113); null — assembly.
+  const [configurations, setConfigurations] = useState<ConfigurationTableInfo | null>(null);
   const [staleness, setStaleness] = useState<StalenessReport | null>(null);
   const [report, setReport] = useState<UpdateReport | null>(null);
   const [tab, setTab] = useState<'sheet' | 'specification'>('sheet');
@@ -291,6 +311,7 @@ export default function DrawingEditorApp({
         wantedSheet && description.sheets.some((s) => s.id === wantedSheet) ? wantedSheet : description.sheets[0]?.id ?? null;
       const pic = id ? await d.sheetPicture(id) : null;
       const vars = description.model.kind === 'part' ? await d.variables() : [];
+      const configs = description.model.kind === 'part' ? await d.configurations() : null;
       const stale = await d.checkModel();
       let specification: { table: SpecificationTable | null; reason: string | null };
       try {
@@ -302,9 +323,11 @@ export default function DrawingEditorApp({
       if (drawingRef.current !== d) return;
       setDesc(description);
       dissolvedRef.current = description.dissolvedAssemblies;
+      groupSpecRef.current = description.groupSpecification;
       setSheetId(id);
       setPicture(pic);
       setVariables(vars);
+      setConfigurations(configs);
       setStaleness(stale);
       setSpec(specification);
     },
@@ -317,9 +340,13 @@ export default function DrawingEditorApp({
     if (drawingRef.current !== d) return;
     const names = namesRef.current;
     const dissolvedAssemblies = dissolvedRef.current;
-    snapshotRef.current = { text, model, name: names.drawing, modelName: names.model, dissolvedAssemblies };
-    const file = packDrawingFile({ drawing: text, model, modelName: names.model, dissolvedAssemblies });
-    hostRef.current.onChange?.({ kind: 'drawing', name: names.drawing, text: file }, savedKey(text, dissolvedAssemblies) !== savedRef.current);
+    const groupSpecification = groupSpecRef.current;
+    snapshotRef.current = { text, model, name: names.drawing, modelName: names.model, dissolvedAssemblies, groupSpecification };
+    const file = packDrawingFile({ drawing: text, model, modelName: names.model, dissolvedAssemblies, groupSpecification: groupSpecification ?? undefined });
+    hostRef.current.onChange?.(
+      { kind: 'drawing', name: names.drawing, text: file },
+      savedKey(text, dissolvedAssemblies, groupSpecification) !== savedRef.current,
+    );
   }, []);
   /** File name of the drawing (.bcdrw.json) and of the model it was made from. */
   const namesRef = useRef({ drawing: '', model: '' });
@@ -403,13 +430,13 @@ export default function DrawingEditorApp({
     const loaded: { report: UpdateReport | null } = { report: null };
     const ok = await openDrawing(
       async (m) => {
-        const r = await loadWithSettings(m, content.drawing, content.model, content.dissolvedAssemblies);
+        const r = await loadWithSettings(m, content.drawing, content.model, content.dissolvedAssemblies, content.groupSpecification);
         loaded.report = r.report;
         return r.drawing;
       },
       name,
       content.modelName,
-      saved ? savedKey(content.drawing, content.dissolvedAssemblies ?? []) : null,
+      saved ? savedKey(content.drawing, content.dissolvedAssemblies ?? [], content.groupSpecification) : null,
       k,
     );
     if (loaded.report) setReport(loaded.report);
@@ -467,7 +494,8 @@ export default function DrawingEditorApp({
     const file = files[0];
     const model = await file.text();
     const drawingText = await d.save();
-    if (await openContent({ drawing: drawingText, model, modelName: file.name, dissolvedAssemblies: dissolvedRef.current }, namesRef.current.drawing, false)) {
+    const groupSpecification = groupSpecRef.current ?? undefined;
+    if (await openContent({ drawing: drawingText, model, modelName: file.name, dissolvedAssemblies: dissolvedRef.current, groupSpecification }, namesRef.current.drawing, false)) {
       setMessage(t('drawing.file.modelReplaced', { name: file.name }));
     }
   };
@@ -482,9 +510,10 @@ export default function DrawingEditorApp({
       const base = designation || drawingFileName(namesRef.current.drawing).slice(0, -DRAWING_FILE_EXTENSION.length);
       const name = downloadName(base, '', DRAWING_FILE_EXTENSION.slice(1));
       const dissolvedAssemblies = dissolvedRef.current;
-      const fileText = packDrawingFile({ drawing: text, model, modelName: namesRef.current.model, dissolvedAssemblies });
+      const groupSpecification = groupSpecRef.current;
+      const fileText = packDrawingFile({ drawing: text, model, modelName: namesRef.current.model, dissolvedAssemblies, groupSpecification: groupSpecification ?? undefined });
       download(fileText, name, 'application/json');
-      savedRef.current = savedKey(text, dissolvedAssemblies);
+      savedRef.current = savedKey(text, dissolvedAssemblies, groupSpecification);
       namesRef.current = { ...namesRef.current, drawing: name };
       const file: DocumentFile = { kind: 'drawing', name, text: fileText };
       hostRef.current.onFile?.(file);
@@ -514,7 +543,13 @@ export default function DrawingEditorApp({
       setKernel(client);
       setStatus('ready');
       if (snap) {
-        await openDrawing(async (m) => (await loadWithSettings(m, snap.text, snap.model, snap.dissolvedAssemblies)).drawing, snap.name, snap.modelName, saved, client.root);
+        await openDrawing(
+          async (m) => (await loadWithSettings(m, snap.text, snap.model, snap.dissolvedAssemblies, snap.groupSpecification)).drawing,
+          snap.name,
+          snap.modelName,
+          saved,
+          client.root,
+        );
       }
       else {
         setDesc(null);
@@ -1311,6 +1346,24 @@ export default function DrawingEditorApp({
                       </span>
                     )}
                     {d.state === 'dangling' && <span className="dr-muted">{t('drawing.dangling', { reason: d.reason ?? '' })}</span>}
+                    {desc.group.enabled && (
+                      <input
+                        className="dr-tol"
+                        key={`letter-${d.groupLetter}`}
+                        size={2}
+                        placeholder="A"
+                        defaultValue={d.groupLetter}
+                        title={t('drawing.group.letterHint')}
+                        data-testid={`dimension-letter-${d.id}`}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                        }}
+                        onBlur={(e) => {
+                          const groupLetter = e.target.value.trim().toUpperCase();
+                          if (groupLetter !== d.groupLetter) run(t('drawing.done.groupLetter', { id: d.id }), (h) => h.setDimension(sheet.id, d.id, { groupLetter }));
+                        }}
+                      />
+                    )}
                     <input
                       className="dr-tol"
                       placeholder={t('drawing.tolerancePlaceholder')}
@@ -1458,6 +1511,7 @@ export default function DrawingEditorApp({
                   {missingPositions.length > 0 && <div data-testid="balloon-missing">{t('drawing.balloonsMissing', { list: missingPositions.join(', ') })}</div>}
                 </div>
               )}
+              {desc?.model.kind === 'assembly' && <GroupSpecificationPanel desc={desc} table={spec.table} run={run} t={t} />}
               {desc?.model.kind === 'assembly' && spec.table && (
                 <div className="dr-box" data-testid="subassemblies">
                   <h2>{t('drawing.subassemblies')}</h2>
@@ -1531,6 +1585,8 @@ export default function DrawingEditorApp({
                   }
                 />
               )}
+
+              {desc.model.kind === 'part' && <GroupDrawingPanel desc={desc} configurations={configurations} run={run} t={t} />}
 
               <h2>{t('drawing.update')}</h2>
               <div className={`dr-box ${staleness?.modelChanged ? 'dr-stale' : ''}`} data-testid="update-panel">

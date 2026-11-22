@@ -7,8 +7,7 @@ import {
   migrateDrawingDocument,
   packDrawingFile,
   readDrawingFiles,
-  unpackDrawingFile,
-} from '../drawingFile';
+  unpackDrawingFile,, storedGroupSpecification } from '../drawingFile';
 import { detectKind } from '../../app/storage';
 
 // Kernel JSON texts: exact bytes, including a number a JavaScript double cannot hold (2^63 + 1)
@@ -40,6 +39,28 @@ describe('drawing file', () => {
     bad.specification = { dissolvedAssemblies: [1] };
     expect(unpackDrawingFile(JSON.stringify(bad))).toMatchObject({ ok: false, error: { code: 'invalid' } });
     bad.specification = 'x';
+    expect(unpackDrawingFile(JSON.stringify(bad))).toMatchObject({ ok: false, error: { code: 'invalid' } });
+  });
+
+  test('group specification (GOST 2.113) is kept beside the documents; the default is not written', () => {
+    const groupSpecification = { enabled: true, layout: 'variableData' as const, columnHeaders: ['', 'Обл.'] };
+    const text = packDrawingFile({ drawing, model: assembly, modelName: 'узел.bcasm.json', groupSpecification });
+    expect(JSON.parse(text).specification).toEqual({ groupSpecification });
+    expect(unpackDrawingFile(text)).toEqual({
+      ok: true,
+      migrated: false,
+      content: { drawing, model: assembly, modelName: 'узел.bcasm.json', groupSpecification },
+    });
+    const both = packDrawingFile({ drawing, model: assembly, modelName: 'a', dissolvedAssemblies: ['УВ.02.000'], groupSpecification });
+    expect(JSON.parse(both).specification).toEqual({ dissolvedAssemblies: ['УВ.02.000'], groupSpecification });
+    const off = { enabled: false, layout: 'columns' as const, columnHeaders: [] };
+    expect(packDrawingFile({ drawing, model: assembly, modelName: 'a', groupSpecification: off })).toBe(packDrawingFile({ drawing, model: assembly, modelName: 'a' }));
+    expect(storedGroupSpecification(off)).toBeNull();
+    expect(storedGroupSpecification(null)).toBeNull();
+    const bad = JSON.parse(text);
+    bad.specification.groupSpecification.layout = 'rows';
+    expect(unpackDrawingFile(JSON.stringify(bad))).toMatchObject({ ok: false, error: { code: 'invalid' } });
+    bad.specification.groupSpecification = { enabled: true, layout: 'columns', columnHeaders: [1] };
     expect(unpackDrawingFile(JSON.stringify(bad))).toMatchObject({ ok: false, error: { code: 'invalid' } });
   });
 

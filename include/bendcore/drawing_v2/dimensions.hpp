@@ -108,6 +108,11 @@ struct DimensionDef {
     std::string prefix;  // перед числом, например «2 отв. »
     std::string suffix;
     int decimals = 2;    // округление линейного значения
+    // Групповой чертёж ГОСТ 2.113: буквенное обозначение вместо числа («A», «⌀B», «R C»);
+    // значения — в таблице исполнений. Допуск при букве — только поле (ToleranceDisplay::ClassOnly):
+    // отклонения зависят от значения исполнения. Не сохраняется в файле: ставится при обновлении
+    // документа чертежа (DrawingSettings::group).
+    std::string letter;
 };
 
 enum class DimensionState {

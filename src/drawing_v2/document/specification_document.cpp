@@ -37,6 +37,25 @@ bool sameContent(const annotations::Specification& a, const annotations::Specifi
     return true;
 }
 
+// Совпадение группового состава: исполнения, позиции, обозначения, количества по исполнениям.
+bool sameGroup(const annotations::GroupSpecification& a, const annotations::GroupSpecification& b) {
+    if (a.configurations != b.configurations || a.columnHeaders != b.columnHeaders || a.sections.size() != b.sections.size())
+        return false;
+    for (std::size_t i = 0; i < a.sections.size(); ++i) {
+        const auto& x = a.sections[i];
+        const auto& y = b.sections[i];
+        if (x.section != y.section || x.items.size() != y.items.size()) return false;
+        for (std::size_t k = 0; k < x.items.size(); ++k) {
+            const auto& p = x.items[k];
+            const auto& q = y.items[k];
+            if (p.item.position != q.item.position || p.item.designation != q.item.designation || p.item.name != q.item.name ||
+                p.quantities != q.quantities || p.item.format != q.item.format || p.item.note != q.item.note)
+                return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 Result<bool> SpecificationDocument::update(const ModelSnapshot& model) {
@@ -55,12 +74,69 @@ Result<bool> SpecificationDocument::update(const ModelSnapshot& model) {
     o.addAssemblyDrawing = settings_.addAssemblyDrawing;
     o.assemblyDrawingFormat = settings_.assemblyDrawingFormat;
     o.reservePositions = settings_.reservePositions;
+    if (settings_.group.enabled) return updateGroup(model, o);
+    group_.reset();
     auto spec = annotations::buildSpecification(doc, o);
     if (!spec) return spec.error();
     if (!title_.designation.empty()) spec.value().designation = title_.designation;
     if (!title_.name.empty()) spec.value().name = title_.name;
     const bool changed = !spec_ || !sameContent(*spec_, spec.value());
     spec_ = std::move(spec).value();
+    const std::string hash = hashHex(model.contentHash);
+    if (hash != model_.resultHash) {
+        ++model_.revision;
+        model_.resultHash = hash;
+    }
+    return changed;
+}
+
+Result<bool> SpecificationDocument::updateGroup(const ModelSnapshot& model, const annotations::SpecificationOptions& base) {
+    const assembly_v2::AssemblyDocument& doc = *model.assembly;
+    auto bom = assembly_v2::configurationBom(doc, loadOptions_);
+    if (!bom) return Error{bom.error().code, "group specification: " + bom.error().message};
+    // Настройки по ключу составной части: строки configurationBom ссылаются на определения
+    // копии документа (исполнения компонентов), поэтому ключ берётся из самой строки.
+    annotations::GroupSpecOptions o;
+    o.base = base;
+    o.base.formats.clear();
+    o.base.notes.clear();
+    o.base.sectionOverride.clear();
+    o.base.dissolve.clear();
+    for (const assembly_v2::ConfigurationBomRow& r : bom.value().rows) {
+        const std::string key = !r.designation.empty() ? r.designation : r.name;
+        if (auto it = settings_.formats.find(key); it != settings_.formats.end()) o.base.formats[r.definition] = it->second;
+        if (auto it = settings_.notes.find(key); it != settings_.notes.end()) o.base.notes[r.definition] = it->second;
+        if (auto it = settings_.sections.find(key); it != settings_.sections.end()) o.base.sectionOverride[r.definition] = it->second;
+        if (r.kind == assembly_v2::DefinitionKind::Assembly && settings_.dissolved.count(key)) o.base.dissolve.insert(r.definition);
+    }
+    o.layout = settings_.group.layout;
+    o.columnHeaders = settings_.group.columnHeaders;
+    const auto& root = doc.definition(doc.root());
+    // Обозначение группового документа — базовое исполнение (первая строка таблицы исполнений).
+    std::string designation = !title_.designation.empty() ? title_.designation : bom.value().configurations.front().fullDesignation;
+    if (designation.empty()) designation = root.properties.designation;
+    std::string name = !title_.name.empty() ? title_.name : (root.properties.name.empty() ? root.name : root.properties.name);
+    auto group = annotations::buildGroupSpecification(bom.value(), designation, name, o);
+    if (!group) return group.error();
+    // Спецификация активного исполнения с номерами позиций групповой — для позиций сборочного
+    // чертежа. Определения строк — из копии документа: сопоставляются с составом документа по
+    // обозначению и наименованию.
+    const std::string active = doc.configurationTable().active;
+    std::size_t activeIndex = 0;
+    for (std::size_t i = 0; i < bom.value().configurations.size(); ++i)
+        if (bom.value().configurations[i].designation == active) activeIndex = i;
+    annotations::Specification spec = group.value().forConfiguration(activeIndex);
+    auto own = assembly_v2::structuredBom(doc);
+    if (!own) return own.error();
+    for (auto& sec : spec.sections)
+        for (auto& item : sec.items) {
+            if (!item.definition) continue;
+            for (const assembly_v2::BomRow& r : own.value().rows)
+                if (r.level == 0 && r.designation == item.designation && r.name == item.name) item.definition = r.definition;
+        }
+    const bool changed = !spec_ || !sameContent(*spec_, spec) || !group_ || !sameGroup(*group_, group.value());
+    spec_ = std::move(spec);
+    group_ = std::move(group).value();
     const std::string hash = hashHex(model.contentHash);
     if (hash != model_.resultHash) {
         ++model_.revision;
@@ -81,6 +157,7 @@ Result<annotations::SpecDocument> SpecificationDocument::render(const TrueTypeFo
     so.title.techControl = title_.techControl;
     so.title.normControl = title_.normControl;
     so.title.approver = title_.approver;
+    if (settings_.group.enabled && group_) return annotations::renderGroupSpecification(*group_, so);
     return annotations::renderSpecification(*spec_, so);
 }
 

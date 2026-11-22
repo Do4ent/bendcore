@@ -3,6 +3,8 @@
 
 #include <bendcore/drawing_v2/specification.hpp>
 
+#include "spec_text.hpp"
+
 #include <algorithm>
 #include <functional>
 #include <cctype>
@@ -25,41 +27,7 @@ bool sortedByDesignation(SpecSection s) {
            s == SpecSection::Kits;
 }
 
-// Текст в ячейке: высота по ряду ГОСТ 2.304 от preferred вниз до 2,5 и сжатие до 0,6.
-Result<Text> fitText(const Rect& cell, const std::string& value, double preferred, HAlign h, bool vertical,
-                     const TextMetrics* font, const char* what) {
-    constexpr double kMargin = 0.5;
-    // Сжатие — только для шрифта TrueType (0,6); шрифт ГОСТ 2.304 не сжимается.
-    const double kMinWf = font ? font->minWidthFactor() : gostStrokeFont().minWidthFactor();
-    const double along = vertical ? cell.height() : cell.width();
-    const double across = vertical ? cell.width() : cell.height();
-    const double avail = along - 2.0 * kMargin;
-    for (auto it = kGostTextHeights.rbegin(); it != kGostTextHeights.rend(); ++it) {
-        const double hgt = *it;
-        if (hgt > preferred + 1e-9 || hgt > across - 1.0 + 1e-9) continue;
-        const double w = estimateTextWidth(value, hgt, font);
-        const double wf = w <= avail ? 1.0 : avail / w;
-        if (wf < kMinWf - 1e-12) continue;
-        Text t;
-        t.utf8 = value;
-        t.height = hgt;
-        t.widthFactor = wf;
-        t.vAlign = VAlign::Middle;
-        if (vertical) {
-            t.rotationDeg = 90.0;
-            t.hAlign = HAlign::Center;
-            t.position = {(cell.x0 + cell.x1) / 2.0, (cell.y0 + cell.y1) / 2.0};
-        } else {
-            t.hAlign = h;
-            const double x = h == HAlign::Left ? cell.x0 + kMargin + 0.5
-                             : h == HAlign::Right ? cell.x1 - kMargin
-                                                  : (cell.x0 + cell.x1) / 2.0;
-            t.position = {x, (cell.y0 + cell.y1) / 2.0};
-        }
-        return t;
-    }
-    return invalid(std::string("specification: text of column '") + what + "' does not fit: " + value);
-}
+using detail::fitCellText;
 
 #define BC_TRY(expr)                 \
     do {                             \
@@ -326,7 +294,7 @@ Result<SpecDocument> renderSpecification(const Specification& spec, const SpecSh
         }
         for (int c = 0; c < 7; ++c) {
             const Rect cell{xs[c], headBottom, xs[c + 1], top};
-            auto t = fitText(cell, kColumnNames[c], 5.0, HAlign::Center, c < 3, o.font, kColumnNames[c]);
+            auto t = fitCellText(cell, kColumnNames[c], 5.0, HAlign::Center, c < 3, o.font, kColumnNames[c]);
             if (!t) return t.error();
             BC_TRY(d.add(Entity{t.value(), layer, LineType::SolidThin}));
         }
@@ -338,7 +306,7 @@ Result<SpecDocument> renderSpecification(const Specification& spec, const SpecSh
                 const Rect cell{xs[c], y0, xs[c + 1], y1};
                 const bool header = row.kind == SpecRowKind::Header;
                 const HAlign al = header || c == 0 || c == 1 || c == 2 || c == 5 ? HAlign::Center : HAlign::Left;
-                auto t = fitText(cell, row.cells[c], h, al, false, o.font, kColumnNames[c]);
+                auto t = fitCellText(cell, row.cells[c], h, al, false, o.font, kColumnNames[c]);
                 if (!t) return t.error();
                 BC_TRY(d.add(Entity{t.value(), layer, LineType::SolidThin}));
                 if (header) {
@@ -393,7 +361,7 @@ Result<Rect> addPartsList(Drawing& d, const TitleBlockLayout& layout, const Spec
     }
     auto put = [&](int c, double ry0, const std::string& s, HAlign al) -> Status {
         if (s.empty()) return okStatus();
-        auto t = fitText({xs[c], ry0, xs[c + 1], ry0 + o.rowHeight}, s, o.textHeight, al, false, o.font,
+        auto t = fitCellText({xs[c], ry0, xs[c + 1], ry0 + o.rowHeight}, s, o.textHeight, al, false, o.font,
                          o.headers[c].c_str());
         if (!t) return t.error();
         return d.add(Entity{t.value(), o.layer, LineType::SolidThin});
@@ -433,5 +401,45 @@ Result<BalloonSyncReport> synchronizeBalloons(std::vector<Balloon>& balloons, co
     }
     return rep;
 }
+
+namespace detail {
+
+// Текст в ячейке: высота по ряду ГОСТ 2.304 от preferred вниз до 2,5 и сжатие до 0,6.
+Result<Text> fitCellText(const Rect& cell, const std::string& value, double preferred, HAlign h, bool vertical,
+                     const TextMetrics* font, const char* what) {
+    constexpr double kMargin = 0.5;
+    // Сжатие — только для шрифта TrueType (0,6); шрифт ГОСТ 2.304 не сжимается.
+    const double kMinWf = font ? font->minWidthFactor() : gostStrokeFont().minWidthFactor();
+    const double along = vertical ? cell.height() : cell.width();
+    const double across = vertical ? cell.width() : cell.height();
+    const double avail = along - 2.0 * kMargin;
+    for (auto it = kGostTextHeights.rbegin(); it != kGostTextHeights.rend(); ++it) {
+        const double hgt = *it;
+        if (hgt > preferred + 1e-9 || hgt > across - 1.0 + 1e-9) continue;
+        const double w = estimateTextWidth(value, hgt, font);
+        const double wf = w <= avail ? 1.0 : avail / w;
+        if (wf < kMinWf - 1e-12) continue;
+        Text t;
+        t.utf8 = value;
+        t.height = hgt;
+        t.widthFactor = wf;
+        t.vAlign = VAlign::Middle;
+        if (vertical) {
+            t.rotationDeg = 90.0;
+            t.hAlign = HAlign::Center;
+            t.position = {(cell.x0 + cell.x1) / 2.0, (cell.y0 + cell.y1) / 2.0};
+        } else {
+            t.hAlign = h;
+            const double x = h == HAlign::Left ? cell.x0 + kMargin + 0.5
+                             : h == HAlign::Right ? cell.x1 - kMargin
+                                                  : (cell.x0 + cell.x1) / 2.0;
+            t.position = {x, (cell.y0 + cell.y1) / 2.0};
+        }
+        return t;
+    }
+    return invalid(std::string("specification: text of column '") + what + "' does not fit: " + value);
+}
+
+}  // namespace detail
 
 }  // namespace bendcore::drawing_v2::annotations

@@ -95,6 +95,16 @@ export class DrawingHandle {
     return this.#call('modelSetVariable', name, String(expression));
   }
 
+  /** Configuration table of the part (columns, rows with cells, active): the source of a group drawing. */
+  configurations() {
+    return this.#call('modelConfigurations');
+  }
+
+  /** Sets one cell of the part's configuration table and rebuilds the part; returns what an update would change. */
+  setConfigurationCell(row, column, value) {
+    return this.#call('modelSetConfigurationCell', row, column, String(value));
+  }
+
   /** Part properties for the title block: designation, name, material, density (kg/m³). */
   setModelProperties(properties) {
     return this.#call('setModelProperties', text(properties));
@@ -121,7 +131,9 @@ export class DrawingHandle {
   /**
    * Document settings: textFont 'gost2304' (single-stroke GOST 2.304 type B, default) or 'truetype'
    * (the font given to setFont); dissolvedAssemblies - component keys (designation or name) of
-   * sub-assemblies whose parts are listed and numbered instead of them (GOST 2.106).
+   * sub-assemblies whose parts are listed and numbered instead of them (GOST 2.106);
+   * group {enabled, mass, material, headers} - group drawing of a part (GOST 2.113);
+   * groupSpecification {enabled, layout, columnHeaders} - group specification of an assembly.
    */
   setSettings(changes) {
     return this.#call('setSettings', text(changes));
