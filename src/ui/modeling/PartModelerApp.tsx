@@ -12,7 +12,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { KernelMesh } from '../../wasm/bendcore_kernel_api.mjs';
+import type { KernelMesh, MeshGeometry } from '../../wasm/bendcore_kernel_api.mjs';
 import type {
   ConfigurationCheck,
   ConfigurationTable,
@@ -20,8 +20,9 @@ import type {
   FeatureTypeSpec,
   FeatureView,
   LibraryMaterial,
-  MeasureSpec,
+  MeasureSpecWithMesh,
   ModelingKernel,
+  PartMeshInfo,
   PartDocumentHandle,
   PartMaterial,
   PartMesh,
@@ -30,11 +31,13 @@ import type {
   VariableView,
 } from '../../wasm/bendcore_modeling_api.mjs';
 import KernelViewport from '../kernel/KernelViewport';
-import type { EdgePick, FacePick, KernelViewportHandle, PickMode, VertexPick } from '../kernel/KernelViewport';
+import type { EdgePick, FacePick, KernelViewportHandle, MeshPick, PickMode, ReferenceMeshDisplay, VertexPick } from '../kernel/KernelViewport';
+import { ReferenceMeshPanel } from '../kernel/ReferenceMeshPanel';
+import type { ReferenceMeshEdits } from '../kernel/ReferenceMeshPanel';
 import { MeasurePanel, SectionPanel } from '../kernel/ViewToolsPanel';
 import { useViewTools } from '../kernel/useViewTools';
 import type { ViewTools } from '../kernel/useViewTools';
-import { boxOfPositions } from '../kernel/viewTools';
+import { boxOfPositions, meshSnap, unionBox } from '../kernel/viewTools';
 import type { MeasureResult } from '../kernel/viewTools';
 import FeaturePanel from './FeaturePanel';
 import ConfigurationPanel from './ConfigurationPanel';
@@ -118,6 +121,8 @@ export interface PartModelerState {
   /** Configuration table of the document and the last check of its configurations. */
   configurations: ConfigurationTable | null;
   configurationChecks: ConfigurationCheck[] | null;
+  /** Reference meshes of the part (docs/ui/PART_MODELING_UI.md, "Справочная сетка"). */
+  meshes: PartMeshInfo[];
 }
 
 export interface PartModelerTestApi {
@@ -185,6 +190,10 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const [newVar, setNewVar] = useState({ name: '', expression: '' });
   const [sketchMode, setSketchMode] = useState<{ featureId: string; isNew: boolean; body: KernelMesh | null } | null>(null);
   const [sketchPlane, setSketchPlane] = useState('XY');
+  const [meshes, setMeshes] = useState<PartMeshInfo[]>([]);
+  const [meshGeoms, setMeshGeoms] = useState<ReadonlyMap<string, MeshGeometry>>(new Map());
+  /** Display meshes by id with the placement they were fetched for. */
+  const meshCacheRef = useRef(new Map<string, { placement: string; geometry: MeshGeometry }>());
 
   const docRef = useRef<PartDoc | null>(null);
   const kernelRef = useRef(kernel);
@@ -245,14 +254,28 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     const doc = docRef.current;
     if (!doc) return;
     try {
-      const [features, state, variables, properties, shown, configurations] = await Promise.all([
+      const [features, state, variables, properties, shown, configurations, meshList] = await Promise.all([
         doc.features(),
         doc.state(),
         doc.variables(),
         doc.properties('final', densityValue()),
         doc.tessellate(shownTarget(p), MESH_PARAMS),
         doc.configurations(),
+        doc.meshes(),
       ]);
+      // Display meshes: fetched again only when the placement of a mesh changed.
+      const cache = meshCacheRef.current;
+      const geoms = new Map<string, MeshGeometry>();
+      for (const m of meshList) {
+        const placement = JSON.stringify([m.unit, m.rotation, m.translation]);
+        let entry = cache.get(m.id);
+        if (!entry || entry.placement !== placement) {
+          entry = { placement, geometry: await doc.meshGeometry(m.id) };
+          cache.set(m.id, entry);
+        }
+        geoms.set(m.id, entry.geometry);
+      }
+      for (const id of [...cache.keys()]) if (!geoms.has(id)) cache.delete(id);
       const sketchId = p?.type === 'Sketch' ? p.featureId : selected;
       const sketch = features.find((f) => f.id === sketchId && f.type === 'Sketch');
       const sketchMesh = sketch?.sketchResult?.hasFaces ? await doc.tessellate(`sketch:${sketch.id}`, MESH_PARAMS) : null;
@@ -261,6 +284,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
       const bodies = target === 'final' ? properties.counts.solids : (await doc.properties(target)).counts.solids;
       if (docRef.current !== doc) return;
       setSnapshot({ features, doc: state, variables, properties, configurations });
+      setMeshes(meshList);
+      setMeshGeoms(geoms);
       setShownBodies(bodies);
       setMesh(shown);
       setOverlay(sketchMesh);
@@ -520,29 +545,79 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
 
   // ------------------------------------------------------------- measurements and section
 
-  const meshBox = useMemo(() => (mesh ? boxOfPositions(mesh.positions) : null), [mesh]);
-  const props0 = snapshot.properties;
-  // The picks of a measurement refer to the model: they are dropped when the model changes.
-  const modelKey = useMemo(
-    () => JSON.stringify([props0?.volume ?? null, props0?.counts ?? null, props0?.boundingBox ?? null, shownBodies]),
-    [props0, shownBodies],
+  const visibleMeshes = useMemo(() => meshes.filter((m) => m.visible), [meshes]);
+  const meshBox = useMemo(
+    () =>
+      unionBox([
+        mesh ? boxOfPositions(mesh.positions) : null,
+        ...visibleMeshes.map((m) => ({ min: m.properties.min, max: m.properties.max })),
+      ]),
+    [mesh, visibleMeshes],
   );
+  const props0 = snapshot.properties;
+  // The picks of a measurement refer to the model and the meshes: dropped when they change.
+  const modelKey = useMemo(
+    () =>
+      JSON.stringify([
+        props0?.volume ?? null,
+        props0?.counts ?? null,
+        props0?.boundingBox ?? null,
+        shownBodies,
+        meshes.map((m) => [m.id, m.unit, m.rotation, m.translation, m.visible]),
+      ]),
+    [props0, shownBodies, meshes],
+  );
+  const referenceMeshes = useMemo<ReferenceMeshDisplay[]>(
+    () =>
+      visibleMeshes.flatMap((m) => {
+        const g = meshGeoms.get(m.id);
+        return g ? [{ key: m.id, positions: g.positions, indices: g.indices, opacity: m.opacity }] : [];
+      }),
+    [visibleMeshes, meshGeoms],
+  );
+  const visibleMeshIdsRef = useRef<string[]>([]);
+  visibleMeshIdsRef.current = visibleMeshes.map((m) => m.id);
   const tools = useViewTools({
     measure: async (spec) => {
       const doc = docRef.current;
       if (!doc) throw new Error('no document');
-      return (await doc.measure(spec as MeasureSpec, 'final')) as MeasureResult;
+      return (await doc.measure(spec as MeasureSpecWithMesh, 'final')) as MeasureResult;
     },
     section: async (plane) => {
       const doc = docRef.current;
       if (!doc) throw new Error('no document');
-      return doc.section(plane, 'final');
+      // The body's section (area) and the contours of the visible reference meshes.
+      const body = (await doc.properties('final')).counts.solids > 0 ? await doc.section(plane, 'final') : { area: 0, polylines: [] };
+      const lines = [...body.polylines];
+      for (const id of visibleMeshIdsRef.current) lines.push(...(await doc.meshSection(id, plane)).polylines);
+      return { area: body.area, polylines: lines };
     },
     box: meshBox,
     modelKey,
   });
   const toolsRef = useRef(tools);
   toolsRef.current = tools;
+
+  // ------------------------------------------------------------- reference meshes
+
+  const insertMesh = async (file: File) => {
+    const data = new Uint8Array(await file.arrayBuffer());
+    void run(async (d) => {
+      await d.addMesh({ fileName: file.name, data });
+    });
+  };
+
+  const editMesh = (key: string | number, edits: ReferenceMeshEdits) => {
+    const { name, ...rest } = edits;
+    void run(async (d) => {
+      await d.editMesh(String(key), name === undefined ? rest : { ...rest, label: name });
+    });
+  };
+
+  const onPickMesh = (pick: MeshPick) => {
+    const m = meshes.find((x) => x.id === pick.key);
+    toolsRef.current.onPickMesh(pick.key, pick.triangle, pick.point, m ? meshSnap(m.properties.size) : 0);
+  };
 
   // ------------------------------------------------------------- picking
 
@@ -821,6 +896,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     tools: tools.state,
     configurations: snapshot.configurations,
     configurationChecks: configChecks,
+    meshes,
   };
   useEffect(() => {
     window.bendcorePartModeler = {
@@ -1139,6 +1215,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
             autoFrame="first"
             frameKey={frameKey}
             bodyCount={shownBodies}
+            referenceMeshes={referenceMeshes}
+            onPickMesh={measuring && tools.meshPickable ? onPickMesh : null}
             onReady={(h) => {
               viewRef.current = h;
             }}
@@ -1225,8 +1303,36 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                 )}
               </dl>
             </section>
-            <MeasurePanel {...tools.measurePanel} />
+            <MeasurePanel {...tools.measurePanel} meshHint={visibleMeshes.length > 0} />
             {tools.sectionPanel && <SectionPanel {...tools.sectionPanel} disabled={tools.sectionPanel.disabled || busyPanel} />}
+            <ReferenceMeshPanel
+              items={meshes.map((m) => ({
+                key: m.id,
+                name: m.label,
+                fileName: m.fileName,
+                unit: m.unit,
+                translation: m.translation,
+                rotation: m.rotation,
+                visible: m.visible,
+                opacity: m.opacity,
+                report: m.report,
+                properties: m.properties,
+              }))}
+              disabled={status !== 'ready' || busyPanel}
+              onInsert={(file) => void insertMesh(file)}
+              onEdit={editMesh}
+              onRemove={(key) =>
+                void run(async (d) => {
+                  await d.removeMesh(String(key));
+                })
+              }
+              onSectionSketch={(key, plane, offset) =>
+                void run(async (d) => {
+                  await d.meshSectionSketch(String(key), plane, offset);
+                  await d.rebuild();
+                })
+              }
+            />
           </aside>
           </>
         )}

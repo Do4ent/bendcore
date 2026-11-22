@@ -6,15 +6,32 @@
 export type Vec3 = [number, number, number];
 
 export type MeasureType = 'distance' | 'angle' | 'length' | 'area' | 'radius';
-export type PickKind = 'face' | 'edge';
+export type PickKind = 'face' | 'edge' | 'mesh';
 
 export const MEASURE_TYPES: readonly MeasureType[] = ['distance', 'angle', 'length', 'area', 'radius'];
 
-/** An element chosen for a measurement; `path` is set in assemblies (occurrence path). */
+/**
+ * An element chosen for a measurement; `path` is set in assemblies (occurrence path). A point on a
+ * reference mesh (docs/kernel/ANALYSIS.md, section 7) has kind 'mesh', the triangle as `index`,
+ * the mesh id, the hit point and the vertex snapping distance (mm).
+ */
 export interface MeasurePick {
   kind: PickKind;
   index: number;
   path?: number[];
+  mesh?: string | number;
+  point?: Vec3;
+  snap?: number;
+}
+
+/** Measurements a point on a reference mesh can take part in. */
+export function acceptsMesh(type: MeasureType): boolean {
+  return type === 'distance';
+}
+
+/** Vertex snapping distance for a pick on a mesh: 1 % of the diagonal of its bounding box. */
+export function meshSnap(size: Vec3): number {
+  return 0.01 * Math.hypot(size[0], size[1], size[2]);
 }
 
 /** Kernel result of a measurement (see Measurement in bendcore_kernel_api.d.mts). */
@@ -45,7 +62,8 @@ export function singleKind(type: MeasureType): PickKind | null {
  */
 export function addPick(picks: readonly MeasurePick[], pick: MeasurePick, type: MeasureType): MeasurePick[] {
   const same = (a: MeasurePick, b: MeasurePick) =>
-    a.kind === b.kind && a.index === b.index && (a.path ?? []).join('/') === (b.path ?? []).join('/');
+    a.kind === b.kind && a.index === b.index && a.mesh === b.mesh && (a.path ?? []).join('/') === (b.path ?? []).join('/');
+  if (pick.kind === 'mesh' && !acceptsMesh(type)) return [...picks];
   const wanted = singleKind(type);
   if (wanted && pick.kind !== wanted) return [...picks];
   const existing = picks.findIndex((p) => same(p, pick));
@@ -60,16 +78,24 @@ export function isComplete(picks: readonly MeasurePick[], type: MeasureType): bo
   return picks.length === picksNeeded(type);
 }
 
+/** Element of the kernel's measurement spec. */
+export type MeasureElementOut =
+  | { kind: 'face' | 'edge'; index: number; path?: number[] }
+  | { kind: 'mesh'; mesh: string | number; triangle: number; point: Vec3; snap: number };
+
 export interface MeasureSpecOut {
   type: MeasureType;
-  a: MeasurePick;
-  b?: MeasurePick;
+  a: MeasureElementOut;
+  b?: MeasureElementOut;
 }
 
 /** The kernel's measurement spec for complete picks, else null. Part and kernel specs have no `path`. */
 export function measureSpec(type: MeasureType, picks: readonly MeasurePick[], withPath: boolean): MeasureSpecOut | null {
   if (!isComplete(picks, type)) return null;
-  const el = (p: MeasurePick): MeasurePick => (withPath ? { path: p.path ?? [], kind: p.kind, index: p.index } : { kind: p.kind, index: p.index });
+  const el = (p: MeasurePick): MeasureElementOut => {
+    if (p.kind === 'mesh') return { kind: 'mesh', mesh: p.mesh ?? '', triangle: p.index, point: p.point ?? [0, 0, 0], snap: p.snap ?? 0 };
+    return withPath ? { path: p.path ?? [], kind: p.kind, index: p.index } : { kind: p.kind, index: p.index };
+  };
   return picks.length === 2 ? { type, a: el(picks[0]), b: el(picks[1]) } : { type, a: el(picks[0]) };
 }
 
@@ -157,6 +183,21 @@ export function clipEquation(plane: Pick<SectionPlaneOut, 'origin' | 'normal'>):
 /** Signed side of a point: > 0 on the removed side of the section plane. */
 export function removedSide(plane: Pick<SectionPlaneOut, 'origin' | 'normal'>, p: Vec3): number {
   return (p[0] - plane.origin[0]) * plane.normal[0] + (p[1] - plane.origin[1]) * plane.normal[1] + (p[2] - plane.origin[2]) * plane.normal[2];
+}
+
+/** Smallest box holding the given boxes (null entries skipped); null when none. */
+export function unionBox(boxes: readonly (Box3 | null)[]): Box3 | null {
+  let out: Box3 | null = null;
+  for (const b of boxes) {
+    if (!b) continue;
+    if (!out) out = { min: [...b.min], max: [...b.max] };
+    else
+      for (let k = 0; k < 3; ++k) {
+        out.min[k] = Math.min(out.min[k], b.min[k]);
+        out.max[k] = Math.max(out.max[k], b.max[k]);
+      }
+  }
+  return out;
 }
 
 /** Bounding box of a mesh position array (xyz triples); null for an empty mesh. */

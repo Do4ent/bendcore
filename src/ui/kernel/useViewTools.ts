@@ -33,6 +33,10 @@ export interface ViewTools {
   pickMode: 'face' | 'edge';
   onPickFace(index: number | null, path?: number[]): void;
   onPickEdge(index: number | null, path?: number[]): void;
+  /** A click on a reference mesh: triangle, hit point, vertex snapping distance (mm). */
+  onPickMesh(mesh: string | number, triangle: number, point: Vec3, snap: number): void;
+  /** Whether clicks on reference meshes belong to the measurement (a distance is being measured). */
+  meshPickable: boolean;
   picks: readonly MeasurePick[];
   measurePanel: MeasurePanelProps;
   sectionPanel: SectionPanelProps | null;
@@ -139,6 +143,13 @@ export function useViewTools(options: ViewToolsOptions): ViewTools {
     [type],
   );
 
+  const pickMesh = useCallback(
+    (mesh: string | number, triangle: number, point: Vec3, snap: number) => {
+      setPicks((current) => addPick(current, { kind: 'mesh', index: triangle, mesh, point, snap }, type));
+    },
+    [type],
+  );
+
   const viewport = useMemo(() => {
     const overlay = result ? measureOverlay(result) : null;
     return {
@@ -156,6 +167,8 @@ export function useViewTools(options: ViewToolsOptions): ViewTools {
     pickMode: fixedKind ?? pickKind,
     onPickFace: (index, path) => pick('face', index, path),
     onPickEdge: (index, path) => pick('edge', index, path),
+    onPickMesh: pickMesh,
+    meshPickable: active && type === 'distance',
     picks,
     measurePanel: {
       active,

@@ -21,9 +21,11 @@ export interface MeasurePanelProps {
   onType(type: MeasureType): void;
   onPickKind(kind: 'face' | 'edge'): void;
   onClear(): void;
+  /** The page shows reference meshes: a distance may be measured to their points. */
+  meshHint?: boolean;
 }
 
-export const MeasurePanel: React.FC<MeasurePanelProps> = ({ active, type, picks, result, error, pickKind, onActive, onType, onPickKind, onClear }) => {
+export const MeasurePanel: React.FC<MeasurePanelProps> = ({ active, type, picks, result, error, pickKind, onActive, onType, onPickKind, onClear, meshHint = false }) => {
   const { t } = useI18n();
   const needed = picksNeeded(type);
   const fixedKind = singleKind(type);
@@ -58,6 +60,11 @@ export const MeasurePanel: React.FC<MeasurePanelProps> = ({ active, type, picks,
           <p className="pm-hint" data-testid="measure-hint">
             {needed === 2 ? t('tools.measure.hintTwo') : t('tools.measure.hintOne')}
           </p>
+          {meshHint && type === 'distance' && (
+            <p className="pm-hint" data-testid="measure-mesh-hint">
+              {t('tools.mesh.measureHint')}
+            </p>
+          )}
           <p data-testid="measure-picked" data-count={picks.length}>
             {t('tools.measure.picked', { count: picks.length, needed })}
           </p>
