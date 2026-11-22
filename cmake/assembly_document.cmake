@@ -21,7 +21,8 @@ add_library(bendcore_assembly_document STATIC
   ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/bom.cpp
   ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/serialization.cpp
   ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/configurations.cpp
-  ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/history.cpp)
+  ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/history.cpp
+  ${BENDCORE_ASSEMBLY_DOC_ROOT}/src/assembly_v2/document/reference_meshes.cpp)
 target_compile_features(bendcore_assembly_document PUBLIC cxx_std_20)
 target_include_directories(bendcore_assembly_document PUBLIC "${BENDCORE_ASSEMBLY_DOC_ROOT}/include")
 # nlohmann/json — только для собственного формата документа (serialization.cpp).
@@ -29,7 +30,7 @@ target_include_directories(bendcore_assembly_document SYSTEM PRIVATE "${BENDCORE
 target_link_libraries(bendcore_assembly_document PUBLIC
   bendcore_assembly_v2 bendcore_modeling_document bendcore_kernel_xcaf bendcore_kernel_healing bendcore_kernel)
 # Плотность материала исполнения детали (kernel::builtInMaterials) — exchange.cpp.
-target_link_libraries(bendcore_assembly_document PRIVATE bendcore_kernel_analysis)
+target_link_libraries(bendcore_assembly_document PUBLIC bendcore_kernel_analysis)
 
 find_package(GTest QUIET)
 if(NOT GTest_FOUND)
@@ -37,7 +38,7 @@ if(NOT GTest_FOUND)
   return()
 endif()
 
-foreach(_t mates patterns interference bom exchange io history configurations assembly_configurations)
+foreach(_t mates patterns interference bom exchange io history configurations assembly_configurations reference_mesh)
   add_executable(test_assembly_document_${_t}
     ${BENDCORE_ASSEMBLY_DOC_ROOT}/tests/assembly_v2/test_assembly_document_${_t}.cpp)
   target_link_libraries(test_assembly_document_${_t} PRIVATE bendcore_assembly_document GTest::gtest GTest::gtest_main)
