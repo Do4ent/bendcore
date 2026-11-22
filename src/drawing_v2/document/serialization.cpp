@@ -365,6 +365,13 @@ Result<std::string> DrawingDocument::toJson() const {
                      {"reducedAxonometry", settings_.reducedAxonometry},
                      {"textFont", toString(settings_.textFont)}};
     if (settings_.sheetStyle != SheetStyle::Eskd) j["settings"]["sheetStyle"] = enumName(settings_.sheetStyle, kSheetStyles);
+    {
+        // Групповой чертёж ГОСТ 2.113 — только не по умолчанию (прежние версии файл прочтут).
+        const GroupDrawingSettings& g = settings_.group;
+        const GroupDrawingSettings def;
+        if (g.enabled != def.enabled || g.mass != def.mass || g.material != def.material || !g.headers.empty())
+            j["settings"]["group"] = {{"enabled", g.enabled}, {"mass", g.mass}, {"material", g.material}, {"headers", g.headers}};
+    }
     json sheets = json::array();
     for (const SheetDef& s : sheets_) {
         json js;
@@ -444,6 +451,7 @@ Result<std::string> DrawingDocument::toJson() const {
                           {"suffix", def.suffix},
                           {"decimals", def.decimals},
                           {"lastValue", d.lastValue ? json(*d.lastValue) : json(nullptr)}});
+            if (!d.groupLetter.empty()) ds.back()["groupLetter"] = d.groupLetter;
             if (!d.group.empty()) {
                 ds.back()["group"] = d.group;
                 ds.back()["groupMode"] = toString(d.groupMode);
@@ -532,6 +540,14 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
             d.settings_.reducedAxonometry = flag(s, "reducedAxonometry", true);
             if (s.contains("textFont")) d.settings_.textFont = textFontFrom(s.at("textFont"));
             if (s.contains("sheetStyle")) d.settings_.sheetStyle = enumValue(s.at("sheetStyle"), kSheetStyles, "sheet style");
+            if (s.contains("group")) {
+                const json& g = s.at("group");
+                if (!g.is_object()) fail("'group' must be an object");
+                d.settings_.group.enabled = flag(g, "enabled", false);
+                d.settings_.group.mass = flag(g, "mass", true);
+                d.settings_.group.material = flag(g, "material", false);
+                d.settings_.group.headers = g.value("headers", std::map<std::string, std::string>{});
+            }
         }
         for (const json& js : field(j, "sheets")) {
             SheetDef s;
@@ -652,6 +668,7 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                     def.suffix = str(jd, "suffix");
                     def.decimals = integer(jd, "decimals", 2);
                     if (jd.contains("lastValue") && !jd.at("lastValue").is_null()) di.lastValue = jd.at("lastValue").get<double>();
+                    di.groupLetter = str(jd, "groupLetter");
                     di.group = str(jd, "group");
                     if (!di.group.empty()) {
                         const std::string mode = str(jd, "groupMode");
@@ -798,6 +815,11 @@ Result<std::string> SpecificationDocument::toJson() const {
                      {"reservePositions", settings_.reservePositions},
                      {"dissolvedAssemblies", settings_.dissolved},
                      {"textFont", toString(settings_.textFont)}};
+    if (settings_.group.enabled || settings_.group.layout != annotations::GroupSpecLayout::Columns ||
+        !settings_.group.columnHeaders.empty())
+        j["settings"]["group"] = {{"enabled", settings_.group.enabled},
+                                  {"layout", annotations::toString(settings_.group.layout)},
+                                  {"columnHeaders", settings_.group.columnHeaders}};
     return j.dump(1);
 }
 
@@ -834,6 +856,16 @@ Result<SpecificationDocument> SpecificationDocument::fromJson(std::string_view t
         d.settings_.reservePositions = integer(s, "reservePositions", 0);
         d.settings_.dissolved = s.value("dissolvedAssemblies", std::set<std::string>{});
         if (s.contains("textFont")) d.settings_.textFont = textFontFrom(s.at("textFont"));
+        if (s.contains("group")) {
+            const json& g = s.at("group");
+            if (!g.is_object()) fail("'group' must be an object");
+            d.settings_.group.enabled = flag(g, "enabled", false);
+            const std::string layout = str(g, "layout", "columns");
+            if (layout == "columns") d.settings_.group.layout = annotations::GroupSpecLayout::Columns;
+            else if (layout == "variableData") d.settings_.group.layout = annotations::GroupSpecLayout::VariableData;
+            else fail("unknown group specification layout '" + layout + "'");
+            d.settings_.group.columnHeaders = g.value("columnHeaders", std::vector<std::string>{});
+        }
         return d;
     } catch (const ParseFailure& e) {
         return Error{ErrorCode::ParseError, "specification: " + e.message};

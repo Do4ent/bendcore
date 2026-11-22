@@ -100,6 +100,9 @@ struct SpecRow {
     // Колонки формы 1: Формат, Зона, Поз., Обозначение, Наименование, Кол., Примечание.
     std::array<std::string, 7> cells;
     bool continuation = false;  // продолжение наименования предыдущей позиции
+    // Групповая спецификация ГОСТ 2.113 (GroupSpecLayout::Columns): количество по исполнениям
+    // («–» — нет в исполнении); cells[5] тогда пусто.
+    std::vector<std::string> quantities;
 };
 
 struct SpecSheetOptions {

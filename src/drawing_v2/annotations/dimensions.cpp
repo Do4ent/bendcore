@@ -680,15 +680,16 @@ Result<DimensionResult> evaluateDimension(const DimensionDef& def, const ModelBi
 
     // Надпись: значение, знак, допуск, ручное переопределение.
     auto makeText = [&](const std::string& symbol, double value, bool angle) -> Result<TextBlock> {
-        std::string number = angle ? formatAngle(value) : formatNumber(value, def.decimals);
+        const bool letter = !def.letter.empty();
+        std::string number = letter ? def.letter : angle ? formatAngle(value) : formatNumber(value, def.decimals);
         std::string main = def.prefix + symbol + number;
         std::optional<ToleranceText> tol;
         if (def.tolerance) {
             auto dev = limitDeviations(value, *def.tolerance);
             if (!dev) return dev.error();
             res.deviations = dev.value();
-            tol = toleranceText(def.prefix + symbol + number, *def.tolerance, dev.value(), def.toleranceDisplay,
-                                st.omitZeroDeviation);
+            tol = toleranceText(def.prefix + symbol + number, *def.tolerance, dev.value(),
+                                letter ? ToleranceDisplay::ClassOnly : def.toleranceDisplay, st.omitZeroDeviation);
             main = tol->main;
         }
         if (def.textOverride) {

@@ -296,7 +296,7 @@ struct SheetRegions {
 // рамка ISO 5457 — поля 20/10, надпись ISO 7200 180×36), технические требования над ней, знак
 // «остальное» в правом верхнем углу.
 SheetRegions computeRegions(const Sheet& sheet, const SheetDef& def, const DrawingSettings& st,
-                            bool hasSecondary, const annotations::AnnotationStyle& style) {
+                            bool hasSecondary, const annotations::AnnotationStyle& style, double groupTable = 0.0) {
     SheetRegions r;
     if (st.sheetStyle == SheetStyle::Iso7200) {
         r.frame = {kIso5457LeftMargin, kIso5457Margin, sheet.widthMm - kIso5457Margin, sheet.heightMm - kIso5457Margin};
@@ -314,6 +314,7 @@ SheetRegions computeRegions(const Sheet& sheet, const SheetDef& def, const Drawi
         trTop += to.gapAboveTitle + double(lines) * to.lineSpacingFactor * to.textHeight + to.textHeight;
     }
     if (def.partsList) trTop += 8.0 * 9.0;  // перечень ISO 7573: заголовок + строки (оценка)
+    trTop += groupTable;  // таблица исполнений группового чертежа ГОСТ 2.113
     const double m = st.margin;
     double topReserve = def.roughnessRemainder ? 25.0 : 0.0;
     // Таблица параметров венца ГОСТ 2.403 в правом верхнем углу: строки по 8 мм (оценка — до 14).
@@ -334,6 +335,12 @@ SheetRegions computeRegions(const Sheet& sheet, const SheetDef& def, const Drawi
         }
     }
     return r;
+}
+
+annotations::GroupTableOptions groupTableOptions(const TextMetrics* font) {
+    annotations::GroupTableOptions o;
+    o.font = font;
+    return o;
 }
 
 struct PlacedGroup {
@@ -406,6 +413,7 @@ Result<annotations::ArrangeResult> DrawingDocument::arrangeDimensions(const Mode
         if (sd->dimensions[i].view != view) continue;
         items.push_back(i);
         defs.push_back(sd->dimensions[i].def);
+        defs.back().letter = groupLetterOf(sd->id, sd->dimensions[i].id);
     }
     auto r = annotations::arrangeDimensions(defs, bindingR.value(), cv->sheetView, style, options);
     if (!r) return r.error();
@@ -675,7 +683,9 @@ StalenessReport DrawingDocument::checkModel(const ModelSnapshot& model) const {
 Result<UpdateReport> DrawingDocument::update(const ModelLoader& loader, ViewCache& cache,
                                              const annotations::Specification* spec) {
     if (!loader) return invalid("drawing update: no model loader");
-    auto snap = loader(model_);
+    ModelLink link = model_;
+    link.withConfigurations = settings_.group.enabled && model_.kind == ModelKind::Part;
+    auto snap = loader(link);
     if (!snap) return snap.error();
     if (snap.value().kind != model_.kind)
         return invalid(std::string("drawing update: the link expects a ") + toString(model_.kind) + " model");
@@ -714,6 +724,21 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         if (!built) return built.error();
         ownSpec = std::move(built).value();
         spec = &*ownSpec;
+    }
+
+    // Групповой чертёж ГОСТ 2.113: значения размеров в каждом исполнении и буквы различающихся.
+    group_.reset();
+    std::vector<std::string> groupWarnings;
+    if (settings_.group.enabled) {
+        if (model.kind != ModelKind::Part) {
+            groupWarnings.push_back("group drawing: only a part drawing can be a group drawing (GOST 2.113)");
+        } else if (model.configurations.empty()) {
+            groupWarnings.push_back("group drawing: the part has no configuration table");
+        } else {
+            auto g = computeGroup(model, cache);
+            if (!g) return g.error();
+            group_ = std::move(g).value();
+        }
     }
 
     // Буквы обозначений разрезов и выносных элементов по всему чертежу (ГОСТ 2.316).
@@ -912,7 +937,8 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         // 3. Компоновка.
         bool hasSecondary = false;
         for (const ViewDef& v : sd.views) hasSecondary = hasSecondary || !isGroupView(v);
-        SheetRegions reg = computeRegions(cs.sheet, sd, settings_, hasSecondary, style);
+        const double groupTableRoom = si == 0 && group_ ? annotations::groupTableHeight(group_->table, groupTableOptions(style.font)) : 0.0;
+        SheetRegions reg = computeRegions(cs.sheet, sd, settings_, hasSecondary, style, groupTableRoom);
         if (!reg.group.valid()) return invalid("sheet '" + sd.id + "': no room for views on the sheet");
 
         std::vector<const ViewDef*> group;
@@ -1231,6 +1257,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             dr.id = item.id;
             dr.oldValue = item.lastValue;
             annotations::DimensionDef def = item.def;
+            def.letter = groupLetterOf(sd.id, item.id);
             std::string broken;
             modeling::ResolveMethod worst = modeling::ResolveMethod::Exact;
             auto rebindAll = [&](std::vector<Anchor>& anchors) {
@@ -1752,6 +1779,24 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         td.name = !sd.title.name.empty() ? sd.title.name : mp.name;
         td.material = !sd.title.material.empty() ? sd.title.material : (model.kind == ModelKind::Part ? mp.material : "");
         td.mass = !sd.title.mass.empty() ? sd.title.mass : (model.massKg ? formatMass(*model.massKg) : "");
+        if (group_) {
+            // Групповой чертёж: обозначение и наименование базового исполнения; масса и материал,
+            // различающиеся у исполнений, — «См. табл.» (значения — в таблице исполнений).
+            const ConfigurationSnapshot& base = model.configurations.front();
+            if (sd.title.designation.empty() && !group_->baseDesignation.empty()) td.designation = group_->baseDesignation;
+            if (sd.title.name.empty() && !base.name.empty()) td.name = base.name;
+            auto inTable = [&](const char* key) {
+                return std::any_of(group_->columns.begin(), group_->columns.end(), [&](const GroupColumn& c) { return c.key == key; });
+            };
+            bool massDiffers = false, materialDiffers = false;
+            for (const ConfigurationSnapshot& c : model.configurations) {
+                massDiffers = massDiffers || (c.massKg && base.massKg ? formatMass(*c.massKg) != formatMass(*base.massKg)
+                                                                      : c.massKg.has_value() != base.massKg.has_value());
+                materialDiffers = materialDiffers || c.material != base.material;
+            }
+            if (sd.title.mass.empty() && massDiffers) td.mass = inTable("mass") ? "См. табл." : "";
+            if (sd.title.material.empty()) td.material = materialDiffers ? "См. табл." : base.material;
+        }
         td.litera = sd.title.litera;
         td.organization = sd.title.organization;
         td.developer = sd.title.developer;
@@ -1786,6 +1831,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         out.push_back(std::move(cs));
     }
 
+    for (std::string& w : groupWarnings) report.warnings.push_back(std::move(w));
     if (settings_.sheetStyle == SheetStyle::Eskd && settings_.projection == ProjectionMethod::ThirdAngle)
         report.warnings.push_back("third-angle projection (ISO 128-30, method A) is not provided by GOST 2.305; "
                                   "the ESKD title block has no projection symbol - use the ISO 7200 sheet style");
@@ -1903,6 +1949,13 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
             auto table = annotations::addPartsList(d, lay.value(), *cs.specification, po);
             if (!table) return Error{table.error().code, "sheet '" + cs.id + "', parts list: " + table.error().message};
             above.titleBlock.y1 = table.value().y1;
+        }
+        if (si == 0 && group_) {
+            // Таблица исполнений ГОСТ 2.113 над основной надписью (и перечнем), правым краем к ней.
+            auto table = annotations::addGroupTable(d, {above.titleBlock.x1, above.titleBlock.y1}, lay.value().frame, group_->table,
+                                                    groupTableOptions(metrics));
+            if (!table) return Error{table.error().code, "sheet '" + cs.id + "', group table: " + table.error().message};
+            above.titleBlock.y1 = table.value().box.y1;
         }
         if (!sd.technicalRequirements.empty()) {
             auto tr = annotations::addTechnicalRequirements(d, above, sd.technicalRequirements, {}, style);

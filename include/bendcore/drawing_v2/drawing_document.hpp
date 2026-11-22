@@ -16,6 +16,7 @@
 #include <bendcore/drawing_v2/specification.hpp>
 #include <bendcore/drawing_v2/threads.hpp>
 #include <bendcore/drawing_v2/gears.hpp>
+#include <bendcore/drawing_v2/group_documents.hpp>
 #include <bendcore/drawing_v2/bearings.hpp>
 #include <bendcore/drawing_v2/balloon_layout.hpp>
 #include <bendcore/drawing_v2/title_block.hpp>
@@ -58,6 +59,23 @@ struct ModelLink {
     // Деталь: свойства для основной надписи (у документа детали их нет). Сборка: не
     // используются — берутся из свойств корневого определения документа сборки.
     ModelProperties properties;
+    // Не сохраняется: загрузчик снимает все исполнения детали (snapshotPartConfigurations) —
+    // DrawingDocument::update(loader) ставит по DrawingSettings::group.
+    bool withConfigurations = false;
+};
+
+struct ModelSnapshot;
+
+// Исполнение детали для группового чертежа ГОСТ 2.113 (строка таблицы параметров,
+// docs/modeling/PART_DOCUMENT.md, «Таблица параметров»).
+struct ConfigurationSnapshot {
+    std::string designation;      // как в таблице («-01»)
+    std::string fullDesignation;  // modeling::fullDesignation
+    std::string name;             // наименование строки (пусто — как у детали)
+    std::string material;         // материал исполнения (ячейка материала или материал детали)
+    std::optional<double> massKg;
+    std::vector<bool> suppressed;  // по ModelSnapshot::configurationFeatures: операция подавлена
+    std::shared_ptr<const ModelSnapshot> model;  // снимок детали в этом исполнении
 };
 
 // Состояние модели для обновления чертежа.
@@ -93,6 +111,11 @@ struct ModelSnapshot {
     // Сборка: подшипники качения (annotations::recognizeBearing — по телам качения в геометрии
     // или по наименованию «Подшипник …»), изображаются условно по ГОСТ 2.420.
     std::vector<annotations::BearingInfo> bearings;
+    // Групповой чертёж (snapshotPartConfigurations): исполнения по порядку таблицы параметров
+    // (первое — базовое; сам снимок — базовое исполнение) и операции столбцов подавления
+    // таблицы (id, подпись).
+    std::vector<ConfigurationSnapshot> configurations;
+    std::vector<std::pair<std::string, std::string>> configurationFeatures;
 };
 
 // Определение, номер позиции которого ставится на ребре edge: первое определение цепочки
@@ -104,6 +127,15 @@ std::optional<assembly_v2::DefinitionId> positionOwner(const ModelSnapshot& mode
 // Снимок документа детали: итоговая форма с картой имён; масса = объём · плотность.
 // Ошибки: InvalidInput — у документа нет тела.
 Result<ModelSnapshot> snapshotPart(const modeling::PartDocument& document, const ModelProperties& properties);
+
+// Снимок всех исполнений документа детали для группового чертежа ГОСТ 2.113: копия документа
+// (сохранение с кэшем и загрузка; сам документ не меняется) перестраивается в каждом исполнении
+// таблицы параметров. Результат — снимок базового исполнения (первая строка) с
+// ModelSnapshot::configurations. Материал исполнения — ячейка материала (имя и плотность из
+// kernel::builtInMaterials()), иначе properties. Деталь без таблицы — обычный снимок без
+// исполнений. Ошибки: исполнение не строится («configuration '-01': feature 'Hole' failed»).
+Result<ModelSnapshot> snapshotPartConfigurations(const modeling::PartDocument& document,
+                                                 const ModelProperties& properties);
 
 // Снимок документа сборки: компаунд деталей (подавленные вхождения не входят), свойства
 // корневого определения, масса — по BOM (если известна плотность всех деталей).
@@ -264,6 +296,10 @@ struct DimensionItem {
     std::string view;
     annotations::DimensionDef def;
     std::optional<double> lastValue;  // значение при предыдущем обновлении (сохраняется в файле)
+    // Групповой чертёж ГОСТ 2.113: буква размера, различающегося у исполнений (пусто — по
+    // порядку, annotations::groupDimensionLetter). У размера, одинакового во всех исполнениях,
+    // не используется.
+    std::string groupLetter;
     // Группа размеров (пусто — одиночный размер). Точки группы — def.offsetFrom (общий у всех
     // размеров группы; у группы от базы первая — база). При каждом обновлении группа
     // перестраивается по модели: цепочка — точки сортируются вдоль оси и размеры соседних пар
@@ -349,6 +385,17 @@ struct SheetDef {
     bool partsList = false;  // перечень составных частей ISO 7573 над основной надписью (сборка)
 };
 
+// Групповой рабочий чертёж детали ГОСТ 2.113 (способ с таблицей исполнений): изображение
+// базового исполнения, размеры, различающиеся у исполнений, — буквами, таблица исполнений над
+// основной надписью первого листа. docs/drawing/DRAWING_DOCUMENT.md, «Групповой чертёж».
+struct GroupDrawingSettings {
+    bool enabled = false;
+    bool mass = true;       // графа «Масса, кг» (если масса известна у всех исполнений)
+    bool material = false;  // графа «Материал»
+    // Заголовки граф таблицы по ключу графы (GroupColumn::key); нет ключа или пусто — по умолчанию.
+    std::map<std::string, std::string> headers;
+};
+
 // Оформление листа: ЕСКД (рамка ГОСТ 2.301/2.104, основная надпись форм 1 и 2а) или ISO (рамка
 // ISO 5457, основная надпись ISO 7200 со знаком метода проекций ISO 5456-2).
 enum class SheetStyle { Eskd, Iso7200 };
@@ -368,6 +415,7 @@ struct DrawingSettings {
     // Шрифт текстов листа: однолинейный тип Б ГОСТ 2.304 (линиями во всех форматах экспорта,
     // метрики — для основной надписи, размеров и полок) или TrueType (DejaVu Sans и др.).
     TextFont textFont = TextFont::Gost2304;
+    GroupDrawingSettings group;
 };
 
 // ---------------------------------------------------------------- результат обновления
@@ -416,6 +464,34 @@ struct ComputedSheet {
     std::vector<annotations::DimensionResult> threadNotes;
     std::optional<annotations::Specification> specification;  // для перечня ISO 7573
     std::vector<annotations::GearTableRow> gearTable;  // строки таблицы ГОСТ 2.403 (SheetDef::gearTable)
+};
+
+// Графа таблицы исполнений. Ключи: «designation» — обозначение исполнения; «dim:<лист>/<размер>»
+// — буквенный размер; «suppress:<операция>» — элемент, подавленный хотя бы в одном исполнении
+// («есть»/«нет»); «mass» — масса, кг; «material» — материал.
+struct GroupColumn {
+    std::string key;
+    std::string header;         // действующий заголовок
+    std::string defaultHeader;  // заголовок по умолчанию
+};
+
+// Буквенный размер группового чертежа: значения по исполнениям (nullopt — размера нет в
+// исполнении: элемент подавлен, ссылка не разрешилась).
+struct GroupDimension {
+    std::string sheet;
+    std::string id;
+    std::string letter;
+    std::vector<std::optional<double>> values;
+    std::vector<std::string> texts;  // ячейки таблицы («80», «–»)
+};
+
+// Результат группового чертежа (последнее обновление с DrawingSettings::group.enabled).
+struct GroupDrawingResult {
+    std::vector<std::string> designations;  // полные обозначения исполнений
+    std::vector<GroupColumn> columns;
+    annotations::GroupTable table;           // заголовки — действующие
+    std::vector<GroupDimension> dimensions;  // только буквенные (различающиеся) размеры
+    std::string baseDesignation;             // обозначение базового исполнения (основная надпись)
 };
 
 struct DimensionReport {
@@ -545,6 +621,8 @@ public:
     std::size_t setProjectionMethod(views::ProjectionMethod method);
 
     bool computed() const { return !computed_.empty(); }
+    // Групповой чертёж последнего обновления; nullptr — режим выключен или у модели нет исполнений.
+    const GroupDrawingResult* groupDrawing() const { return group_ ? &*group_ : nullptr; }
     const std::vector<ComputedSheet>& computedSheets() const { return computed_; }
 
     // Листы чертежа (рамка, основная надпись форм 1/2а, виды, обозначения, размеры, знаки,
@@ -566,6 +644,11 @@ private:
     std::vector<ComputedSheet> computed_;
     std::map<std::uint64_t, std::shared_ptr<const views::SectionView>> sectionCache_;
     const TrueTypeFont* font_ = nullptr;
+    std::optional<GroupDrawingResult> group_;
+    // Значения размеров каждого исполнения и буквы — до основного обновления (group_drawing.cpp).
+    Result<GroupDrawingResult> computeGroup(const ModelSnapshot& model, views::ViewCache& cache) const;
+    // Буква размера id листа sheet по group_ (пусто — числом).
+    std::string groupLetterOf(const std::string& sheet, const std::string& id) const;
 };
 
 // ---------------------------------------------------------------- отмена и повтор
@@ -612,6 +695,15 @@ private:
 
 // ---------------------------------------------------------------- спецификация
 
+// Групповая спецификация ГОСТ 2.113 по составу всех исполнений сборки
+// (assembly_v2::configurationBom, docs/drawing/SPECIFICATION.md, «Групповая спецификация»).
+struct GroupSpecificationSettings {
+    bool enabled = false;
+    annotations::GroupSpecLayout layout = annotations::GroupSpecLayout::Columns;
+    // Заголовки граф количества по исполнениям (по порядку таблицы); пусто — по умолчанию.
+    std::vector<std::string> columnHeaders;
+};
+
 // Настройки спецификации; ключ составной части — её обозначение, а если его нет, наименование.
 struct SpecificationSettings {
     std::map<std::string, std::string> formats;
@@ -625,6 +717,7 @@ struct SpecificationSettings {
     // чертежа входят их детали, а не сами подсборки (annotations::SpecificationOptions::dissolve).
     std::set<std::string> dissolved;
     TextFont textFont = TextFont::Gost2304;  // шрифт текстов листов спецификации
+    GroupSpecificationSettings group;
 };
 
 // Спецификация ГОСТ 2.106 как отдельный документ (свой файл "bendcore-specification").
@@ -641,8 +734,15 @@ public:
 
     // Состав из BOM сборки. Ошибки: модель — не сборка; ошибки buildSpecification.
     // Возвращает true, если состав (позиции, обозначения, количества) изменился.
+    // Групповой режим (settings().group.enabled): состав всех исполнений — configurationBom с
+    // loadOptions(); specification() — спецификация активного исполнения с номерами позиций
+    // групповой (позиции сборочного чертежа), render() — листы групповой спецификации.
     Result<bool> update(const ModelSnapshot& model);
     const annotations::Specification* specification() const { return spec_ ? &*spec_ : nullptr; }
+    const annotations::GroupSpecification* groupSpecification() const { return group_ ? &*group_ : nullptr; }
+    // Загрузка исполнений компонентов для configurationBom (не сохраняется в файле).
+    void setLoadOptions(assembly_v2::LoadOptions options) { loadOptions_ = std::move(options); }
+    const assembly_v2::LoadOptions& loadOptions() const { return loadOptions_; }
 
     // Листы формы 1 (А4, основная надпись форм 2 и 2а); шрифт — SpecificationSettings::textFont
     // (font — TrueType, нужен только для textFont == TrueType). Ошибка — документ не обновлён.
@@ -656,6 +756,9 @@ private:
     SpecificationSettings settings_;
     TitleFields title_;
     std::optional<annotations::Specification> spec_;
+    std::optional<annotations::GroupSpecification> group_;
+    assembly_v2::LoadOptions loadOptions_;
+    Result<bool> updateGroup(const ModelSnapshot& model, const annotations::SpecificationOptions& base);
 };
 
 // ---------------------------------------------------------------- экспорт комплекта
