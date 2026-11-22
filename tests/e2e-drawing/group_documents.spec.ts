@@ -204,8 +204,25 @@ test('group specification of an assembly: quantities per configuration, column h
   await expect.poll(async () => (await state(page)).description!.groupSpecification!.columnHeaders).toEqual(['', 'Обл.']);
   await expect(page.getByTestId('group-spec-header-1')).toHaveValue('Обл.');
 
-  // Variable data layout: the table is still there, quantities unchanged.
+  // Variable data layout: constant part first — Корпус is position 1 now.
   await page.getByTestId('group-spec-layout').selectOption('variableData');
   await expectNoError(page);
   await expect(page.getByTestId('group-spec-table')).toBeVisible();
+  await expect(page.getByTestId('group-spec-position-1')).toContainText('Корпус');
+
+  // Saved beside the documents in the drawing file and applied again when it is opened.
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('drawing-save').click()]);
+  const saved = path.join(out, 'group_spec_' + download.suggestedFilename());
+  await download.saveAs(saved);
+  const fileJson = JSON.parse(fs.readFileSync(saved, 'utf8'));
+  expect(fileJson.specification).toEqual({ groupSpecification: { enabled: true, layout: 'variableData', columnHeaders: ['', 'Обл.'] } });
+  await page.reload();
+  await expect(page.getByTestId('status')).toContainText('Откройте документ', { timeout: 120_000 });
+  await page.getByTestId('open-drawing').setInputFiles(saved);
+  await expect(page.getByTestId('sheet-svg').locator('svg')).toHaveCount(1);
+  await expectNoError(page);
+  expect((await state(page)).description!.groupSpecification).toEqual({ enabled: true, layout: 'variableData', columnHeaders: ['', 'Обл.'] });
+  await page.getByTestId('tab-specification').click();
+  await expect(page.getByTestId('group-spec-enabled')).toBeChecked();
+  await expect(page.getByTestId('group-spec-header-1')).toHaveValue('Обл.');
 });
