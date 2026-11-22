@@ -310,3 +310,65 @@
 .app-fault p {
   margin: 4px 0;
 }
+
+/* Templates (docs/ui/APP_SHELL.md, "Шаблоны") */
+.app-templates {
+  grid-column: 1 / -1;
+}
+.app-templates h3 {
+  margin: 0.8rem 0 0.3rem;
+  font-size: 0.95rem;
+}
+.app-template-kind h3 {
+  font-size: 0.85rem;
+  color: var(--app-muted);
+}
+.app-template {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--app-border);
+  list-style: none;
+}
+.app-template-text {
+  flex: 1;
+  min-width: 0;
+}
+.app-template-model {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.app-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.35);
+}
+.app-dialog {
+  min-width: 22rem;
+  padding: 1rem 1.2rem;
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+}
+.app-dialog h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+.app-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.5rem 0;
+}
+.app-dialog-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
