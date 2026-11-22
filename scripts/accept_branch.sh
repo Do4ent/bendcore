@@ -56,6 +56,10 @@ step "node drawing" node_test tests/wasm/drawing_document.test.mjs --module $W/w
   --assembly-module $W/wasm_assembly
 step "node viewport tools" node_test tests/wasm/viewport_tools.test.mjs --modeling $W/wasm_modeling \
   --kernel $W/wasm_kernel --assembly $W/wasm_assembly
+step "node dxf sketch" node_test tests/wasm/dxf_sketch.test.mjs --module $W/wasm_modeling
+step "node part configurations" node_test tests/wasm/part_configurations.test.mjs --module $W/wasm_modeling
+step "node assembly configurations" node_test tests/wasm/assembly_configurations.test.mjs --module $W/wasm_assembly
+step "node assembly design table" node_test tests/wasm/assembly_design_table.test.mjs --module $W/wasm_assembly
 step "tsc" npx tsc --noEmit -p .
 step "jest" bash -c 'npx jest 2>&1 | grep -E "^Tests:"; exit ${PIPESTATUS[0]}'
 
