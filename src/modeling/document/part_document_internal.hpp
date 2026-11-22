@@ -67,11 +67,28 @@ struct PartDocument::Node : NodeDefinition {
     void clearResults();
 };
 
+// Reference mesh: definition plus the parsed file (shared between undo states).
+struct PartDocument::MeshEntry {
+    std::string id;
+    std::string label;
+    std::string fileName;
+    kernel::MeshFileFormat format = kernel::MeshFileFormat::Stl;
+    std::shared_ptr<const std::string> data;
+    std::shared_ptr<const kernel::ReferenceMeshData> parsed;
+    std::string unit = "mm";
+    kernel::Point3 rotationDegrees{0.0, 0.0, 0.0};
+    kernel::Point3 translation{0.0, 0.0, 0.0};
+    bool visible = true;
+    double opacity = 0.5;
+    std::shared_ptr<const kernel::TriangleMesh> placed;  // reset when the placement changes
+};
+
 struct PartDocument::State {
     std::vector<std::pair<std::string, std::string>> variables;
     std::optional<std::size_t> rollback;
     std::vector<NodeDefinition> nodes;
     ConfigurationTable table;
+    std::vector<MeshEntry> meshes;
 };
 
 struct PartDocument::Transactions {
