@@ -813,3 +813,84 @@ describe('thread dimension', () => {
     }
   });
 });
+
+// Group drawing of GOST 2.113 (docs/drawing/DRAWING_DOCUMENT.md, "Групповой чертёж"): the bracket
+// with a configuration table — base РД.10.001 (A = 60, d = 8), -01 (A = 80, d = 10), -02 (A = 60,
+// without the hole). Letters stand exactly at the dimensions that differ; the table of
+// configurations holds the values of the part table; a changed cell → updated table.
+function bracketWithConfigurations() {
+  const doc = JSON.parse(partJson);
+  doc.version = 4;
+  doc.configurations = {
+    columns: [{ kind: 'variable', target: 'A' }, { kind: 'variable', target: 'd' }, { kind: 'suppression', target: 'MountHole' }],
+    rows: [
+      { designation: 'РД.10.001', name: 'Кронштейн', cells: ['60', '8', '0'] },
+      { designation: '-01', name: 'Кронштейн', cells: ['80', '10', '0'] },
+      { designation: '-02', name: 'Кронштейн', cells: ['60', '8', '1'] },
+    ],
+    active: 'РД.10.001',
+  };
+  return JSON.stringify(doc);
+}
+
+describe('group drawing (GOST 2.113)', () => {
+  test('letters at the differing dimensions, table of configurations, cell change, DXF', () => {
+    const drawing = kernel.createFromPart(bracketWithConfigurations(), { properties: PROPS, path: 'bracket.part.json' });
+    try {
+      assert.equal(drawing.describe().group.configurations, 3);
+      assert.equal(drawing.configurations().rows[1].fullDesignation, 'РД.10.001-01');
+      const F = drawing.addView('S1', { kind: 'base', standard: 'front' });
+      const T = drawing.addView('S1', { kind: 'projected', standard: 'top' });
+      const pic = drawing.sheetPicture('S1');
+      const front = view(pic, F);
+      const dA = drawing.addDimension('S1', F, [extremeLine(front, isVertical, 0, Math.min).index, extremeLine(front, isVertical, 0, Math.max).index]);
+      const dB = drawing.addDimension('S1', F, [extremeLine(front, isHorizontal, 1, Math.min).index, extremeLine(front, isHorizontal, 1, Math.max).index]);
+      const dd = drawing.addDimension('S1', T, [view(pic, T).edges.find((e) => e.type === 'circle' && e.visible).index]);
+
+      drawing.setSettings({ group: { enabled: true } });
+      const desc = drawing.describe();
+      assert.equal(desc.group.enabled, true);
+      const table = desc.group.table;
+      assert.ok(table, 'table of configurations');
+      assert.deepEqual(table.dimensions.map((x) => x.id).sort(), [dA, dd].sort(), 'letters only at A and d');
+      assert.equal(dimensionById(drawing, 'S1', dA).text, table.dimensions.find((x) => x.id === dA).letter);
+      assert.equal(dimensionById(drawing, 'S1', dB).text, '50');
+      assert.ok(dimensionById(drawing, 'S1', dd).text.startsWith('⌀'));
+      const col = (key) => table.columns.findIndex((c) => c.key === key);
+      assert.deepEqual(table.rows.map((r) => r[col(`dim:S1/${dA}`)]), ['60', '80', '60']);
+      assert.deepEqual(table.rows.map((r) => r[col(`dim:S1/${dd}`)]), ['8', '10', '–']);
+      assert.deepEqual(table.rows.map((r) => r[col('suppress:MountHole')]), ['есть', 'есть', 'нет']);
+      assert.deepEqual(table.rows.map((r) => r[0]), ['РД.10.001', 'РД.10.001-01', 'РД.10.001-02']);
+      assert.equal(desc.sheets[0].titleShown.designation, 'РД.10.001');
+
+      // Header edited by the user; the cell of the part table changes → update → new value.
+      drawing.setSettings({ group: { headers: { 'suppress:MountHole': 'Отверстие' } } });
+      assert.equal(drawing.describe().group.table.columns[col('suppress:MountHole')].header, 'Отверстие');
+      const st = drawing.setConfigurationCell(1, 0, '90');
+      assert.equal(st.modelChanged, true, 'a changed configuration is a changed model of the group drawing');
+      drawing.updateFromModel();
+      assert.deepEqual(drawing.describe().group.table.rows.map((r) => r[col(`dim:S1/${dA}`)]), ['60', '90', '60']);
+
+      // DXF of the sheet: letters and the table texts.
+      const texts = dxfTexts(dxfPairs(new TextDecoder().decode(drawing.exportSheet('S1', 'dxf'))));
+      for (const want of ['РД.10.001-01', 'РД.10.001-02', 'Отверстие', 'нет', '90', 'Обозначение'])
+        assert.ok(texts.includes(want), `DXF text ${want}`);
+      // Saved and loaded: the group setting survives; off again — numbers, undo — back on.
+      const back = kernel.load(drawing.save(), drawing.saveModel());
+      try {
+        assert.equal(back.drawing.describe().group.enabled, true);
+        assert.ok(back.drawing.describe().group.table);
+      } finally {
+        back.drawing.dispose();
+      }
+      drawing.setSettings({ group: { enabled: false } });
+      assert.equal(dimensionById(drawing, 'S1', dA).text, '60');
+      assert.equal(drawing.describe().group.table, null);
+      drawing.undo();
+      assert.equal(drawing.describe().group.enabled, true);
+      expectKernelError(() => drawing.setConfigurationCell(7, 0, '1'), 'InvalidInput', 'no such row');
+    } finally {
+      drawing.dispose();
+    }
+  });
+});

@@ -88,6 +88,15 @@ Result<ModelSnapshot> snapshotPartConfigurations(const modeling::PartDocument& d
         configs.push_back(std::move(cs));
     }
     ModelSnapshot base = *configs.front().model;
+    // Хэш снимка — по формам всех исполнений: изменение любого исполнения (ячейки таблицы
+    // параметров) — изменение модели группового чертежа (checkModel, ревизия).
+    std::uint64_t h = 1469598103934665603ull;
+    for (const ConfigurationSnapshot& c : configs) {
+        const std::uint64_t x = c.model->contentHash;
+        const auto* b = reinterpret_cast<const unsigned char*>(&x);
+        for (std::size_t i = 0; i < sizeof x; ++i) h = (h ^ b[i]) * 1099511628211ull;
+    }
+    base.contentHash = h;
     base.configurations = std::move(configs);
     base.configurationFeatures = std::move(features);
     return base;
