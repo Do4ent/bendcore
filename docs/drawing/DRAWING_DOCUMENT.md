@@ -441,6 +441,9 @@ ctest --test-dir build-occt -R drawing_document --output-on-failure
   со шпоночным пазом (`ANNOTATIONS.md`, «Размеры на фигуре сечения»).
 - `dim_layout` (`test_drawing_document_dim_layout.cpp`) — автокомпоновка размеров на видах
   кронштейна и фланца (`ANNOTATIONS.md`, «Автокомпоновка размеров»).
+- `group` (`test_drawing_document_group.cpp`) — групповой чертёж детали и групповая
+  спецификация сборки ГОСТ 2.113 (раздел «Групповой чертёж», `SPECIFICATION.md`); файлы —
+  `drawing_document_out/group/`, `group_spec/`.
 - `io` — сохранение → загрузка → тот же текст; загрузка модели по пути (`fileModelLoader`) —
   тот же хэш, ссылки по имени (`Exact`); изменённый файл детали → «S1/A: 60 → 75», ревизия 2;
   миграция v1 (строки формата и модели, масштаб числом, ссылки только именами → разрешение и
