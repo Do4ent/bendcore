@@ -15,8 +15,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AssemblyDocumentHandle,
   AssemblyKernel,
+  AssemblyConfigurationTableInfo,
   AssemblyState,
   Bom,
+  ConfigurationActivation,
   ElementInfo,
   InterferenceReport,
   KernelMesh,
@@ -28,6 +30,8 @@ import type {
 } from '../../wasm/bendcore_assembly_api.mjs';
 import { BomPanel, ExplodePanel, FastenerPanel, InterferencePanel, MatePanel, PatternPanel, PropertiesPanel } from './AssemblyPanels';
 import AssemblyTree, { refLabel } from './AssemblyTree';
+import AssemblyConfigurationPanel from './AssemblyConfigurationPanel';
+import { assemblyTableInput } from './configurationTable';
 import AssemblyViewport, { pathKey } from './AssemblyViewport';
 import { MeasurePanel } from '../kernel/ViewToolsPanel';
 import { useViewTools } from '../kernel/useViewTools';
@@ -46,6 +50,7 @@ import BusyIndicator from '../app/BusyIndicator';
 import { useHotkeys } from '../app/hotkeys';
 import { useI18n } from '../app/i18n';
 import type { DocumentFile, EditorHostProps, PartSource } from '../app/editorHost';
+import { downloadText } from '../app/editorHost';
 import { useFaultReport } from '../app/faultReport';
 import ExportDialog from '../exchange/ExportDialog';
 import MassSection from '../exchange/MassSection';
@@ -62,10 +67,10 @@ import { KernelMessageText } from '../app/KernelMessageText';
 
 const MESH_PARAMS = { linearDeflection: 0.05, angularDeflection: 0.25 };
 
-type PanelId = 'mate' | 'fasteners' | 'interference' | 'bom' | 'explode' | 'pattern' | 'properties';
+type PanelId = 'mate' | 'fasteners' | 'interference' | 'bom' | 'explode' | 'pattern' | 'properties' | 'configurations';
 
 /** Side panels in tab order; captions are messages assembly.panel.<id>. */
-const PANELS: PanelId[] = ['mate', 'fasteners', 'interference', 'bom', 'explode', 'pattern', 'properties'];
+const PANELS: PanelId[] = ['mate', 'fasteners', 'interference', 'bom', 'explode', 'pattern', 'properties', 'configurations'];
 
 export interface AssemblyPageState {
   status: 'loading' | 'ready' | 'failed';
@@ -178,6 +183,8 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   const [selectedComponent, setSelectedComponent] = useState<number | null>(null);
   const [bomMode, setBomMode] = useState<'flat' | 'structured'>('flat');
   const [bom, setBom] = useState<Bom | null>(null);
+  const [configTable, setConfigTable] = useState<AssemblyConfigurationTableInfo | null>(null);
+  const [activation, setActivation] = useState<ConfigurationActivation | null>(null);
   const [interference, setInterference] = useState<InterferenceReport | null>(null);
   const [showTouching, setShowTouching] = useState(false);
   const [selectedPair, setSelectedPair] = useState<number | null>(null);
@@ -225,6 +232,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
       setMeshes(next);
       setParts(tess.occurrences);
       if ((opts.panel ?? panel) === 'bom') setBom(await doc.bom(opts.bomMode ?? bomMode));
+      if ((opts.panel ?? panel) === 'configurations') setConfigTable(await doc.configurationTable());
     },
     [explode, panel, bomMode],
   );
@@ -614,6 +622,9 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     if (p === 'bom') {
       docRef.current?.bom(bomMode).then(setBom, (e: unknown) => !isCancelled(e) && fail(e));
     }
+    if (p === 'configurations') {
+      docRef.current?.configurationTable().then(setConfigTable, (e: unknown) => !isCancelled(e) && fail(e));
+    }
     if (explode.view !== null && p !== 'explode') {
       const ex = { view: null, progress: 0 };
       setExplode(ex);
@@ -879,7 +890,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
           }}
           frameKey={frameKey}
         />
-        <aside className={`kv-panel pm-right as-right ${panel === 'bom' ? 'as-right-wide' : ''}`}>
+        <aside className={`kv-panel pm-right as-right ${panel === 'bom' || panel === 'configurations' ? 'as-right-wide' : ''}`}>
           <nav className="as-tabs">
             {PANELS.map((p) => (
               <button
@@ -992,6 +1003,41 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
             />
           )}
           {panel === 'properties' && state && <MassSection load={loadMass} version={state} />}
+          {panel === 'configurations' && state && (
+            <AssemblyConfigurationPanel
+              table={configTable}
+              state={state}
+              activation={activation}
+              disabled={state.dragging !== null}
+              onSetTable={(table) => {
+                setActivation(null);
+                void run((d) => d.setConfigurationTable(table));
+              }}
+              onActivate={(designation) =>
+                void run(async (d) => {
+                  setActivation(await d.activateConfiguration(designation));
+                })
+              }
+              onUndo={() => {
+                setActivation(null);
+                void run((d) => d.undo());
+              }}
+              onImportCsv={(text) => {
+                setActivation(null);
+                void run(async (d) => {
+                  await d.setConfigurationTable(assemblyTableInput(await d.configurationsFromCsv(text)));
+                });
+              }}
+              onExportCsv={(decimal) =>
+                void run(async (d) => {
+                  const csv = await d.configurationsToCsv({ decimal });
+                  // UTF-8 decoding of the module's string drops the byte order mark Excel needs.
+                  const text = csv.startsWith('\uFEFF') ? csv : `\uFEFF${csv}`;
+                  downloadText(`${state.name || 'assembly'}.configurations.csv`, text, 'text/csv');
+                })
+              }
+            />
+          )}
         </aside>
       </div>
     </div>

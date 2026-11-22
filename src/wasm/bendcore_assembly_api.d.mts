@@ -97,7 +97,9 @@ export interface DefinitionInfo {
   configuration: string;
   /** Registered part document of the definition (registerPartSource), or null. */
   partSource: string | null;
-  /** Configurations of that part document (empty without one). */
+  /** Registered subassembly document of an assembly definition (registerSource), if any. */
+  assemblySource?: string;
+  /** Configurations of that part or subassembly document (empty without one). */
   configurations: PartConfigurationInfo[];
   external: boolean;
   readOnly: boolean;
@@ -188,6 +190,89 @@ export interface AssemblyState {
   history: { canUndo: boolean; canRedo: boolean; undoLabel: string; redoLabel: string; depth: number };
   /** Occurrence being dragged, or null. */
   dragging: number | null;
+  /** Assembly configuration: active designation ('' — base values), its full designation, rows. */
+  configuration: { active: string; designation: string; count: number };
+}
+
+export type AssemblyColumnKind = 'suppression' | 'configuration' | 'mateValue';
+
+export interface AssemblyConfigurationColumn {
+  kind: AssemblyColumnKind;
+  /** Occurrence id (suppression, configuration) or mate id (mateValue). */
+  target: number;
+}
+
+/** Column of configurationTable(): with its CSV title, component/mate label, unit and choices. */
+export interface AssemblyConfigurationColumnInfo extends AssemblyConfigurationColumn {
+  title: string;
+  label: string;
+  /** mateValue: 'mm' | 'deg' | 'ratio'. */
+  unit: string;
+  /** configuration: configurations of the component's document. */
+  options: PartConfigurationInfo[];
+}
+
+export interface AssemblyConfigurationRow {
+  designation: string;
+  name: string;
+  /** One per column: suppression '1'/'0', configuration designation or '#' (as saved),
+   *  mate value (mm, degrees, ratio); '' — base value. */
+  cells: string[];
+}
+
+export interface AssemblyConfigurationTable {
+  columns: AssemblyConfigurationColumn[];
+  rows: AssemblyConfigurationRow[];
+  /** '' — base values. */
+  active?: string;
+}
+
+export interface AssemblyConfigurationTableInfo {
+  columns: AssemblyConfigurationColumnInfo[];
+  rows: (AssemblyConfigurationRow & { fullDesignation: string })[];
+  active: string;
+  /** Base values of the columns. */
+  base: string[];
+  /** Designation of the assembly in the active configuration. */
+  designation: string;
+}
+
+export interface ConfigurationActivation {
+  designation: string;
+  fullDesignation: string;
+  excluded: number[];
+  /** Mates switched off because a component is excluded (not an error). */
+  disabledMates: { mate: number; occurrence: number }[];
+  /** Mates that lost a reference when a component changed configuration. */
+  brokenMates: { mate: number; occurrence: number; reason: string }[];
+  solve: SolveReport | null;
+}
+
+export interface ConfigurationBomRow {
+  definition: number;
+  kind: 'part' | 'assembly';
+  designation: string;
+  name: string;
+  material: string;
+  /** Per configuration (index of ConfigurationBom.configurations); 0 — absent. */
+  quantities: number[];
+  unitVolume: number;
+  unitMass: number | null;
+}
+
+export interface ConfigurationBom {
+  configurations: {
+    designation: string;
+    fullDesignation: string;
+    name: string;
+    totalMass: number | null;
+    totalVolume: number;
+    totalParts: number;
+  }[];
+  /** First level of the composition (specification lines). */
+  rows: ConfigurationBomRow[];
+  /** All parts of the product. */
+  parts: ConfigurationBomRow[];
 }
 
 export interface PlacedPart {
@@ -428,6 +513,17 @@ export class AssemblyDocumentHandle {
     contactTolerance?: number;
   }): InterferenceReport;
   bom(mode?: 'flat' | 'structured'): Bom;
+  /** Assembly configuration table with current values (docs/assembly/ASSEMBLY_DOCUMENT.md, 8.2). */
+  configurationTable(): AssemblyConfigurationTableInfo;
+  /** Whole table, one undo step; table.active is applied and solved. */
+  setConfigurationTable(table: AssemblyConfigurationTable): void;
+  /** One undo step: composition of the configuration, then solve ('' — base values). */
+  activateConfiguration(designation: string): ConfigurationActivation;
+  configurationsToCsv(options?: { decimal?: '.' | ','; bom?: boolean }): string;
+  /** Parses CSV against the document; apply the result with setConfigurationTable. */
+  configurationsFromCsv(csv: string): AssemblyConfigurationTableInfo;
+  /** Composition of every configuration (GOST 2.113 group specification). */
+  configurationBom(): ConfigurationBom;
   findHoles(spec: { part: number[]; insertion: Vec3; radius: number; tolerance?: number }): HoleSite[];
   insertFasteners(spec: FastenerInsertSpec): StackPlacement[];
 }

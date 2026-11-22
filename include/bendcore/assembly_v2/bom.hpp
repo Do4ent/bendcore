@@ -39,4 +39,43 @@ struct Bom {
 kernel::Result<Bom> flatBom(const AssemblyDocument& document);
 kernel::Result<Bom> structuredBom(const AssemblyDocument& document);
 
+// ---- состав всех исполнений сразу (групповая спецификация ГОСТ 2.113, docs/drawing/SPECIFICATION.md)
+
+struct ConfigurationBomRow {
+    DefinitionId definition = 0;
+    DefinitionKind kind = DefinitionKind::Part;
+    std::string designation;
+    std::string name;
+    std::string material;
+    std::vector<int> quantities;  // по исполнению (индекс — ConfigurationBom::configurations); 0 — нет в нём
+    double unitVolume = 0.0;         // мм³
+    std::optional<double> unitMass;  // кг
+};
+
+struct ConfigurationBomColumn {
+    std::string designation;      // как в таблице («-01»)
+    std::string fullDesignation;  // «РЦ.100.00.000-01»
+    std::string name;
+    std::optional<double> totalMass;  // кг; нет, если масса известна не для всех деталей
+    double totalVolume = 0.0;
+    int totalParts = 0;
+};
+
+struct ConfigurationBom {
+    std::vector<ConfigurationBomColumn> configurations;  // строки таблицы исполнений по порядку
+    // Первый уровень состава (как structuredBom, уровень 0: детали и сборочные единицы
+    // верхнего уровня) — то, что пишет спецификация; порядок — первое появление по исполнениям.
+    std::vector<ConfigurationBomRow> rows;
+    // Все детали по всему дереву (как flatBom) — количества в изделии.
+    std::vector<ConfigurationBomRow> parts;
+};
+
+// Состав каждого исполнения таблицы документа: на копии документа исполнения активируются по
+// очереди без решения сопряжений (состав от положений не зависит), строки — по определению
+// (одно определение — одно исполнение компонента); определения с теми же видом, обозначением,
+// наименованием, материалом, объёмом и массой — одна строка (definition — первое из них). Таблица без строк — один столбец с текущим
+// составом (обозначение — документа). options — загрузка исполнений компонентов, которых ещё нет
+// в документе. Ошибки: активации исполнения (с его обозначением), BOM (деталь без геометрии).
+kernel::Result<ConfigurationBom> configurationBom(const AssemblyDocument& document, const LoadOptions& options = {});
+
 }  // namespace bendcore::assembly_v2

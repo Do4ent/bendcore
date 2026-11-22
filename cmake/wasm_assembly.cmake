@@ -55,4 +55,10 @@ if(BENDCORE_NODE)
     COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_ASSEMBLY_ROOT}/tests/wasm/assembly_configurations.test.mjs"
             --module "${BENDCORE_WASM_ASSEMBLY_OUT}")
   set_tests_properties(wasm_assembly_configurations PROPERTIES TIMEOUT 300)
+  # Assembly configurations: composition, BOM, DOF, switching, CSV, undo, nested subassembly
+  # (docs/assembly/ASSEMBLY_DOCUMENT.md, section 8.2).
+  add_test(NAME wasm_assembly_design_table
+    COMMAND ${BENDCORE_NODE} "${BENDCORE_WASM_ASSEMBLY_ROOT}/tests/wasm/assembly_design_table.test.mjs"
+            --module "${BENDCORE_WASM_ASSEMBLY_OUT}")
+  set_tests_properties(wasm_assembly_design_table PROPERTIES TIMEOUT 300)
 endif()

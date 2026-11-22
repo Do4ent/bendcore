@@ -55,6 +55,14 @@ public:
 
     kernel::Result<DocumentSolveReport> solve();
 
+    // Исполнения сборки (раздел 8.2): таблица и активное исполнение — шаги отмены; положения
+    // после решения входят в шаг, поэтому undo() возвращает и состав, и положения.
+    Status setConfigurationTable(AssemblyConfigurationTable table, const LoadOptions& options = {});
+    kernel::Result<ConfigurationActivation> activateConfiguration(const std::string& designation,
+                                                                  const LoadOptions& options = {});
+    kernel::Result<ReplaceReport> setComponentConfiguration(OccurrenceId id, const std::string& configuration,
+                                                            const LoadOptions& options);
+
     bool canUndo() const noexcept { return !undo_.empty(); }
     bool canRedo() const noexcept { return !redo_.empty(); }
     // Название шага, который отменит undo() / повторит redo(); пусто, если шага нет.

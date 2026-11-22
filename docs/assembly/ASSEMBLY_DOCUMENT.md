@@ -3,8 +3,9 @@
 Фаза 3 `docs/ROADMAP_GENERAL_CAD.md` (пп. 1, 3, 4, 6, 7): документ сборки на геометрии OCCT
 поверх решателя `bendcore_assembly_v2` (`docs/assembly/SOLVER.md`).
 
-- Код: `include/bendcore/assembly_v2/{assembly_document,occt_entities,interference,bom,history}.hpp`,
-  `src/assembly_v2/document/` (`serialization.cpp` — собственный формат, `history.cpp` — отмена).
+- Код: `include/bendcore/assembly_v2/{assembly_document,assembly_configurations,occt_entities,interference,bom,history}.hpp`,
+  `src/assembly_v2/document/` (`serialization.cpp` — собственный формат, `history.cpp` — отмена,
+  `configurations.cpp` — исполнения сборки).
 - Сборка: `cmake/assembly_document.cmake`, цель `bendcore_assembly_document`. Зависит от
   `bendcore_assembly_v2`, `bendcore_kernel`, `bendcore_kernel_healing` (булевы операции),
   `bendcore_kernel_xcaf` (STEP), `bendcore_modeling_document` (карта имён элементов детали);
@@ -84,6 +85,8 @@ auto report = doc.solve();   // report.value().totalDof == 1; положения
 | `setOccurrenceName`, `setOccurrenceDesignation`, `removeExplodedView` | Правка вхождения, вида |
 | `toJson`, `fromJson`, `saveFile`, `loadFile`, `addSubassemblyFromSource` | Собственный формат, внешние подсборки (раздел 10) |
 | `AssemblyHistory` (`history.hpp`) | Отмена/повтор (раздел 11) |
+| `setConfigurationTable`, `activateConfiguration`, `configurationTable`, `configurationBase`, `configurationProperties`, `configurationTableToCsv`/`FromCsv`, `configurationBom` | Исполнения сборки (раздел 8.2) |
+| `setOccurrenceConfiguration(id, cfg, resolver / LoadOptions)` | Исполнение детали (8.1) или внешней подсборки (8.2) у вхождения |
 | `addExplodedView`, `explodedPlacements` | Разнесённый вид (раздел 7) |
 
 Ссылки на `patterns()`, `mates()`, `definitions()` действительны до следующего изменения
@@ -252,6 +255,158 @@ P_i = P_ref · L_i · P_ref⁻¹ · P_seed
   определения (вхождение перешло на другое исполнение) остаются в документе и в BOM не входят.
 - Масса строки BOM — `V·ρ` исполнения (`V` — объём его формы, `ρ` — плотность его материала).
 
+### 8.2 Исполнения сборки
+
+Таблица исполнений сборки — аналог таблицы параметров детали (Design Table SolidWorks,
+«Исполнения» КОМПАС) для состава. Заголовок `include/bendcore/assembly_v2/assembly_configurations.hpp`
+(модель), API — `AssemblyDocument` и свободные функции в `assembly_document.hpp`, исходник
+`src/assembly_v2/document/configurations.cpp`; состав всех исполнений — `configurationBom`
+(`bom.hpp`, `bom.cpp`); файл — `serialization.cpp`.
+
+**Модель.** `AssemblyConfigurationTable{columns, rows, active}`:
+
+| Элемент | Содержимое |
+|---|---|
+| Столбец `{kind, target}` | `Suppression` — вхождение исключено или включено (`target` — ID вхождения); `Configuration` — исполнение детали или внешней подсборки у вхождения (`target` — ID вхождения); `MateValue` — значение сопряжения Distance (мм), Angle (градусы) или Gear (передаточное отношение) (`target` — ID сопряжения) |
+| Строка `{designation, name, cells}` | обозначение (полное «РЦ.100.00.000» или суффикс «-01»), наименование, по ячейке на столбец |
+| Ячейка | `1`/`0` (также true/false, yes/no, да/нет — `modeling::parseSuppressionCell`) у подавления; обозначение исполнения документа компонента или `#` (компонент как сохранён, источник без «#») у исполнения; число с точкой или запятой у значения; **пусто — базовое значение** |
+| `active` | обозначение активного исполнения; пусто — базовые значения |
+
+Переменных у документа сборки нет: параметры состава — значения сопряжений; переменные
+деталей меняются исполнениями деталей (столбец `Configuration`). Полное обозначение —
+`fullDesignation(table, row, rootDesignation)`: суффикс дописывается к обозначению первой
+строки, а если и она суффикс — к обозначению сборки; `configurationFullDesignation(row)`,
+`configurationProperties()` (свойства корня с обозначением и наименованием активного
+исполнения — заголовок спецификации, свойства подсборки-исполнения).
+
+**Базовые значения и правки.** Активное исполнение подставляет непустые ячейки своей строки
+в документ (флаг `Occurrence::suppressed`, определение вхождения, `MateSpec::value`), пустые —
+базовые значения (`configurationBase()`, по одному на столбец; при `setConfigurationTable` —
+прежние для общих столбцов, текущее состояние документа — для новых). Документ всегда хранит
+действующие значения, поэтому решатель, развёртка, пересечения, BOM, масса и STEP исполнения
+не знают отдельной логики. Правка документа при активном исполнении (`setOccurrenceSuppressed`,
+`editMate`, `setOccurrenceConfiguration`) попадает в непустую ячейку этого исполнения, иначе — в
+базовое значение (как у детали): `configurationTable()` возвращает таблицу, синхронизированную
+с документом, и при уходе с исполнения правка не теряется. Текст ячейки, задающий то же
+значение («30» градусов), сохраняется как записан.
+
+**Активация** — `activateConfiguration(designation, LoadOptions, ActivationOptions{solve,
+solver})` → `ConfigurationActivation{designation, fullDesignation, excluded, disabledMates,
+replaced, solve}`:
+
+1. текущее состояние записывается в таблицу (см. выше), положения вхождений верхнего уровня
+   запоминаются за уходящим исполнением;
+2. значения столбцов ставятся по порядку: подавление — флагом; исполнение —
+   `setOccurrenceConfiguration(id, исполнение, options)` (деталь — по `options.parts`,
+   подсборка — по `options.assemblies`; определение исполнения уже есть — загрузки нет);
+   значение — `spec.value` (угол из градусов в радианы);
+3. положения, которые были у этого исполнения при уходе с него, восстанавливаются, массивы
+   пересчитываются, затем `solve`. Поэтому переключение туда и обратно даёт **те же**
+   положения бит в бит (решение стартует из решённого состояния; свободные вращения не
+   «уплывают»);
+4. отчёт: `excluded` — исключённые вхождения; `disabledMates` — сопряжения, у которых
+   вхождение на любом уровне пути исключено, вместе с этим вхождением: они не решаются
+   (`DocumentSolveReport::suppressedMates`) и **не являются ошибкой**; `replaced` — отчёты
+   замены (`ReplaceReport`: сломанные ссылки с причиной) у вхождений, сменивших исполнение.
+
+Исключённые компоненты (подавленные) не участвуют в решателе (не переменные), проверке
+пересечений и развёртке (`placedParts`), BOM, массе и STEP. Ошибка на любом шаге
+(«no configuration '-07'», исполнение детали не строится, нет файла подсборки) — документ
+возвращается к состоянию до вызова.
+
+**Правки таблицы** — `setConfigurationTable(table, options, activation)`: проверка, возврат к
+базовым значениям прежней таблицы, новые базовые значения, активация `table.active`. Ошибки
+`InvalidInput` (документ не меняется): «column 2: unknown occurrence 9», «column 3: mate 4
+(Coincident) has no value», «column 1: occurrence 'B1:2' is a pattern instance; it follows the
+pattern seed» (экземпляры массива создаются массивом и следуют за исходным), «column 4:
+occurrence 'Корпус' has no source document: configurations need one», вхождение внешней
+подсборки («belongs to external subassembly … and is read-only»), «repeated column
+'suppress:A1'», «configuration 2 has no designation», «repeated designation '-01'»,
+«configuration '-01' has 2 cells, the table has 3 columns», «configuration '-01', column
+'suppress:A1': invalid value 'maybe' (expected 1 or 0)», «…: invalid value 'x': expected a
+number», «…: a gear ratio must be positive», «no configuration '-07'», ошибки активации
+(«occurrence 'Вал', configuration '-09': the part has no configuration '-09'»). Удаление
+вхождения или сопряжения удаляет его столбец.
+
+**Подсборки-исполнения.** `setOccurrenceConfiguration(id, configuration, LoadOptions)` у
+вхождения внешней подсборки: источник определения — `«<путь>#<исполнение>»`, как у деталей.
+Документ подсборки читается (`options.assemblies(путь)`), в нём активируется исполнение
+(подстановка и **решение его сопряжений**: положения внутри подсборки — исполнения), состав
+вставляется как при `addSubassemblyFromSource`; свойства определения — свойства прежнего с
+обозначением и наименованием исполнения подсборки («РЦ.300.00.000-01»). Одно определение на
+исполнение (повторное переключение берёт готовое). Ссылки сопряжений внутрь подсборки
+переносятся на вхождения нового состава по ID в файле подсборки (`sourceId`); вхождения нет в
+новом составе — сопряжение сломано с причиной и восстанавливается при возврате. Ошибки:
+«occurrence 3 is a subassembly without a source document: configurations need one»,
+«subassembly 'unit.json', configuration '-05': no configuration '-05'». При загрузке файла
+определение-сборка с источником «…#-01» загружается так же; цикл файлов определяется по пути
+без исполнения. Встроенные детали (без источника) двух исполнений одной подсборки — разные
+определения (раздел 12), в `configurationBom` они сводятся в одну строку.
+
+**Состав всех исполнений** — `configurationBom(document, options)` (`bom.hpp`) для групповой
+спецификации ГОСТ 2.113 (`docs/drawing/SPECIFICATION.md`, «Исполнения сборки»): на копии
+документа исполнения активируются по очереди без решения (состав от положений не зависит),
+документ не меняется.
+
+```cpp
+struct ConfigurationBomRow {   // одна составная часть
+    DefinitionId definition; DefinitionKind kind;
+    std::string designation, name, material;
+    std::vector<int> quantities;      // по исполнению; 0 — нет в нём
+    double unitVolume; std::optional<double> unitMass;
+};
+struct ConfigurationBomColumn { std::string designation, fullDesignation, name;
+                                std::optional<double> totalMass; double totalVolume; int totalParts; };
+struct ConfigurationBom {
+    std::vector<ConfigurationBomColumn> configurations;  // строки таблицы по порядку
+    std::vector<ConfigurationBomRow> rows;   // первый уровень (structuredBom, уровень 0) — строки спецификации
+    std::vector<ConfigurationBomRow> parts;  // все детали изделия (flatBom)
+};
+kernel::Result<ConfigurationBom> configurationBom(const AssemblyDocument&, const LoadOptions& = {});
+```
+
+Строки — в порядке первого появления по исполнениям; одна строка на определение, определения с
+теми же видом, обозначением, наименованием, материалом, объёмом и массой — одна строка. Таблица
+без строк — один столбец с текущим составом. Ошибки — активации исполнения или BOM (деталь без
+геометрии) с префиксом «configuration '-01': ».
+
+**CSV** — тем же кодом, что у деталей (`modeling::configurationTableToCsv` /
+`configurationTableFromCsv`: «;», кавычки RFC 4180, CRLF, UTF-8 с BOM, десятичная запятая у
+чисел): `configurationTableToCsv(document, table, decimal, byteOrderMark)`,
+`configurationTableFromCsv(document, csv)`, заголовок столбца — `configurationColumnTitle`.
+Столбцы сборки записываются столбцами таблицы детали: подавление — `suppress:<вхождение>`,
+исполнение и значение — `configuration:<вхождение>`, `mate:<сопряжение>` (при чтении также
+«подавить:», «исполнение:», «сопряжение:», «Обозначение», «Наименование»). Вхождение и
+сопряжение называются по имени, если оно однозначно в редактируемом составе, иначе `#<ID>`.
+Ошибки чтения — `ParseError`: ошибки CSV с номером строки (как у деталей), «CSV column
+'material': an assembly configuration has no material…», «CSV column 'W': expected
+'suppress:<component>', 'configuration:<component>' or 'mate:<mate>'», «… no occurrence named
+'X'», «… 2 occurrences are named 'A1'; use #<id>». Значения проверяет `setConfigurationTable`.
+Туда и обратно таблица не теряет ничего (обе формы разделителя).
+
+**Файл** (версия 3): поле `"configurations"`; состояние вхождений и сопряжений в файле —
+активного исполнения, `base` — базовые значения, `placements` — положения других исполнений
+(ключ «» — базовые значения):
+
+```json
+"configurations": {"columns": [{"kind": "suppression", "target": 5}, {"kind": "configuration", "target": 2},
+                               {"kind": "mateValue", "target": 3}],
+                   "rows": [{"designation": "РЦ.100.00.000", "name": "Редуктор", "cells": ["0", "#", "20"]},
+                            {"designation": "-01", "name": "Редуктор с удлинённым валом", "cells": ["1", "-01", "40"]}],
+                   "active": "-01", "base": ["0", "#", "20"],
+                   "placements": [{"configuration": "РЦ.100.00.000",
+                                   "occurrences": [{"occurrence": 2, "placement": {"position": [...], "rotation": [...]}}]}]}
+```
+
+Таблица из файла проверяется как `setConfigurationTable`; ошибка — `ParseError`
+«configurations: column 1: unknown occurrence 9», неизвестный вид столбца — «configurations:
+unknown column kind 'x'». Без `base` базовыми считаются значения в файле.
+
+**Отмена.** `AssemblyHistory::setConfigurationTable`, `activateConfiguration`,
+`setComponentConfiguration` — по шагу истории («Configuration table», «Activate configuration»,
+«Component configuration»); решение входит в шаг, поэтому `undo()` возвращает и состав, и
+положения.
+
 ## 9. Обмен STEP
 
 `toXcaf()` строит `kernel::AssemblyDocument`: корень — корневая сборка, определения —
@@ -277,7 +432,7 @@ P_i = P_ref · L_i · P_ref⁻¹ · P_seed
 относительно каталога документа (детали — `filePartResolver`).
 
 ```json
-{"format": "bendcore-assembly", "version": 2, "name": "Вал во втулке",
+{"format": "bendcore-assembly", "version": 3, "name": "Вал во втулке",
  "properties": {"designation": "СБ-100", "name": "...", "material": "", "density": null}, "color": null,
  "next": {"occurrence": 3, "mate": 3, "pattern": 1},
  "definitions": [
@@ -374,9 +529,13 @@ load 'parts/shaft.json' …»). Сломанное сопряжение сохр
 
 ### 10.5 Версии и миграция
 
-`AssemblyDocument::kFormatVersion = 2`. Версия новее — `Unsupported`; старее — миграция при
+`AssemblyDocument::kFormatVersion = 3`. Версия новее — `Unsupported`; старее — миграция при
 загрузке (`LoadReport::migrated`), сохранение всегда в текущей версии.
 
+- **v3**: таблица исполнений сборки `"configurations"` (раздел 8.2); файл без неё отличается от
+  v2 только номером версии. Файлы v1 и v2 читаются, таблица у них пуста.
+- **v2**: привязки сопряжений `bound` с сигнатурами, подавление, позиционные обозначения,
+  счётчики `next`.
 - **v1** (исходная раскладка): положение — `{"matrix": [r00, r01, r02, tx, r10, …, tz]}`
   (3×4, проверяется ортонормированность и det > 0, переводится в кватернион); сопряжения без
   `bound` — элементы привязываются заново по ссылкам (`index`/`name`) на загруженной
@@ -417,6 +576,11 @@ load 'parts/shaft.json' …»). Сломанное сопряжение сохр
 - Исполнение выбирается у вхождения детали с источником — документом детали; у встроенной
   детали без источника, STEP и BRep исполнений нет. Определения прежних исполнений остаются в
   документе (не удаляются автоматически).
+- Исполнения сборки: столбцы — подавление, исполнение компонента и значение сопряжения;
+  столбцов фиксации, положения и цвета нет; у экземпляров массива столбцов нет (они следуют за
+  исходным компонентом). Исполнение есть только у внешней подсборки (документа в своём файле);
+  у встроенной подсборки — нет. Положения неактивных исполнений хранятся с момента ухода с них:
+  исполнение, ни разу не бывшее активным, решается из текущих положений.
 
 ## 13. Как тестировать
 
@@ -425,7 +589,8 @@ cmake -S . -B build-occt -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DBENDCORE_WITH_OCCT=ON -DBENDCORE_OCCT_DIR=/home/user/bendcore/third_party/occt-install
 cmake --build build-occt --target test_assembly_document_mates test_assembly_document_patterns \
   test_assembly_document_interference test_assembly_document_bom test_assembly_document_exchange \
-  test_assembly_document_io test_assembly_document_history test_assembly_document_configurations
+  test_assembly_document_io test_assembly_document_history test_assembly_document_configurations \
+  test_assembly_document_assembly_configurations
 ctest --test-dir build-occt -R assembly_document --output-on-failure
 ```
 
@@ -439,3 +604,4 @@ ctest --test-dir build-occt -R assembly_document --output-on-failure
 | `assembly_document_io` | вал (документ детали `parts/shaft.json`) во втулке (`parts/bushing.step`): сохранение → загрузка → решение — положения 1e-9, 1 степень свободы, свойства и обозначения (кириллица), со встроенной геометрией и без; кривошип (палец, рычаг, угол 30°): 0 степеней свободы, начало рычага (20, 20, 10), cos угла; правка угла 60° и подавление (1 степень свободы); плита с болтами: массив по отверстиям, подавленный экземпляр, разнесённый вид, BOM 3 болта и объём `π·5²·30 + π·8²·6`; перемещённый файл — `MissingEmbedded`/`Missing`, диагностика по обоим сопряжениям с путём файла, возврат файла восстанавливает; изменённые файлы — длинный вал (`Changed`, торец `Remapped`), втулка → коробка (соосность `Broken` с причиной «Cylinder»), торец вала на z = 30; внешняя подсборка дважды, сопряжение на грань внутри неё, только чтение, общий BOM, перезагрузка, цикл файлов; миграция v1 (матрица, привязка без сигнатур); ошибки формата; STEP: обозначения/наименования/позиционные обозначения, подавленное вхождение не экспортируется | аналитика положений, формулы объёма |
 | `assembly_document_history` | отмена двух сопряжений возвращает вал в исходное положение побитно, повтор — посаженное; правка (расстояние 5) и отмена; подавление; удаление компонента с сопряжениями и отмена (те же ID); замена на длинный вал (середина z = 70) и отмена; подавление компонента; ошибки не записываются; линейный и круговой массивы, удаление массива и отмена; предел глубины; откат частичной правки в `apply` | побитное сравнение со снимком, геометрия по построению |
 | `assembly_document_configurations` | документ детали `block.json` (брусок W×D×H, отверстие r = 5; исполнения РЦ.080.00.010 60×40×20 S235, -01 80×50×30 6061-T6, -02 50×30×15 без отверстия и без материала, -03 H = −5): два вхождения разных исполнений — источник `block.json#-01`, обозначение, наименование, материал; BOM 2 строки, объёмы и массы `V·ρ`, общая масса; третье вхождение «-01» — то же определение, количество 2; «-02» берёт плотность детали; ошибки («-09», «-03» не строится с причиной `Body`, деталь без источника), неудачная смена ничего не меняет; возврат к «как сохранена»; сохранение со ссылками и загрузка из файла детали — `Loaded`, те же количества и масса; разбор источника и `filePartResolver` с «#» (STEP/BRep — ошибка) | формулы объёма и массы |
+| `assembly_document_assembly_configurations` | редуктор-подобная сборка: корпус 100×60×20 (отверстие r = 10, четыре r = 5, ρ = 7200), вал — документ детали `shaft.json` (R10×60, «-01» R10×80, «-02» R10.5×60, S235), болты М10×30 и М10×40 (ρ = 7850); исполнения: базовое — два болта М10×30, вылет вала 20; «-01» — четыре болта М10×40, вал «-01», вылет 40; «-02» — пустые ячейки (базовые значения), вал «-02». По каждому: масса `Σ V·ρ` (объёмы по формулам цилиндров и коробки), строки и количества BOM, степени свободы (3 / 5 / 3 — вращения вала и болтов), невязка < 1e-9, высота торца вала (40 / 60 / 40), число пересечений (0 / 0 / 1, объём натяга `π(10.5² − 10²)·20`), отключённые сопряжения исключённых болтов (8 / 4); состав всех исполнений (`configurationBom`: количества по исполнениям). Переключение туда и обратно — положения побитно; правка значения при активном исполнении пишет его ячейку; ошибки (нет исполнения, неизвестное исполнение компонента, недопустимое значение, компонент без источника, повтор обозначения) не меняют документ; удаление вхождения удаляет столбец. Файл v3: таблица, базовые значения, активное исполнение и положения другого исполнения; v2 читается; повреждённый вид столбца — `ParseError`. CSV туда и обратно (точка и запятая), одинаковые имена — `#<ID>`, русские заголовки, ошибки разбора. Отмена активации и таблицы. Вложенная подсборка-исполнение (планка с двумя болтами, второй исключён в базовом, «-01» поднимает болт на 5 мм сопряжением подсборки): источник `unit.json#-01`, обозначение исполнения, сопряжение внутрь подсборки переносится по `sourceId`, BOM 1 → 2 болта и масса по формулам, подъём головки 5 мм, таблица верхней сборки со столбцом исполнения подсборки, файл | формулы объёма и массы, аналитика положений |

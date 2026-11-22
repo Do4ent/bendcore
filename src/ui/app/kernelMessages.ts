@@ -676,6 +676,27 @@ export const KERNEL_TEMPLATES: readonly (readonly [string, string])[] = [
   ['configNoSource', '{what} has no part document source: configurations need one'],
   ['configPatternInstance', '{what} is a pattern instance; set the configuration of the seed'],
   ['notAPart', '{what} is not a part'],
+  // Assembly configuration table (docs/assembly/ASSEMBLY_DOCUMENT.md, 8.2).
+  ['asmColumnUnknownMate', 'column {k:num}: unknown mate {m:num}'],
+  ['asmColumnMateNoValue', 'column {k:num}: mate {m:num} ({type}) has no value'],
+  ['asmColumnUnknownOccurrence', 'column {k:num}: unknown occurrence {o:num}'],
+  ['asmColumnPatternInstance', 'column {k:num}: occurrence \'{o}\' is a pattern instance; it follows the pattern seed'],
+  ['asmColumnNoSource', 'column {k:num}: occurrence \'{o}\' has no source document: configurations need one'],
+  ['asmColumnPrefix', 'column {k:num}: {detail:msg}'],
+  ['asmOccurrenceConfiguration', 'occurrence \'{o}\', configuration \'{c}\': {detail:msg}'],
+  ['asmConfigurationPrefix', 'configuration \'{d}\': {detail:msg}'],
+  ['asmSubassemblyConfiguration', 'subassembly \'{s}\', configuration \'{c}\': {detail:msg}'],
+  ['asmSubassemblyNoSource', 'occurrence {o:num} is a subassembly without a source document: configurations need one'],
+  ['asmOccurrenceNoSource', 'occurrence \'{o}\' has no source document'],
+  ['asmCsvMaterial', 'CSV column \'material\': an assembly configuration has no material; set it in the part\'s design table'],
+  ['asmCsvRepeated', 'CSV column \'{title}\' is repeated'],
+  ['asmCsvColumnKind', 'CSV column \'{title}\': expected \'suppress:<component>\', \'configuration:<component>\' or \'mate:<mate>\''],
+  ['asmCsvNoSuchMate', 'CSV column \'{title}\': no such mate'],
+  ['asmCsvNoSuchOccurrence', 'CSV column \'{title}\': no such occurrence'],
+  ['asmCsvNoMateNamed', 'CSV column \'{title}\': no mate named \'{name}\''],
+  ['asmCsvNoOccurrenceNamed', 'CSV column \'{title}\': no occurrence named \'{name}\''],
+  ['asmCsvMatesNamed', 'CSV column \'{title}\': {n:num} mates are named \'{name}\'; use #<id>'],
+  ['asmCsvOccurrencesNamed', 'CSV column \'{title}\': {n:num} occurrences are named \'{name}\'; use #<id>'],
 ];
 
 type FieldType = 'text' | 'id' | 'num' | 'op' | 'kind' | 'msg';

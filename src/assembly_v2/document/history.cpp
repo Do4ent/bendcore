@@ -74,6 +74,46 @@ Result<ReplaceReport> AssemblyHistory::replaceComponent(OccurrenceId id, Definit
     return report;
 }
 
+Status AssemblyHistory::setConfigurationTable(AssemblyConfigurationTable table, const LoadOptions& options) {
+    ActivationOptions a;
+    a.solve = options_.solveAfterEdit;
+    a.solver = options_.solver;
+    return apply("Configuration table",
+                 [&](AssemblyDocument& d) { return d.setConfigurationTable(std::move(table), options, a); });
+}
+
+Result<ConfigurationActivation> AssemblyHistory::activateConfiguration(const std::string& designation,
+                                                                       const LoadOptions& options) {
+    ConfigurationActivation report;
+    ActivationOptions a;
+    a.solve = options_.solveAfterEdit;
+    a.solver = options_.solver;
+    auto s = apply("Activate configuration", [&](AssemblyDocument& d) -> Status {
+        auto r = d.activateConfiguration(designation, options, a);
+        if (!r) return r.error();
+        report = std::move(r).value();
+        return std::monostate{};
+    });
+    if (!s) return s.error();
+    return report;
+}
+
+Result<ReplaceReport> AssemblyHistory::setComponentConfiguration(OccurrenceId id, const std::string& configuration,
+                                                                 const LoadOptions& options) {
+    ReplaceReport report;
+    auto s = apply(
+        "Component configuration",
+        [&](AssemblyDocument& d) -> Status {
+            auto r = d.setOccurrenceConfiguration(id, configuration, options);
+            if (!r) return r.error();
+            report = std::move(r).value();
+            return std::monostate{};
+        },
+        options_.solveAfterEdit);
+    if (!s) return s.error();
+    return report;
+}
+
 Status AssemblyHistory::moveComponent(OccurrenceId id, const Transform& placement) {
     return apply("Move component", [&](AssemblyDocument& d) { return d.setPlacement(id, placement); });
 }
