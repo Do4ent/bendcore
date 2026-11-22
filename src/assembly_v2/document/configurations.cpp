@@ -213,15 +213,17 @@ Status AssemblyDocument::writeColumnValue(const AssemblyConfigurationColumn& c, 
 // Текущее состояние документа → непустые ячейки активного исполнения и базовые значения
 // (правки при активном исполнении не теряются при переключении). Текст ячейки, который
 // задаёт то же значение («30» градусов), сохраняется как записан.
-void AssemblyDocument::captureConfiguration() {
-    configurationBase_.resize(configurations_.columns.size());
-    const auto row = configurations_.rowOf(configurations_.active);
-    for (std::size_t k = 0; k < configurations_.columns.size(); ++k) {
-        const AssemblyConfigurationColumn& c = configurations_.columns[k];
+void AssemblyDocument::captureConfiguration() { captureInto(configurations_, configurationBase_); }
+
+void AssemblyDocument::captureInto(AssemblyConfigurationTable& table, std::vector<std::string>& base) const {
+    base.resize(table.columns.size());
+    const auto row = table.rowOf(table.active);
+    for (std::size_t k = 0; k < table.columns.size(); ++k) {
+        const AssemblyConfigurationColumn& c = table.columns[k];
         auto now = columnValue(c);
         if (!now) continue;
-        std::string* slot = &configurationBase_[k];
-        if (row && !configurations_.rows[*row].cells[k].empty()) slot = &configurations_.rows[*row].cells[k];
+        std::string* slot = &base[k];
+        if (row && !table.rows[*row].cells[k].empty()) slot = &table.rows[*row].cells[k];
         bool same = *slot == now.value();
         if (!same && c.kind == AssemblyColumnKind::Suppression) {
             same = modeling::parseSuppressionCell(*slot) == modeling::parseSuppressionCell(now.value());
@@ -249,15 +251,17 @@ void AssemblyDocument::pruneConfigurationColumns() {
 }
 
 AssemblyConfigurationTable AssemblyDocument::configurationTable() const {
-    AssemblyDocument copy = *this;  // формы — общие дескрипторы; копируются значения
-    copy.captureConfiguration();
-    return copy.configurations_;
+    AssemblyConfigurationTable table = configurations_;
+    std::vector<std::string> base = configurationBase_;
+    captureInto(table, base);
+    return table;
 }
 
 std::vector<std::string> AssemblyDocument::configurationBase() const {
-    AssemblyDocument copy = *this;
-    copy.captureConfiguration();
-    return copy.configurationBase_;
+    AssemblyConfigurationTable table = configurations_;
+    std::vector<std::string> base = configurationBase_;
+    captureInto(table, base);
+    return base;
 }
 
 std::string AssemblyDocument::configurationFullDesignation(std::size_t row) const {

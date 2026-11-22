@@ -810,7 +810,7 @@ val stateToJs(const Session& s) {
     val cfg = val::object();
     cfg.set("active", doc.activeConfiguration());
     cfg.set("designation", doc.configurationProperties().designation);
-    cfg.set("count", static_cast<double>(doc.configurationTable().rows.size()));
+    cfg.set("count", static_cast<double>(doc.configurationCount()));
     out.set("configuration", cfg);
     return out;
 }

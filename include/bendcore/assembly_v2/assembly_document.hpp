@@ -517,6 +517,7 @@ public:
                                                                   const LoadOptions& options = {},
                                                                   const ActivationOptions& activation = {});
     const std::string& activeConfiguration() const { return configurations_.active; }
+    std::size_t configurationCount() const { return configurations_.rows.size(); }
     // Свойства корня с обозначением и наименованием активного исполнения (спецификация, BOM
     // подсборки-исполнения).
     PartProperties configurationProperties() const;
@@ -592,6 +593,7 @@ private:
     Status writeColumnValue(const AssemblyConfigurationColumn& column, const std::string& value,
                             const LoadOptions& options, ConfigurationActivation& report);
     void captureConfiguration();
+    void captureInto(AssemblyConfigurationTable& table, std::vector<std::string>& base) const;
     void pruneConfigurationColumns();  // столбцы удалённых вхождений и сопряжений
     kernel::Result<ConfigurationActivation> applyConfiguration(const std::string& designation, const LoadOptions& options,
                                                                const ActivationOptions& activation);
