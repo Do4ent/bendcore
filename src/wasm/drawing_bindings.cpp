@@ -350,12 +350,19 @@ Session& session(std::uint32_t handle) {
     return *it->second;
 }
 
+// Snapshot of the rebuilt part: a group drawing (GOST 2.113) needs every configuration of the
+// part's configuration table, a plain drawing - the active configuration only.
+dd::ModelSnapshot partSnapshot(Session& s) {
+    if (s.doc.settings().group.enabled) return take(dd::snapshotPartConfigurations(*s.part, s.doc.model().properties));
+    return take(dd::snapshotPart(*s.part, s.doc.model().properties));
+}
+
 dd::ModelSnapshot currentSnapshot(Session& s) {
     if (s.kind == dd::ModelKind::Part) {
         const m::RebuildReport rep = s.part->rebuild();
         if (!rep.failed.empty())
             raise({k::ErrorCode::OperationFailed, "part rebuild failed: feature '" + rep.failed.front() + "'"});
-        return take(dd::snapshotPart(*s.part, s.doc.model().properties));
+        return partSnapshot(s);
     }
     return take(dd::snapshotAssembly(s.assembly));
 }
@@ -512,6 +519,29 @@ json historyJson(const Session& s) {
             {"undoDepth", s.history.undoDepth()}, {"redoDepth", s.history.redoDepth()}};
 }
 
+// Group drawing (GOST 2.113): settings and, after an update in group mode, the table of
+// configurations (columns with their keys, rows, lettered dimensions).
+json groupJson(const Session& s) {
+    const dd::GroupDrawingSettings& g = s.doc.settings().group;
+    json out = {{"enabled", g.enabled}, {"mass", g.mass}, {"material", g.material}, {"headers", g.headers},
+                {"available", s.kind == dd::ModelKind::Part}, {"configurations", 0}, {"table", nullptr}};
+    if (s.kind == dd::ModelKind::Part) out["configurations"] = s.part->configurationTable().rows.size();
+    if (const dd::GroupDrawingResult* r = s.doc.groupDrawing()) {
+        json columns = json::array();
+        for (const dd::GroupColumn& c : r->columns)
+            columns.push_back({{"key", c.key}, {"header", c.header}, {"defaultHeader", c.defaultHeader}});
+        json dims = json::array();
+        for (const dd::GroupDimension& d : r->dimensions) {
+            json values = json::array();
+            for (const auto& v : d.values) values.push_back(v ? json(*v) : json(nullptr));
+            dims.push_back({{"sheet", d.sheet}, {"id", d.id}, {"letter", d.letter}, {"values", values}, {"texts", d.texts}});
+        }
+        out["table"] = {{"designations", r->designations}, {"baseDesignation", r->baseDesignation}, {"columns", columns},
+                        {"rows", r->table.rows}, {"dimensions", dims}};
+    }
+    return out;
+}
+
 json describe(Session& s) {
     json sheets = json::array();
     const auto& computed = s.doc.computedSheets();
@@ -551,7 +581,8 @@ json describe(Session& s) {
                       {"textOverride", d.def.textOverride ? json(*d.def.textOverride) : json(nullptr)},
                       {"decimals", d.def.decimals},
                       {"lastValue", d.lastValue ? json(*d.lastValue) : json(nullptr)},
-                      {"group", d.group.empty() ? json(nullptr) : json(d.group)}};
+                      {"group", d.group.empty() ? json(nullptr) : json(d.group)},
+                      {"groupLetter", d.groupLetter}};
             if (!d.group.empty()) {
                 j["groupMode"] = dd::toString(d.groupMode);
                 j["groupSpacing"] = d.groupSpacing;
@@ -680,6 +711,11 @@ json describe(Session& s) {
             {"sheetStyle", enumName(s.doc.settings().sheetStyle, kSheetStyles)},
             {"textFont", dv::toString(s.doc.settings().textFont)},
             {"dissolvedAssemblies", s.spec ? json(s.spec->settings().dissolved) : json::array()},
+            {"group", groupJson(s)},
+            {"groupSpecification", s.spec ? json({{"enabled", s.spec->settings().group.enabled},
+                                                  {"layout", an::toString(s.spec->settings().group.layout)},
+                                                  {"columnHeaders", s.spec->settings().group.columnHeaders}})
+                                          : json(nullptr)},
             {"sheets", sheets},
             {"history", historyJson(s)}};
 }
@@ -810,6 +846,53 @@ std::string modelSave(std::uint32_t handle) {
     });
 }
 
+json stalenessJson(const dd::StalenessReport& r);
+
+// Configuration table of the part (docs/modeling/PART_DOCUMENT.md, "Таблица параметров"): the
+// source of the group drawing (GOST 2.113).
+json configurationTableJson(const m::ConfigurationTable& t) {
+    json columns = json::array();
+    for (const m::ConfigurationColumn& c : t.columns)
+        columns.push_back({{"kind", m::toString(c.kind)}, {"target", c.target}, {"title", m::columnTitle(c)}});
+    json rows = json::array();
+    for (std::size_t r = 0; r < t.rows.size(); ++r)
+        rows.push_back({{"designation", t.rows[r].designation}, {"fullDesignation", m::fullDesignation(t, r)},
+                        {"name", t.rows[r].name}, {"cells", t.rows[r].cells}});
+    return {{"columns", columns}, {"rows", rows}, {"active", t.active}};
+}
+
+std::string modelConfigurations(std::uint32_t handle) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        if (s.kind != dd::ModelKind::Part) raise({k::ErrorCode::Unsupported, "configurations: the drawing model is an assembly"});
+        return configurationTableJson(s.part->configurationTable());
+    });
+}
+
+// Sets one cell of the part's configuration table and rebuilds the part; the drawing is not
+// updated (see checkModel / updateFromModel). A configuration that does not build restores the cell.
+std::string modelSetConfigurationCell(std::uint32_t handle, int row, int column, std::string value) {
+    return guarded([&]() -> json {
+        Session& s = session(handle);
+        if (s.kind != dd::ModelKind::Part) raise({k::ErrorCode::Unsupported, "configurations: the drawing model is an assembly"});
+        const m::ConfigurationTable before = s.part->configurationTable();
+        if (row < 0 || std::size_t(row) >= before.rows.size()) throw InputError("no configuration row " + std::to_string(row));
+        if (column < 0 || std::size_t(column) >= before.columns.size()) throw InputError("no configuration column " + std::to_string(column));
+        if (auto st = s.part->setConfigurationCell(std::size_t(row), std::size_t(column), value); !st) raise(st.error());
+        s.part->rebuild();
+        for (const m::ConfigurationCheck& c : s.part->checkConfigurations()) {
+            if (c.ok) continue;
+            s.part->setConfigurationTable(before);
+            s.part->rebuild();
+            raise({k::ErrorCode::OperationFailed, "configuration '" + c.designation + "' does not build: " +
+                                                      (c.problems.empty() ? std::string("unknown problem") : c.problems.front())});
+        }
+        json out = stalenessJson(s.doc.checkModel(partSnapshot(s)));
+        out["configurations"] = configurationTableJson(s.part->configurationTable());
+        return out;
+    });
+}
+
 std::string modelVariables(std::uint32_t handle) {
     return guarded([&]() -> json {
         Session& s = session(handle);
@@ -847,7 +930,7 @@ std::string modelSetVariable(std::uint32_t handle, std::string name, std::string
             raise({k::ErrorCode::OperationFailed,
                    "variable " + name + " = " + expression + ": the part does not rebuild (feature '" + rep.failed.front() + "')"});
         }
-        const dd::ModelSnapshot snap = take(dd::snapshotPart(*s.part, s.doc.model().properties));
+        const dd::ModelSnapshot snap = partSnapshot(s);
         return stalenessJson(s.doc.checkModel(snap));
     });
 }
@@ -877,7 +960,7 @@ std::string setModelProperties(std::uint32_t handle, std::string text) {
         dd::DrawingEditState before = dd::captureEditState(s.doc);
         try {
             propertiesApply(s.doc.model().properties, j);
-            const dd::ModelSnapshot snap = take(dd::snapshotPart(*s.part, s.doc.model().properties));
+            const dd::ModelSnapshot snap = partSnapshot(s);
             json rep = updateReportJson(runUpdate(s, snap));
             s.history.record(std::move(before), "setModelProperties");
             return rep;
@@ -901,8 +984,59 @@ std::string setSettings(std::uint32_t handle, std::string text) {
         const json j = parseArg(text, "settings");
         const dd::DrawingSettings backup = s.doc.settings();
         const std::set<std::string> dissolvedBackup = s.spec ? s.spec->settings().dissolved : std::set<std::string>{};
+        const dd::GroupSpecificationSettings groupSpecBackup = s.spec ? s.spec->settings().group : dd::GroupSpecificationSettings{};
         dd::DrawingEditState before = dd::captureEditState(s.doc);
+        bool resnap = false;
         try {
+            if (j.contains("group")) {
+                // Group drawing of a part (GOST 2.113): {enabled, mass, material, headers: {key: text}}.
+                const json& g = j.at("group");
+                if (!g.is_object()) throw InputError("group must be an object");
+                dd::GroupDrawingSettings& gs = s.doc.settings().group;
+                if (g.contains("enabled")) {
+                    const bool on = boolOr(g, "enabled", gs.enabled);
+                    if (on && s.kind != dd::ModelKind::Part)
+                        raise({k::ErrorCode::Unsupported, "group drawing: only a part drawing can be a group drawing (GOST 2.113)"});
+                    resnap = resnap || on != gs.enabled;
+                    gs.enabled = on;
+                }
+                gs.mass = boolOr(g, "mass", gs.mass);
+                gs.material = boolOr(g, "material", gs.material);
+                if (g.contains("headers")) {
+                    const json& h = g.at("headers");
+                    if (!h.is_object()) throw InputError("group headers must be an object {key: text}");
+                    for (const auto& [key, value] : h.items()) {
+                        if (value.is_null() || (value.is_string() && value.get<std::string>().empty())) {
+                            gs.headers.erase(key);
+                        } else {
+                            if (!value.is_string()) throw InputError("group header '" + key + "' must be a string");
+                            gs.headers[key] = value.get<std::string>();
+                        }
+                    }
+                }
+            }
+            if (j.contains("groupSpecification")) {
+                // Group specification of an assembly (GOST 2.113): {enabled, layout, columnHeaders}.
+                if (!s.spec) raise({k::ErrorCode::Unsupported, "a group specification needs an assembly model"});
+                const json& g = j.at("groupSpecification");
+                if (!g.is_object()) throw InputError("groupSpecification must be an object");
+                dd::GroupSpecificationSettings& gs = s.spec->settings().group;
+                gs.enabled = boolOr(g, "enabled", gs.enabled);
+                if (g.contains("layout")) {
+                    const std::string l = strOr(g, "layout");
+                    if (l == "columns") gs.layout = an::GroupSpecLayout::Columns;
+                    else if (l == "variableData") gs.layout = an::GroupSpecLayout::VariableData;
+                    else throw InputError("group specification layout must be 'columns' or 'variableData'");
+                }
+                if (g.contains("columnHeaders")) {
+                    std::vector<std::string> headers;
+                    for (const json& h : g.at("columnHeaders")) {
+                        if (!h.is_string()) throw InputError("columnHeaders must be strings");
+                        headers.push_back(h.get<std::string>());
+                    }
+                    gs.columnHeaders = std::move(headers);
+                }
+            }
             if (j.contains("textFont")) {
                 if (!j.at("textFont").is_string()) throw InputError("textFont must be a string");
                 auto f = dv::textFontFromString(j.at("textFont").get<std::string>());
@@ -920,13 +1054,22 @@ std::string setSettings(std::uint32_t handle, std::string text) {
                 }
                 s.spec->settings().dissolved = std::move(keys);
             }
-            json rep = updateReportJson(runUpdate(s, *s.shown));
+            // Switching the group drawing changes what the snapshot holds (every configuration).
+            const dd::ModelSnapshot snap = resnap ? currentSnapshot(s) : *s.shown;
+            json rep = updateReportJson(runUpdate(s, snap));
             s.history.record(std::move(before), "setSettings");
             return rep;
         } catch (...) {
             dd::restoreEditState(s.doc, before);
             s.doc.settings() = backup;
             if (s.spec) s.spec->settings().dissolved = dissolvedBackup;
+            if (s.spec) s.spec->settings().group = groupSpecBackup;
+            if (resnap) {
+                try {
+                    s.shown = currentSnapshot(s);
+                } catch (...) {
+                }
+            }
             try {
                 runUpdate(s, *s.shown);
             } catch (...) {
@@ -1446,6 +1589,8 @@ std::string setDimension(std::uint32_t handle, std::string sheetId, std::string 
                                              ? std::nullopt : std::optional(strOr(j, "textOverride"));
                 if (j.contains("prefix")) d.def.prefix = strOr(j, "prefix");
                 if (j.contains("suffix")) d.def.suffix = strOr(j, "suffix");
+                // Group drawing (GOST 2.113): letter of a dimension that differs between configurations.
+                if (j.contains("groupLetter")) d.groupLetter = strOr(j, "groupLetter");
                 return nullptr;
             }
             throw InputError("unknown dimension '" + id + "'");
@@ -1963,7 +2108,22 @@ std::string specification(std::uint32_t handle) {
                                  {"quantity", it.quantity ? json(*it.quantity) : json(nullptr)}, {"note", it.note}});
             sections.push_back({{"section", enumName(sec.section, kSpecSections)}, {"title", an::sectionTitle(sec.section)}, {"items", items}});
         }
-        return {{"designation", sp.designation}, {"name", sp.name}, {"sections", sections}};
+        json out = {{"designation", sp.designation}, {"name", sp.name}, {"sections", sections}, {"group", nullptr}};
+        if (const an::GroupSpecification* g = s.spec->groupSpecification()) {
+            // Group specification (GOST 2.113): quantities per configuration.
+            json gs = json::array();
+            for (const an::GroupSpecSection& sec : g->sections) {
+                json items = json::array();
+                for (const an::GroupSpecItem& it : sec.items)
+                    items.push_back({{"format", it.item.format}, {"position", it.item.position},
+                                     {"designation", it.item.designation}, {"name", it.item.name},
+                                     {"quantities", it.quantities}, {"constant", it.constant()}, {"note", it.item.note}});
+                gs.push_back({{"section", enumName(sec.section, kSpecSections)}, {"title", an::sectionTitle(sec.section)}, {"items", items}});
+            }
+            out["group"] = {{"designation", g->designation}, {"name", g->name}, {"layout", an::toString(g->layout)},
+                            {"configurations", g->configurations}, {"columnHeaders", g->columnHeaders}, {"sections", gs}};
+        }
+        return out;
     });
 }
 
@@ -2041,6 +2201,8 @@ EMSCRIPTEN_BINDINGS(bendcore_drawing) {
     emscripten::function("modelSave", &modelSave);
     emscripten::function("modelVariables", &modelVariables);
     emscripten::function("modelSetVariable", &modelSetVariable);
+    emscripten::function("modelConfigurations", &modelConfigurations);
+    emscripten::function("modelSetConfigurationCell", &modelSetConfigurationCell);
     emscripten::function("setModelProperties", &setModelProperties);
     emscripten::function("checkModel", &checkModel);
     emscripten::function("updateFromModel", &updateFromModel);

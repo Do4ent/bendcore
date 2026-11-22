@@ -17,6 +17,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type {
+  ConfigurationTableInfo,
   DrawingDescription,
   DrawingHandle,
   DrawingKernel,
@@ -32,6 +33,7 @@ import type {
   ViewSpec,
 } from '../../wasm/bendcore_drawing_api.mjs';
 import SheetCanvas, { Handle, SheetCanvasHandle } from './SheetCanvas';
+import { GroupDrawingPanel, GroupSpecificationPanel } from './GroupPanels';
 import { FONT_FAMILY, FONT_FILE, defaultDrawingBaseUrl, loadDrawingFrom } from './drawingLoader';
 import { printDocument, printHtml } from './printSheet';
 import { CHARACTERISTICS, SCALES, SHEET_SIDES, STANDARD_VIEWS } from './labels';
@@ -222,6 +224,8 @@ export default function DrawingEditorApp({
   const [pickState, setPickState] = useState<PickState>(emptyPicks);
   const [selectedView, setSelectedView] = useState<string | null>(null);
   const [variables, setVariables] = useState<Variable[]>([]);
+  // Configuration table of a part model (group drawing, GOST 2.113); null — assembly.
+  const [configurations, setConfigurations] = useState<ConfigurationTableInfo | null>(null);
   const [staleness, setStaleness] = useState<StalenessReport | null>(null);
   const [report, setReport] = useState<UpdateReport | null>(null);
   const [tab, setTab] = useState<'sheet' | 'specification'>('sheet');
@@ -291,6 +295,7 @@ export default function DrawingEditorApp({
         wantedSheet && description.sheets.some((s) => s.id === wantedSheet) ? wantedSheet : description.sheets[0]?.id ?? null;
       const pic = id ? await d.sheetPicture(id) : null;
       const vars = description.model.kind === 'part' ? await d.variables() : [];
+      const configs = description.model.kind === 'part' ? await d.configurations() : null;
       const stale = await d.checkModel();
       let specification: { table: SpecificationTable | null; reason: string | null };
       try {
@@ -305,6 +310,7 @@ export default function DrawingEditorApp({
       setSheetId(id);
       setPicture(pic);
       setVariables(vars);
+      setConfigurations(configs);
       setStaleness(stale);
       setSpec(specification);
     },
@@ -1311,6 +1317,24 @@ export default function DrawingEditorApp({
                       </span>
                     )}
                     {d.state === 'dangling' && <span className="dr-muted">{t('drawing.dangling', { reason: d.reason ?? '' })}</span>}
+                    {desc.group.enabled && (
+                      <input
+                        className="dr-tol"
+                        key={`letter-${d.groupLetter}`}
+                        size={2}
+                        placeholder="A"
+                        defaultValue={d.groupLetter}
+                        title={t('drawing.group.letterHint')}
+                        data-testid={`dimension-letter-${d.id}`}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                        }}
+                        onBlur={(e) => {
+                          const groupLetter = e.target.value.trim().toUpperCase();
+                          if (groupLetter !== d.groupLetter) run(t('drawing.done.groupLetter', { id: d.id }), (h) => h.setDimension(sheet.id, d.id, { groupLetter }));
+                        }}
+                      />
+                    )}
                     <input
                       className="dr-tol"
                       placeholder={t('drawing.tolerancePlaceholder')}
@@ -1458,6 +1482,7 @@ export default function DrawingEditorApp({
                   {missingPositions.length > 0 && <div data-testid="balloon-missing">{t('drawing.balloonsMissing', { list: missingPositions.join(', ') })}</div>}
                 </div>
               )}
+              {desc?.model.kind === 'assembly' && <GroupSpecificationPanel desc={desc} table={spec.table} run={run} t={t} />}
               {desc?.model.kind === 'assembly' && spec.table && (
                 <div className="dr-box" data-testid="subassemblies">
                   <h2>{t('drawing.subassemblies')}</h2>
@@ -1531,6 +1556,8 @@ export default function DrawingEditorApp({
                   }
                 />
               )}
+
+              {desc.model.kind === 'part' && <GroupDrawingPanel desc={desc} configurations={configurations} run={run} t={t} />}
 
               <h2>{t('drawing.update')}</h2>
               <div className={`dr-box ${staleness?.modelChanged ? 'dr-stale' : ''}`} data-testid="update-panel">

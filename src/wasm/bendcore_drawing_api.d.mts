@@ -168,6 +168,8 @@ export interface DimensionInfo {
   group: string | null;
   groupMode?: 'chain' | 'baseline';
   groupSpacing?: number;
+  /** Group drawing (GOST 2.113): letter set by the user (empty — assigned in order). */
+  groupLetter: string;
 }
 export interface SymbolInfo {
   id: string;
@@ -239,6 +241,39 @@ export interface DrawingSettingsChanges {
   projection?: ProjectionMethod;
   sheetStyle?: SheetStyle;
   dissolvedAssemblies?: string[];
+  /** Group drawing of a part (GOST 2.113); headers: column key → text (empty or null — default). */
+  group?: { enabled?: boolean; mass?: boolean; material?: boolean; headers?: Record<string, string | null> };
+  /** Group specification of an assembly (GOST 2.113). */
+  groupSpecification?: { enabled?: boolean; layout?: GroupSpecLayout; columnHeaders?: string[] };
+}
+
+export type GroupSpecLayout = 'columns' | 'variableData';
+
+/** Column of the table of configurations: designation, dim:<sheet>/<id>, suppress:<feature>, mass, material. */
+export interface GroupColumn { key: string; header: string; defaultHeader: string }
+
+export interface GroupDrawingInfo {
+  enabled: boolean;
+  mass: boolean;
+  material: boolean;
+  headers: Record<string, string>;
+  /** A group drawing is made of a part. */
+  available: boolean;
+  /** Rows of the part's configuration table. */
+  configurations: number;
+  table: {
+    designations: string[];
+    baseDesignation: string;
+    columns: GroupColumn[];
+    rows: string[][];
+    dimensions: { sheet: string; id: string; letter: string; values: (number | null)[]; texts: string[] }[];
+  } | null;
+}
+
+export interface ConfigurationTableInfo {
+  columns: { kind: 'variable' | 'suppression' | 'material'; target: string; title: string }[];
+  rows: { designation: string; fullDesignation: string; name: string; cells: string[] }[];
+  active: string;
 }
 
 export interface DrawingDescription {
@@ -249,6 +284,8 @@ export interface DrawingDescription {
   textFont: TextFont;
   /** Sub-assemblies listed by their parts in the specification and positions (assembly only). */
   dissolvedAssemblies: string[];
+  group: GroupDrawingInfo;
+  groupSpecification: { enabled: boolean; layout: GroupSpecLayout; columnHeaders: string[] } | null;
   sheets: SheetInfo[];
   history: HistoryInfo;
 }
@@ -389,6 +426,19 @@ export interface SpecificationTable {
     title: string;
     items: { format: string; zone: string; position: number; designation: string; name: string; quantity: number | null; note: string }[];
   }[];
+  /** Group specification (GOST 2.113): quantities per configuration. */
+  group: {
+    designation: string;
+    name: string;
+    layout: GroupSpecLayout;
+    configurations: string[];
+    columnHeaders: string[];
+    sections: {
+      section: string;
+      title: string;
+      items: { format: string; position: number; designation: string; name: string; quantities: number[]; constant: boolean; note: string }[];
+    }[];
+  } | null;
 }
 
 export class DrawingHandle {
@@ -400,6 +450,8 @@ export class DrawingHandle {
   saveModel(): string;
   variables(): { name: string; expression: string; value: number | null; error: string | null }[];
   setVariable(name: string, expression: string | number): StalenessReport;
+  configurations(): ConfigurationTableInfo;
+  setConfigurationCell(row: number, column: number, value: string | number): StalenessReport & { configurations: ConfigurationTableInfo };
   setModelProperties(properties: Partial<ModelProperties>): UpdateReport;
   checkModel(): StalenessReport;
   updateFromModel(): UpdateReport;
@@ -412,7 +464,7 @@ export class DrawingHandle {
   moveView(sheet: string, view: string, x: number, y: number): EditResult & { moved: string; group: boolean };
   setView(sheet: string, view: string, changes: Partial<Pick<ViewSpec, 'scale' | 'position' | 'hidden' | 'centerLines' | 'autoBalloons' | 'detailRadius' | 'balloonLine' | 'bearings' | 'bearingSymbol' | 'rotated'>>): EditResult;
   addDimension(sheet: string, view: string, picks: number[], options?: { id?: string; offset?: number; tolerance?: string; leaderAngle?: number }): string;
-  setDimension(sheet: string, id: string, changes: { offset?: number; textShift?: number; decimals?: number; tolerance?: string | null; toleranceDisplay?: DimensionInfo['toleranceDisplay']; textOverride?: string | null; prefix?: string; suffix?: string }): EditResult;
+  setDimension(sheet: string, id: string, changes: { offset?: number; textShift?: number; decimals?: number; tolerance?: string | null; toleranceDisplay?: DimensionInfo['toleranceDisplay']; textOverride?: string | null; prefix?: string; suffix?: string; groupLetter?: string }): EditResult;
   addRoughness(sheet: string, view: string, pick: number, spec?: RoughnessSpec & { id?: string; at?: number }): string;
   addTolerance(sheet: string, view: string, pick: number, spec: { characteristic: GeometricCharacteristic; tolerance: string; datums?: string[]; diameterZone?: boolean; id?: string; at?: number }): string;
   addDatum(sheet: string, view: string, pick: number, letter: string, spec?: { id?: string; at?: number }): string;
