@@ -84,6 +84,10 @@ struct FeatureOutput {
     std::optional<FeatureMode> toolMode;
     std::shared_ptr<const SketchResult> sketch;
     std::shared_ptr<const DatumResult> datum;
+    // Patterns (LinearPattern, CircularPattern, BodyLinearPattern, BodyCircularPattern): rigid
+    // transforms of the copies in part coordinates, seed excluded, in the order of the feature
+    // (FeatureResult::copies). Mirrors are not listed (a reflection is no component placement).
+    std::vector<gp_Trsf> copies;
 };
 
 // Result of an earlier node seen through a link.
@@ -210,6 +214,7 @@ struct FeatureInfo {
     std::shared_ptr<const SketchResult> sketchResult;
     std::shared_ptr<const DatumResult> datum;
     TopoDS_Shape tool;
+    std::vector<gp_Trsf> copies;  // FeatureOutput::copies of the last build
 };
 
 // Body of a multibody part (NamedShape::bodyNames).

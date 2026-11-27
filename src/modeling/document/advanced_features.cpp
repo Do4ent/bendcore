@@ -506,6 +506,8 @@ Result<FeatureOutput> copies(const FeatureContext& ctx, const std::vector<gp_Trs
     auto threads = threadCopies(seeds, transforms, res.value().shape);
     FeatureOutput out = outputOf(std::move(res).value(), std::nullopt);
     out.attributes = std::move(threads);
+    for (const gp_Trsf& t : transforms)
+        if (!t.IsNegative()) out.copies.push_back(t);
     return out;
 }
 

@@ -5,6 +5,7 @@
 
 #include <bendcore/kernel/brep_io.hpp>
 
+#include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
 
 #include <nlohmann/json.hpp>
@@ -579,6 +580,17 @@ Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
                 entry["values"] = n->values;
                 entry["reports"] = reports;
                 entry["brep"] = base64Encode(bytes.value());
+                if (!n->copies.empty()) {
+                    // Pattern copies (FeatureInfo::copies): rows of the 3×4 matrix of each transform.
+                    json copies = json::array();
+                    for (const gp_Trsf& t : n->copies) {
+                        json m = json::array();
+                        for (int r = 1; r <= 3; ++r)
+                            for (int c = 1; c <= 4; ++c) m.push_back(t.Value(r, c));
+                        copies.push_back(std::move(m));
+                    }
+                    entry["copies"] = std::move(copies);
+                }
                 if (!n->tool.IsNull() && n->toolMode) {
                     auto toolBytes = kernel::writeBrepBinary(kernel::Shape(n->tool));
                     if (!toolBytes) {
@@ -783,6 +795,26 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
                 c.values = entry.at("values").get<std::map<std::string, double>>();
                 for (const auto& rep : entry.at("reports")) c.reports.push_back(resolutionFromJson(rep));
                 c.output = std::make_shared<const NamedShape>(std::move(named).value());
+                bool copiesOk = true;
+                if (entry.contains("copies")) {
+                    for (const auto& m : entry.at("copies")) {
+                        if (!m.is_array() || m.size() != 12) {
+                            copiesOk = false;
+                            break;
+                        }
+                        gp_Trsf t;
+                        try {
+                          t.SetValues(m[0].get<double>(), m[1].get<double>(), m[2].get<double>(), m[3].get<double>(),
+                                    m[4].get<double>(), m[5].get<double>(), m[6].get<double>(), m[7].get<double>(),
+                                    m[8].get<double>(), m[9].get<double>(), m[10].get<double>(), m[11].get<double>());
+                        } catch (const Standard_Failure&) {
+                            copiesOk = false;
+                            break;
+                        }
+                        c.copies.push_back(t);
+                    }
+                }
+                if (!copiesOk) continue;  // unusable cache entry: the feature is recomputed
                 if (entry.contains("tool")) {
                     auto toolBytes = base64Decode(entry.at("tool").get<std::string>());
                     if (!toolBytes) continue;

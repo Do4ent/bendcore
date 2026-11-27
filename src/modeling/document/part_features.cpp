@@ -409,6 +409,10 @@ FeatureOutput fromResult(FeatureResult r, const LinkedFeature* src, std::optiona
                          const NamedShape& input) {
     FeatureOutput out;
     out.attributes = copiedThreads(r, src, input);
+    // Component patterns of an assembly follow the copies (docs/assembly/ASSEMBLY_DOCUMENT.md,
+    // section 5); a mirror copy is a reflection, not a placement.
+    for (const gp_Trsf& t : r.copies)
+        if (!t.IsNegative()) out.copies.push_back(t);
     out.shape = std::move(r.shape);
     out.history = std::move(r.history);
     out.warnings = std::move(r.warnings);

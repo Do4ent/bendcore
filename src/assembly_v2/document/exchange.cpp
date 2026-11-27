@@ -193,6 +193,44 @@ Result<PartData> partDataFromDocument(const modeling::PartDocument& document) {
     data.shape = named.shape();
     data.elementMap = std::make_shared<const modeling::NamedShape>(std::move(named));
     data.properties = documentProperties(document);
+    // Массивы операций: построенные узлы с копиями (FeatureInfo::copies) — для массивов
+    // компонентов «по массиву детали» (docs/assembly/ASSEMBLY_DOCUMENT.md, раздел 5).
+    for (const std::string& id : document.featureIds()) {
+        auto f = document.feature(id);
+        if (!f || f.value().copies.empty()) continue;
+        if (f.value().state != modeling::FeatureState::Ok && f.value().state != modeling::FeatureState::Warning) continue;
+        const modeling::FeatureInfo& info = f.value();
+        PartFeaturePattern p;
+        p.feature = info.id;
+        p.label = info.label;
+        p.type = info.type;
+        // Ключи копий: линейный — «i,j» (порядок копий: j внешний, i внутренний, без (0, 0)),
+        // круговой — «k».
+        const bool linear = info.type == "LinearPattern" || info.type == "BodyLinearPattern";
+        int count1 = 0;
+        if (linear) {
+            auto it = info.values.find("count1");
+            count1 = it == info.values.end() ? 0 : static_cast<int>(std::llround(it->second));
+        }
+        for (std::size_t k = 0; k < info.copies.size(); ++k) {
+            const gp_Trsf& t = info.copies[k];
+            const gp_XYZ v = t.TranslationPart();
+            const gp_Quaternion q = t.GetRotation();
+            Transform tr;
+            tr.position = Vec3(v.X(), v.Y(), v.Z());
+            tr.rotation = Quat(q.W(), q.X(), q.Y(), q.Z());
+            tr.rotation.normalize();
+            p.transforms.push_back(tr);
+            if (linear && count1 > 0) {
+                const std::size_t n = k + 1;  // индекс в полном ряду с исходным
+                p.keys.push_back(std::to_string(n % static_cast<std::size_t>(count1)) + "," +
+                                 std::to_string(n / static_cast<std::size_t>(count1)));
+            } else {
+                p.keys.push_back(std::to_string(k + 1));
+            }
+        }
+        data.patterns.push_back(std::move(p));
+    }
     return data;
 }
 
