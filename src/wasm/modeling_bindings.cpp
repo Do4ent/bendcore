@@ -26,6 +26,8 @@
 #include "exchange_common.hpp"
 #include "modeling_bindings_internal.hpp"
 
+#include <TopExp_Explorer.hxx>
+#include <TopAbs_ShapeEnum.hxx>
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
@@ -1130,6 +1132,25 @@ val docTessellate(std::uint32_t handle, val target, val params) {
             vertices.push_back(static_cast<float>(p.Z()));
         }
         out.set("vertices", typedArray("Float32Array", vertices));
+        // Geometry type of every face and edge (selection filters) and the solid of every face
+        // (body selection), in the same element order as the mesh.
+        auto topo = k::TopologyIndex::build(k::Shape(shape.shape()));
+        if (!topo) return failure(topo.error());
+        val faceTypes = val::array();
+        for (const k::FaceInfo& f : topo.value().faces()) faceTypes.call<void>("push", std::string(k::toString(f.surface)));
+        val edgeTypes = val::array();
+        for (const k::EdgeInfo& e : topo.value().edges()) edgeTypes.call<void>("push", std::string(k::toString(e.curve)));
+        std::vector<std::uint32_t> faceBodies(topo.value().faces().size(), 0xFFFFFFFFu);
+        std::uint32_t body = 0;
+        for (TopExp_Explorer solid(shape.shape(), TopAbs_SOLID); solid.More(); solid.Next(), ++body) {
+            for (TopExp_Explorer face(solid.Current(), TopAbs_FACE); face.More(); face.Next()) {
+                const auto fi = topo.value().faceIndex(face.Current());
+                if (fi && *fi < faceBodies.size()) faceBodies[*fi] = body;
+            }
+        }
+        out.set("faceTypes", faceTypes);
+        out.set("edgeTypes", edgeTypes);
+        out.set("faceBodies", typedArray("Uint32Array", faceBodies));
         return success(out);
     });
 }

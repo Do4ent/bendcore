@@ -113,6 +113,13 @@ export interface KernelMesh {
   edges: EdgePolyline[];
   missingFaces: Uint32Array;
   missingEdges: Uint32Array;
+  /** Surface type of every face and curve type of every edge (part and assembly meshes). */
+  faceTypes?: string[];
+  edgeTypes?: string[];
+  /** The solid every face belongs to (0xFFFFFFFF: none); part meshes and KernelShape.tessellate. */
+  faceBodies?: Uint32Array;
+  /** Vertex positions, xyz triples, index = vertex index (KernelShape.tessellate; PartMesh has them). */
+  vertices?: Float32Array;
 }
 
 export type ExportFormat = 'step' | 'iges' | 'stl' | '3mf';

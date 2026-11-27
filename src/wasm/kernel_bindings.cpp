@@ -19,6 +19,8 @@
 
 #include <BRepAdaptor_Surface.hxx>
 #include <BRep_Builder.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopAbs_ShapeEnum.hxx>
 #include <TopoDS_Compound.hxx>
 #include <Standard_Failure.hxx>
 #include <Standard_Version.hxx>
@@ -371,6 +373,31 @@ val tessellate(std::uint32_t handle, val params) {
         out.set("edges", edges);
         out.set("missingFaces", typedArray("Uint32Array", m.missingFaces));
         out.set("missingEdges", typedArray("Uint32Array", m.missingEdges));
+        // Selection data in the element order of the mesh: vertex positions, the surface type of
+        // every face, the curve type of every edge and the solid of every face (body selection).
+        val error = val::undefined();
+        const k::TopologyIndex* topo = topology(e, error);
+        if (!topo) return error;
+        std::vector<float> vertices;
+        vertices.reserve(topo->vertices().size() * 3);
+        for (const k::VertexInfo& v : topo->vertices())
+            for (double c : v.point) vertices.push_back(static_cast<float>(c));
+        val faceTypes = val::array();
+        for (const k::FaceInfo& f : topo->faces()) faceTypes.call<void>("push", std::string(k::toString(f.surface)));
+        val edgeTypes = val::array();
+        for (const k::EdgeInfo& info : topo->edges()) edgeTypes.call<void>("push", std::string(k::toString(info.curve)));
+        std::vector<std::uint32_t> faceBodies(topo->faces().size(), 0xFFFFFFFFu);
+        std::uint32_t body = 0;
+        for (TopExp_Explorer solid(e.shape.occt(), TopAbs_SOLID); solid.More(); solid.Next(), ++body) {
+            for (TopExp_Explorer face(solid.Current(), TopAbs_FACE); face.More(); face.Next()) {
+                const auto fi = topo->faceIndex(face.Current());
+                if (fi && *fi < faceBodies.size()) faceBodies[*fi] = body;
+            }
+        }
+        out.set("vertices", typedArray("Float32Array", vertices));
+        out.set("faceTypes", faceTypes);
+        out.set("edgeTypes", edgeTypes);
+        out.set("faceBodies", typedArray("Uint32Array", faceBodies));
         return success(out);
     });
 }

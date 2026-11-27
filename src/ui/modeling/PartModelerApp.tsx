@@ -31,7 +31,10 @@ import type {
   VariableView,
 } from '../../wasm/bendcore_modeling_api.mjs';
 import KernelViewport from '../kernel/KernelViewport';
-import type { EdgePick, FacePick, KernelViewportHandle, MeshPick, PickMode, ReferenceMeshDisplay, VertexPick } from '../kernel/KernelViewport';
+import type { BodyPick, EdgePick, FacePick, KernelViewportHandle, MeshPick, PickMode, ReferenceMeshDisplay, VertexPick } from '../kernel/KernelViewport';
+import { SelectionPanel } from '../kernel/SelectionPanel';
+import { useElementSelection } from '../kernel/useElementSelection';
+import type { BoxResult, SelectOp } from '../kernel/selection';
 import { ReferenceMeshPanel } from '../kernel/ReferenceMeshPanel';
 import type { ReferenceMeshEdits } from '../kernel/ReferenceMeshPanel';
 import { MeasurePanel, SectionPanel } from '../kernel/ViewToolsPanel';
@@ -118,6 +121,18 @@ export interface PartModelerState {
   material: { id: string; density: number | null; libraryCount: number };
   /** Measurement and section tools (docs/ui/KERNEL_VIEWPORT.md). */
   tools: ViewTools['state'];
+  /** Selection mode, type filters and the selected elements (docs/ui/KERNEL_VIEWPORT.md). */
+  elements: {
+    mode: string;
+    faceTypes: readonly string[];
+    edgeTypes: readonly string[];
+    boxSelect: boolean;
+    faces: number[];
+    edges: number[];
+    vertices: number[];
+    bodies: number[];
+    total: number | null;
+  };
   /** Configuration table of the document and the last check of its configurations. */
   configurations: ConfigurationTable | null;
   configurationChecks: ConfigurationCheck[] | null;
@@ -597,6 +612,22 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   });
   const toolsRef = useRef(tools);
   toolsRef.current = tools;
+  const sel = useElementSelection({
+    modelKey: mesh,
+    total: async (kind, indices) => {
+      const doc = docRef.current;
+      if (!doc) throw new Error('no document');
+      // The kernel's own area of every face and length of every edge.
+      const parts = await Promise.all(
+        indices.map(async (index) =>
+          ((await doc.measure({ type: kind === 'face' ? 'area' : 'length', a: { kind, index } } as MeasureSpecWithMesh, 'final')) as MeasureResult).value,
+        ),
+      );
+      return parts.reduce((a, b) => a + b, 0);
+    },
+  });
+  const selRef = useRef(sel);
+  selRef.current = sel;
 
   // ------------------------------------------------------------- reference meshes
 
@@ -627,7 +658,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     return specOf(p.type)?.references.find((r) => r.name === p.activeSlot) ?? null;
   };
 
-  const pickElement = async (kind: 'face' | 'edge' | 'vertex', index: number | null) => {
+  const pickElement = async (kind: 'face' | 'edge' | 'vertex', index: number | null, op?: SelectOp) => {
     const doc = docRef.current;
     if (!doc) return;
     const p = panelRef.current;
@@ -655,16 +686,73 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
         setPanel({ ...current, activeSlot, form });
         return;
       }
-      if (kind === 'vertex') return;
-      setSelection(index === null ? null : { kind, index, name: (await doc.element('final', kind, index)).name });
+      // No operation slot: the click edits the selection (Shift adds, Ctrl removes).
+      selRef.current.pick(kind, index, op);
     } catch (e) {
       if (!isCancelled(e)) setError(describeError(e));
     }
   };
 
-  const onPickFace = useCallback((pick: FacePick | null) => void pickElement('face', pick ? pick.faceIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
-  const onPickEdge = useCallback((pick: EdgePick | null) => void pickElement('edge', pick ? pick.edgeIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
-  const onPickVertex = useCallback((pick: VertexPick | null) => void pickElement('vertex', pick ? pick.vertexIndex : null), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onPickFace = useCallback((pick: FacePick | null) => void pickElement('face', pick ? pick.faceIndex : null, pick?.op), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onPickEdge = useCallback((pick: EdgePick | null) => void pickElement('edge', pick ? pick.edgeIndex : null, pick?.op), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onPickVertex = useCallback((pick: VertexPick | null) => void pickElement('vertex', pick ? pick.vertexIndex : null, pick?.op), [catalog, kernel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onPickBody = useCallback((pick: BodyPick | null) => selRef.current.pick('body', pick ? pick.bodyIndex : null, pick?.op), []);
+
+  // A box: into the active operation slot (by its kind and the type filters), else the selection.
+  const onBoxSelect = async (result: BoxResult, op: SelectOp) => {
+    const doc = docRef.current;
+    const p = panelRef.current;
+    const spec = activeSlotSpec();
+    if (!p || !spec) {
+      selRef.current.box(result, op);
+      return;
+    }
+    if (!doc) return;
+    const found = spec.kind === 'face' ? result.faces : spec.kind === 'edge' ? result.edges : result.vertices;
+    if (!spec.multiple && found.length !== 1) {
+      if (found.length > 1) setError({ code: 'InvalidInput', message: t('sel.slotSingle', { count: found.length }) });
+      return;
+    }
+    try {
+      const refs = await Promise.all(found.map(async (index) => ({ ref: await doc.makeReference(shownTarget(p), spec.kind, index), index })));
+      const current = panelRef.current;
+      if (!current || current.activeSlot !== spec.name) return;
+      const before = current.form.references[spec.name] ?? [];
+      const names = new Set(refs.map((r) => r.ref.name));
+      const picks =
+        op === 'remove'
+          ? before.filter((b) => !names.has(b.ref.name))
+          : op === 'add'
+            ? [...before, ...refs.filter((r) => !before.some((b) => b.ref.name === r.ref.name))]
+            : refs;
+      setPanel({ ...current, form: { ...current.form, references: { ...current.form.references, [spec.name]: picks } } });
+    } catch (e) {
+      if (!isCancelled(e)) setError(describeError(e));
+    }
+  };
+
+  // A single selected face or edge gives the named element of the selection panel.
+  useEffect(() => {
+    const doc = docRef.current;
+    const kind = sel.selected.faces.length === 1 ? 'face' : sel.selected.edges.length === 1 ? 'edge' : null;
+    const index = kind === 'face' ? sel.selected.faces[0] : kind === 'edge' ? sel.selected.edges[0] : null;
+    if (!doc || kind === null || index === null) {
+      setSelection(null);
+      return undefined;
+    }
+    let stale = false;
+    doc.element('final', kind, index).then(
+      (r) => {
+        if (!stale) setSelection({ kind, index, name: r.name });
+      },
+      () => {
+        if (!stale) setSelection(null);
+      },
+    );
+    return () => {
+      stale = true;
+    };
+  }, [sel.selected]);
 
   // ------------------------------------------------------------- tree, undo, files
 
@@ -894,6 +982,14 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     sketchMode: sketchMode && { featureId: sketchMode.featureId, isNew: sketchMode.isNew },
     material: { id: materialId, density: densityValue(), libraryCount: materials.length },
     tools: tools.state,
+    elements: {
+      mode: sel.filter.mode,
+      faceTypes: sel.filter.faceTypes,
+      edgeTypes: sel.filter.edgeTypes,
+      boxSelect: sel.boxSelect,
+      ...sel.selected,
+      total: sel.total ? sel.total.value : null,
+    },
     configurations: snapshot.configurations,
     configurationChecks: configChecks,
     meshes,
@@ -916,7 +1012,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
 
   const slot = panel ? activeSlotSpec() : null;
   const measuring = !panel && tools.capturing;
-  const pickMode: PickMode = measuring ? tools.pickMode : slot ? (slot.kind === 'edge' || slot.kind === 'vertex' ? slot.kind : 'face') : 'face';
+  const pickMode: PickMode = measuring ? tools.pickMode : slot ? (slot.kind === 'edge' || slot.kind === 'vertex' ? slot.kind : 'face') : sel.filter.mode;
+  const selecting = !measuring && !slot;
   const toolFaces = measuring ? tools.picks.filter((p) => p.kind === 'face').map((p) => p.index) : [];
   const toolEdges = measuring ? tools.picks.filter((p) => p.kind === 'edge').map((p) => p.index) : [];
   const slotPicks = panel && panel.activeSlot ? panel.form.references[panel.activeSlot] ?? [] : [];
@@ -1196,11 +1293,17 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
           <>
           <KernelViewport
             mesh={mesh}
-            selectedFace={!measuring && pickMode === 'face' && !slot && selection?.kind === 'face' ? selection.index : null}
-            selectedFaces={measuring ? toolFaces : slot && slot.kind === 'face' ? pickedIndices : []}
-            selectedEdges={
-              measuring ? toolEdges : slot && slot.kind === 'edge' ? pickedIndices : selection?.kind === 'edge' ? [selection.index] : []
-            }
+            selectedFace={null}
+            selectedFaces={measuring ? toolFaces : slot && slot.kind === 'face' ? pickedIndices : selecting ? sel.selected.faces : []}
+            selectedEdges={measuring ? toolEdges : slot && slot.kind === 'edge' ? pickedIndices : selecting ? sel.selected.edges : []}
+            selectedBodies={selecting ? sel.selected.bodies : []}
+            filter={sel.filter}
+            faceTypes={mesh?.faceTypes ?? null}
+            edgeTypes={mesh?.edgeTypes ?? null}
+            faceBodies={mesh?.faceBodies ?? null}
+            boxSelect={!measuring && sel.boxSelect}
+            onBoxSelect={(result, op) => void onBoxSelect(result, op)}
+            onPickBody={onPickBody}
             clip={tools.viewport.clip}
             sectionLines={tools.viewport.sectionLines}
             measure={tools.viewport.measure}
@@ -1209,7 +1312,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
             onPickEdge={onPickEdge}
             vertices={mesh?.vertices ?? null}
             onPickVertex={onPickVertex}
-            selectedVertices={slot && slot.kind === 'vertex' ? pickedIndices : []}
+            selectedVertices={slot && slot.kind === 'vertex' ? pickedIndices : selecting ? sel.selected.vertices : []}
             datums={datums}
             overlay={overlay}
             autoFrame="first"
@@ -1239,6 +1342,19 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
               />
             ) : (
               <p className="pm-hint">{t('part.hint')}</p>
+            )}
+            {!measuring && (
+              <SelectionPanel
+                filter={sel.filter}
+                onFilter={sel.setFilter}
+                boxSelect={sel.boxSelect}
+                onBoxSelect={sel.setBoxSelect}
+                modes={['face', 'edge', 'vertex', 'body']}
+                forcedMode={slot ? slot.kind : null}
+                count={slot ? pickedIndices.length : sel.current.length}
+                total={slot ? null : sel.total}
+                onClear={sel.clear}
+              />
             )}
             <section>
               <h2>{t('part.properties')}</h2>

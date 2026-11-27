@@ -321,6 +321,12 @@ export interface PlacedPart {
   color: Color | null;
 }
 
+export interface AssemblySectionResult {
+  area: number;
+  polylines: Float32Array[];
+  parts: number;
+}
+
 export interface AssemblyTessellation {
   meshes: Record<string, KernelMesh>;
   occurrences: PlacedPart[];
@@ -543,6 +549,8 @@ export class AssemblyDocumentHandle {
   element(ref: GeometryRef): ElementInfo;
   /** Measurement between elements of placed parts, world coordinates; mm and degrees. */
   measure(spec: AssemblyMeasureSpec): Measurement;
+  /** Section of all placed parts by a plane: summed area (mm^2), contour polylines, cut parts. */
+  section(plane: SectionPlane, deflection?: number, options?: ExplodeOptions): AssemblySectionResult;
   insertMesh(spec: ReferenceMeshSpec): number;
   setMesh(id: number, changes: ReferenceMeshChanges): void;
   removeMesh(id: number): void;

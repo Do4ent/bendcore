@@ -210,6 +210,15 @@ export class AssemblyDocumentHandle {
   }
 
   /**
+   * Section of the whole assembly by the plane { origin, normal }: every placed part (world frame,
+   * as in the view `options` {view, progress}) is cut by the kernel -> { area (sum of the part
+   * sections, mm^2), polylines: Float32Array[], parts (number of cut parts) }.
+   */
+  section(plane, deflection = 0.05, options = {}) {
+    return this.#call('asmSection', plane, deflection, options);
+  }
+
+  /**
    * Reference mesh component (docs/assembly/ASSEMBLY_DOCUMENT.md, section 14): an STL/3MF file
    * embedded in the document, placed by moving only; not in BOM, mass, interference or mates.
    * spec { fileName, data: Uint8Array, format?, name?, unit?, placement? } -> mesh id.

@@ -33,7 +33,12 @@ import AssemblyTree, { refLabel } from './AssemblyTree';
 import AssemblyConfigurationPanel from './AssemblyConfigurationPanel';
 import { assemblyTableInput } from './configurationTable';
 import AssemblyViewport, { pathKey } from './AssemblyViewport';
-import { MeasurePanel } from '../kernel/ViewToolsPanel';
+import { MeasurePanel, SectionPanel } from '../kernel/ViewToolsPanel';
+import { SelectionPanel } from '../kernel/SelectionPanel';
+import { combineSelection, defaultFilter } from '../kernel/selection';
+import type { SelectOp, SelectionFilter } from '../kernel/selection';
+import { combineRefs, placedBox, topLevelIds } from './selectionSet';
+import type { ElementRef } from './selectionSet';
 import { ReferenceMeshPanel } from '../kernel/ReferenceMeshPanel';
 import type { ReferenceMeshEdits } from '../kernel/ReferenceMeshPanel';
 import type { MeshPick, ReferenceMeshDisplay } from '../kernel/referenceMeshObject';
@@ -42,7 +47,7 @@ import type { MeshGeometry } from '../../wasm/bendcore_kernel_api.mjs';
 import { useViewTools } from '../kernel/useViewTools';
 import type { ViewTools } from '../kernel/useViewTools';
 import type { MeasureResult } from '../kernel/viewTools';
-import type { AssemblyPick, AssemblyPickMode, AssemblyViewportHandle, PartHighlight } from './AssemblyViewport';
+import type { AssemblyBoxResult, AssemblyPick, AssemblyPickMode, AssemblyViewportHandle, PartHighlight } from './AssemblyViewport';
 import { clampProgress, eulerToQuaternion, insertionDirection, quaternionToEuler } from './assemblyMath';
 import type { V3 } from './assemblyMath';
 import { defaultAssemblyBaseUrl, loadAssemblyFrom } from './assemblyLoader';
@@ -89,6 +94,16 @@ export interface AssemblyPageState {
   selectedComponent: number | null;
   /** Measurement tool (docs/ui/KERNEL_VIEWPORT.md). */
   tools: ViewTools['state'];
+  /** Type filters, box switch and the selected elements and components (docs/ui/ASSEMBLY_UI.md). */
+  elements: {
+    faceTypes: readonly string[];
+    edgeTypes: readonly string[];
+    boxSelect: boolean;
+    faces: ElementRef[];
+    edges: ElementRef[];
+    components: number[];
+    total: number | null;
+  };
   bom: Bom | null;
   interference: InterferenceReport | null;
   explode: { view: number | null; progress: number };
@@ -213,16 +228,44 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [parts, JSON.stringify(refMeshList.map((m) => [m.id, m.unit, m.placement.matrix, m.visible]))],
   );
+  const explodeRef = useRef(explode);
+  explodeRef.current = explode;
+  // The section slider ranges over the placed parts (world coordinates).
+  const sectionBox = useMemo(
+    () =>
+      placedBox(
+        parts.flatMap((p) => {
+          const m = p.mesh ? meshes[p.mesh] : undefined;
+          return m ? [{ positions: m.positions, matrix: p.world.matrix }] : [];
+        }),
+      ),
+    [parts, meshes],
+  );
   const tools = useViewTools({
     measure: async (spec) => {
       const doc = docRef.current;
       if (!doc) throw new Error('no document');
       return (await doc.measure(spec as Parameters<typeof doc.measure>[0])) as MeasureResult;
     },
+    // The kernel cuts every placed part (in the view shown) by the plane.
+    section: async (plane) => {
+      const doc = docRef.current;
+      if (!doc) throw new Error('no document');
+      const ex = explodeRef.current;
+      const r = await doc.section(plane, 0.05, ex.view !== null ? { view: ex.view, progress: ex.progress } : {});
+      return { area: r.area, polylines: r.polylines };
+    },
     withPath: true,
-    box: null,
+    box: sectionBox,
     modelKey: toolsModelKey,
   });
+  // Selection: type filters, box, faces and edges (Shift/Ctrl/box) and components.
+  const [selFilter, setSelFilter] = useState<SelectionFilter>(defaultFilter());
+  const [boxSelect, setBoxSelect] = useState(false);
+  const [selFaces, setSelFaces] = useState<ElementRef[]>([]);
+  const [selEdges, setSelEdges] = useState<ElementRef[]>([]);
+  const [selComponents, setSelComponents] = useState<number[]>([]);
+  const [selTotal, setSelTotal] = useState<number | null>(null);
   const toolsRef = useRef(tools);
   toolsRef.current = tools;
 
@@ -579,14 +622,82 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     }
     if (!pick) {
       setSelectedComponent(null);
+      setSelFaces([]);
+      setSelEdges([]);
       return;
     }
+    if (pick.op && pick.op !== 'replace') {
+      // Shift adds, Ctrl removes: the click edits the selection set, mate slots stay.
+      const found = [{ path: pick.path, index: pick.index }];
+      if (pick.kind === 'face') setSelFaces((c) => combineRefs(c, found, pick.op as SelectOp));
+      else setSelEdges((c) => combineRefs(c, found, pick.op as SelectOp));
+      return;
+    }
+    setSelFaces([]);
+    setSelEdges([]);
     setSelectedComponent(pick.path[0]);
     const element = await pickedElement(pick);
     if (!element) return;
     if (panel === 'fasteners' || panel === 'pattern') setHole(element);
     else if (panel === 'mate') setMateSlots((s) => nextMateSlots(s, element));
   };
+
+  const onPickComponent = (path: number[] | null, op: SelectOp) => {
+    if (path === null) {
+      if (op === 'replace') {
+        setSelComponents([]);
+        setSelectedComponent(null);
+      }
+      return;
+    }
+    setSelComponents((c) => combineSelection(c, [path[0]], op));
+    if (op === 'replace') setSelectedComponent(path[0]);
+  };
+
+  const onBoxSelect = (result: AssemblyBoxResult, op: SelectOp) => {
+    if (pickMode === 'component') setSelComponents((c) => combineSelection(c, topLevelIds(result.components), op));
+    else if (pickMode === 'edge') setSelEdges((c) => combineRefs(c, result.edges, op));
+    else setSelFaces((c) => combineRefs(c, result.faces, op));
+  };
+
+  const clearSelection = () => {
+    setSelFaces([]);
+    setSelEdges([]);
+    setSelComponents([]);
+    setSelectedComponent(null);
+  };
+
+  // The kernel's total area of the selected faces / length of the selected edges.
+  useEffect(() => {
+    setSelTotal(null);
+    const doc = docRef.current;
+    const list = pickMode === 'edge' ? selEdges : pickMode === 'face' ? selFaces : [];
+    if (!doc || list.length === 0) return undefined;
+    let stale = false;
+    const kind = pickMode === 'edge' ? 'edge' : 'face';
+    Promise.all(
+      list.map(
+        async (r) =>
+          (
+            (await doc.measure({ type: kind === 'face' ? 'area' : 'length', a: { path: r.path, kind, index: r.index } } as Parameters<typeof doc.measure>[0])) as MeasureResult
+          ).value,
+      ),
+    ).then(
+      (v) => {
+        if (!stale) setSelTotal(v.reduce((a, b) => a + b, 0));
+      },
+      () => undefined,
+    );
+    return () => {
+      stale = true;
+    };
+  }, [pickMode, selFaces, selEdges]);
+
+  // The model changed (parts replaced): selected elements refer to old geometry.
+  useEffect(() => {
+    setSelFaces([]);
+    setSelEdges([]);
+  }, [toolsModelKey]);
 
   const onDragStart = async (path: number[], face: number, point: V3): Promise<DragStart> => {
     const doc = docRef.current;
@@ -680,6 +791,9 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     if (selectedComponent !== null) {
       for (const p of parts) if (p.path[0] === selectedComponent) h[pathKey(p.path)] = 'selected';
     }
+    for (const id of selComponents) {
+      for (const p of parts) if (p.path[0] === id) h[pathKey(p.path)] = 'selected';
+    }
     if (interference) {
       interference.pairs.forEach((pair, i) => {
         if (selectedPair !== null && selectedPair !== i) return;
@@ -692,7 +806,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
       });
     }
     return h;
-  }, [selectedComponent, parts, interference, selectedPair, showTouching]);
+  }, [selectedComponent, selComponents, parts, interference, selectedPair, showTouching]);
 
   // ---------------------------------------------------------------- reference meshes
 
@@ -739,10 +853,14 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     () =>
       tools.capturing
         ? tools.picks.flatMap((p) => (p.kind === 'mesh' ? [] : [{ path: p.path ?? [], kind: p.kind, index: p.index }]))
-        : [mateSlots[0]?.ref, mateSlots[1]?.ref, panel === 'fasteners' || panel === 'pattern' ? hole?.ref : undefined].filter(
-            (r): r is NonNullable<typeof r> => !!r,
-          ),
-    [mateSlots, hole, panel, tools.capturing, tools.picks],
+        : [
+            mateSlots[0]?.ref,
+            mateSlots[1]?.ref,
+            panel === 'fasteners' || panel === 'pattern' ? hole?.ref : undefined,
+            ...selFaces.map((r) => ({ path: r.path, kind: 'face' as const, index: r.index })),
+            ...selEdges.map((r) => ({ path: r.path, kind: 'edge' as const, index: r.index })),
+          ].filter((r): r is NonNullable<typeof r> => !!r),
+    [mateSlots, hole, panel, tools.capturing, tools.picks, selFaces, selEdges],
   );
 
   const selectedOccurrence = state && selectedComponent !== null ? findOccurrence(state.occurrences, selectedComponent) : null;
@@ -762,6 +880,15 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     hole,
     selectedComponent,
     tools: tools.state,
+    elements: {
+      faceTypes: selFilter.faceTypes,
+      edgeTypes: selFilter.edgeTypes,
+      boxSelect,
+      faces: selFaces,
+      edges: selEdges,
+      components: selComponents,
+      total: selTotal,
+    },
     bom,
     interference,
     explode,
@@ -880,7 +1007,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
         </button>
         <span className="pm-sep" />
         <span className="as-modes" role="radiogroup">
-          {(['face', 'edge', 'drag'] as const).map((m) => (
+          {(['face', 'edge', 'component', 'drag'] as const).map((m) => (
             <label key={m}>
               <input type="radio" name="pick-mode" checked={pickMode === m} onChange={() => setPickMode(m)} data-testid={`mode-${m}`} />
               {t(`assembly.mode.${m}`)}
@@ -950,7 +1077,22 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
               onRemovePattern={(id) => void run((d) => d.removePattern(id))}
             />
           )}
+          {!tools.capturing && (
+            <SelectionPanel
+              filter={selFilter}
+              onFilter={setSelFilter}
+              boxSelect={boxSelect}
+              onBoxSelect={setBoxSelect}
+              modes={[]}
+              activeMode={pickMode === 'component' ? 'body' : pickMode === 'edge' ? 'edge' : 'face'}
+              bodyLabel="component"
+              count={pickMode === 'component' ? selComponents.length : pickMode === 'edge' ? selEdges.length : selFaces.length}
+              total={selTotal === null ? null : { kind: pickMode === 'edge' ? 'length' : 'area', value: selTotal }}
+              onClear={clearSelection}
+            />
+          )}
           <MeasurePanel {...tools.measurePanel} meshHint={refMeshList.some((m) => m.visible)} />
+          {tools.sectionPanel && <SectionPanel {...tools.sectionPanel} />}
           <ReferenceMeshPanel
             items={refMeshList.map((m) => ({
               key: m.id,
@@ -980,6 +1122,12 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
           measure={tools.viewport.measure}
           highlights={highlights}
           onPick={(pick) => void onPick(pick)}
+          filter={selFilter}
+          onPickComponent={onPickComponent}
+          boxSelect={!tools.capturing && boxSelect && pickMode !== 'drag'}
+          onBoxSelect={onBoxSelect}
+          clip={tools.viewport.clip}
+          sectionLines={tools.viewport.sectionLines}
           onDragStart={onDragStart}
           onDragMove={onDragMove}
           onDragEnd={onDragEnd}

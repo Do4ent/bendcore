@@ -385,6 +385,8 @@ declare module 'three/addons/controls/OrbitControls.js' {
     enableDamping: boolean;
     screenSpacePanning: boolean;
     enabled: boolean;
+    /** Mouse button actions (three.js MOUSE values; -1 disables the button). */
+    mouseButtons: { LEFT: number; MIDDLE: number; RIGHT: number };
     update(): boolean;
     addEventListener(type: 'change' | 'start' | 'end', listener: () => void): void;
     removeEventListener(type: 'change' | 'start' | 'end', listener: () => void): void;
