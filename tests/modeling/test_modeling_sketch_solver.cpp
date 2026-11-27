@@ -478,3 +478,50 @@ TEST(SketchSolver, InvalidOperandsThrow) {
     EXPECT_FALSE(s.is_removed(point_geo(a)));
     EXPECT_THROW(s.remove(point_geo(b)), std::invalid_argument);  // used by l2
 }
+
+TEST(SketchSolver, OffsetDistanceFollowsItsMaster) {
+    Sketch s;
+    // Original line and circle (fixed); offsets of both driven by one dimension.
+    const Id l0 = s.add_line(fixed(s, 0, 0), fixed(s, 10, 0));
+    const Id l1 = s.add_line(s.add_point(1, 3), s.add_point(9, 3.5));
+    const Id c0 = s.add_circle(fixed(s, 30, 0), 5);
+    s.constrain_radius(c0, 5);
+    const Id c1 = s.add_circle(s.add_point(30.5, 0.2), 6);
+    s.constrain_parallel(l1, l0);
+    const Id master = s.constrain_offset_distance(line_geo(l1), line_geo(l0), 4);
+    s.constrain_concentric(circle_geo(c1), circle_geo(c0));
+    const Id dep = s.constrain_offset_distance(circle_geo(c1), circle_geo(c0), 0, master);
+    EXPECT_THROW(s.set_driving(dep, false), std::invalid_argument);
+    EXPECT_THROW(s.constrain_offset_distance(line_geo(l1), circle_geo(c0), 1), std::invalid_argument);
+    Report r = s.solve();
+    ASSERT_TRUE(r.converged);
+    EXPECT_NEAR(s.point(s.line(l1).end).y, 4, kTol);
+    EXPECT_NEAR(s.circle_radius(c1), 9, kTol);  // on the side where it started (outside)
+    EXPECT_NEAR(s.offset_distance_value(dep), 4, 0);
+    s.set_constraint_value(master, 2.5);
+    r = s.solve();
+    ASSERT_TRUE(r.converged);
+    EXPECT_NEAR(s.point(s.line(l1).start).y, 2.5, kTol);
+    EXPECT_NEAR(s.circle_radius(c1), 7.5, kTol);
+    expectAllSatisfied(s);
+    // A reference master is measured; removing the master removes its dependants.
+    s.set_driving(master, false);
+    EXPECT_NEAR(s.offset_distance_value(dep), 2.5, kTol);
+    s.remove_constraint(master);
+    EXPECT_TRUE(s.constraint(dep).removed);
+}
+
+TEST(SketchSolver, EqualMinorRadiusOfEllipses) {
+    Sketch s;
+    const Id e1 = s.add_ellipse(fixed(s, 0, 0), fixed(s, 4, 0), 2);
+    const Id e2 = s.add_ellipse(fixed(s, 20, 0), fixed(s, 20, 3), 5);
+    s.constrain_minor_radius(ellipse_geo(e1), 2.5);
+    const Id eq = s.constrain_equal_minor_radius(ellipse_geo(e1), ellipse_geo(e2));
+    const Report r = s.solve();
+    ASSERT_TRUE(r.converged);
+    EXPECT_EQ(r.dof, 0) << r.status;
+    EXPECT_NEAR(s.ellipse(e2).minor_radius, 2.5, kTol);
+    EXPECT_NEAR(s.ellipse_major_radius(ellipse_geo(e2)), std::sqrt(9 + 6.25), kTol);
+    EXPECT_LT(s.residual(eq), kTol);
+    EXPECT_THROW(s.constrain_equal_minor_radius(ellipse_geo(e1), line_geo(0)), std::exception);
+}

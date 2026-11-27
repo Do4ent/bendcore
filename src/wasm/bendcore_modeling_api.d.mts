@@ -221,7 +221,17 @@ export interface SketchSolution {
 
 export type SketchTool =
   | { name: 'trim' | 'extend'; entity: number; pick: [number, number] }
-  | { name: 'offset'; chain: number[]; distance: number; constrain?: boolean }
+  | {
+      name: 'offset';
+      chain: number[];
+      /** > 0: left of the chain direction, < 0: right */
+      distance: number;
+      /** also the offset on the other side (driven by the same dimension) */
+      bothSides?: boolean;
+      /** convex corners: extended to the intersection (default) or rounded around the corner */
+      corners?: 'extend' | 'round';
+      constrain?: boolean;
+    }
   | { name: 'mirror'; entities: number[]; axis: number; constrain?: boolean }
   | { name: 'linear-pattern'; entities: number[]; step: [number, number]; count: number; constrain?: boolean }
   | { name: 'circular-pattern'; entities: number[]; center: number; count: number; angle: number; constrain?: boolean }
@@ -238,6 +248,18 @@ export interface SketchEditOutcome {
   /** new point indices and constraint numbers in the new data */
   points: number[];
   constraints: number[];
+  /** offset: number of the offset dimension ('offset-distance' constraint) */
+  dimension?: number;
+}
+
+export interface SketchProjectOutcome {
+  sketch: SketchData;
+  /** entity ids of the projected curves */
+  created: number[];
+  /** edge indices that project to a point (skipped) */
+  skipped: number[];
+  /** number of references in the node's 'projected' slot */
+  references: number;
 }
 
 export interface FeatureView {
@@ -471,6 +493,12 @@ export class PartDocumentHandle {
   meshSectionSketch(id: string, plane: 'XY' | 'XZ' | 'YZ', offset: number): string;
   solveSketch(featureId: string, sketch: SketchData, options?: { drag?: { point: number; x: number; y: number }; lite?: boolean }): SketchSolution;
   editSketch(featureId: string, sketch: SketchData, tool: SketchTool): SketchEditOutcome;
+  projectToSketch(
+    featureId: string,
+    sketch: SketchData,
+    elements: { kind: 'edge' | 'face'; index: number }[],
+    options?: { construction?: boolean },
+  ): SketchProjectOutcome;
 }
 
 export interface DxfSketchOptions {

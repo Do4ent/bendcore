@@ -305,6 +305,18 @@ export class PartDocumentHandle {
   editSketch(featureId, sketch, tool) {
     return this.#call('docSketchEdit', featureId, sketch, tool);
   }
+
+  /**
+   * Projects edges and faces (their edges) of the body the sketch is drawn on (target
+   * before:<featureId>) onto the sketch plane: elements [{ kind: 'edge' | 'face', index }]. The
+   * edges become references of the node's 'projected' slot (changed at once) and curves of the
+   * returned sketch data pinned at the projection; they follow the model at every rebuild.
+   * Returns { sketch, created, skipped, references }. options.construction marks the curves as
+   * construction geometry.
+   */
+  projectToSketch(featureId, sketch, elements, options = {}) {
+    return this.#call('docSketchProject', featureId, sketch, elements, options);
+  }
 }
 
 /** The part's material saved next to the v3 document, or null (absent or malformed). */

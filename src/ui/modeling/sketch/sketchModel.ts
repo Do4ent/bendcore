@@ -48,6 +48,9 @@ export const CONSTRAINT_OPERANDS: Record<string, OperandKind[]> = {
   'symmetric-point': ['point', 'point', 'point'],
   rotation: ['point', 'point', 'point'],
   fix: ['point'],
+  // c: number of the offset dimension this one follows (a constraint, not an element)
+  'offset-distance': ['entity', 'entity'],
+  'equal-minor-radius': ['entity', 'entity'],
 };
 
 /** Dimensions: have a value and may be reference (driven) dimensions. */
@@ -62,7 +65,18 @@ export const DIMENSION_TYPES = new Set([
   'arc-length',
   'major-radius',
   'minor-radius',
+  'offset-distance',
 ]);
+
+/**
+ * A dimension of the data: a dimension type, except an offset distance that follows another
+ * offset dimension (c >= 1; its value is that dimension's).
+ */
+export const isDimension = (c: SketchConstraintDef): boolean =>
+  DIMENSION_TYPES.has(c.type) && !(c.type === 'offset-distance' && c.c >= 1);
+
+/** Number of the dimension whose value constraint c takes (offset distances), else 0. */
+export const masterOf = (c: SketchConstraintDef): number => (c.type === 'offset-distance' && c.c >= 1 ? c.c : 0);
 
 /** Constraints with a value that are not dimensions. */
 export const VALUE_TYPES = new Set(['rotation']);
@@ -199,8 +213,11 @@ export function removeItems(data: SketchData, refs: SketchRef[], constraints: nu
   const constraintMap: number[] = [0];
   const kept: SketchConstraintDef[] = [];
   data.constraints.forEach((c, i) => {
+    // An offset distance goes with the dimension it follows (an earlier constraint).
+    const master = masterOf(c);
     const gone =
       dropConstraint.has(i + 1) ||
+      (master > 0 && !(constraintMap[master] > 0)) ||
       constraintRefs(c).some((r) => (r.kind === 'point' ? pointMap[r.index] < 0 : entityMap[r.id] === 0));
     if (gone) {
       constraintMap[i + 1] = 0;
@@ -211,7 +228,7 @@ export function removeItems(data: SketchData, refs: SketchRef[], constraints: nu
       if (v < 0 || ops[i2] === undefined) return v;
       return ops[i2] === 'point' ? pointMap[v] : entityMap[v];
     };
-    kept.push({ ...c, a: remap(c.a, 0), b: remap(c.b, 1), c: remap(c.c, 2) });
+    kept.push({ ...c, a: remap(c.a, 0), b: remap(c.b, 1), c: master > 0 ? constraintMap[master] : remap(c.c, 2) });
     constraintMap[i + 1] = kept.length;
   });
   const regions = data.regions.map((r) => entityMap[r] ?? 0).filter((r) => r > 0);

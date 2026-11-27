@@ -68,6 +68,11 @@ enum class ConstraintKind {
     Concentric,         // центры кривых a, b совпадают
     Fix,                // точка a закреплена в (value, value2)
     Rotation,           // точка b = точка a, повёрнутая вокруг точки c на value градусов
+    OffsetDistance,     // кривая a смещена от кривой b на value (отрезки — расстояние от начала a
+                        // до прямой b; окружности/дуги — разность радиусов); с master — на значение
+                        // размера master (эквидистанта: один размер на цепочку)
+    EqualMinorRadius,   // эллипсы/дуги эллипсов a, b: равные малые полуоси (зеркало и массивы:
+                        // большая полуось следует из образов центра и фокуса)
 };
 
 const char* to_string(ConstraintKind kind) noexcept;
@@ -81,6 +86,7 @@ struct ConstraintInfo {
     double value2 = 0.0;   // Fix: y
     bool driving = true;   // false — справочный размер: в решении не участвует, измеряется
     bool removed = false;
+    Id master = 0;         // OffsetDistance: размер, значение которого используется (0 — свой)
 };
 
 enum class Definition { Fully, Under, Over };
@@ -165,6 +171,9 @@ public:
     bool is_construction(Geo g) const;
     void set_line_points(Id line, Id start, Id end);
     void set_arc_points(Id arc, Id start, Id end);
+    void set_ellipse_arc_points(Id arc, Id start, Id end);
+    // Новые данные сплайна (полюса, узлы); ограничения, ссылающиеся на сплайн, сохраняются.
+    void set_bspline(Id s, const BSplineData& data);
     // Удаление кривой или точки вместе с ограничениями, которые на неё ссылаются. Точки кривой
     // остаются. Точка, занятая живой кривой, не удаляется (std::invalid_argument).
     void remove(Geo g);
@@ -202,6 +211,15 @@ public:
     Id constrain_point_on(Id p, Geo curve);
     Id constrain_symmetric_point(Id p1, Id p2, Id center);
     Id constrain_rotation(Id p, Id q, Id center, double deg);
+    // Смещение кривой offset от кривой original того же вида: отрезки (расстояние от начала
+    // offset до прямой original; параллельность — отдельное ограничение), окружности и дуги
+    // (|r_offset − r_original|; концентричность — отдельно). Сторона — по текущему положению.
+    // master > 0 — значение берётся у размера-смещения master (справочного — измеренное);
+    // удаление master удаляет и это ограничение. Такое ограничение не может быть справочным.
+    Id constrain_offset_distance(Geo offset, Geo original, double d, Id master = 0);
+    Id constrain_equal_minor_radius(Geo a, Geo b);
+    // Значение смещения, которое использует OffsetDistance (по цепочке master).
+    double offset_distance_value(Id c) const;
 
     // ---- размеры
     Id constrain_distance_x(Id a, Id b, double d);

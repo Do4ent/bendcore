@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <map>
 #include <set>
 #include <sstream>
@@ -56,7 +57,7 @@ constexpr SketchConstraintType kConstraintTypes[] = {
     SketchConstraintType::Fix,           SketchConstraintType::DistanceX,   SketchConstraintType::DistanceY,
     SketchConstraintType::PointCurveDistance, SketchConstraintType::Diameter, SketchConstraintType::ArcLength,
     SketchConstraintType::MajorRadius,   SketchConstraintType::MinorRadius, SketchConstraintType::SymmetricPoint,
-    SketchConstraintType::Rotation,
+    SketchConstraintType::Rotation,      SketchConstraintType::OffsetDistance, SketchConstraintType::EqualMinorRadius,
 };
 
 }  // namespace
@@ -91,6 +92,8 @@ const char* toString(SketchConstraintType type) noexcept {
         case SketchConstraintType::MinorRadius: return "minor-radius";
         case SketchConstraintType::SymmetricPoint: return "symmetric-point";
         case SketchConstraintType::Rotation: return "rotation";
+        case SketchConstraintType::OffsetDistance: return "offset-distance";
+        case SketchConstraintType::EqualMinorRadius: return "equal-minor-radius";
     }
     return "unknown";
 }
@@ -100,6 +103,159 @@ std::optional<SketchConstraintType> sketchConstraintTypeFromString(std::string_v
         if (text == toString(t)) return t;
     }
     return std::nullopt;
+}
+
+namespace {
+
+std::string decimal(double v) {
+    if (std::abs(v) < 1e-12) return "0";
+    std::ostringstream o;
+    o.precision(17);
+    o << std::fixed << v;
+    std::string s = o.str();
+    while (!s.empty() && s.back() == '0') s.pop_back();
+    if (!s.empty() && s.back() == '.') s.pop_back();
+    return s;
+}
+
+// Ellipse with majorRadius >= minorRadius (the frame turns by 90° otherwise); `shift` is added to
+// parameters of the input frame.
+Ellipse2d normalEllipse(const Ellipse2d& e, double& shift) {
+    shift = 0;
+    if (e.minorRadius <= e.majorRadius) return e;
+    Ellipse2d out = e;
+    out.majorDirection = {-e.majorDirection.y, e.majorDirection.x};
+    std::swap(out.majorRadius, out.minorRadius);
+    shift = -std::numbers::pi / 2;
+    return out;
+}
+
+Point2 ellipsePoint(const Ellipse2d& e, double t) {
+    const double x = e.majorRadius * std::cos(t), y = e.minorRadius * std::sin(t);
+    const Point2 u = e.majorDirection;
+    return {e.center.x + x * u.x - y * u.y, e.center.y + x * u.y + y * u.x};
+}
+
+Point2 ellipseFocus(const Ellipse2d& e) {
+    const double c = std::sqrt(std::max(e.majorRadius * e.majorRadius - e.minorRadius * e.minorRadius, 0.0));
+    return {e.center.x + c * e.majorDirection.x, e.center.y + c * e.majorDirection.y};
+}
+
+}  // namespace
+
+Result<ProjectedPins> projectedPins(const SketchGeometryDef& def, const Curve2d& c, const std::string& where) {
+    ProjectedPins out;
+    auto wrong = [&]() {
+        return Result<ProjectedPins>::failure(ErrorCode::InvalidInput, where + ": projected edge is not a " + toString(def.type));
+    };
+    switch (def.type) {
+        case SketchGeometryType::Line: {
+            if (!std::holds_alternative<LineSegment2d>(c)) return wrong();
+            LineSegment2d l = std::get<LineSegment2d>(c);
+            if (l.end.x < l.start.x - 1e-9 || (std::abs(l.end.x - l.start.x) <= 1e-9 && l.end.y < l.start.y)) std::swap(l.start, l.end);
+            out.points = {{def.start, l.start}, {def.end, l.end}};
+            return out;
+        }
+        case SketchGeometryType::Circle: {
+            if (!std::holds_alternative<Circle2d>(c)) return wrong();
+            const Circle2d& ci = std::get<Circle2d>(c);
+            out.points = {{def.center, ci.center}};
+            out.radius = ci.radius;
+            return out;
+        }
+        case SketchGeometryType::Arc: {
+            if (!std::holds_alternative<CircularArc2d>(c)) return wrong();
+            const CircularArc2d& a = std::get<CircularArc2d>(c);
+            out.points = {{def.center, a.center},
+                          {def.start, a.counterClockwise ? a.start : a.end},
+                          {def.end, a.counterClockwise ? a.end : a.start}};
+            return out;
+        }
+        case SketchGeometryType::Ellipse: {
+            if (!std::holds_alternative<Ellipse2d>(c)) return wrong();
+            double shift = 0;
+            const Ellipse2d e = normalEllipse(std::get<Ellipse2d>(c), shift);
+            out.points = {{def.center, e.center}, {def.focus, ellipseFocus(e)}};
+            out.radius = e.minorRadius;
+            return out;
+        }
+        case SketchGeometryType::EllipticalArc: {
+            if (!std::holds_alternative<EllipticalArc2d>(c)) return wrong();
+            const EllipticalArc2d& a = std::get<EllipticalArc2d>(c);
+            double shift = 0;
+            const Ellipse2d e = normalEllipse(a.ellipse, shift);
+            out.points = {{def.center, e.center},
+                          {def.focus, ellipseFocus(e)},
+                          {def.start, ellipsePoint(e, a.startParameter + shift)},
+                          {def.end, ellipsePoint(e, a.endParameter + shift)}};
+            out.radius = e.minorRadius;
+            return out;
+        }
+        case SketchGeometryType::BSpline: {
+            if (!std::holds_alternative<BSpline2d>(c)) return wrong();
+            const BSpline2d& sp = std::get<BSpline2d>(c);
+            if (sp.poles.size() != def.poles.size()) {
+                return Result<ProjectedPins>::failure(
+                    ErrorCode::InvalidInput, where + ": projected spline has " + std::to_string(sp.poles.size()) +
+                                                 " poles, the sketch curve " + std::to_string(def.poles.size()) +
+                                                 " (project the edge again)");
+            }
+            for (std::size_t k = 0; k < sp.poles.size(); ++k) out.points.push_back({def.poles[k], sp.poles[k]});
+            out.spline = sp;
+            return out;
+        }
+    }
+    return wrong();
+}
+
+SketchGeometryDef projectedDefinition(SketchData& data, const Curve2d& c, int referenceIndex, bool construction) {
+    SketchGeometryDef g;
+    g.projection = referenceIndex;
+    g.construction = construction;
+    auto point = [&](Point2 p) {
+        data.points.push_back({decimal(p.x), decimal(p.y), false});
+        return static_cast<int>(data.points.size()) - 1;
+    };
+    if (const auto* l = std::get_if<LineSegment2d>(&c)) {
+        g.type = SketchGeometryType::Line;
+        g.start = point(l->start);
+        g.end = point(l->end);
+    } else if (const auto* ci = std::get_if<Circle2d>(&c)) {
+        g.type = SketchGeometryType::Circle;
+        g.center = point(ci->center);
+        g.radius = decimal(ci->radius);
+    } else if (const auto* a = std::get_if<CircularArc2d>(&c)) {
+        g.type = SketchGeometryType::Arc;
+        g.center = point(a->center);
+        g.start = point(a->counterClockwise ? a->start : a->end);
+        g.end = point(a->counterClockwise ? a->end : a->start);
+    } else if (const auto* e = std::get_if<Ellipse2d>(&c)) {
+        double shift = 0;
+        const Ellipse2d n = normalEllipse(*e, shift);
+        g.type = SketchGeometryType::Ellipse;
+        g.center = point(n.center);
+        g.focus = point(ellipseFocus(n));
+        g.radius = decimal(n.minorRadius);
+    } else if (const auto* ea = std::get_if<EllipticalArc2d>(&c)) {
+        double shift = 0;
+        const Ellipse2d n = normalEllipse(ea->ellipse, shift);
+        g.type = SketchGeometryType::EllipticalArc;
+        g.center = point(n.center);
+        g.focus = point(ellipseFocus(n));
+        g.start = point(ellipsePoint(n, ea->startParameter + shift));
+        g.end = point(ellipsePoint(n, ea->endParameter + shift));
+        g.radius = decimal(n.minorRadius);
+    } else {
+        const BSpline2d& sp = std::get<BSpline2d>(c);
+        g.type = SketchGeometryType::BSpline;
+        for (const Point2& p : sp.poles) g.poles.push_back(point(p));
+        g.degree = sp.degree;
+        g.knots = sp.knots;
+        g.multiplicities = sp.multiplicities;
+        g.weights = sp.weights;
+        g.periodic = sp.periodic;
+    }
+    return g;
 }
 
 std::vector<const std::string*> sketchExpressions(const SketchData& data) {
@@ -209,8 +365,16 @@ SketchEntityId SketchBuilder::projected(SketchGeometryType type, int referenceIn
             g.end = point("0", "1");
             break;
         case SketchGeometryType::Ellipse:
+            g.center = point("0", "0");
+            g.focus = point("1", "0");
+            break;
         case SketchGeometryType::EllipticalArc:
-        case SketchGeometryType::BSpline: break;  // rejected at rebuild: only lines, circles, arcs are projected
+            g.center = point("0", "0");
+            g.focus = point("1", "0");
+            g.start = point("2", "0");
+            g.end = point("0", "1");
+            break;
+        case SketchGeometryType::BSpline: break;  // needs the poles of the projection: projectedDefinition
     }
     data_.geometry.push_back(g);
     return static_cast<SketchEntityId>(data_.geometry.size());
@@ -362,6 +526,7 @@ public:
         }
         std::vector<double> radii(ng);
         std::vector<std::optional<double>> projectedRadius(ng);
+        std::vector<std::optional<BSpline2d>> projectedSpline(ng);
         for (std::size_t g = 0; g < ng; ++g) radii[g] = v[2 * np + g];
         const auto& projected = ctx.references("projected");
         for (std::size_t g = 0; g < ng; ++g) {
@@ -376,31 +541,20 @@ public:
             auto pe = projectEdge(pl, TopoDS::Edge(projected[static_cast<std::size_t>(def.projection)]));
             if (!pe) return fail(pe.error().code, where + ": " + pe.error().message);
             if (!pe.value().curve) return fail(ErrorCode::InvalidInput, where + ": the edge projects to a point");
-            const Curve2d& c = *pe.value().curve;
-            auto pin = [&](int p, Point2 at) {
+            auto pins = projectedPins(def, *pe.value().curve, where);
+            if (!pins) return pins.error();
+            for (const auto& [p, at] : pins.value().points) {
+                if (p < 0 || static_cast<std::size_t>(p) >= np) {
+                    return fail(ErrorCode::InvalidInput, where + ": point " + std::to_string(p) + " does not exist");
+                }
                 pos[static_cast<std::size_t>(p)] = at;
                 fixed[static_cast<std::size_t>(p)] = true;
-            };
-            if (def.type == SketchGeometryType::Line && std::holds_alternative<LineSegment2d>(c)) {
-                LineSegment2d l = std::get<LineSegment2d>(c);
-                if (l.end.x < l.start.x - 1e-9 || (std::abs(l.end.x - l.start.x) <= 1e-9 && l.end.y < l.start.y)) {
-                    std::swap(l.start, l.end);
-                }
-                pin(def.start, l.start);
-                pin(def.end, l.end);
-            } else if (def.type == SketchGeometryType::Circle && std::holds_alternative<Circle2d>(c)) {
-                const Circle2d& ci = std::get<Circle2d>(c);
-                pin(def.center, ci.center);
-                radii[g] = ci.radius;
-                projectedRadius[g] = ci.radius;
-            } else if (def.type == SketchGeometryType::Arc && std::holds_alternative<CircularArc2d>(c)) {
-                const CircularArc2d& a = std::get<CircularArc2d>(c);
-                pin(def.center, a.center);
-                pin(def.start, a.counterClockwise ? a.start : a.end);
-                pin(def.end, a.counterClockwise ? a.end : a.start);
-            } else {
-                return fail(ErrorCode::InvalidInput, where + ": projected edge is not a " + toString(def.type));
             }
+            if (pins.value().radius) {
+                radii[g] = *pins.value().radius;
+                projectedRadius[g] = radii[g];
+            }
+            projectedSpline[g] = pins.value().spline;
         }
 
         BoundSketch bs;
@@ -429,8 +583,8 @@ public:
                         if (def.type == SketchGeometryType::Ellipse) {
                             bs.addEllipse(def.center, def.focus, radii[g], def.construction);
                         } else {
-                            bs.addEllipticalArc(def.center, def.focus, radii[g], def.start, def.end, def.counterClockwise,
-                                                def.construction);
+                            bs.addEllipticalArc(def.center, def.focus, radii[g], def.start, def.end,
+                                                def.projection >= 0 || def.counterClockwise, def.construction);
                         }
                         break;
                     case SketchGeometryType::BSpline: {
@@ -441,6 +595,13 @@ public:
                         sd.multiplicities = def.multiplicities;
                         sd.weights = def.weights;
                         sd.periodic = def.periodic;
+                        if (const auto& ps = projectedSpline[g]) {
+                            sd.degree = ps->degree;
+                            sd.knots = ps->knots;
+                            sd.multiplicities = ps->multiplicities;
+                            sd.weights = ps->weights;
+                            sd.periodic = ps->periodic;
+                        }
                         bs.addBSpline(sd, def.construction);
                         break;
                     }
@@ -450,9 +611,10 @@ public:
             }
         }
         for (std::size_t g = 0; g < ng; ++g) {
-            if (projectedRadius[g]) {
-                bs.sketch().constrain_radius(bs.entity(static_cast<SketchEntityId>(g + 1)).circle, *projectedRadius[g]);
-            }
+            if (!projectedRadius[g]) continue;
+            const auto& e = bs.entity(static_cast<SketchEntityId>(g + 1));
+            if (e.kind == BoundSketch::EntityKind::Circle) bs.sketch().constrain_radius(e.circle, *projectedRadius[g]);
+            else bs.sketch().constrain_minor_radius(e.geo, *projectedRadius[g]);
         }
         const std::size_t c0 = 2 * np + ng;
         std::vector<int> tags;
@@ -536,6 +698,20 @@ public:
                     case SketchConstraintType::Fix: tag = s.constrain_fix(c.a); break;
                     case SketchConstraintType::SymmetricPoint: tag = s.constrain_symmetric_point(c.a, c.b, c.c); break;
                     case SketchConstraintType::Rotation: tag = s.constrain_rotation(c.a, c.b, c.c, val); break;
+                    case SketchConstraintType::OffsetDistance: {
+                        int master = 0;
+                        if (c.c >= 1) {
+                            if (static_cast<std::size_t>(c.c) > tags.size()) {
+                                throw std::invalid_argument("offset dimension " + std::to_string(c.c) + " is not an earlier constraint");
+                            }
+                            master = tags[static_cast<std::size_t>(c.c) - 1];
+                        } else {
+                            positive("offset distance");
+                        }
+                        tag = s.constrain_offset_distance(geo(c.a), geo(c.b), val, master);
+                        break;
+                    }
+                    case SketchConstraintType::EqualMinorRadius: tag = s.constrain_equal_minor_radius(geo(c.a), geo(c.b)); break;
                 }
                 if (c.driven) {
                     if (!sketch2d::is_dimension(s.constraint(tag).kind)) {

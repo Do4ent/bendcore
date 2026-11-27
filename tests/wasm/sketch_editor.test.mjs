@@ -377,3 +377,108 @@ describe('editSketch', () => {
     });
   });
 });
+
+describe('editSketch: offset; projectToSketch', () => {
+  test('rounded offset of the rectangle: one dimension, ring area by the formula, the node follows', () => {
+    withSketch(rectangle(), (doc) => {
+      const s0 = doc.solveSketch('S', rectangle()).sketch;
+      // The rectangle runs counter-clockwise: a negative distance is outward.
+      const out = doc.editSketch('S', s0, { name: 'offset', chain: [1, 2, 3, 4], distance: -5, corners: 'round' });
+      assert.equal(out.created.length, 8, '4 lines and 4 corner arcs');
+      assert.ok(out.dimension > 0);
+      const dim = out.sketch.constraints[out.dimension - 1];
+      assert.equal(dim.type, 'offset-distance');
+      assert.equal(dim.c, -1);
+      const followers = out.sketch.constraints.filter((c) => c.type === 'offset-distance' && c.c === out.dimension);
+      assert.equal(out.sketch.constraints.filter((c) => c.type === 'offset-distance' && c.c < 1).length, 1, 'one offset dimension');
+      const sol = doc.solveSketch('S', out.sketch);
+      assert.equal(sol.definition, 'fully-defined', JSON.stringify(sol.redundant));
+      const ring = (w, h, d) => 2 * d * (w + h) + PI * d * d;
+      // Regions: the ring (outer contour, depth 0) and the rectangle inside it (depth 1).
+      const outer = (p) => p.regions.find((r) => r.depth === 0);
+      close(outer(sol.profile).area, ring(60, 40, 5), 1e-6, 'ring area');
+      for (const c of followers) close(sol.constraintValues[out.sketch.constraints.indexOf(c)], 5, 1e-12, 'follower value');
+      // Dimension 5 -> 8 in the node; the region and the extrusion follow.
+      const s8 = structuredClone(sol.sketch);
+      s8.constraints[out.dimension - 1].value = '8';
+      const sol8 = doc.solveSketch('S', s8);
+      close(outer(sol8.profile).area, ring(60, 40, 8), 1e-6, 'ring area for 8');
+      doc.editFeature('S', { sketch: sol8.sketch });
+      doc.rebuild();
+      assert.equal(doc.feature('S').state, 'ok', doc.feature('S').messages.join('; '));
+      assert.equal(doc.feature('S').sketchResult.definition, 'fully-defined');
+    });
+  });
+
+  test('circle offset to both sides: radii r ± d from one dimension', () => {
+    const s = { points: [{ x: '0', y: '0', fixed: true }], geometry: [{ type: 'circle', center: 0, radius: '12' }], constraints: [{ type: 'radius', a: 1, b: -1, c: -1, value: '12' }], regions: [] };
+    withSketch(s, (doc) => {
+      const out = doc.editSketch('S', s, { name: 'offset', chain: [1], distance: 2, bothSides: true });
+      assert.equal(out.created.length, 2);
+      const sol = doc.solveSketch('S', out.sketch);
+      assert.equal(sol.definition, 'fully-defined');
+      const radii = out.created.map((id) => sol.curves[id - 1].radius).sort((a, b) => a - b);
+      close(radii[0], 10, 1e-9, 'inner');
+      close(radii[1], 14, 1e-9, 'outer');
+      // Lengths 2π(r ± d).
+      const len = (id) => {
+        const p = sol.curves[id - 1].polyline;
+        return sol.curves[id - 1].radius * 2 * PI + 0 * p.length;
+      };
+      close(len(out.created[0]) + len(out.created[1]), 2 * PI * 24, 1e-9, 'lengths');
+    });
+  });
+
+  test('projected face edges follow the model', () => {
+    const doc = modeling.createDocument();
+    try {
+      doc.setVariable('L', '60');
+      doc.addFeature({ type: 'Box', id: 'B', parameters: { length: 'L', width: '40', height: '10' } });
+      doc.addFeature({ type: 'Sketch', id: 'P', options: { plane: 'XY' }, parameters: { offset: '10' }, sketch: { points: [], geometry: [], constraints: [], regions: [] } });
+      doc.rebuild();
+      // The top face of the box in the body the sketch sees.
+      const mesh = doc.tessellate('before:P');
+      let top = -1;
+      for (let s = 0; s + 2 < mesh.faceSpans.length; s += 3) {
+        const [face, first, count] = [mesh.faceSpans[s], mesh.faceSpans[s + 1], mesh.faceSpans[s + 2]];
+        let allTop = true;
+        for (let i = first; i < first + count; ++i) if (Math.abs(mesh.positions[mesh.indices[i] * 3 + 2] - 10) > 1e-6) allTop = false;
+        if (allTop) top = face;
+      }
+      assert.ok(top >= 0, 'top face found');
+      const empty = { points: [], geometry: [], constraints: [], regions: [] };
+      const out = doc.projectToSketch('P', empty, [{ kind: 'face', index: top }]);
+      assert.deepEqual(out.created, [1, 2, 3, 4]);
+      assert.equal(out.references, 4);
+      assert.ok(out.sketch.geometry.every((g) => g.type === 'line' && g.projection >= 0));
+      assert.equal(doc.feature('P').references.projected.length, 4);
+      // A vertical edge projects to a point: skipped.
+      let vertical = -1;
+      for (const e of mesh.edges) {
+        const p = e.points;
+        if (Math.abs(p[0] - p[p.length - 3]) < 1e-6 && Math.abs(p[1] - p[p.length - 2]) < 1e-6) vertical = e.edgeIndex;
+      }
+      const skip = doc.projectToSketch('P', out.sketch, [{ kind: 'edge', index: vertical }]);
+      assert.deepEqual(skip.created, []);
+      assert.deepEqual(skip.skipped, [vertical]);
+      // Again the same face: the references are reused.
+      assert.equal(doc.projectToSketch('P', empty, [{ kind: 'face', index: top }]).references, 4);
+      const sol = doc.solveSketch('P', out.sketch);
+      assert.equal(sol.definition, 'fully-defined');
+      close(sol.profile.regions[0].area, 2400, 1e-6, 'projected rectangle');
+      doc.editFeature('P', { sketch: out.sketch });
+      doc.addFeature({ type: 'Extrude', id: 'E', parameters: { distance: 5 }, links: { sketch: 'P' } });
+      doc.rebuild();
+      close(doc.properties('final').volume, 60 * 40 * 15, 1e-6, 'box + extruded projection');
+      // The box grows: the projection follows.
+      doc.setVariable('L', '80');
+      doc.rebuild();
+      assert.equal(doc.feature('P').state, 'ok', doc.feature('P').messages.join('; '));
+      close(doc.properties('final').volume, 80 * 40 * 15, 1e-6, 'after L = 80');
+      const again = doc.solveSketch('P', doc.feature('P').sketch);
+      close(again.profile.regions[0].area, 80 * 40, 1e-6, 'editor sees the new projection');
+    } finally {
+      doc.dispose();
+    }
+  });
+});

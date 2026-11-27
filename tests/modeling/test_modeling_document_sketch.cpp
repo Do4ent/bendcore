@@ -524,3 +524,60 @@ TEST(ModelingDocumentSketch, CrossingCirclesUnionAndRebuild) {
         EXPECT_FALSE(cylinderFace(body, r, 0).IsNull()) << "big arc wall follows R = " << r;
     }
 }
+
+TEST(ModelingDocumentSketch, ProjectedFaceEdgesAndOffsetCirclesFollowTheModel) {
+    PartDocument doc(partRegistry());
+    setVar(doc, "L", 60);
+    setVar(doc, "D", 3);
+    add(doc, {"Box", "Block", "", {{"length", "L"}, {"width", "40"}, {"height", "10"}}, {}, {}, false});
+    doc.rebuild();
+    NamedShape s = doc.finalShape();
+    // The four edges of the top face, projected as editor projections are (projectedDefinition).
+    const TopoDS_Shape top = planarFace(s.shape(), gp::DZ(), 10);
+    const auto placement = SketchPlacement::fromPlane(gp_Pln(gp_Pnt(0, 0, 10), gp::DZ()));
+    SketchData data;
+    std::vector<TopoReference> refs;
+    for (TopExp_Explorer ex(top, TopAbs_EDGE); ex.More(); ex.Next()) {
+        auto pe = projectEdge(placement, TopoDS::Edge(ex.Current()));
+        ASSERT_TRUE(pe.ok() && pe.value().curve);
+        data.geometry.push_back(projectedDefinition(data, *pe.value().curve, static_cast<int>(refs.size()), false));
+        refs.push_back(refTo(s, ex.Current()));
+    }
+    // Three concentric circles: r0 = 5 (dimensioned), r1 = r0 + D (the offset dimension), r2 = r1 + D
+    // (follows the dimension).
+    SketchBuilder b;
+    b.data() = data;
+    const int c = b.point("30", "20", true);
+    const auto c0 = b.circle(c, "5");
+    b.constrain(SketchConstraintType::Radius, static_cast<int>(c0), -1, "5");
+    const auto c1 = b.circle(c, "7");
+    const auto c2 = b.circle(c, "9");
+    const int master = b.constrain(SketchConstraintType::OffsetDistance, static_cast<int>(c1), static_cast<int>(c0), "D");
+    b.constrain(SketchConstraintType::OffsetDistance, static_cast<int>(c2), static_cast<int>(c1), "0", master);
+    FeatureSpec sk = sketchOn("Cap", "XY", b.build());
+    sk.parameters = {{"offset", "10"}};
+    sk.references["projected"] = refs;
+    add(doc, sk);
+    add(doc, extrudeOf("Boss", "Cap", "5"));
+    auto expected = [](double l, double d) {
+        return (l * 40 - kPi * (5 + 2 * d) * (5 + 2 * d) + kPi * (5 + d) * (5 + d) - kPi * 25) * 5 + l * 40 * 10;
+    };
+    for (auto [l, d] : {std::pair{60.0, 3.0}, std::pair{80.0, 3.0}, std::pair{80.0, 4.5}}) {
+        setVar(doc, "L", l);
+        setVar(doc, "D", d);
+        RebuildReport rep = doc.rebuild();
+        ASSERT_TRUE(rep.failed.empty()) << messages(info(doc, "Cap")) << messages(info(doc, "Boss"));
+        EXPECT_EQ(info(doc, "Cap").sketchResult->definition, "fully-defined");
+        EXPECT_NEAR(volume(doc.finalShape().shape()), expected(l, d), 1e-6) << "L = " << l << ", D = " << d;
+    }
+    // The file keeps the new constraint and the projections.
+    auto json = doc.toJson();
+    ASSERT_TRUE(json.ok());
+    auto loaded = PartDocument::fromJson(json.value(), partRegistry());
+    ASSERT_TRUE(loaded.ok()) << loaded.error().message;
+    EXPECT_NEAR(volume(loaded.value().finalShape().shape()), expected(80, 4.5), 1e-6);
+    // A dependent offset must point at an earlier offset dimension.
+    SketchData bad = b.build();
+    bad.constraints.back().c = static_cast<int>(bad.constraints.size());
+    EXPECT_FALSE(doc.setSketch("Cap", bad).ok());
+}

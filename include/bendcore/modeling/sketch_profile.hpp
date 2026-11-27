@@ -348,8 +348,10 @@ public:
     void setConstruction(SketchEntityId id, bool construction);
     // Removes the entity and the constraints that reference its geometry (not its points).
     void removeEntity(SketchEntityId id);
-    // Replace the end points of a line or an arc (editing tools).
+    // Replace the end points of a line, an arc or an elliptical arc (editing tools).
     void setEndPoints(SketchEntityId id, sketch2d::Id start, sketch2d::Id end);
+    // Replace the poles and knots of a B-spline; constraints on the spline are kept.
+    void setBSpline(SketchEntityId id, const sketch2d::BSplineData& data);
 
     const std::vector<Entity>& entities() const noexcept { return entities_; }
     const Entity& entity(SketchEntityId id) const;

@@ -157,6 +157,34 @@ export function dimensionGraphic(
         text,
       );
     }
+    case 'offset-distance': {
+      // Between the offset curve and its source: from the start (line) or along the radius
+      // through the middle (circle, arc) of the offset curve.
+      const off = curve(c.a);
+      const src = curve(c.b);
+      if (!off || !src) return null;
+      let from: V | null = null;
+      let to: V | null = null;
+      if (off.center && off.radius !== undefined && src.radius !== undefined) {
+        const at = off.midpoint ? { x: off.midpoint[0], y: off.midpoint[1] } : { x: off.center[0] + off.radius, y: off.center[1] };
+        const d = { x: at.x - off.center[0], y: at.y - off.center[1] };
+        const l = Math.hypot(d.x, d.y) || 1;
+        from = at;
+        to = { x: off.center[0] + (d.x / l) * src.radius, y: off.center[1] + (d.y / l) * src.radius };
+      } else if (off.polyline.length >= 4 && src.polyline.length >= 4) {
+        from = off.midpoint ? { x: off.midpoint[0], y: off.midpoint[1] } : { x: off.polyline[0], y: off.polyline[1] };
+        const ax = src.polyline[0];
+        const ay = src.polyline[1];
+        const dx = src.polyline[src.polyline.length - 2] - ax;
+        const dy = src.polyline[src.polyline.length - 1] - ay;
+        const t = ((from.x - ax) * dx + (from.y - ay) * dy) / (dx * dx + dy * dy || 1);
+        to = { x: ax + t * dx, y: ay + t * dy };
+      }
+      if (!from || !to) return null;
+      const m = mid(from, to);
+      const text = { x: m.x + gap * 0.5 + offset.x, y: m.y + gap * 0.5 + offset.y };
+      return done([[from.x, from.y, to.x, to.y]], text);
+    }
     case 'point-curve-distance': {
       const p = P(c.a);
       const cv = curve(c.b);
