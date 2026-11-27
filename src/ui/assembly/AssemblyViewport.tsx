@@ -27,10 +27,32 @@ import { shouldReframeInstances } from '../kernel/autoFrame';
 import { buildReferenceMesh, referenceMeshHit } from '../kernel/referenceMeshObject';
 import type { MeshPick, ReferenceMeshDisplay } from '../kernel/referenceMeshObject';
 import type { V3 } from './assemblyMath';
+import {
+  boxFaces,
+  boxEdges,
+  boxKind,
+  defaultFilter,
+  edgeAllowed,
+  faceAllowed,
+  normalizeRect,
+  selectOp,
+} from '../kernel/selection';
+import type { SelectOp, SelectionFilter } from '../kernel/selection';
+import type { ClipPlane } from '../kernel/KernelViewport';
 
-export type AssemblyPickMode = 'face' | 'edge' | 'drag' | 'none';
+/** 'component' picks a whole occurrence (the body mode of the selection panel). */
+export type AssemblyPickMode = 'face' | 'edge' | 'component' | 'drag' | 'none';
+
+/** Elements and components a box took (docs/ui/ASSEMBLY_UI.md, "Выбор рамкой"). */
+export interface AssemblyBoxResult {
+  faces: { path: number[]; index: number }[];
+  edges: { path: number[]; index: number }[];
+  components: number[][];
+}
 
 export interface AssemblyPick {
+  /** Shift adds to the selection, Ctrl removes from it. */
+  op?: SelectOp;
   path: number[];
   kind: 'face' | 'edge';
   index: number;
@@ -75,8 +97,21 @@ export interface AssemblyViewportProps {
   referenceMeshes?: readonly ReferenceMeshDisplay[];
   /** When set, a click that hits a reference mesh before the parts picks a point on it. */
   onPickMesh?: ((pick: MeshPick) => void) | null;
+  /** Selection filter by geometry type (selection.ts); the element kind is `pickMode`. */
+  filter?: SelectionFilter;
+  /** Component mode: the picked occurrence path, or null for a click on nothing. */
+  onPickComponent?: (path: number[] | null, op: SelectOp) => void;
+  /** Box selection (left to right: entirely inside, right to left: touched). */
+  boxSelect?: boolean;
+  onBoxSelect?: (result: AssemblyBoxResult, op: SelectOp, kind: 'inside' | 'cross') => void;
+  /** Section: parts are clipped by this plane (the side n.p + c >= 0 is kept). */
+  clip?: ClipPlane | null;
+  /** Section contours (world xyz triples) drawn over the cut. */
+  sectionLines?: readonly Float32Array[];
 }
 
+const SECTION_COLOR = 0xd62828;
+const HOVER_COLOR = 0xffd166;
 const BASE_COLOR = 0xb8c4d6;
 const SELECTED_COLOR = 0xff8c1a;
 const EDGE_COLOR = 0x1d2733;
@@ -99,6 +134,10 @@ interface Instance {
   faces: THREE.Mesh;
   baseMaterial: THREE.MeshPhongMaterial;
   highlight: THREE.Group;
+  /** hovered edge line (instance frame) */
+  hover: THREE.Group;
+  selectedFaces: Set<number>;
+  hoverFaces: Set<number>;
 }
 
 interface SceneState {
@@ -114,6 +153,9 @@ interface SceneState {
   tools: THREE.Group;
   /** reference meshes (pickable for measurements only) */
   refMeshes: THREE.Group;
+  /** section contours */
+  section: THREE.Group;
+  clip: THREE.Plane | null;
   label: { anchor: THREE.Vector3; element: HTMLDivElement } | null;
   framed: boolean;
   /** times the view was framed automatically (data-frames, for end-to-end tests) */
@@ -129,6 +171,15 @@ function disposeObject(obj: THREE.Object3D): void {
     if (Array.isArray(mats)) mats.forEach((m) => m.dispose());
     else mats?.dispose();
   });
+}
+
+/** Draw groups of an occurrence: selected faces use material 1, hovered ones material 2. */
+function applyInstanceMaterials(inst: Instance, mesh: KernelMesh): void {
+  const groups = inst.faces.geometry.groups;
+  for (let g = 0; g < groups.length; ++g) {
+    const face = mesh.faceSpans[g * 3];
+    groups[g].materialIndex = inst.selectedFaces.has(face) ? 1 : inst.hoverFaces.has(face) ? 2 : 0;
+  }
 }
 
 function sharedGeometry(mesh: KernelMesh): THREE.BufferGeometry {
@@ -199,13 +250,20 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
   measure = null,
   referenceMeshes,
   onPickMesh = null,
+  filter = defaultFilter(),
+  onPickComponent,
+  boxSelect = false,
+  onBoxSelect,
+  clip = null,
+  sectionLines,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
   const meshesRef = useRef(meshes);
   meshesRef.current = meshes;
-  const cb = useRef({ onPick, onDragStart, onDragMove, onDragEnd, pickMode, onPickMesh });
-  cb.current = { onPick, onDragStart, onDragMove, onDragEnd, pickMode, onPickMesh };
+  const activeFilter: SelectionFilter = { ...filter, mode: pickMode === 'component' ? 'body' : pickMode === 'edge' ? 'edge' : 'face' };
+  const cb = useRef({ onPick, onDragStart, onDragMove, onDragEnd, pickMode, onPickMesh, onPickComponent, onBoxSelect, boxSelect, filter: activeFilter });
+  cb.current = { onPick, onDragStart, onDragMove, onDragEnd, pickMode, onPickMesh, onPickComponent, onBoxSelect, boxSelect, filter: activeFilter };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -232,6 +290,8 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
     scene.add(toolsGroup);
     const refMeshesGroup = new THREE.Group();
     scene.add(refMeshesGroup);
+    const sectionGroup = new THREE.Group();
+    scene.add(sectionGroup);
     const render = () => {
       renderer.render(scene, camera);
       const label = stateRef.current?.label;
@@ -254,6 +314,8 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       geometries: new Map(),
       tools: toolsGroup,
       refMeshes: refMeshesGroup,
+      section: sectionGroup,
+      clip: null,
       label: null,
       framed: false,
       frames: 0,
@@ -285,7 +347,7 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
     };
     const faceHit = (raycaster: THREE.Raycaster) => {
       const objects = [...state.instances.values()].map((i) => i.faces);
-      const hit = raycaster.intersectObjects(objects, false)[0];
+      const hit = raycaster.intersectObjects(objects, false).find((h) => !state.clip || state.clip.distanceToPoint(h.point) >= 0);
       if (!hit || hit.faceIndex === undefined) return null;
       const inst = state.instances.get(hit.object.userData.instance as string);
       const mesh = inst ? meshesRef.current[inst.meshKey] : undefined;
@@ -300,7 +362,7 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       return {
         x: rect.left + ((p.x + 1) / 2) * rect.width,
         y: rect.top + ((1 - p.y) / 2) * rect.height,
-        visible: p.z > -1 && p.z < 1,
+        visible: p.z > -1 && p.z < 1 && !(state.clip && state.clip.distanceToPoint(world) < -1e-6),
       };
     };
 
@@ -320,8 +382,10 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
           const w = toWorld(buffers.positions[v * 3], buffers.positions[v * 3 + 1], buffers.positions[v * 3 + 2]);
           return [w.x, w.y, w.z];
         };
+        const edgeTypes = meshesRef.current[inst.meshKey]?.edgeTypes;
         for (const c of edgeCandidates(buffers, (x, y, z) => project(toWorld(x, y, z)), clientX, clientY, EDGE_TOLERANCE)) {
           if (best && best.distance <= c.distance) break;
+          if (!edgeAllowed(cb.current.filter, edgeTypes?.[c.edgeIndex])) continue;
           const near = closestPointOnSegmentToRay(
             [origin.x, origin.y, origin.z],
             [direction.x, direction.y, direction.z],
@@ -416,12 +480,149 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
         },
       );
     };
+    // ---- hover: only elements the filter allows are highlighted
+    let hoverKey = '';
+    let hoverFrame = 0;
+    let hovered: Instance[] = [];
+    const clearHover = () => {
+      for (const inst of hovered) {
+        inst.hoverFaces = new Set();
+        disposeObject(inst.hover);
+        inst.hover.clear();
+        inst.baseMaterial.emissive.setHex(0x000000);
+        const mesh = meshesRef.current[inst.meshKey];
+        if (mesh) applyInstanceMaterials(inst, mesh);
+      }
+      hovered = [];
+    };
+    const hoverAt = (clientX: number, clientY: number) => {
+      const mode = cb.current.pickMode;
+      let key = '';
+      let next: (() => void) | null = null;
+      if (mode === 'face' || mode === 'component') {
+        const fh = faceHit(rayAt(clientX, clientY));
+        if (fh) {
+          const mesh = meshesRef.current[fh.inst.meshKey];
+          if (mode === 'component') {
+            key = `component:${fh.inst.key}`;
+            next = () => {
+              fh.inst.baseMaterial.emissive.setHex(0x4a3a00);
+              hovered.push(fh.inst);
+            };
+          } else if (faceAllowed(cb.current.filter, mesh?.faceTypes?.[fh.face])) {
+            key = `face:${fh.inst.key}:${fh.face}`;
+            next = () => {
+              fh.inst.hoverFaces = new Set([fh.face]);
+              if (mesh) applyInstanceMaterials(fh.inst, mesh);
+              hovered.push(fh.inst);
+            };
+          }
+        }
+      } else if (mode === 'edge') {
+        const pe = pickEdge(clientX, clientY);
+        const inst = pe ? state.instances.get(pathKey(pe.path)) : undefined;
+        const mesh = inst ? meshesRef.current[inst.meshKey] : undefined;
+        if (pe && inst && mesh) {
+          key = `edge:${inst.key}:${pe.index}`;
+          next = () => {
+            const chosen = mesh.edges.filter((e) => e.edgeIndex === pe.index);
+            const line = edgeLines(packEdgePolylines(chosen), HOVER_COLOR);
+            line.renderOrder = 9;
+            (line.material as unknown as { depthTest: boolean }).depthTest = false;
+            inst.hover.add(line);
+            hovered.push(inst);
+          };
+        }
+      }
+      if (key === hoverKey) return;
+      clearHover();
+      hoverKey = key;
+      next?.();
+      renderer.domElement.parentElement?.setAttribute('data-hover', key);
+      render();
+    };
+
+    // ---- box selection
+    let boxElement: HTMLDivElement | null = null;
+    const drawBox = (x0: number, y0: number, x1: number, y1: number) => {
+      const host = renderer.domElement.parentElement;
+      if (!host) return;
+      if (!boxElement) {
+        boxElement = document.createElement('div');
+        boxElement.className = 'kernel-box';
+        boxElement.setAttribute('data-testid', 'box-rect');
+        host.appendChild(boxElement);
+      }
+      const rect = renderer.domElement.getBoundingClientRect();
+      const box = normalizeRect({ x: x0, y: y0 }, { x: x1, y: y1 });
+      boxElement.style.left = `${box.x0 - rect.left}px`;
+      boxElement.style.top = `${box.y0 - rect.top}px`;
+      boxElement.style.width = `${box.x1 - box.x0}px`;
+      boxElement.style.height = `${box.y1 - box.y0}px`;
+      boxElement.setAttribute('data-direction', x1 >= x0 ? 'inside' : 'cross');
+    };
+    const hideBox = () => {
+      boxElement?.remove();
+      boxElement = null;
+    };
+    const finishBox = (start: { x: number; y: number }, e: PointerEvent): void => {
+      hideBox();
+      const mode = cb.current.pickMode;
+      const kind = boxKind(start, { x: e.clientX });
+      const rect = normalizeRect(start, { x: e.clientX, y: e.clientY });
+      const result: AssemblyBoxResult = { faces: [], edges: [], components: [] };
+      for (const inst of state.instances.values()) {
+        const mesh = meshesRef.current[inst.meshKey];
+        if (!mesh) continue;
+        inst.group.updateMatrixWorld();
+        const m = inst.group.matrixWorld;
+        const proj = (x: number, y: number, z: number) => project(new THREE.Vector3(x, y, z).applyMatrix4(m));
+        if (mode === 'face') {
+          for (const index of boxFaces(mesh, proj, rect, kind, cb.current.filter)) result.faces.push({ path: inst.path, index });
+        } else if (mode === 'edge') {
+          for (const index of boxEdges(mesh, proj, rect, kind, cb.current.filter)) result.edges.push({ path: inst.path, index });
+        } else if (mode === 'component') {
+          const total = mesh.faceSpans.length / 3;
+          const found = boxFaces(mesh, proj, rect, kind).length;
+          if (total > 0 && (kind === 'inside' ? found === total : found > 0)) result.components.push(inst.path);
+        }
+      }
+      cb.current.onBoxSelect?.(result, selectOp(e), kind);
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (down) {
+        if (cb.current.boxSelect && (e.buttons & 1) !== 0 && Math.hypot(e.clientX - down.x, e.clientY - down.y) > CLICK_TOLERANCE) {
+          drawBox(down.x, down.y, e.clientX, e.clientY);
+        }
+        return;
+      }
+      if (drag || cb.current.pickMode === 'drag' || cb.current.pickMode === 'none') return;
+      if (hoverFrame) cancelAnimationFrame(hoverFrame);
+      const { clientX, clientY } = e;
+      hoverFrame = requestAnimationFrame(() => {
+        hoverFrame = 0;
+        hoverAt(clientX, clientY);
+      });
+    };
+    const onPointerLeave = () => {
+      if (!hoverKey) return;
+      clearHover();
+      hoverKey = '';
+      renderer.domElement.parentElement?.setAttribute('data-hover', '');
+      render();
+    };
     const onPointerUp = (e: PointerEvent) => {
       if (!down || e.button !== 0) return;
+      const start = down;
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       down = null;
       const mode = cb.current.pickMode;
-      if (moved > CLICK_TOLERANCE || mode === 'none' || mode === 'drag') return;
+      if (mode === 'none' || mode === 'drag') return;
+      if (moved > CLICK_TOLERANCE) {
+        if (cb.current.boxSelect) finishBox(start, e);
+        return;
+      }
+      const op = selectOp(e);
       const meshPick = cb.current.onPickMesh;
       if (meshPick) {
         const raycaster = rayAt(e.clientX, e.clientY);
@@ -433,19 +634,28 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
         }
       }
       if (mode === 'edge') {
-        cb.current.onPick(pickEdge(e.clientX, e.clientY));
+        const picked = pickEdge(e.clientX, e.clientY);
+        cb.current.onPick(picked ? { ...picked, op } : null);
         return;
       }
       const fh = faceHit(rayAt(e.clientX, e.clientY));
+      if (mode === 'component') {
+        cb.current.onPickComponent?.(fh ? fh.inst.path : null, op);
+        return;
+      }
       if (!fh) {
         cb.current.onPick(null);
         return;
       }
+      // A face the type filter refuses does not select (and does not clear the selection).
+      if (!faceAllowed(cb.current.filter, meshesRef.current[fh.inst.meshKey]?.faceTypes?.[fh.face])) return;
       const p = fh.hit.point;
-      cb.current.onPick({ path: fh.inst.path, kind: 'face', index: fh.face, point: [p.x, p.y, p.z] });
+      cb.current.onPick({ path: fh.inst.path, kind: 'face', index: fh.face, point: [p.x, p.y, p.z], op });
     };
     renderer.domElement.addEventListener('pointerdown', onPointerDown, { capture: true });
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerleave', onPointerLeave);
 
     onReady?.({
       worldToClient(x, y, z) {
@@ -498,11 +708,16 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       finishDrag();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown, { capture: true });
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('pointermove', onPointerMove);
+      renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
+      if (hoverFrame) cancelAnimationFrame(hoverFrame);
+      hideBox();
       controls.removeEventListener('change', render);
       controls.dispose();
       disposeObject(root);
       disposeObject(toolsGroup);
       disposeObject(refMeshesGroup);
+      disposeObject(sectionGroup);
       state.label?.element.remove();
       for (const g of state.geometries.values()) g.dispose();
       renderer.dispose();
@@ -563,14 +778,28 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
         const faces = new THREE.Mesh(instanceGeometry(state.geometries.get(part.mesh)!, mesh), [
           baseMaterial,
           new THREE.MeshPhongMaterial({ color: SELECTED_COLOR, shininess: 40, ...offset }),
+          new THREE.MeshPhongMaterial({ color: HOVER_COLOR, shininess: 40, ...offset }),
         ]);
         faces.userData.instance = key;
         group.add(faces);
         group.add(edgeLines(state.edgeBuffers.get(part.mesh)!, EDGE_COLOR));
         const highlight = new THREE.Group();
         group.add(highlight);
+        const hover = new THREE.Group();
+        group.add(hover);
         state.root.add(group);
-        inst = { key, path: part.path, meshKey: part.mesh, group, faces, baseMaterial, highlight };
+        inst = {
+          key,
+          path: part.path,
+          meshKey: part.mesh,
+          group,
+          faces,
+          baseMaterial,
+          highlight,
+          hover,
+          selectedFaces: new Set(),
+          hoverFaces: new Set(),
+        };
         state.instances.set(key, inst);
         added.push(inst);
       }
@@ -622,8 +851,8 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
         if (r.kind === 'edge') edgeSet.add(r.index);
         else faceSet.add(r.index);
       }
-      const groups = inst.faces.geometry.groups;
-      for (let g = 0; g < groups.length; ++g) groups[g].materialIndex = faceSet.has(mesh.faceSpans[g * 3]) ? 1 : 0;
+      inst.selectedFaces = faceSet;
+      applyInstanceMaterials(inst, mesh);
       disposeObject(inst.highlight);
       inst.highlight.clear();
       if (edgeSet.size > 0) {
@@ -635,6 +864,52 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
     // selectionKey and highlightKey stand for the arrays.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meshes, parts, selectionKey, highlightKey]);
+
+  // Box selection: the left button drags a rectangle, so it no longer orbits.
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    state.controls.mouseButtons.LEFT = boxSelect ? -1 : 0;
+    state.renderer.domElement.parentElement?.setAttribute('data-box-select', boxSelect ? '1' : '0');
+  }, [boxSelect]);
+
+  // Section plane: a renderer clipping plane (the slider needs no kernel call).
+  const clipKey = clip ? `${clip.normal.join(',')}|${clip.constant}` : '';
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    if (clip) {
+      state.clip = new THREE.Plane(new THREE.Vector3(...clip.normal), clip.constant);
+      state.renderer.localClippingEnabled = false;
+      state.renderer.clippingPlanes = [state.clip];
+    } else {
+      state.clip = null;
+      state.renderer.clippingPlanes = [];
+    }
+    state.renderer.domElement.parentElement?.setAttribute('data-clipped', clip ? 'true' : 'false');
+    state.render();
+    // clipKey stands for the plane.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipKey]);
+
+  // Section contours of the kernel.
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    disposeObject(state.section);
+    state.section.clear();
+    for (const line of sectionLines ?? []) {
+      if (line.length < 6) continue;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(line), 3));
+      const obj = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: SECTION_COLOR, depthTest: false }));
+      obj.renderOrder = 10;
+      obj.name = 'assembly-section';
+      state.section.add(obj);
+    }
+    state.renderer.domElement.parentElement?.setAttribute('data-section-lines', String(sectionLines?.length ?? 0));
+    state.render();
+  }, [sectionLines]);
 
   // Measurement: lines and a label over the projection of its anchor.
   useEffect(() => {

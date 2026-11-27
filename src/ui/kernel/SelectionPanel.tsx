@@ -18,6 +18,8 @@ export interface SelectionPanelProps {
   modes: readonly ElementMode[];
   /** The element kind is dictated by an active operation slot: the mode buttons are disabled. */
   forcedMode?: ElementMode | null;
+  /** The element mode is kept by the page (assemblies: the pick mode radio buttons); no buttons, no hint. */
+  activeMode?: ElementMode;
   /** Number of selected elements and a kernel-computed total (area of faces, length of edges). */
   count: number;
   total?: { kind: 'area' | 'length'; value: number } | null;
@@ -35,18 +37,19 @@ export const SelectionPanel: React.FC<SelectionPanelProps> = ({
   onBoxSelect,
   modes,
   forcedMode = null,
+  activeMode,
   count,
   total = null,
   onClear,
   bodyLabel = 'body',
 }) => {
   const { t } = useI18n();
-  const mode = forcedMode ?? filter.mode;
+  const mode = forcedMode ?? activeMode ?? filter.mode;
   const label = (m: ElementMode) => t(m === 'body' && bodyLabel === 'component' ? 'sel.mode.component' : (`sel.mode.${m}` as 'sel.mode.face'));
   return (
     <section data-testid="selection-panel" data-mode={mode}>
       <h2>{t('sel.title')}</h2>
-      <div role="group" className="pm-field">
+      <div role="group" className="pm-field" hidden={modes.length === 0}>
         {modes.map((m) => (
           <button
             key={m}
