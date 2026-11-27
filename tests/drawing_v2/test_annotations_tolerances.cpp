@@ -62,7 +62,7 @@ TEST(Iso286, IntervalBoundariesAreInclusive) {
     EXPECT_DOUBLE_EQ(standardToleranceUm(3, 6).value(), 6);
     EXPECT_DOUBLE_EQ(standardToleranceUm(500, 18).value(), 9700);
     EXPECT_FALSE(standardToleranceUm(0, 7).ok());
-    EXPECT_FALSE(standardToleranceUm(500.1, 7).ok());
+    EXPECT_FALSE(standardToleranceUm(3150.1, 7).ok());
     EXPECT_FALSE(standardToleranceUm(1, 14).ok());  // IT14..18 не для размеров до 1 мм
 }
 
@@ -91,12 +91,12 @@ TEST(Iso286, ParseAndErrors) {
     EXPECT_FALSE(c.value().hole());
     EXPECT_EQ(c.value().label(), "js6");
     EXPECT_TRUE(parseToleranceClass("H7").value().hole());
-    EXPECT_FALSE(parseToleranceClass("x7").ok());  // не поддерживается
+    EXPECT_FALSE(parseToleranceClass("cd7").ok());  // CD не поддерживается
     EXPECT_FALSE(parseToleranceClass("H").ok());
     EXPECT_FALSE(parseToleranceClass("H19").ok());
     EXPECT_FALSE(parseToleranceClass("Js6").ok());
     EXPECT_FALSE(limitDeviations(0.5, "a11").ok());
-    EXPECT_FALSE(limitDeviations(600, "H7").ok());
+    EXPECT_FALSE(limitDeviations(3200, "H7").ok());
 }
 
 TEST(Iso286, Formatting) {
@@ -286,25 +286,45 @@ TEST(Iso286Ext, FitsClearanceTransitionInterference) {
     EXPECT_DOUBLE_EQ(P7.lowerUm - h6.upperUm, a.value().minClearanceUm);
 }
 
-// Независимая сверка: формулы ISO 286-1 (табл. 2 и 4) против таблиц реализации.
+// Независимая сверка: формулы ISO 286-1 (табл. 2 и 4) против таблиц реализации. Допуски — по
+// формулам стандарта без округления; таблицы округлены по правилам стандарта, поэтому границы:
+//  - до 500 мм, IT5…IT18, интервалы свыше 10 мм: ≤ 6 %; IT6…IT18 свыше 6 мм: ≤ 5 %;
+//  - до 500 мм, интервалы до 10 мм и IT01…IT4: формулы малых размеров стандарта приближённые,
+//    расхождения до 28 % (значения — в docs/STANDARDS_VERIFICATION.md);
+//  - свыше 500 мм: IT6…IT18 ≤ 2 %, IT1…IT5 ≤ 7 %.
 TEST(Iso286Ext, ItTableMatchesFormula) {
     const double mains[] = {3,   6,   10,  18,  30,   50,   80,   120,  180,  250,  315,
                             400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150};
+    int checked = 0;
     for (double hi : mains) {
         for (int g = (hi <= 500 ? -1 : 1); g <= 18; ++g) {
             if (g >= 14 && hi <= 1.0) continue;
             const double table = standardToleranceUm(hi, g).value();
             const double formula = standardToleranceFormulaUm(hi, g).value();
+            const double rel = std::abs(table - formula) / formula;
             if (dumpEnabled()) {
-                std::printf("IT D<=%g g=%d table=%g formula=%.3f rel=%.4f abs=%.3f\n", hi, g, table, formula,
-                            std::abs(table - formula) / formula, std::abs(table - formula));
+                std::printf("IT D<=%g g=%d table=%g formula=%.3f rel=%.4f abs=%.3f\n", hi, g, table, formula, rel,
+                            std::abs(table - formula));
             }
+            double bound = 1.0;
+            if (hi > 500) bound = g >= 6 ? 0.02 : 0.07;
+            else if (hi > 10 && g >= 5) bound = 0.06;
+            else if (hi > 6 && g >= 6) bound = 0.05;
+            else if (g >= 1 && hi > 3) bound = 0.22;  // IT1…IT4, малые размеры
+            else bound = 0.3;
+            EXPECT_LE(rel, bound) << "IT" << g << " up to " << hi;
+            ++checked;
         }
     }
+    EXPECT_GT(checked, 300);
 }
 
+// Основные отклонения: формулы табл. 4 против таблиц для интервалов свыше 18 мм (для меньших
+// размеров формулы t…zc, m, n и др. стандарт сводит к таблицам — расхождения в
+// STANDARDS_VERIFICATION.md). Для s свыше 500 мм, r, t, u свыше 500 мм таблица — сама расчёт.
 TEST(Iso286Ext, FundamentalDeviationsMatchFormulas) {
     const char* letters[] = {"a", "b", "c", "d", "e", "f", "g", "m", "n", "p", "r", "s", "t", "u", "v", "x", "y", "z", "za", "zb", "zc"};
+    int checked = 0;
     for (const char* l : letters) {
         for (std::size_t fi = 0; fi < 41; ++fi) {
             const double hi = kFineBounds[fi];
@@ -315,10 +335,15 @@ TEST(Iso286Ext, FundamentalDeviationsMatchFormulas) {
             auto dev = limitDeviations(mid, std::string(l) + "9");
             if (!dev) continue;
             const double table = dev.value().fundamentalUm;
+            const double rel = std::abs(table - f.value()) / std::abs(f.value());
             if (dumpEnabled()) {
                 std::printf("FD %s %g-%g table=%g formula=%.2f abs=%.2f rel=%.4f\n", l, lo, hi, table, f.value(),
-                            std::abs(table - f.value()), std::abs(table - f.value()) / std::abs(f.value()));
+                            std::abs(table - f.value()), rel);
             }
+            if (hi <= 18) continue;
+            EXPECT_LE(rel, std::string(l) == "c" ? 0.16 : 0.1) << l << " " << lo << "-" << hi;
+            ++checked;
         }
     }
+    EXPECT_GT(checked, 300);
 }
