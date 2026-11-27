@@ -363,7 +363,10 @@ SketchEntityId SketchBuilder::projected(SketchGeometryType type, int referenceIn
             g.start = point("1", "0");
             g.end = point("0", "1");
             break;
-        case SketchGeometryType::Ellipse: g.center = point("0", "0"), g.focus = point("1", "0"); break;
+        case SketchGeometryType::Ellipse:
+            g.center = point("0", "0");
+            g.focus = point("1", "0");
+            break;
         case SketchGeometryType::EllipticalArc:
             g.center = point("0", "0");
             g.focus = point("1", "0");
