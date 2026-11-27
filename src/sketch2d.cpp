@@ -161,7 +161,7 @@ const char* to_string(ConstraintKind kind) noexcept {
         case ConstraintKind::Concentric: return "concentric";
         case ConstraintKind::Fix: return "fix";
         case ConstraintKind::Rotation: return "rotation";
-        case ConstraintKind::EqualDistance: return "equal-distance";
+        case ConstraintKind::OffsetDistance: return "offset-distance";
     }
     return "unknown";
 }
@@ -177,7 +177,8 @@ bool is_dimension(ConstraintKind kind) noexcept {
         case ConstraintKind::Angle:
         case ConstraintKind::ArcLength:
         case ConstraintKind::MajorRadius:
-        case ConstraintKind::MinorRadius: return true;
+        case ConstraintKind::MinorRadius:
+        case ConstraintKind::OffsetDistance: return true;
         default: return false;
     }
 }
@@ -657,25 +658,27 @@ Id Sketch::constrain_rotation(Id p, Id q, Id center, double deg) {
     return add_constraint(make(ConstraintKind::Rotation, point_geo(p), point_geo(q), point_geo(center), deg));
 }
 
-Id Sketch::constrain_equal_distance(Id p, Geo curve, Id master) {
-    require(point_geo(p), kPointOnly, "равное расстояние");
-    require(curve, {GeoKind::Line, GeoKind::Circle, GeoKind::Arc}, "равное расстояние");
-    const ConstraintInfo& m = constraint(master);
-    if (m.removed) throw std::invalid_argument("равное расстояние: размер " + std::to_string(master) + " удалён");
-    if (m.kind != ConstraintKind::Distance && m.kind != ConstraintKind::PointCurveDistance &&
-        m.kind != ConstraintKind::EqualDistance) {
-        throw std::invalid_argument("равное расстояние: ограничение " + std::to_string(master) +
-                                    " не расстояние (Distance, PointCurveDistance, EqualDistance)");
+Id Sketch::constrain_offset_distance(Geo offset, Geo original, double d, Id master) {
+    require(offset, {GeoKind::Line, GeoKind::Circle, GeoKind::Arc}, "смещение");
+    require(original, {GeoKind::Line, GeoKind::Circle, GeoKind::Arc}, "смещение");
+    if ((offset.kind == GeoKind::Line) != (original.kind == GeoKind::Line)) {
+        throw std::invalid_argument("смещение: кривые разных видов " + geo_text(offset) + ", " + geo_text(original));
     }
-    ConstraintInfo i = make(ConstraintKind::EqualDistance, point_geo(p), curve);
+    if (master != 0) {
+        const ConstraintInfo& m = constraint(master);
+        if (m.removed || m.kind != ConstraintKind::OffsetDistance) {
+            throw std::invalid_argument("смещение: ограничение " + std::to_string(master) + " не размер-смещение");
+        }
+    }
+    ConstraintInfo i = make(ConstraintKind::OffsetDistance, offset, original, {}, d);
     i.master = master;
     return add_constraint(i);
 }
 
-double Sketch::equal_distance_value(Id c) const {
+double Sketch::offset_distance_value(Id c) const {
     const ConstraintInfo* i = &constraint(c);
-    for (std::size_t guard = 0; i->kind == ConstraintKind::EqualDistance; ++guard) {
-        if (guard > constraints_.size()) throw std::logic_error("равное расстояние: цикл ссылок на размеры");
+    for (std::size_t guard = 0; i->master != 0; ++guard) {
+        if (guard > constraints_.size()) throw std::logic_error("смещение: цикл ссылок на размеры");
         c = i->master;
         i = &constraint(c);
     }
@@ -725,6 +728,9 @@ void Sketch::set_driving(Id c, bool driving) {
     constraint(c);
     if (!is_dimension(constraints_[c - 1].kind)) {
         throw std::invalid_argument("справочным может быть только размер");
+    }
+    if (!driving && constraints_[c - 1].master != 0) {
+        throw std::invalid_argument("смещение со ссылкой на другой размер не может быть справочным");
     }
     constraints_[c - 1].driving = driving;
 }
@@ -862,6 +868,12 @@ double Sketch::measure(Id id) const {
         case ConstraintKind::ArcLength: return crec(c.a).radius * arc_sweep(c.a.id);
         case ConstraintKind::MajorRadius: return ellipse_major_radius(c.a);
         case ConstraintKind::MinorRadius: return crec(c.a).radius;
+        case ConstraintKind::OffsetDistance: {
+            const CurveRec& a = crec(c.a);
+            const CurveRec& b = crec(c.b);
+            if (b.kind == GeoKind::Line) return line_distance(prec(a.p0).pos, prec(b.p0).pos, prec(b.p1).pos);
+            return std::abs(a.radius - b.radius);
+        }
         default: throw std::invalid_argument(std::string("ограничение ") + to_string(c.kind) + " не размер");
     }
 }
@@ -879,6 +891,7 @@ double Sketch::residual(Id id) const {
     if (is_dimension(c.kind)) {
         if (!c.driving) return 0.0;
         if (c.kind == ConstraintKind::Angle) return std::abs(wrap_pi((measure(id) - c.value) * kDeg));
+        if (c.kind == ConstraintKind::OffsetDistance) return std::abs(measure(id) - offset_distance_value(id));
         if (c.kind == ConstraintKind::PointCurveDistance || c.kind == ConstraintKind::Distance) {
             return std::abs(measure(id) - std::abs(c.value));
         }
@@ -939,12 +952,6 @@ double Sketch::residual(Id id) const {
             return std::abs(dist(p, f) + dist(p, f2) - 2 * ellipse_major_radius(c.b));
         }
         case ConstraintKind::Concentric: return dist(center(c.a), center(c.b));
-        case ConstraintKind::EqualDistance: {
-            const CurveRec& r = crec(c.b);
-            const double d = r.kind == GeoKind::Line ? line_distance(P(c.a), prec(r.p0).pos, prec(r.p1).pos)
-                                                     : std::abs(dist(P(c.a), prec(r.p0).pos) - r.radius);
-            return std::abs(d - equal_distance_value(id));
-        }
         case ConstraintKind::Rotation: {
             const Point2 p = P(c.a), q = P(c.b), o = P(c.c);
             const double co = std::cos(c.value * kDeg), si = std::sin(c.value * kDeg);
@@ -1236,9 +1243,23 @@ struct SolverModel {
             case ConstraintKind::DistanceY:
                 sys.addConstraintDifference(P(c.a).y, P(c.b).y, param(c.value, false), tag, true);
                 break;
-            case ConstraintKind::PointCurveDistance:
-            case ConstraintKind::EqualDistance: {
-                const double d = c.kind == ConstraintKind::EqualDistance ? s.equal_distance_value(tag) : std::abs(c.value);
+            case ConstraintKind::OffsetDistance: {
+                const double d = s.offset_distance_value(tag);
+                if (c.b.kind == GeoKind::Line) {
+                    GCS::Point& p = gl[c.a.id].p1;
+                    const GCS::Line& l = gl[c.b.id];
+                    const double x0 = *p.x, y0 = *p.y;
+                    const double area = -x0 * (*l.p2.y - *l.p1.y) + y0 * (*l.p2.x - *l.p1.x) + *l.p1.x * *l.p2.y - *l.p2.x * *l.p1.y;
+                    sys.addConstraintP2LDistance(p, gl[c.b.id], param(d, false), area >= 0, tag, true);
+                } else {
+                    GCS::Circle& a = circular(c.a);
+                    GCS::Circle& b = circular(c.b);
+                    sys.addConstraintDifference(b.rad, a.rad, param(*a.rad >= *b.rad ? d : -d, false), tag, true);
+                }
+                break;
+            }
+            case ConstraintKind::PointCurveDistance: {
+                const double d = std::abs(c.value);
                 if (c.b.kind == GeoKind::Line) {
                     const GCS::Line& l = gl[c.b.id];
                     const double x0 = *P(c.a).x, y0 = *P(c.a).y;

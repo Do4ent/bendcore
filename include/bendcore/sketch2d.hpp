@@ -68,7 +68,9 @@ enum class ConstraintKind {
     Concentric,         // центры кривых a, b совпадают
     Fix,                // точка a закреплена в (value, value2)
     Rotation,           // точка b = точка a, повёрнутая вокруг точки c на value градусов
-    EqualDistance,      // точка a на расстоянии от отрезка/окружности/дуги b, равном размеру master
+    OffsetDistance,     // кривая a смещена от кривой b на value (отрезки — расстояние от начала a
+                        // до прямой b; окружности/дуги — разность радиусов); с master — на значение
+                        // размера master (эквидистанта: один размер на цепочку)
 };
 
 const char* to_string(ConstraintKind kind) noexcept;
@@ -82,7 +84,7 @@ struct ConstraintInfo {
     double value2 = 0.0;   // Fix: y
     bool driving = true;   // false — справочный размер: в решении не участвует, измеряется
     bool removed = false;
-    Id master = 0;         // EqualDistance: размер, значение которого используется
+    Id master = 0;         // OffsetDistance: размер, значение которого используется (0 — свой)
 };
 
 enum class Definition { Fully, Under, Over };
@@ -207,12 +209,14 @@ public:
     Id constrain_point_on(Id p, Geo curve);
     Id constrain_symmetric_point(Id p1, Id p2, Id center);
     Id constrain_rotation(Id p, Id q, Id center, double deg);
-    // Расстояние от точки p до кривой (как PointCurveDistance) равно значению размера master
-    // (Distance, PointCurveDistance или другого EqualDistance; справочный — измеренное
-    // значение). Удаление master удаляет и это ограничение. Эквидистанта: один размер на цепочку.
-    Id constrain_equal_distance(Id p, Geo curve, Id master);
-    // Значение расстояния, которое использует EqualDistance (по цепочке master).
-    double equal_distance_value(Id c) const;
+    // Смещение кривой offset от кривой original того же вида: отрезки (расстояние от начала
+    // offset до прямой original; параллельность — отдельное ограничение), окружности и дуги
+    // (|r_offset − r_original|; концентричность — отдельно). Сторона — по текущему положению.
+    // master > 0 — значение берётся у размера-смещения master (справочного — измеренное);
+    // удаление master удаляет и это ограничение. Такое ограничение не может быть справочным.
+    Id constrain_offset_distance(Geo offset, Geo original, double d, Id master = 0);
+    // Значение смещения, которое использует OffsetDistance (по цепочке master).
+    double offset_distance_value(Id c) const;
 
     // ---- размеры
     Id constrain_distance_x(Id a, Id b, double d);

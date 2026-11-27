@@ -20,6 +20,19 @@ struct SketchEditResult {
     std::vector<SketchEntityId> removed;      // entities removed
     std::vector<sketch2d::Id> points;         // new sketch points
     std::vector<sketch2d::Id> constraints;    // new constraints
+    sketch2d::Id dimension = 0;               // offset: the distance dimension of the offset
+};
+
+enum class OffsetCorners {
+    Extend,  // convex corners: the offset curves are extended to their intersection
+    Round,   // convex corners: an arc of radius |distance| around the original corner
+};
+
+struct OffsetOptions {
+    double distance = 0.0;   // > 0: left of the chain direction, < 0: right
+    bool bothSides = false;  // also the offset at -distance (same dimension)
+    OffsetCorners corners = OffsetCorners::Extend;
+    bool constrain = true;
 };
 
 // Removes the piece of a line, arc or circle that contains `pick`, bounded by the nearest
@@ -33,12 +46,21 @@ Result<SketchEditResult> trimEntity(BoundSketch& sketch, SketchEntityId entity, 
 // live entity; the new end point gets a point-on constraint with that entity.
 Result<SketchEditResult> extendEntity(BoundSketch& sketch, SketchEntityId entity, const Point2& pick);
 
-// Offsets a connected chain of lines and arcs (in chain order; closed when the last entity meets
-// the first) by `distance` to the left of the chain direction (negative: to the right). The
-// direction is that of the first entity towards the second. Corners are joined at the
-// intersection of the offset curves (tangent joints share the end point). With `constrain`:
-// lines get parallel + point-curve distance, arcs share the centre (concentric) and get the
-// point-curve distance; joints share points.
+// Offsets a connected chain (in chain order; closed when the last entity meets the first) of
+// lines, arcs, elliptical arcs and open splines, or one closed entity (circle, ellipse, closed
+// spline). The direction is that of the first entity towards the second. Lines and arcs offset
+// exactly (arc radius ± distance), the other curves are approximated by splines
+// (Geom2d_OffsetCurve -> Geom2dConvert_ApproxCurve, 1e-6 of the sketch size). Tangent joints
+// share the end point; concave corners are cut at the intersection of the offsets; convex corners
+// are extended to the intersection (Extend; lines and arcs only) or rounded by an arc around the
+// original corner (Round, and always at a convex corner next to a spline).
+// With `constrain`: lines get parallel, arcs and circles share the centre; every line, arc and
+// circle gets an OffsetDistance constraint, the first is the offset dimension (`dimension`), the
+// others take its value; joints are tangent where the source is (and at round corners); spline
+// poles keep their offsets from the source start pole (or ellipse centre). Constraints the solver
+// reports redundant are removed.
+Result<SketchEditResult> offsetChain(BoundSketch& sketch, const std::vector<SketchEntityId>& chain,
+                                     const OffsetOptions& options);
 Result<SketchEditResult> offsetChain(BoundSketch& sketch, const std::vector<SketchEntityId>& chain,
                                      double distance, bool constrain = true);
 

@@ -7,7 +7,9 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
+#include <functional>
 #include <numbers>
 
 using namespace bendcore::modeling;
@@ -350,4 +352,408 @@ TEST(SketchTools, LinearAndCircularPatterns) {
     EXPECT_EQ(r.dof, 0) << r.status;
     expectSatisfied(b);
     EXPECT_FALSE(circularPattern(b, {spoke}, o, 2, 360).ok());
+}
+
+// ---- Trim / extend of ellipses, elliptical arcs and splines ----------------------------------
+
+namespace {
+
+// Point of a solved sketch curve at a parameter fraction, through the profile curve kinds.
+double polylineLength(const std::function<Point2(double)>& f, int n = 20000) {
+    double len = 0;
+    Point2 prev = f(0);
+    for (int i = 1; i <= n; ++i) {
+        const Point2 q = f(static_cast<double>(i) / n);
+        len += std::hypot(q.x - prev.x, q.y - prev.y);
+        prev = q;
+    }
+    return len;
+}
+
+// Cubic clamped Bezier through sketch points (degree 3, knots 0, 1).
+Point2 bezier(const std::array<Point2, 4>& p, double t) {
+    const double u = 1 - t;
+    const double b0 = u * u * u, b1 = 3 * u * u * t, b2 = 3 * u * t * t, b3 = t * t * t;
+    return {b0 * p[0].x + b1 * p[1].x + b2 * p[2].x + b3 * p[3].x, b0 * p[0].y + b1 * p[1].y + b2 * p[2].y + b3 * p[3].y};
+}
+
+// De Boor evaluation of a clamped non-rational B-spline of the sketch at parameter u.
+Point2 splinePoint(const BoundSketch& b, SketchEntityId id, double u) {
+    const auto& d = b.sketch().bspline(b.entity(id).geo.id);
+    std::vector<double> flat;
+    for (std::size_t k = 0; k < d.knots.size(); ++k) {
+        for (int m = 0; m < d.multiplicities[k]; ++m) flat.push_back(d.knots[k]);
+    }
+    const int p = d.degree;
+    const int n = static_cast<int>(d.poles.size());
+    int span = p;
+    while (span < n - 1 && u >= flat[static_cast<std::size_t>(span + 1)]) ++span;
+    std::vector<Point2> dd;
+    for (int j = 0; j <= p; ++j) {
+        const auto q = b.sketch().point(d.poles[static_cast<std::size_t>(span - p + j)]);
+        dd.push_back({q.x, q.y});
+    }
+    for (int r = 1; r <= p; ++r) {
+        for (int j = p; j >= r; --j) {
+            const double lo = flat[static_cast<std::size_t>(j + span - p)];
+            const double hi = flat[static_cast<std::size_t>(j + 1 + span - r)];
+            const double a = hi > lo ? (u - lo) / (hi - lo) : 0;
+            dd[static_cast<std::size_t>(j)] = {(1 - a) * dd[static_cast<std::size_t>(j - 1)].x + a * dd[static_cast<std::size_t>(j)].x,
+                                               (1 - a) * dd[static_cast<std::size_t>(j - 1)].y + a * dd[static_cast<std::size_t>(j)].y};
+        }
+    }
+    return dd[static_cast<std::size_t>(p)];
+}
+
+std::pair<double, double> splineRange(const BoundSketch& b, SketchEntityId id) {
+    const auto& d = b.sketch().bspline(b.entity(id).geo.id);
+    return {d.knots.front(), d.knots.back()};
+}
+
+double splineLength(const BoundSketch& b, SketchEntityId id) {
+    const auto [u0, u1] = splineRange(b, id);
+    return polylineLength([&](double t) { return splinePoint(b, id, u0 + (u1 - u0) * t); });
+}
+
+// Distance from q to the Bezier curve (dense sampling plus local refinement).
+double distanceToBezier(const std::array<Point2, 4>& p, Point2 q) {
+    double best = 1e300, bt = 0;
+    for (int i = 0; i <= 4000; ++i) {
+        const double t = i / 4000.0;
+        const Point2 x = bezier(p, t);
+        const double d = std::hypot(x.x - q.x, x.y - q.y);
+        if (d < best) best = d, bt = t;
+    }
+    for (double h = 1.0 / 4000; h > 1e-14; h *= 0.5) {
+        for (double t : {bt - h, bt + h}) {
+            if (t < 0 || t > 1) continue;
+            const Point2 x = bezier(p, t);
+            const double d = std::hypot(x.x - q.x, x.y - q.y);
+            if (d < best) best = d, bt = t;
+        }
+    }
+    return best;
+}
+
+SketchEntityId addBezier(BoundSketch& b, const std::array<Point2, 4>& p, bool fixed = true) {
+    bendcore::sketch2d::BSplineData d;
+    for (const Point2& q : p) d.poles.push_back(fixed ? fixedPoint(b, q.x, q.y) : b.sketch().add_point(q.x, q.y));
+    d.degree = 3;
+    d.knots = {0, 1};
+    d.multiplicities = {4, 4};
+    return b.addBSpline(d);
+}
+
+}  // namespace
+
+TEST(SketchTools, TrimEllipseToArcAndSplitEllipticalArc) {
+    BoundSketch b;
+    auto& s = b.sketch();
+    // Ellipse a = 10 (along X), b = 5: focus at (sqrt(75), 0).
+    const Id c = fixedPoint(b, 0, 0), f = fixedPoint(b, std::sqrt(75.0), 0);
+    const auto el = b.addEllipse(c, f, 5);
+    s.constrain_minor_radius(b.entity(el).geo, 5);
+    b.addLine(fixedPoint(b, -20, 0), fixedPoint(b, 20, 0));
+    auto t = trimEntity(b, el, {0, 5});
+    ASSERT_TRUE(t.ok()) << t.error().message;
+    ASSERT_EQ(t.value().created.size(), 1u);
+    EXPECT_TRUE(b.entity(el).removed);
+    const auto& arc = b.entity(t.value().created[0]);
+    EXPECT_EQ(arc.kind, BoundSketch::EntityKind::EllipticalArc);
+    EXPECT_EQ(arc.center, c);
+    EXPECT_EQ(arc.focus, f);
+    expectPoint(b, arc.start, -10, 0);  // the lower half is kept: (-10, 0) -> (0, -5) -> (10, 0)
+    expectPoint(b, arc.end, 10, 0);
+    auto curve = b.curve(arc.id);
+    ASSERT_TRUE(curve.ok());
+    const auto& ea = std::get<EllipticalArc2d>(curve.value().geometry);
+    EXPECT_NEAR(ea.endParameter - ea.startParameter, kPi, 1e-9);
+    EXPECT_NEAR(std::fmod(ea.startParameter + 4 * kPi, 2 * kPi), kPi, 1e-9);
+    const auto rep = b.solve();
+    EXPECT_EQ(rep.dof, 0) << rep.status;  // minor radius moved to the arc, ends on the line
+    EXPECT_TRUE(rep.redundant.empty());
+    expectSatisfied(b);
+
+    // Split the half ellipse by two verticals x = -6 and x = 6: the middle piece goes.
+    b.addLine(fixedPoint(b, -6, -10), fixedPoint(b, -6, 10));
+    b.addLine(fixedPoint(b, 6, -10), fixedPoint(b, 6, 10));
+    auto split = trimEntity(b, arc.id, {0, -5});
+    ASSERT_TRUE(split.ok()) << split.error().message;
+    ASSERT_EQ(split.value().created.size(), 1u);
+    const auto& left = b.entity(arc.id);
+    const auto& right = b.entity(split.value().created[0]);
+    expectPoint(b, left.start, -10, 0);
+    expectPoint(b, left.end, -6, -4);    // x = -6 on the ellipse: y = -5 * sqrt(1 - 0.36)
+    expectPoint(b, right.start, 6, -4);
+    expectPoint(b, right.end, 10, 0);
+    EXPECT_EQ(right.center, c);
+    EXPECT_EQ(right.focus, f);
+    const auto rep2 = b.solve();
+    EXPECT_TRUE(rep2.redundant.empty()) << rep2.status;  // equal minor radii only (shared centre and focus)
+    EXPECT_EQ(rep2.dof, 0) << rep2.status;
+    expectSatisfied(b);
+    // The minor radius dimension (moved from the ellipse to the arc) drives both pieces.
+    Id minor = 0;
+    for (Id k = 1; k <= static_cast<Id>(s.constraint_count()); ++k) {
+        if (!s.constraint(k).removed && s.constraint(k).kind == bendcore::sketch2d::ConstraintKind::MinorRadius) minor = k;
+    }
+    ASSERT_NE(minor, 0);
+    s.set_constraint_value(minor, 4);
+    ASSERT_TRUE(b.solve().converged);
+    EXPECT_NEAR(s.ellipse_arc(right.geo.id).minor_radius, 4, 1e-9);
+}
+
+TEST(SketchTools, ExtendEllipticalArcToLine) {
+    BoundSketch b;
+    const Id c = fixedPoint(b, 0, 0), f = fixedPoint(b, std::sqrt(75.0), 0);
+    const Id p0 = fixedPoint(b, 10, 0), p1 = b.sketch().add_point(0, 5);
+    const auto arc = b.addEllipticalArc(c, f, 5, p0, p1, true);
+    b.sketch().constrain_minor_radius(b.entity(arc).geo, 5);
+    b.addLine(fixedPoint(b, -6, -10), fixedPoint(b, -6, 10));
+    auto e = extendEntity(b, arc, {0, 5});
+    ASSERT_TRUE(e.ok()) << e.error().message;
+    expectPoint(b, b.entity(arc).end, -6, 4);  // cos t = -0.6, sin t = 0.8
+    const auto rep = b.solve();
+    EXPECT_EQ(rep.dof, 0) << rep.status;
+    expectPoint(b, b.entity(arc).end, -6, 4);
+    // Backwards from the start the ellipse meets the line again at (-6, -4).
+    auto back = extendEntity(b, arc, {10, 0});
+    ASSERT_TRUE(back.ok()) << back.error().message;
+    expectPoint(b, b.entity(arc).start, -6, -4);
+}
+
+TEST(SketchTools, TrimSplineAtIntersectionsKeepsTheCurve) {
+    BoundSketch b;
+    // Point-symmetric about (15, 0): crosses y = 0 at x = 15 for t = 1/2.
+    const std::array<Point2, 4> poles{Point2{0, 0}, Point2{10, 20}, Point2{20, -20}, Point2{30, 0}};
+    const auto sp = addBezier(b, poles);
+    const Id first = b.sketch().bspline(b.entity(sp).geo.id).poles.front();
+    const double fullLength = splineLength(b, sp);
+    b.addLine(fixedPoint(b, 15, -10), fixedPoint(b, 15, 10));
+    auto t = trimEntity(b, sp, bezier(poles, 0.8));
+    ASSERT_TRUE(t.ok()) << t.error().message;
+    EXPECT_EQ(t.value().modified, (std::vector<SketchEntityId>{sp}));
+    const auto& d = b.sketch().bspline(b.entity(sp).geo.id);
+    EXPECT_EQ(d.poles.front(), first);  // the kept end keeps its point
+    expectPoint(b, d.poles.back(), 15, 0, 1e-9);
+    EXPECT_NEAR(splineLength(b, sp), fullLength / 2, 1e-6);
+    // The kept piece is the same curve: every point lies on the original.
+    const auto [u0, u1] = splineRange(b, sp);
+    for (int i = 0; i <= 10; ++i) EXPECT_LT(distanceToBezier(poles, splinePoint(b, sp, u0 + (u1 - u0) * i / 10.0)), 1e-9);
+    // Inner poles keep their offsets from the kept end; the cut end slides along the cutter.
+    EXPECT_EQ(b.solve().dof, 1);
+    expectSatisfied(b);
+
+    // Split: two verticals at x = 5 and x = 25 remove the middle piece of a second spline.
+    BoundSketch b2;
+    const auto sp2 = addBezier(b2, poles);
+    b2.addLine(fixedPoint(b2, 5, -30), fixedPoint(b2, 5, 30));
+    b2.addLine(fixedPoint(b2, 25, -30), fixedPoint(b2, 25, 30));
+    auto split = trimEntity(b2, sp2, {15, 0});
+    ASSERT_TRUE(split.ok()) << split.error().message;
+    ASSERT_EQ(split.value().created.size(), 1u);
+    const auto& d1 = b2.sketch().bspline(b2.entity(sp2).geo.id);
+    const auto& d2 = b2.sketch().bspline(b2.entity(split.value().created[0]).geo.id);
+    EXPECT_NEAR(b2.sketch().point(d1.poles.back()).x, 5, 1e-9);
+    EXPECT_NEAR(b2.sketch().point(d2.poles.front()).x, 25, 1e-9);
+    EXPECT_LT(distanceToBezier(poles, {b2.sketch().point(d1.poles.back()).x, b2.sketch().point(d1.poles.back()).y}), 1e-9);
+    // Symmetric pieces: equal lengths.
+    EXPECT_NEAR(splineLength(b2, sp2), splineLength(b2, split.value().created[0]), 1e-6);
+    EXPECT_EQ(b2.solve().dof, 2);
+    expectSatisfied(b2);
+}
+
+TEST(SketchTools, ExtendSplineToLine) {
+    BoundSketch b;
+    const std::array<Point2, 4> poles{Point2{0, 0}, Point2{5, 5}, Point2{10, 5}, Point2{15, 0}};
+    const auto sp = addBezier(b, poles, false);
+    const Id first = b.sketch().bspline(b.entity(sp).geo.id).poles.front();
+    b.sketch().fix_point(first);
+    b.addLine(fixedPoint(b, 25, -40), fixedPoint(b, 25, 40));
+    auto e = extendEntity(b, sp, {15, 0});
+    ASSERT_TRUE(e.ok()) << e.error().message;
+    const auto& d = b.sketch().bspline(b.entity(sp).geo.id);
+    EXPECT_EQ(d.poles.front(), first);
+    EXPECT_NEAR(b.sketch().point(d.poles.back()).x, 25, 1e-9);  // ends on the line (point-on)
+    // The original piece of the curve is kept: its points lie on the extended spline.
+    const auto [u0, u1] = splineRange(b, sp);
+    for (int i = 0; i <= 8; ++i) {
+        const Point2 q = bezier(poles, i / 8.0);
+        double best = 1e300;
+        for (int k = 0; k <= 20000; ++k) {
+            const Point2 x = splinePoint(b, sp, u0 + (u1 - u0) * k / 20000.0);
+            best = std::min(best, std::hypot(x.x - q.x, x.y - q.y));
+        }
+        EXPECT_LT(best, 2e-3) << "t = " << i / 8.0;
+    }
+    expectSatisfied(b);
+}
+
+// ---- Offset ------------------------------------------------------------------------------------
+
+namespace {
+
+double entityLength(const BoundSketch& b, SketchEntityId id) {
+    const auto& e = b.entity(id);
+    const auto& s = b.sketch();
+    switch (e.kind) {
+        case BoundSketch::EntityKind::Line: {
+            const auto p = s.point(e.start), q = s.point(e.end);
+            return std::hypot(q.x - p.x, q.y - p.y);
+        }
+        case BoundSketch::EntityKind::Arc: return s.arc(e.arc).radius * s.arc_sweep(e.arc);
+        case BoundSketch::EntityKind::Circle: return 2 * kPi * s.circle(e.circle).radius;
+        default: return -1;
+    }
+}
+
+double outerLoopArea(const BoundSketch& b) {
+    auto curves = b.curves();
+    if (!curves.ok()) return -1;
+    auto profile = SketchProfile::build(xy(), curves.value());
+    EXPECT_TRUE(profile.ok()) << (profile.ok() ? "" : profile.error().message);
+    if (!profile.ok()) return -1;
+    double area = 0;
+    for (const auto& l : profile.value().loops()) area = std::max(area, l.area);
+    return area;
+}
+
+int offsetDimensions(const BoundSketch& b) {
+    int n = 0;
+    for (Id c = 1; c <= static_cast<Id>(b.sketch().constraint_count()); ++c) {
+        const auto& i = b.sketch().constraint(c);
+        if (!i.removed && i.kind == bendcore::sketch2d::ConstraintKind::OffsetDistance && i.master == 0) ++n;
+    }
+    return n;
+}
+
+}  // namespace
+
+TEST(SketchTools, OffsetCircleLengthAndAreaFollowTheDimension) {
+    BoundSketch b;
+    auto& s = b.sketch();
+    const auto circle = b.addCircle(fixedPoint(b, 3, 4), 10);
+    const Id radius = s.constrain_radius(b.entity(circle).circle, 10);
+    OffsetOptions o;
+    o.distance = -3;  // a circle runs counter-clockwise: the right side is outside
+    auto r = offsetChain(b, {circle}, o);
+    ASSERT_TRUE(r.ok()) << r.error().message;
+    ASSERT_EQ(r.value().created.size(), 1u);
+    const auto oc = r.value().created[0];
+    EXPECT_EQ(b.entity(oc).center, b.entity(circle).center);
+    EXPECT_NEAR(entityLength(b, oc), 2 * kPi * 13, 1e-9);
+    EXPECT_NEAR(outerLoopArea(b), kPi * 169, 1e-6);
+    ASSERT_NE(r.value().dimension, 0);
+    auto rep = b.solve();
+    EXPECT_EQ(rep.dof, 0) << rep.status;
+    // Dimension 3 -> 5 and radius 10 -> 12: offset radius 17.
+    s.set_constraint_value(r.value().dimension, 5);
+    s.set_constraint_value(radius, 12);
+    ASSERT_TRUE(b.solve().converged);
+    EXPECT_NEAR(entityLength(b, oc), 2 * kPi * 17, 1e-8);
+    EXPECT_NEAR(outerLoopArea(b), kPi * 289, 1e-6);
+    // Both sides: radii 12 ± 2 from one dimension.
+    BoundSketch b2;
+    const auto c2 = b2.addCircle(fixedPoint(b2, 0, 0), 12);
+    b2.sketch().constrain_radius(b2.entity(c2).circle, 12);
+    OffsetOptions both;
+    both.distance = 2;
+    both.bothSides = true;
+    auto r2 = offsetChain(b2, {c2}, both);
+    ASSERT_TRUE(r2.ok()) << r2.error().message;
+    ASSERT_EQ(r2.value().created.size(), 2u);
+    EXPECT_NEAR(b2.sketch().circle_radius(b2.entity(r2.value().created[0]).circle), 10, 1e-12);
+    EXPECT_NEAR(b2.sketch().circle_radius(b2.entity(r2.value().created[1]).circle), 14, 1e-12);
+    EXPECT_EQ(offsetDimensions(b2), 1);
+    b2.sketch().set_constraint_value(r2.value().dimension, 4);
+    const auto rep2 = b2.solve();
+    EXPECT_EQ(rep2.dof, 0) << rep2.status;
+    EXPECT_NEAR(b2.sketch().circle_radius(b2.entity(r2.value().created[0]).circle), 8, 1e-9);
+    EXPECT_NEAR(b2.sketch().circle_radius(b2.entity(r2.value().created[1]).circle), 16, 1e-9);
+}
+
+TEST(SketchTools, OffsetRectangleWithRoundCornersAgainstFormulas) {
+    Rect r;
+    ASSERT_EQ(r.b.solve().status, "определено");
+    OffsetOptions o;
+    o.distance = -5;  // outward
+    o.corners = OffsetCorners::Round;
+    auto res = offsetChain(r.b, {r.bottom, r.right, r.top, r.left}, o);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    ASSERT_EQ(res.value().created.size(), 8u);  // 4 lines + 4 corner arcs
+    auto check = [&](double w, double h, double d) {
+        double length = 0;
+        for (SketchEntityId id : res.value().created) length += entityLength(r.b, id);
+        EXPECT_NEAR(length, 2 * (w + h) + 2 * kPi * d, 1e-7);
+        EXPECT_NEAR(outerLoopArea(r.b), w * h + 2 * d * (w + h) + kPi * d * d, 1e-6);
+    };
+    check(40, 20, 5);
+    const auto rep = r.b.solve();
+    EXPECT_EQ(rep.dof, 0) << rep.status;
+    EXPECT_TRUE(rep.redundant.empty());
+    EXPECT_EQ(offsetDimensions(r.b), 1);
+    expectSatisfied(r.b);
+    // Offset 5 -> 8 and width 40 -> 60: the offset follows.
+    r.b.sketch().set_constraint_value(res.value().dimension, 8);
+    r.b.sketch().set_constraint_value(r.width, 60);
+    ASSERT_TRUE(r.b.solve().converged);
+    check(60, 20, 8);
+    expectSatisfied(r.b);
+}
+
+TEST(SketchTools, OffsetBothSidesWithExtendedCorners) {
+    Rect r;
+    ASSERT_EQ(r.b.solve().status, "определено");
+    OffsetOptions o;
+    o.distance = 2;
+    o.bothSides = true;
+    auto res = offsetChain(r.b, {r.bottom, r.right, r.top, r.left}, o);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    ASSERT_EQ(res.value().created.size(), 8u);
+    const auto& inner = r.b.entity(res.value().created[0]);
+    const auto& outer = r.b.entity(res.value().created[4]);
+    expectPoint(r.b, inner.start, 2, 2);
+    expectPoint(r.b, inner.end, 38, 2);
+    expectPoint(r.b, outer.start, -2, -2);
+    expectPoint(r.b, outer.end, 42, -2);
+    const auto rep = r.b.solve();
+    EXPECT_EQ(rep.dof, 0) << rep.status;
+    EXPECT_TRUE(rep.redundant.empty());
+    EXPECT_EQ(offsetDimensions(r.b), 1);
+    r.b.sketch().set_constraint_value(res.value().dimension, 3);
+    ASSERT_TRUE(r.b.solve().converged);
+    expectPoint(r.b, inner.start, 3, 3, 1e-7);
+    expectPoint(r.b, outer.end, 43, -3, 1e-7);
+}
+
+TEST(SketchTools, OffsetChainWithArcAndSpline) {
+    BoundSketch b;
+    // Line (0,0)-(10,0), then a spline from (10,0) tangent to the line.
+    const Id p0 = fixedPoint(b, 0, 0), p1 = fixedPoint(b, 10, 0);
+    const auto line = b.addLine(p0, p1);
+    bendcore::sketch2d::BSplineData d;
+    d.poles = {p1, fixedPoint(b, 15, 0), fixedPoint(b, 20, 5), fixedPoint(b, 25, 10)};
+    d.degree = 3;
+    d.knots = {0, 1};
+    d.multiplicities = {4, 4};
+    const auto sp = b.addBSpline(d);
+    const std::array<Point2, 4> poles{Point2{10, 0}, Point2{15, 0}, Point2{20, 5}, Point2{25, 10}};
+    OffsetOptions o;
+    o.distance = 2;  // left: above the line
+    auto res = offsetChain(b, {line, sp}, o);
+    ASSERT_TRUE(res.ok()) << res.error().message;
+    ASSERT_EQ(res.value().created.size(), 2u);
+    const auto& ol = b.entity(res.value().created[0]);
+    expectPoint(b, ol.start, 0, 2);
+    expectPoint(b, ol.end, 10, 2);
+    const auto os = res.value().created[1];
+    EXPECT_EQ(b.sketch().bspline(b.entity(os).geo.id).poles.front(), ol.end);  // tangent joint shared
+    const auto [u0, u1] = splineRange(b, os);
+    for (int i = 0; i <= 20; ++i) {
+        EXPECT_NEAR(distanceToBezier(poles, splinePoint(b, os, u0 + (u1 - u0) * i / 20.0)), 2, 1e-5) << i;
+    }
+    const auto rep = b.solve();
+    EXPECT_TRUE(rep.converged);
+    EXPECT_TRUE(rep.redundant.empty()) << rep.status;
+    (void)line;
 }
