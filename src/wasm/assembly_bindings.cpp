@@ -1673,7 +1673,17 @@ val asmTessellate(std::uint32_t handle, val options) {
             if (def.shape.IsNull()) continue;
             const std::string key = meshKeyOf(def.shape);
             if (skip.count(key)) continue;
-            meshes.set(key, meshToJs(take(k::tessellate(k::Shape(def.shape), p))));
+            val meshJs = meshToJs(take(k::tessellate(k::Shape(def.shape), p)));
+            // Geometry types of the faces and edges (selection filters).
+            if (def.topology) {
+                val faceTypes = val::array();
+                for (const k::FaceInfo& f : def.topology->faces()) faceTypes.call<void>("push", std::string(k::toString(f.surface)));
+                val edgeTypes = val::array();
+                for (const k::EdgeInfo& e : def.topology->edges()) edgeTypes.call<void>("push", std::string(k::toString(e.curve)));
+                meshJs.set("faceTypes", faceTypes);
+                meshJs.set("edgeTypes", edgeTypes);
+            }
+            meshes.set(key, meshJs);
         }
         val out = val::object();
         out.set("meshes", meshes);
@@ -1783,6 +1793,36 @@ val asmMeasure(std::uint32_t handle, val spec) {
         auto r = wa::measureWithMeshes(spec, lookup, element, plain);
         if (!r) return failure(r.error());
         return success(r.value());
+    });
+}
+
+// Section of the whole assembly by the plane {origin, normal}: every placed part (its shape in the
+// world frame) is cut by the kernel (sectionByPlane); {area, polylines, parts}. `area` is the sum of
+// the part sections (overlapping parts are counted twice), `parts` the number of cut parts.
+val asmSection(std::uint32_t handle, val plane, double deflection) {
+    return withSession(handle, [&](Session& s) {
+        namespace wa = bendcore::wasm_analysis;
+        const a::AssemblyDocument& doc = s.active();
+        const auto placed = take(doc.placedParts());
+        double area = 0.0;
+        std::uint32_t cut = 0;
+        val lines = val::array();
+        for (const a::PlacedOccurrence& pl : placed) {
+            if (pl.shape.IsNull()) continue;
+            auto r = wa::sectionShape(k::Shape(pl.shape), plane, deflection);
+            if (!r) return failure(r.error());
+            const double a1 = r.value()["area"].as<double>();
+            const val polylines = r.value()["polylines"];
+            const unsigned n = polylines["length"].as<unsigned>();
+            if (n > 0) ++cut;
+            area += a1;
+            for (unsigned i = 0; i < n; ++i) lines.call<void>("push", polylines[i]);
+        }
+        val out = val::object();
+        out.set("area", area);
+        out.set("polylines", lines);
+        out.set("parts", cut);
+        return success(out);
     });
 }
 
@@ -2301,6 +2341,7 @@ EMSCRIPTEN_BINDINGS(bendcore_assembly) {
     emscripten::function("asmMeshGeometry", &asmMeshGeometry);
     emscripten::function("asmMeshSection", &asmMeshSection);
     emscripten::function("asmMeasure", &asmMeasure);
+    emscripten::function("asmSection", &asmSection);
     emscripten::function("asmInterference", &asmInterference);
     emscripten::function("asmBom", &asmBom);
     emscripten::function("asmConfigurations", &asmConfigurations);
