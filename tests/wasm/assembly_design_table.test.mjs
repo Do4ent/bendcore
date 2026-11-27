@@ -181,7 +181,7 @@ test('configurations: composition, BOM, mass, DOF, switching back and forth, und
 
     // File: the table, the active configuration and the base values are kept.
     const text = doc.save();
-    assert.match(text, /"version": 3/);
+    assert.match(text, /"version": 4/); // v4 since reference meshes (docs/assembly/ASSEMBLY_DOCUMENT.md, 10.5)
     const loaded = kernel.loadDocument(text);
     try {
       const t2 = loaded.document.configurationTable();

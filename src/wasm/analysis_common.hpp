@@ -8,6 +8,7 @@
 
 #include <bendcore/kernel/material.hpp>
 #include <bendcore/kernel/measure.hpp>
+#include <bendcore/kernel/reference_mesh.hpp>
 #include <bendcore/kernel/result.hpp>
 #include <bendcore/kernel/section.hpp>
 #include <bendcore/kernel/shape.hpp>
@@ -15,11 +16,14 @@
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
+#include <BRepBuilderAPI_MakeVertex.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Shape.hxx>
 
 #include <cmath>
+#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -163,6 +167,107 @@ inline k::Result<val> measureShapes(const std::string& type, const TopoDS_Shape&
     return invalid("an angle is measured between two faces or two edges");
 }
 
+// ------------------------------------------------------------------ reference meshes
+
+// Mesh of a module's reference mesh by the key the page passes (part: id string, assembly: id).
+using MeshLookup = std::function<k::Result<std::shared_ptr<const k::TriangleMesh>>(const val& key)>;
+
+inline bool isMeshElement(const val& ref) {
+    return given(ref) && isObj(ref) && ref["kind"].isString() && ref["kind"].as<std::string>() == "mesh";
+}
+
+// Element {kind: 'mesh', mesh, triangle, point: [x, y, z], snap?}: the point of the triangle
+// nearest to `point`, snapped to a corner within `snap` mm (docs/kernel/ANALYSIS.md, section 7).
+inline k::Result<k::MeshPoint> meshPointOf(const val& ref, const MeshLookup& lookup, const std::string& what) {
+    if (!lookup) return invalid(what + ": this document has no reference meshes");
+    auto mesh = lookup(ref["mesh"]);
+    if (!mesh) return mesh.error();
+    if (!ref["triangle"].isNumber()) return invalid(what + ".triangle must be a non-negative integer");
+    const double t = ref["triangle"].as<double>();
+    if (!(t >= 0) || t != std::floor(t)) return invalid(what + ".triangle must be a non-negative integer");
+    auto p = readVec3(ref["point"], what + ".point");
+    if (!p) return p.error();
+    double snap = 0.0;
+    if (given(ref["snap"])) {
+        if (!ref["snap"].isNumber() || !(ref["snap"].as<double>() >= 0)) return invalid(what + ".snap must be a non-negative number");
+        snap = ref["snap"].as<double>();
+    }
+    return k::pointOnTriangle(*mesh.value(), static_cast<std::size_t>(t), p.value(), snap);
+}
+
+inline val typedFloats(const std::vector<float>& v) {
+    return val::global("Float32Array").new_(emscripten::typed_memory_view(v.size(), v.data()));
+}
+
+// Mesh for display: {positions: Float32Array (xyz), indices: Uint32Array (3 per triangle)}.
+inline val meshToJs(const k::TriangleMesh& mesh) {
+    std::vector<float> pos;
+    pos.reserve(mesh.vertices.size() * 3);
+    for (const k::Point3& p : mesh.vertices)
+        for (double c : p) pos.push_back(static_cast<float>(c));
+    std::vector<std::uint32_t> idx;
+    idx.reserve(mesh.triangles.size() * 3);
+    for (const auto& t : mesh.triangles)
+        for (std::uint32_t i : t) idx.push_back(i);
+    val out = val::object();
+    out.set("positions", typedFloats(pos));
+    out.set("indices", val::global("Uint32Array").new_(emscripten::typed_memory_view(idx.size(), idx.data())));
+    return out;
+}
+
+// {vertices, triangles, min, max, size, area, volume (null unless closed), closed, openEdges}.
+inline val meshPropertiesToJs(const k::MeshProperties& p) {
+    val o = val::object();
+    o.set("vertices", static_cast<double>(p.vertices));
+    o.set("triangles", static_cast<double>(p.triangles));
+    o.set("min", vec3(p.min));
+    o.set("max", vec3(p.max));
+    o.set("size", vec3({p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2]}));
+    o.set("area", p.area);
+    o.set("volume", p.closed ? val(p.volume) : val::null());
+    o.set("closed", p.closed);
+    o.set("openEdges", static_cast<double>(p.openEdges));
+    return o;
+}
+
+inline val meshReportToJs(const k::MeshReadReport& r) {
+    val o = val::object();
+    o.set("encoding", r.encoding);
+    o.set("facetsRead", static_cast<double>(r.facetsRead));
+    o.set("degenerateDropped", static_cast<double>(r.degenerateDropped));
+    o.set("objects", static_cast<double>(r.objects));
+    return o;
+}
+
+// Section of a mesh by {origin, normal}: {area, length, polylines: [Float32Array], closed: [bool]}
+// (a closed contour repeats its first point at the end).
+inline k::Result<val> sectionMeshJs(const k::TriangleMesh& mesh, const val& plane) {
+    if (!given(plane) || !isObj(plane)) return invalid("plane must be {origin, normal}");
+    auto origin = readVec3(plane["origin"], "plane.origin");
+    if (!origin) return origin.error();
+    auto normal = readVec3(plane["normal"], "plane.normal");
+    if (!normal) return normal.error();
+    auto s = k::sectionMesh(mesh, k::SectionPlane{origin.value(), normal.value()});
+    if (!s) return s.error();
+    val out = val::object();
+    out.set("area", s.value().area);
+    out.set("length", s.value().length);
+    val lines = val::array();
+    val closed = val::array();
+    for (const k::MeshSectionContour& c : s.value().contours) {
+        std::vector<float> flat;
+        for (const k::Point3& p : c.points)
+            for (double x : p) flat.push_back(static_cast<float>(x));
+        if (c.closed && !c.points.empty())
+            for (double x : c.points.front()) flat.push_back(static_cast<float>(x));
+        lines.call<void>("push", typedFloats(flat));
+        closed.call<void>("push", c.closed);
+    }
+    out.set("polylines", lines);
+    out.set("closed", closed);
+    return out;
+}
+
 // spec {type, a: {kind, index}, b: {kind, index}} on the elements of one shape.
 inline k::Result<val> measureElements(const k::TopologyIndex& topo, const val& spec) {
     if (!given(spec) || !isObj(spec) || !spec["type"].isString()) return invalid("spec.type must be a string");
@@ -202,6 +307,47 @@ inline k::Result<val> sectionShape(const k::Shape& shape, const val& plane, doub
     }
     out.set("polylines", lines);
     return out;
+}
+
+// Measurement where one or both elements may be points on reference meshes ({kind: 'mesh', ...}):
+// only 'distance' (BRepExtrema between the point as a vertex and the other element, or between two
+// points). Specs without mesh elements go to `plain`. Result points: the two nearest points;
+// `vertexA`/`vertexB` tell whether a point snapped to a mesh vertex.
+using ElementLookup = std::function<k::Result<TopoDS_Shape>(const val& ref, const std::string& what)>;
+
+inline k::Result<val> measureWithMeshes(const val& spec, const MeshLookup& lookup, const ElementLookup& element,
+                                        const std::function<k::Result<val>()>& plain) {
+    if (!given(spec) || !isObj(spec) || !spec["type"].isString()) return invalid("spec.type must be a string");
+    const std::string type = spec["type"].as<std::string>();
+    const bool ma = isMeshElement(spec["a"]);
+    const bool mb = isMeshElement(spec["b"]);
+    if (!ma && !mb) return plain();
+    if (type != "distance") return invalid("only a distance is measured on a reference mesh");
+    struct Side {
+        TopoDS_Shape shape;
+        bool snapped = false;
+    };
+    auto sideOf = [&](const val& ref, bool mesh, const std::string& what) -> k::Result<Side> {
+        if (mesh) {
+            auto p = meshPointOf(ref, lookup, what);
+            if (!p) return p.error();
+            const k::Point3& q = p.value().point;
+            return Side{BRepBuilderAPI_MakeVertex(gp_Pnt(q[0], q[1], q[2])).Shape(), p.value().vertex.has_value()};
+        }
+        auto e = element(ref, what);
+        if (!e) return e.error();
+        return Side{e.value(), false};
+    };
+    auto a = sideOf(spec["a"], ma, "spec.a");
+    if (!a) return a.error();
+    auto b = sideOf(spec["b"], mb, "spec.b");
+    if (!b) return b.error();
+    auto r = k::minimumDistance(a.value().shape, b.value().shape);
+    if (!r) return r.error();
+    val o = measurement("distance", "mm", r.value().distance, {r.value().pointOnFirst, r.value().pointOnSecond});
+    o.set("vertexA", a.value().snapped);
+    o.set("vertexB", b.value().snapped);
+    return o;
 }
 
 }  // namespace bendcore::wasm_analysis

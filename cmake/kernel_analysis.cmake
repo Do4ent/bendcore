@@ -34,7 +34,8 @@ add_library(bendcore_kernel_analysis STATIC
   ${BENDCORE_KERNEL_ANALYSIS_ROOT}/src/kernel/analysis/mesh_export.cpp
   ${BENDCORE_KERNEL_ANALYSIS_ROOT}/src/kernel/analysis/zip_archive.cpp
   ${BENDCORE_KERNEL_ANALYSIS_ROOT}/src/kernel/analysis/measure.cpp
-  ${BENDCORE_KERNEL_ANALYSIS_ROOT}/src/kernel/analysis/section.cpp)
+  ${BENDCORE_KERNEL_ANALYSIS_ROOT}/src/kernel/analysis/section.cpp
+  ${BENDCORE_KERNEL_ANALYSIS_ROOT}/src/kernel/analysis/reference_mesh.cpp)
 target_compile_features(bendcore_kernel_analysis PUBLIC cxx_std_20)
 target_include_directories(bendcore_kernel_analysis PUBLIC "${BENDCORE_KERNEL_ANALYSIS_ROOT}/include")
 # nlohmann/json.hpp (MIT) for the material JSON.
@@ -48,7 +49,7 @@ endif()
 if(GTest_FOUND)
   # The 3MF test parses the model XML with expat (independent of the writer).
   find_package(EXPAT QUIET)
-  set(analysis_tests materials mass_properties measure section zip_archive)
+  set(analysis_tests materials mass_properties measure section zip_archive reference_mesh)
   if(EXPAT_FOUND)
     list(APPEND analysis_tests mesh_export)
   else()

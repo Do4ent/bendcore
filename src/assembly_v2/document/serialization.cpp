@@ -638,7 +638,7 @@ Result<std::string> AssemblyDocument::toJson(const SaveOptions& options) const {
         doc["name"] = name();
         doc["properties"] = propertiesJson(definitions_[0].properties);
         doc["color"] = colorJson(definitions_[0].color);
-        doc["next"] = {{"occurrence", nextOccurrence_}, {"mate", nextMate_}, {"pattern", nextPattern_}};
+        doc["next"] = {{"occurrence", nextOccurrence_}, {"mate", nextMate_}, {"pattern", nextPattern_}, {"referenceMesh", nextMesh_}};
 
         json defs = json::array();
         for (std::size_t i = 1; i < definitions_.size(); ++i) {
@@ -724,6 +724,22 @@ Result<std::string> AssemblyDocument::toJson(const SaveOptions& options) const {
         }
         doc["explodedViews"] = std::move(views);
 
+        if (!meshes_.empty()) {
+            json meshes = json::array();
+            for (const ReferenceMeshComponent& m : meshes_) {
+                meshes.push_back({{"id", m.id},
+                                  {"name", m.name},
+                                  {"fileName", m.fileName},
+                                  {"format", kernel::toString(m.format)},
+                                  {"unit", m.unit},
+                                  {"placement", placementJson(m.placement)},
+                                  {"visible", m.visible},
+                                  {"opacity", m.opacity},
+                                  {"data", base64Encode(std::vector<std::uint8_t>(m.data->begin(), m.data->end()))}});
+            }
+            doc["referenceMeshes"] = std::move(meshes);
+        }
+
         if (!configurations_.empty()) {
             const AssemblyConfigurationTable table = configurationTable();
             json cols = json::array();
@@ -786,6 +802,7 @@ public:
             readMates(j);
             readPatterns(j);
             readViews(j);
+            readMeshes(j);
             readConfigurations(j);
             finish();
             return out;
@@ -1181,6 +1198,33 @@ private:
             }
             doc_->views_.push_back(std::move(view));
         }
+    }
+
+    // Справочные сетки (v4): файл встроен, читается и проверяется заново.
+    void readMeshes(const json& j) {
+        const json next = j.contains("next") ? j.at("next") : json::object();
+        ReferenceMeshId maxId = 0;
+        if (j.contains("referenceMeshes")) {
+            for (const json& m : j.at("referenceMeshes")) {
+                const ReferenceMeshId id = uid(field(m, "id"), "reference mesh id");
+                if (doc_->findReferenceMesh(id)) bad("duplicate reference mesh id " + std::to_string(id));
+                const std::string format = text(m, "format", "stl");
+                const auto f = kernel::meshFileFormatFromString(format);
+                if (!f) bad("reference mesh " + std::to_string(id) + ": unknown format '" + format + "'");
+                const auto bytes = base64Decode(text(m, "data"));
+                doc_->nextMesh_ = id;
+                auto added = doc_->addReferenceMesh(text(m, "name"), text(m, "fileName"), *f,
+                                                    std::string(bytes.begin(), bytes.end()), text(m, "unit", "mm"),
+                                                    placementFrom(field(m, "placement"), version_));
+                if (!added) throw FormatError("reference mesh " + std::to_string(id) + ": " + added.error().message,
+                                              added.error().code);
+                const double opacity = m.contains("opacity") ? number(m, "opacity") : 0.5;
+                if (auto d = doc_->setReferenceMeshDisplay(id, m.contains("visible") ? flag(m, "visible") : true, opacity); !d)
+                    bad("reference mesh " + std::to_string(id) + ": " + d.error().message);
+                maxId = std::max(maxId, id);
+            }
+        }
+        doc_->nextMesh_ = std::max<ReferenceMeshId>(maxId + 1, next.contains("referenceMesh") ? uid(next.at("referenceMesh"), "next") : 1);
     }
 
     // Таблица исполнений (v3). Состояние вхождений и сопряжений в файле — активного

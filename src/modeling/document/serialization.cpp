@@ -540,7 +540,9 @@ json migrateV2(json doc) {
 Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
     try {
         // Without a configuration table the document is written as v3, readable by older versions.
-        json doc{{"format", kFormatName}, {"version", table_.empty() ? 3 : kFormatVersion}};
+        // ...and without reference meshes as v4, so that older versions refuse a file whose meshes
+        // they would drop.
+        json doc{{"format", kFormatName}, {"version", !meshes_.empty() ? 5 : !table_.empty() ? 4 : 3}};
         json vars = json::array();
         for (const auto& [name, expr] : variables_) vars.push_back(json{{"name", name}, {"expression", expr}});
         doc["variables"] = vars;
@@ -597,6 +599,22 @@ Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
                 rows.push_back(json{{"designation", r.designation}, {"name", r.name}, {"cells", r.cells}});
             }
             doc["configurations"] = json{{"columns", columns}, {"rows", rows}, {"active", table_.active}};
+        }
+        if (!meshes_.empty()) {
+            json meshes = json::array();
+            for (const MeshEntry& e : meshes_) {
+                meshes.push_back(json{{"id", e.id},
+                                      {"label", e.label},
+                                      {"fileName", e.fileName},
+                                      {"format", kernel::toString(e.format)},
+                                      {"unit", e.unit},
+                                      {"rotation", e.rotationDegrees},
+                                      {"translation", e.translation},
+                                      {"visible", e.visible},
+                                      {"opacity", e.opacity},
+                                      {"data", base64Encode(std::vector<std::uint8_t>(e.data->begin(), e.data->end()))}});
+            }
+            doc["referenceMeshes"] = meshes;
         }
         if (options.includeCache) doc["cache"] = cache;
         return doc.dump(1);
@@ -677,6 +695,28 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
             table.active = cj.value("active", std::string());
             auto st = part.setConfigurationTable(std::move(table));
             if (!st) return R::failure(ErrorCode::ParseError, "configurations: " + st.error().message);
+        }
+        if (doc.contains("referenceMeshes")) {
+            for (const auto& m : doc.at("referenceMeshes")) {
+                ReferenceMeshSpec spec;
+                spec.id = m.at("id").get<std::string>();
+                spec.label = m.value("label", std::string());
+                spec.fileName = m.value("fileName", std::string());
+                const std::string format = m.value("format", std::string("stl"));
+                const auto f = kernel::meshFileFormatFromString(format);
+                if (!f) return R::failure(ErrorCode::ParseError, "reference mesh '" + spec.id + "': unknown format '" + format + "'");
+                spec.format = *f;
+                spec.unit = m.value("unit", std::string("mm"));
+                spec.rotationDegrees = m.value("rotation", kernel::Point3{0, 0, 0});
+                spec.translation = m.value("translation", kernel::Point3{0, 0, 0});
+                spec.visible = m.value("visible", true);
+                spec.opacity = m.value("opacity", 0.5);
+                auto bytes = base64Decode(m.at("data").get<std::string>());
+                if (!bytes) return R::failure(ErrorCode::ParseError, "reference mesh '" + spec.id + "': invalid base64");
+                spec.data.assign(bytes->begin(), bytes->end());
+                auto id = part.addReferenceMesh(std::move(spec));
+                if (!id) return R::failure(id.error().code, "reference mesh: " + id.error().message);
+            }
         }
         if (doc.contains("cache")) {
             for (const auto& [id, entry] : doc.at("cache").items()) {

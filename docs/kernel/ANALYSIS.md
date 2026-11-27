@@ -207,8 +207,9 @@ auto s = sectionByPlane(shape, pl);                  // edges, wires, faces, are
 
 ```bash
 cmake --build build-occt --target test_kernel_materials test_kernel_mass_properties \
-  test_kernel_mesh_export test_kernel_zip_archive test_kernel_measure test_kernel_section
-ctest --test-dir build-occt -R 'kernel_(materials|mass_properties|mesh_export|zip_archive|measure|section)' --output-on-failure
+  test_kernel_mesh_export test_kernel_zip_archive test_kernel_measure test_kernel_section \
+  test_kernel_reference_mesh
+ctest --test-dir build-occt -R 'kernel_(materials|mass_properties|mesh_export|zip_archive|measure|section|reference_mesh)' --output-on-failure
 ```
 
 - `test_kernel_materials`: инварианты таблицы, опорные значения EN 1993-1-1/EN 1999-1-1,
@@ -228,6 +229,77 @@ ctest --test-dir build-occt -R 'kernel_(materials|mass_properties|mesh_export|zi
 - `test_kernel_measure`, `test_kernel_section`: расстояния, углы, длины, площади, радиусы,
   площади сечений (брус, наклонная плоскость, цилиндр вдоль и поперёк оси, кольцо полого
   цилиндра, круг сферы) и объёмы отсечённых частей против формул.
+
+## 7. Справочная сетка (`reference_mesh.hpp`)
+
+Файл STL (двоичный и ASCII) или 3MF, прочитанный как треугольная сетка для справки в детали и
+сборке. Сетка — не B-rep: в булевы операции, массы, BOM, пересечения и STEP не попадает.
+
+```cpp
+auto r = readReferenceMesh(bytes, MeshFileFormat::Stl);      // MeshReadLimits{128 МБ, 4 млн треуг.}
+TriangleMesh placed = placeMesh(r.value().mesh, {*meshUnitScale("in"), {0, 0, 90}, {100, 0, 0}}).value();
+MeshProperties p = meshProperties(placed);                   // габарит, площадь, объём, замкнутость
+MeshSection s = sectionMesh(placed, {{0, 0, 5}, {0, 0, 1}}).value();
+MeshPoint q = pointOnTriangle(placed, triangle, hit, snap).value();   // точка/вершина для измерения
+```
+
+**Чтение и проверка.** Формат STL — по правилу размера двоичного файла (`84 + 50·n`), иначе по
+слову `solid`; двоичный файл, начинающийся с `solid`, читается как двоичный. Ошибки (код —
+сообщение): пустой файл, файл больше `maxBytes`, больше `maxTriangles` треугольников (проверка
+по заголовку до выделения памяти) — `InvalidInput` с размером и пределом («the mesh file is
+312.5 MB, the limit is 128.0 MB»); обрезанный двоичный STL — `ParseError` «binary STL: the header
+declares 12 triangles (684 bytes), the file has 677 bytes»; ошибка ASCII — номер строки
+(`readStl`); NaN/∞ в координатах — `ParseError` с номером треугольника; нет треугольников
+ненулевой площади — `InvalidInput`. Нехватка памяти перехватывается и сообщается как превышение
+предела. Вершины свариваются по точному совпадению координат (`-0` = `+0`, хэш-таблица, O(n));
+треугольник площадью ≤ 1e-12·d² (d — диагональ габарита) или с двумя совпавшими вершинами
+отбрасывается и считается в `MeshReadReport::degenerateDropped`.
+
+**3MF.** `readZip` (stored; deflate — только при zlib, в WASM `Unsupported`), часть `*.model`
+(предпочтительно `3D/3dmodel.model`), разбор тегов без внешнего парсера: `<model unit>` (micron,
+millimeter, centimeter, inch, foot, meter → мм), `<object id>` с `<vertex>`/`<triangle>`, элементы
+`<build><item objectid transform>` (матрица 3×4 построчно, как в спецификации 3MF Core). Объекты
+из `<components>` — `Unsupported`; нет модели, нет элементов сборки, неверный индекс вершины —
+`ParseError`. Координаты 3MF сразу переводятся в мм.
+
+**Размещение.** `p' = T + Rz·Ry·Rx·(s·p)`, `s` — мм на единицу файла (`mm` 1, `cm` 10, `m` 1000,
+`in` 25,4), углы в градусах вокруг неподвижных осей X, затем Y, затем Z; `gp_Trsf` OCCT.
+Ориентация треугольников сохраняется (s > 0).
+
+**Свойства.** Габарит, площадь (Σ|AB×AC|/2), объём по формуле дивергенции `Σ a·(b×c)/6`
+(`meshVolume`), замкнутость (`checkClosure`: каждое ребро ровно у двух треугольников с
+противоположным обходом); объём имеет смысл только у замкнутой сетки.
+
+**Точка на сетке.** `pointOnTriangle` — ближайшая к точке попадания точка треугольника (Ericson,
+«Real-Time Collision Detection», 5.1.5) с привязкой к вершине на расстоянии ≤ `snap`;
+`raycastMesh` — Моллер–Трумбор; `nearestPointOnMesh` — перебор. Расстояние между точками сеток и
+от точки сетки до элемента B-rep считает `BRepExtrema_DistShapeShape` (точка — `TopoDS_Vertex`,
+`src/wasm/analysis_common.hpp`, `measureWithMeshes`).
+
+**Сечение плоскостью.** Собственный срез треугольников (`BRepAlgoAPI_Section` по триангуляции
+потребовал бы построить из сетки оболочку из тысяч граней — дорого и без пользы): знаковые
+расстояния вершин до плоскости, вершина на плоскости считается лежащей с положительной стороны
+(символическое возмущение — нет двойных точек и пропусков); точка пересечения именуется ребром
+сетки или вершиной, поэтому отрезки соседних треугольников стыкуются точно, без допусков.
+Отрезок ориентирован так, что материал слева при взгляде с +n (внешние контуры — против часовой
+стрелки, отверстия — по ней); площадь — `½ Σ (s × e)·n` по ориентированным отрезкам (не зависит
+от сборки контуров). Отрезки собираются в контуры по общим ключам (сначала открытые цепочки),
+точки на прямой соседей (≤ `tolerance`) удаляются: сечение куба из 12 треугольников — квадрат
+из 4 точек.
+
+Ограничения: сварка только точно совпадающих вершин (щели в сетке не закрываются); 3MF без
+компонентов и расширений (цвета, материалы, slice игнорируются); выбор точки и ближайшая точка
+— перебор треугольников (O(n) на запрос).
+
+Тест `test_kernel_reference_mesh` (файлы пишутся тестом побайтно, независимо от писателей ядра):
+двоичный и ASCII STL куба 10 мм — 12 треугольников, 8 вершин, габарит, площадь 600, объём 1000;
+призма над правильным 256-угольником r = 5, h = 20 (цилиндр) — 1024 треугольника, площадь и объём
+многоугольной призмы, объём меньше πr²h не больше чем на сумму сегментов; двоичный STL с
+заголовком «solid»; сечение куба z = 3,7 — квадрат 4 точки, стороны 10, периметр 40, площадь 100;
+наклонное сечение 100√2; плоскость через вершины; сечение 64-угольной призмы; 3MF из `export3mf`
+(объём 6000) и вручную (дюймы, перенос); битые файлы (пусто, обрезан, мусор, ошибка ASCII в
+строке 4, без `endsolid`, пределы, NaN, только нулевые треугольники); размещение (дюймы, 90° вокруг
+Z, перенос), попадание лучом, точка на треугольнике с привязкой, расстояние между углами √3.
 
 ## WASM
 

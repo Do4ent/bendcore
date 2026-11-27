@@ -1,7 +1,7 @@
 // Types of bendcore_modeling_api.mjs (docs/ui/PART_MODELING_UI.md).
 
 import { KernelError, KernelMesh, TessellationParams, Vec3, faceOfTriangle } from './bendcore_kernel_api.mjs';
-import type { ExportFormat, ExportOptions, MassProperties, LibraryMaterial, MeasureSpec, Measurement, SectionPlane, SectionResult } from './bendcore_kernel_api.mjs';
+import type { ExportFormat, ExportOptions, MassProperties, LibraryMaterial, MeasureSpecWithMesh, Measurement, SectionPlane, SectionResult, MeshGeometry, MeshProperties, MeshReadReport, MeshSectionResult, MeshUnit, Vec3 } from './bendcore_kernel_api.mjs';
 
 export type { ExportFormat, ExportOptions, MassProperties };
 
@@ -379,7 +379,46 @@ export interface PartMaterial {
   density: number;
 }
 
-export type { LibraryMaterial, MeasureSpec, Measurement, SectionPlane, SectionResult } from './bendcore_kernel_api.mjs';
+export type { LibraryMaterial, MeasureSpec, MeasureSpecWithMesh, MeshPointElement, Measurement, SectionPlane, SectionResult, MeshGeometry, MeshProperties, MeshReadReport, MeshSectionResult, MeshUnit } from './bendcore_kernel_api.mjs';
+
+/** Reference mesh of a part (docs/modeling/PART_DOCUMENT.md, "Справочная сетка"). */
+export interface PartMeshInfo {
+  id: string;
+  label: string;
+  fileName: string;
+  format: 'stl' | '3mf';
+  /** size of the embedded file */
+  bytes: number;
+  unit: MeshUnit;
+  /** degrees about X, then Y, then Z */
+  rotation: Vec3;
+  /** mm */
+  translation: Vec3;
+  visible: boolean;
+  opacity: number;
+  report: MeshReadReport;
+  /** of the placed mesh, part mm */
+  properties: MeshProperties;
+}
+export interface PartMeshSpec {
+  fileName: string;
+  data: Uint8Array;
+  format?: 'stl' | '3mf';
+  label?: string;
+  unit?: MeshUnit;
+  rotation?: Vec3;
+  translation?: Vec3;
+  visible?: boolean;
+  opacity?: number;
+}
+export interface PartMeshEdits {
+  label?: string;
+  unit?: MeshUnit;
+  rotation?: Vec3;
+  translation?: Vec3;
+  visible?: boolean;
+  opacity?: number;
+}
 
 export class PartDocumentHandle {
   readonly handle: number;
@@ -420,9 +459,16 @@ export class PartDocumentHandle {
   exportFile(format: ExportFormat, options?: ExportOptions, target?: ShapeTarget): Uint8Array;
   massProperties(density: number, target?: ShapeTarget): MassProperties;
   /** Measurement between elements of the target (kernel indices); mm and degrees. */
-  measure(spec: MeasureSpec, target?: ShapeTarget): Measurement;
+  measure(spec: MeasureSpecWithMesh, target?: ShapeTarget): Measurement;
   /** Section of the target by a plane: area (mm^2) and contour polylines (xyz triples). */
   section(plane: SectionPlane, target?: ShapeTarget, deflection?: number): SectionResult;
+  meshes(): PartMeshInfo[];
+  addMesh(spec: PartMeshSpec): string;
+  removeMesh(id: string): void;
+  editMesh(id: string, edits: PartMeshEdits): void;
+  meshGeometry(id: string): MeshGeometry;
+  meshSection(id: string, plane: SectionPlane): MeshSectionResult;
+  meshSectionSketch(id: string, plane: 'XY' | 'XZ' | 'YZ', offset: number): string;
   solveSketch(featureId: string, sketch: SketchData, options?: { drag?: { point: number; x: number; y: number }; lite?: boolean }): SketchSolution;
   editSketch(featureId: string, sketch: SketchData, tool: SketchTool): SketchEditOutcome;
 }

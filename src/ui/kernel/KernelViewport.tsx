@@ -30,6 +30,10 @@ import { packEdgePolylines } from './edgeBuffers';
 import type { EdgeBuffers } from './edgeBuffers';
 import { closestPointOnSegmentToRay, edgeCandidates } from './edgePick';
 import { shouldReframePart } from './autoFrame';
+import { buildReferenceMesh, referenceMeshHit } from './referenceMeshObject';
+import type { MeshPick, ReferenceMeshDisplay } from './referenceMeshObject';
+
+export type { MeshPick, ReferenceMeshDisplay };
 
 export interface FacePick {
   faceIndex: number;
@@ -118,6 +122,10 @@ export interface KernelViewportProps {
   sectionLines?: readonly Float32Array[];
   /** A measurement drawn over the model. */
   measure?: MeasureOverlay | null;
+  /** Reference meshes (visible ones only), drawn translucent; not part of the model. */
+  referenceMeshes?: readonly ReferenceMeshDisplay[];
+  /** When set, a click that hits a reference mesh before the model picks a point on it. */
+  onPickMesh?: ((pick: MeshPick) => void) | null;
 }
 
 const FACE_COLOR = 0xb8c4d6;
@@ -147,6 +155,8 @@ interface SceneState {
   edgeBuffers: EdgeBuffers | null;
   highlight: THREE.Group;
   overlay: THREE.Group;
+  /** reference meshes (pickable for measurements only) */
+  meshes: THREE.Group;
   /** section contour and measurement lines (not pickable) */
   tools: THREE.Group;
   /** vertex dots of the vertex mode and selected vertices; datum glyphs (not pickable) */
@@ -328,6 +338,8 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
   clip = null,
   sectionLines,
   measure = null,
+  referenceMeshes,
+  onPickMesh = null,
   vertices = null,
   onPickVertex,
   selectedVertices,
@@ -344,6 +356,8 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
   onPickVertexRef.current = onPickVertex;
   const verticesRef = useRef(vertices);
   verticesRef.current = vertices;
+  const onPickMeshRef = useRef(onPickMesh);
+  onPickMeshRef.current = onPickMesh;
   const pickModeRef = useRef(pickMode);
   pickModeRef.current = pickMode;
   meshRef.current = mesh;
@@ -372,6 +386,8 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     scene.add(highlight);
     const overlayGroup = new THREE.Group();
     scene.add(overlayGroup);
+    const meshesGroup = new THREE.Group();
+    scene.add(meshesGroup);
     const toolsGroup = new THREE.Group();
     scene.add(toolsGroup);
     const marksGroup = new THREE.Group();
@@ -396,6 +412,7 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       edgeBuffers: null,
       highlight,
       overlay: overlayGroup,
+      meshes: meshesGroup,
       tools: toolsGroup,
       marks: marksGroup,
       datums: datumsGroup,
@@ -445,6 +462,15 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
         state.faces && current
           ? raycaster.intersectObject(state.faces, false).find((h) => !state.clip || state.clip.distanceToPoint(h.point) >= 0)
           : undefined;
+      // A point on a reference mesh in front of the model (measurements).
+      const meshPick = onPickMeshRef.current;
+      if (meshPick) {
+        const mh = referenceMeshHit(raycaster, state.meshes, (p) => !state.clip || state.clip.distanceToPoint(p) >= 0);
+        if (mh && (!hit || mh.distance < hit.distance)) {
+          meshPick(mh.pick);
+          return;
+        }
+      }
       if (mode === 'vertex') {
         const points = verticesRef.current;
         if (!points || points.length === 0) {
@@ -540,6 +566,7 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       disposeModel(model);
       disposeModel(highlight);
       disposeModel(overlayGroup);
+      disposeModel(meshesGroup);
       disposeModel(toolsGroup);
       disposeModel(marksGroup);
       disposeModel(datumsGroup);
@@ -670,6 +697,30 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     // autoFrame is a mount-time choice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overlay]);
+
+  // Reference meshes: translucent, framed when there is no model yet.
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    disposeModel(state.meshes);
+    const list = referenceMeshes ?? [];
+    const sphere = new THREE.Box3();
+    for (const m of list) {
+      if (m.indices.length === 0) continue;
+      const obj = buildReferenceMesh(m);
+      state.meshes.add(obj);
+      sphere.expandByObject(obj);
+    }
+    state.renderer.domElement.parentElement?.setAttribute('data-reference-meshes', String(state.meshes.children.length));
+    if (!state.faces && state.meshes.children.length > 0 && !sphere.isEmpty()) {
+      const bs = new THREE.Sphere();
+      sphere.getBoundingSphere(bs);
+      if (!state.framed || autoFrame === 'always') frame(state, bs);
+    }
+    state.render();
+    // autoFrame is a mount-time choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referenceMeshes]);
 
   // Section plane: a renderer clipping plane, so the slider needs no kernel call.
   const clipKey = clip ? `${clip.normal.join(',')}|${clip.constant}` : '';

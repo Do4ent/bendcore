@@ -367,7 +367,7 @@ TEST(AssemblyConfigurations, FileRoundTripAndOldVersions) {
     auto loaded = AssemblyDocument::loadFile(file.string(), m::partRegistry());
     ASSERT_TRUE(loaded.ok()) << loaded.error().message;
     AssemblyDocument& back = loaded.value().document;
-    EXPECT_EQ(loaded.value().report.fileVersion, 3);
+    EXPECT_EQ(loaded.value().report.fileVersion, AssemblyDocument::kFormatVersion);
     EXPECT_EQ(back.configurationTable(), doc.configurationTable());
     EXPECT_EQ(back.configurationBase(), doc.configurationBase());
     EXPECT_EQ(back.activeConfiguration(), "-01");
@@ -382,7 +382,7 @@ TEST(AssemblyConfigurations, FileRoundTripAndOldVersions) {
     const DefinitionId p = plain.addPart("P", PartData{box(0, 0, 0, 1, 1, 1), nullptr, std::nullopt}).value();
     plain.addOccurrence(p, Transform::identity());
     std::string text = plain.toJson().value();
-    const auto at = text.find("\"version\": 3");
+    const auto at = text.find("\"version\": " + std::to_string(AssemblyDocument::kFormatVersion));
     ASSERT_NE(at, std::string::npos);
     text.replace(at, 12, "\"version\": 2");
     auto v2 = AssemblyDocument::fromJson(text, {});

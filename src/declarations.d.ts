@@ -125,7 +125,7 @@ declare module 'three' {
     color: Color;
     emissive: Color;
     shininess: number;
-    constructor(params?: MaterialParameters & { emissive?: number | string; shininess?: number });
+    constructor(params?: MaterialParameters & { emissive?: number | string; shininess?: number; depthWrite?: boolean });
   }
 
   export class MeshBasicMaterial extends Material {

@@ -34,11 +34,16 @@ import AssemblyConfigurationPanel from './AssemblyConfigurationPanel';
 import { assemblyTableInput } from './configurationTable';
 import AssemblyViewport, { pathKey } from './AssemblyViewport';
 import { MeasurePanel } from '../kernel/ViewToolsPanel';
+import { ReferenceMeshPanel } from '../kernel/ReferenceMeshPanel';
+import type { ReferenceMeshEdits } from '../kernel/ReferenceMeshPanel';
+import type { MeshPick, ReferenceMeshDisplay } from '../kernel/referenceMeshObject';
+import { meshSnap } from '../kernel/viewTools';
+import type { MeshGeometry } from '../../wasm/bendcore_kernel_api.mjs';
 import { useViewTools } from '../kernel/useViewTools';
 import type { ViewTools } from '../kernel/useViewTools';
 import type { MeasureResult } from '../kernel/viewTools';
 import type { AssemblyPick, AssemblyPickMode, AssemblyViewportHandle, PartHighlight } from './AssemblyViewport';
-import { clampProgress, insertionDirection } from './assemblyMath';
+import { clampProgress, eulerToQuaternion, insertionDirection, quaternionToEuler } from './assemblyMath';
 import type { V3 } from './assemblyMath';
 import { defaultAssemblyBaseUrl, loadAssemblyFrom } from './assemblyLoader';
 import type { DragStart } from './AssemblyViewport';
@@ -198,6 +203,16 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   const [dragSolve, setDragSolve] = useState<SolveReport | null>(null);
   const [frameKey, setFrameKey] = useState(0);
   const viewportRef = useRef<AssemblyViewportHandle | null>(null);
+  const [refGeoms, setRefGeoms] = useState<ReadonlyMap<number, MeshGeometry>>(new Map());
+  /** World meshes of the reference meshes by id with the placement they were fetched for. */
+  const refCacheRef = useRef(new Map<number, { placement: string; geometry: MeshGeometry }>());
+  const refMeshList = state?.referenceMeshes ?? [];
+  const toolsModelKey = useMemo(
+    () => [parts, refMeshList.map((m) => [m.id, m.unit, m.placement.matrix, m.visible])],
+    // parts and the mesh list stand for the model.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [parts, JSON.stringify(refMeshList.map((m) => [m.id, m.unit, m.placement.matrix, m.visible]))],
+  );
   const tools = useViewTools({
     measure: async (spec) => {
       const doc = docRef.current;
@@ -206,7 +221,7 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     },
     withPath: true,
     box: null,
-    modelKey: parts,
+    modelKey: toolsModelKey,
   });
   const toolsRef = useRef(tools);
   toolsRef.current = tools;
@@ -223,6 +238,21 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
       if (!doc) return;
       const st = await doc.state();
       if (docRef.current !== doc) return;
+      // World meshes of the reference meshes, fetched again when the placement changed.
+      const cache = refCacheRef.current;
+      const geoms = new Map<number, MeshGeometry>();
+      for (const m of st.referenceMeshes) {
+        const placement = JSON.stringify([m.unit, m.placement.matrix]);
+        let entry = cache.get(m.id);
+        if (!entry || entry.placement !== placement) {
+          entry = { placement, geometry: await doc.meshGeometry(m.id) };
+          cache.set(m.id, entry);
+        }
+        geoms.set(m.id, entry.geometry);
+      }
+      for (const id of [...cache.keys()]) if (!geoms.has(id)) cache.delete(id);
+      if (docRef.current !== doc) return;
+      setRefGeoms(geoms);
       setState(st);
       const ex = opts.explode ?? explode;
       const view = ex.view !== null && ex.view < st.explodedViews.length ? ex.view : null;
@@ -664,10 +694,51 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
     return h;
   }, [selectedComponent, parts, interference, selectedPair, showTouching]);
 
+  // ---------------------------------------------------------------- reference meshes
+
+  const referenceMeshes = useMemo<ReferenceMeshDisplay[]>(
+    () =>
+      refMeshList.flatMap((m) => {
+        const g = refGeoms.get(m.id);
+        return m.visible && g ? [{ key: m.id, positions: g.positions, indices: g.indices, opacity: m.opacity }] : [];
+      }),
+    // refGeoms changes with every refresh that touches the meshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [refGeoms, state],
+  );
+
+  const insertMesh = async (file: File) => {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const ok = await run((d) => d.insertMesh({ fileName: file.name, data }));
+    if (ok && parts.length === 0) setFrameKey((k) => k + 1);
+  };
+
+  const editMesh = (key: string | number, edits: ReferenceMeshEdits) => {
+    const m = refMeshList.find((x) => x.id === key);
+    if (!m) return;
+    const changes: Parameters<AssemblyDoc['setMesh']>[1] = {};
+    if (edits.name !== undefined) changes.name = edits.name;
+    if (edits.unit !== undefined) changes.unit = edits.unit;
+    if (edits.visible !== undefined) changes.visible = edits.visible;
+    if (edits.opacity !== undefined) changes.opacity = edits.opacity;
+    if (edits.translation || edits.rotation) {
+      changes.placement = {
+        position: edits.translation ?? m.placement.position,
+        rotation: edits.rotation ? eulerToQuaternion(edits.rotation) : m.placement.rotation,
+      };
+    }
+    void run((d) => d.setMesh(m.id, changes));
+  };
+
+  const onPickMesh = (pick: MeshPick) => {
+    const m = refMeshList.find((x) => x.id === pick.key);
+    toolsRef.current.onPickMesh(pick.key, pick.triangle, pick.point, m?.properties ? meshSnap(m.properties.size) : 0);
+  };
+
   const selectedRefs = useMemo(
     () =>
       tools.capturing
-        ? tools.picks.map((p) => ({ path: p.path ?? [], kind: p.kind, index: p.index }))
+        ? tools.picks.flatMap((p) => (p.kind === 'mesh' ? [] : [{ path: p.path ?? [], kind: p.kind, index: p.index }]))
         : [mateSlots[0]?.ref, mateSlots[1]?.ref, panel === 'fasteners' || panel === 'pattern' ? hole?.ref : undefined].filter(
             (r): r is NonNullable<typeof r> => !!r,
           ),
@@ -879,9 +950,29 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
               onRemovePattern={(id) => void run((d) => d.removePattern(id))}
             />
           )}
-          <MeasurePanel {...tools.measurePanel} />
+          <MeasurePanel {...tools.measurePanel} meshHint={refMeshList.some((m) => m.visible)} />
+          <ReferenceMeshPanel
+            items={refMeshList.map((m) => ({
+              key: m.id,
+              name: m.name,
+              fileName: m.fileName,
+              unit: m.unit,
+              translation: m.placement.position,
+              rotation: quaternionToEuler(m.placement.rotation),
+              visible: m.visible,
+              opacity: m.opacity,
+              report: m.report,
+              properties: m.properties,
+            }))}
+            disabled={status !== 'ready'}
+            onInsert={(file) => void insertMesh(file)}
+            onEdit={editMesh}
+            onRemove={(key) => void run((d) => d.removeMesh(Number(key)))}
+          />
         </aside>
         <AssemblyViewport
+          referenceMeshes={referenceMeshes}
+          onPickMesh={tools.capturing && tools.meshPickable ? onPickMesh : null}
           meshes={meshes}
           parts={parts}
           pickMode={tools.capturing ? tools.pickMode : pickMode}

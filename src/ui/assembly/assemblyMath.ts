@@ -60,3 +60,31 @@ export function clampProgress(progress: number, steps: number): number {
   if (!Number.isFinite(progress)) return 0;
   return Math.min(Math.max(progress, 0), Math.max(steps, 0));
 }
+
+/** Quaternion [x, y, z, w] of the rotation R = Rz(c)·Ry(b)·Rx(a), angles in degrees (reference meshes). */
+export function eulerToQuaternion(deg: V3): [number, number, number, number] {
+  const [a, b, c] = deg.map((d) => (d * Math.PI) / 360);
+  const [sa, ca, sb, cb, sc, cc] = [Math.sin(a), Math.cos(a), Math.sin(b), Math.cos(b), Math.sin(c), Math.cos(c)];
+  return [
+    sa * cb * cc - ca * sb * sc,
+    ca * sb * cc + sa * cb * sc,
+    ca * cb * sc - sa * sb * cc,
+    ca * cb * cc + sa * sb * sc,
+  ];
+}
+
+/** Angles [a, b, c] (degrees) with R = Rz(c)·Ry(b)·Rx(a) of a unit quaternion [x, y, z, w]. */
+export function quaternionToEuler(q: readonly number[]): V3 {
+  const [x, y, z, w] = q;
+  const r00 = 1 - 2 * (y * y + z * z);
+  const r10 = 2 * (x * y + z * w);
+  const r20 = 2 * (x * z - y * w);
+  const r21 = 2 * (y * z + x * w);
+  const r22 = 1 - 2 * (x * x + y * y);
+  const deg = (v: number) => {
+    const d = (v * 180) / Math.PI;
+    const r = Math.round(d * 1e9) / 1e9;
+    return r === 0 ? 0 : r;
+  };
+  return [deg(Math.atan2(r21, r22)), deg(Math.asin(Math.max(-1, Math.min(1, -r20)))), deg(Math.atan2(r10, r00))];
+}

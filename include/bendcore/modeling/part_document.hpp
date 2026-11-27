@@ -9,6 +9,7 @@
 #include <bendcore/modeling/gear.hpp>
 #include <bendcore/modeling/naming.hpp>
 #include <bendcore/modeling/part_sketch.hpp>
+#include <bendcore/kernel/reference_mesh.hpp>
 
 #include <BRepTools_History.hxx>
 #include <Standard_Handle.hxx>
@@ -263,6 +264,37 @@ struct SaveOptions {
     bool includeCache = false;  // BRep + element map of each built feature, keyed by input hash
 };
 
+// Reference mesh of a part (docs/modeling/PART_DOCUMENT.md, "Справочная сетка"): an STL or 3MF
+// file embedded in the document, placed in the part coordinates and shown for reference. It is
+// not part of the feature tree: no body, no mass, no boolean operations, no rebuild.
+struct ReferenceMeshSpec {
+    std::string id;        // empty: "Mesh<NNN>"
+    std::string label;     // empty: the file name
+    std::string fileName;
+    kernel::MeshFileFormat format = kernel::MeshFileFormat::Stl;
+    std::string data;      // file bytes, embedded in the document
+    std::string unit = "mm";  // file units: mm | cm | m | in
+    kernel::Point3 rotationDegrees{0.0, 0.0, 0.0};  // about X, then Y, then Z
+    kernel::Point3 translation{0.0, 0.0, 0.0};      // mm
+    bool visible = true;
+    double opacity = 0.5;  // display, [0.05, 1]
+};
+
+struct ReferenceMeshInfo {
+    std::string id;
+    std::string label;
+    std::string fileName;
+    kernel::MeshFileFormat format = kernel::MeshFileFormat::Stl;
+    std::size_t bytes = 0;
+    std::string unit;
+    kernel::Point3 rotationDegrees{};
+    kernel::Point3 translation{};
+    bool visible = true;
+    double opacity = 0.5;
+    kernel::MeshReadReport report;
+    kernel::MeshProperties properties;  // of the placed mesh, mm
+};
+
 class PartDocument {
 public:
     explicit PartDocument(std::shared_ptr<const FeatureRegistry> registry);
@@ -321,6 +353,29 @@ public:
     Status setRollback(std::optional<std::size_t> position);
     std::optional<std::size_t> rollback() const noexcept { return rollback_; }
 
+    // ---- reference meshes (not part of the tree; recorded for undo; take effect at once).
+    // The file is read and checked when added (kernel::readReferenceMesh with `limits`):
+    // InvalidInput / ParseError / Unsupported of the reader prefixed with the file name.
+    Result<std::string> addReferenceMesh(ReferenceMeshSpec spec, const kernel::MeshReadLimits& limits = {});
+    Status removeReferenceMesh(const std::string& id);
+    Status setReferenceMeshPlacement(const std::string& id, const std::string& unit, const kernel::Point3& rotationDegrees,
+                                     const kernel::Point3& translation);
+    Status setReferenceMeshDisplay(const std::string& id, bool visible, double opacity);
+    Status setReferenceMeshLabel(const std::string& id, const std::string& label);
+    std::vector<std::string> referenceMeshIds() const;
+    Result<ReferenceMeshInfo> referenceMesh(const std::string& id) const;
+    // Mesh in part coordinates (placement applied), mm.
+    Result<std::shared_ptr<const kernel::TriangleMesh>> placedReferenceMesh(const std::string& id) const;
+    // Embedded file bytes.
+    Result<std::string> referenceMeshData(const std::string& id) const;
+    // Section of the placed mesh by the base plane `plane` ("XY" | "XZ" | "YZ") moved by `offset`
+    // along its normal, added as a new sketch on that plane (options plane, parameter offset) whose
+    // geometry is construction lines between fixed points: reference geometry that is never a
+    // profile. Points closer than `tolerance` to the line of their neighbours are dropped.
+    // InvalidInput: unknown mesh or plane, the plane misses the mesh, more than 5000 segments.
+    Result<std::string> addMeshSectionSketch(const std::string& meshId, const std::string& plane, double offset,
+                                             std::string sketchId = "", double tolerance = 1.0e-6);
+
     // ---- undo / redo. Every successful editing call (variables, features, rollback) is
     // recorded; calls between beginTransaction and commitTransaction form one entry.
     // undo/redo restore the definitions and rebuild; results of restored states are reused
@@ -354,8 +409,9 @@ public:
     std::vector<BodyInfo> bodies() const;
 
     // ---- persistence (format "bendcore-part", version kFormatVersion)
-    // Version 4 adds "configurations"; a document without a table is still written as v3.
-    static constexpr int kFormatVersion = 4;
+    // Version 4 adds "configurations", version 5 "referenceMeshes"; a document is written with
+    // the lowest version that holds its content (v3 without a table and meshes).
+    static constexpr int kFormatVersion = 5;
     Result<std::string> toJson(const SaveOptions& options = {}) const;
     // Loads, migrates older versions and rebuilds. Errors: ParseError (not JSON, missing
     // fields), Unsupported (newer version, unknown feature type).
@@ -365,6 +421,7 @@ public:
     struct Node;
     struct State;
     struct Transactions;
+    struct MeshEntry;
 
 private:
     Status checkExpression(const std::string& expression) const;
@@ -379,6 +436,8 @@ private:
     void removeColumns(ConfigurationColumnKind kind, const std::string& target);
     Node* node(const std::string& id);
     const Node* node(const std::string& id) const;
+    MeshEntry* meshEntry(const std::string& id);
+    const MeshEntry* meshEntry(const std::string& id) const;
     State captureState() const;
     void restoreState(State state);
     // Records an undo entry with `before` (state before a successful edit).
@@ -390,6 +449,7 @@ private:
     std::map<std::string, Result<double>> variableValues_;
     std::optional<std::size_t> rollback_;
     ConfigurationTable table_;
+    std::vector<MeshEntry> meshes_;
     std::unique_ptr<Transactions> transactions_;
 };
 

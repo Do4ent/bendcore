@@ -22,6 +22,7 @@ PartDocument::State PartDocument::captureState() const {
     s.variables = variables_;
     s.rollback = rollback_;
     s.table = table_;
+    s.meshes = meshes_;
     s.nodes.reserve(nodes_.size());
     for (const auto& n : nodes_) s.nodes.push_back(static_cast<const NodeDefinition&>(*n));
     return s;
@@ -47,6 +48,7 @@ void PartDocument::restoreState(State state) {
     variables_ = std::move(state.variables);
     rollback_ = state.rollback;
     table_ = std::move(state.table);
+    meshes_ = std::move(state.meshes);
 }
 
 void PartDocument::recordEdit(const std::string& name, State before) {

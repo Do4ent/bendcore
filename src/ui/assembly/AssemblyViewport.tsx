@@ -24,6 +24,8 @@ import { closestPointOnSegmentToRay, edgeCandidates } from '../kernel/edgePick';
 import { rayPlane } from './assemblyMath';
 import type { MeasureOverlay } from '../kernel/KernelViewport';
 import { shouldReframeInstances } from '../kernel/autoFrame';
+import { buildReferenceMesh, referenceMeshHit } from '../kernel/referenceMeshObject';
+import type { MeshPick, ReferenceMeshDisplay } from '../kernel/referenceMeshObject';
 import type { V3 } from './assemblyMath';
 
 export type AssemblyPickMode = 'face' | 'edge' | 'drag' | 'none';
@@ -69,6 +71,10 @@ export interface AssemblyViewportProps {
   frameKey?: number;
   /** A measurement drawn over the model (world coordinates) with its label. */
   measure?: MeasureOverlay | null;
+  /** Reference meshes (visible ones), world coordinates; not parts. */
+  referenceMeshes?: readonly ReferenceMeshDisplay[];
+  /** When set, a click that hits a reference mesh before the parts picks a point on it. */
+  onPickMesh?: ((pick: MeshPick) => void) | null;
 }
 
 const BASE_COLOR = 0xb8c4d6;
@@ -106,6 +112,8 @@ interface SceneState {
   geometries: Map<string, THREE.BufferGeometry>;
   /** measurement lines (not pickable) and label */
   tools: THREE.Group;
+  /** reference meshes (pickable for measurements only) */
+  refMeshes: THREE.Group;
   label: { anchor: THREE.Vector3; element: HTMLDivElement } | null;
   framed: boolean;
   /** times the view was framed automatically (data-frames, for end-to-end tests) */
@@ -153,6 +161,7 @@ function edgeLines(buffers: EdgeBuffers, color: number): THREE.LineSegments {
 function frame(state: SceneState): boolean {
   const box = new THREE.Box3();
   for (const inst of state.instances.values()) box.expandByObject(inst.faces);
+  for (const m of state.refMeshes.children) box.expandByObject(m);
   if (box.isEmpty()) return false;
   state.frames += 1;
   state.renderer.domElement.parentElement?.setAttribute('data-frames', String(state.frames));
@@ -188,13 +197,15 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
   onReady,
   frameKey,
   measure = null,
+  referenceMeshes,
+  onPickMesh = null,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
   const meshesRef = useRef(meshes);
   meshesRef.current = meshes;
-  const cb = useRef({ onPick, onDragStart, onDragMove, onDragEnd, pickMode });
-  cb.current = { onPick, onDragStart, onDragMove, onDragEnd, pickMode };
+  const cb = useRef({ onPick, onDragStart, onDragMove, onDragEnd, pickMode, onPickMesh });
+  cb.current = { onPick, onDragStart, onDragMove, onDragEnd, pickMode, onPickMesh };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -219,6 +230,8 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
     controls.screenSpacePanning = true;
     const toolsGroup = new THREE.Group();
     scene.add(toolsGroup);
+    const refMeshesGroup = new THREE.Group();
+    scene.add(refMeshesGroup);
     const render = () => {
       renderer.render(scene, camera);
       const label = stateRef.current?.label;
@@ -240,6 +253,7 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       edgeBuffers: new Map(),
       geometries: new Map(),
       tools: toolsGroup,
+      refMeshes: refMeshesGroup,
       label: null,
       framed: false,
       frames: 0,
@@ -408,6 +422,16 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       down = null;
       const mode = cb.current.pickMode;
       if (moved > CLICK_TOLERANCE || mode === 'none' || mode === 'drag') return;
+      const meshPick = cb.current.onPickMesh;
+      if (meshPick) {
+        const raycaster = rayAt(e.clientX, e.clientY);
+        const mh = referenceMeshHit(raycaster, state.refMeshes);
+        const fh = faceHit(raycaster);
+        if (mh && (!fh || mh.distance < fh.hit.distance)) {
+          meshPick(mh.pick);
+          return;
+        }
+      }
       if (mode === 'edge') {
         cb.current.onPick(pickEdge(e.clientX, e.clientY));
         return;
@@ -478,6 +502,7 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
       controls.dispose();
       disposeObject(root);
       disposeObject(toolsGroup);
+      disposeObject(refMeshesGroup);
       state.label?.element.remove();
       for (const g of state.geometries.values()) g.dispose();
       renderer.dispose();
@@ -492,6 +517,18 @@ const AssemblyViewport: React.FC<AssemblyViewportProps> = ({
     const state = stateRef.current;
     if (state) state.framed = false;
   }, [frameKey]);
+
+  // Reference meshes: rebuilt when the list changes; framed with the parts.
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    disposeObject(state.refMeshes);
+    state.refMeshes.clear();
+    for (const m of referenceMeshes ?? []) if (m.indices.length > 0) state.refMeshes.add(buildReferenceMesh(m));
+    state.renderer.domElement.parentElement?.setAttribute('data-reference-meshes', String(state.refMeshes.children.length));
+    if (!state.framed && state.refMeshes.children.length > 0) state.framed = frame(state);
+    state.render();
+  }, [referenceMeshes]);
 
   // Instances: create/remove by occurrence path; update world matrices in place.
   useEffect(() => {

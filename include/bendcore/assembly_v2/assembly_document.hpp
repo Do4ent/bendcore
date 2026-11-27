@@ -9,6 +9,7 @@
 #include <bendcore/assembly_v2/assembly_configurations.hpp>
 #include <bendcore/assembly_v2/occt_entities.hpp>
 #include <bendcore/assembly_v2/solver.hpp>
+#include <bendcore/kernel/reference_mesh.hpp>
 #include <bendcore/kernel/result.hpp>
 #include <bendcore/kernel/shape.hpp>
 #include <bendcore/kernel/xcaf_io.hpp>
@@ -137,6 +138,26 @@ struct Definition {
     bool external = false;
     // Деталь: источник не загрузился и встроенной геометрии нет (shape пуст) — причина.
     std::string loadError;
+};
+
+// ---- справочная сетка (docs/assembly/ASSEMBLY_DOCUMENT.md, раздел 14)
+
+using ReferenceMeshId = std::uint32_t;
+
+// Справочный компонент-сетка: файл STL/3MF, встроенный в документ. Не деталь: не входит в BOM,
+// массы, пересечения, STEP и решатель; положение задаётся только перемещением (фиксировано
+// относительно сборки), сопряжения к сетке не поддерживаются.
+struct ReferenceMeshComponent {
+    ReferenceMeshId id = 0;
+    std::string name;
+    std::string fileName;
+    kernel::MeshFileFormat format = kernel::MeshFileFormat::Stl;
+    std::shared_ptr<const std::string> data;                  // байты файла
+    std::shared_ptr<const kernel::ReferenceMeshData> parsed;  // сетка в единицах файла
+    std::string unit = "mm";                                  // mm | cm | m | in
+    Transform placement;                                      // мировое положение
+    bool visible = true;
+    double opacity = 0.5;  // [0.05, 1]
 };
 
 // ---- ссылки на геометрию и сопряжения
@@ -533,6 +554,23 @@ public:
     // Пересчитывает преобразования и положения экземпляров всех массивов (вызывается solve).
     Status updatePatterns();
 
+    // ---- справочные сетки (раздел 14): правки сразу в силе, отмена — AssemblyHistory::apply.
+    // Файл читается и проверяется при вставке (kernel::readReferenceMesh): ошибки читателя
+    // с префиксом «mesh '<файл>': »; InvalidInput — неизвестная единица, прозрачность вне [0.05, 1].
+    kernel::Result<ReferenceMeshId> addReferenceMesh(std::string name, std::string fileName, kernel::MeshFileFormat format,
+                                                     std::string data, std::string unit = "mm",
+                                                     const Transform& placement = Transform::identity(),
+                                                     const kernel::MeshReadLimits& limits = {});
+    Status removeReferenceMesh(ReferenceMeshId id);
+    Status setReferenceMeshPlacement(ReferenceMeshId id, const Transform& placement);
+    Status setReferenceMeshUnit(ReferenceMeshId id, const std::string& unit);
+    Status setReferenceMeshDisplay(ReferenceMeshId id, bool visible, double opacity);
+    Status setReferenceMeshName(ReferenceMeshId id, std::string name);
+    const std::vector<ReferenceMeshComponent>& referenceMeshes() const { return meshes_; }
+    const ReferenceMeshComponent* findReferenceMesh(ReferenceMeshId id) const;
+    // Сетка в мировой СК (масштаб единиц, затем положение), мм.
+    kernel::Result<kernel::TriangleMesh> worldReferenceMesh(ReferenceMeshId id) const;
+
     // ---- развёртка
     // overrides — мировые положения вхождений верхнего уровня вместо текущих (разнесённый вид).
     kernel::Result<std::vector<PlacedOccurrence>> placedParts(
@@ -556,8 +594,9 @@ public:
     Status saveFile(const std::string& path, const SaveOptions& options = {}) const;
     static kernel::Result<LoadedAssembly> loadFile(const std::string& path,
                                                    std::shared_ptr<const modeling::FeatureRegistry> registry);
-    // v3 — таблица исполнений «configurations» (v1, v2 читаются).
-    static constexpr int kFormatVersion = 3;
+    // v4 — справочные сетки «referenceMeshes», v3 — таблица исполнений «configurations»
+    // (v1–v3 читаются).
+    static constexpr int kFormatVersion = 4;
 
     // ---- обмен STEP (структура, имена, цвета, положения; сопряжения в STEP не пишутся)
     kernel::Result<kernel::AssemblyDocument> toXcaf() const;
@@ -606,6 +645,8 @@ private:
     OccurrenceId nextOccurrence_ = 1;
     MateId nextMate_ = 1;
     PatternId nextPattern_ = 1;
+    std::vector<ReferenceMeshComponent> meshes_;
+    ReferenceMeshId nextMesh_ = 1;
     AssemblyConfigurationTable configurations_;
     std::vector<std::string> configurationBase_;  // по столбцу configurations_
     // Положения вхождений верхнего уровня, которые были у исполнения при уходе с него
