@@ -27,6 +27,7 @@ import type { SketchCanvasHandle, SketchPointerEvent } from './SketchCanvas';
 import { dimensionGraphic, formatValue, offsetFor, twoPointDimension } from './dimensionLayout';
 import type { DimensionGraphic } from './dimensionLayout';
 import { DRAW_TOOLS, DrawError, DrawTool, PICK_COUNT, PICK_HINTS, drawShape } from './drawTools';
+import { pickBodyElement } from './projectPick';
 import { constraintCaption, definitionCaption, describeConstraint } from './sketchLabels';
 import { useI18n } from '../../app/i18n';
 import { kernelMessageLine, localizeKernelError } from '../../app/kernelMessages';
@@ -45,6 +46,8 @@ import {
   entityRef,
   hasValue,
   highlights,
+  isDimension,
+  masterOf,
   pointRef,
   refKey,
   removeItems,
@@ -54,12 +57,12 @@ import { findSnap, nearestEntity, nearestPoint } from './snap';
 import type { Snap } from './snap';
 import './SketchEditor.css';
 
-export type EditorTool = 'select' | DrawTool | 'dimension' | 'trim' | 'extend' | 'fillet' | 'chamfer' | 'regions';
+export type EditorTool = 'select' | DrawTool | 'dimension' | 'trim' | 'extend' | 'fillet' | 'chamfer' | 'regions' | 'project';
 
 const isDrawTool = (t: EditorTool): t is DrawTool => (DRAW_TOOLS as string[]).includes(t);
 
 /** Captions sketch.tool.<tool> and hints sketch.hint.<tool> of the tools other than drawing. */
-const EDIT_TOOLS = ['dimension', 'trim', 'extend', 'fillet', 'chamfer', 'regions'] as const;
+const EDIT_TOOLS = ['dimension', 'trim', 'extend', 'fillet', 'chamfer', 'regions', 'project'] as const;
 
 /**
  * Dimension text offsets by "<document handle>:<sketch id>": the part file has no place for
@@ -80,7 +83,8 @@ export interface SketchEditorState {
   redundant: number[];
   constraints: { type: string; a: number; b: number; c: number; value: string; driven: boolean; measured: number; state: string }[];
   points: { x: number; y: number; fixed: boolean; defined: boolean }[];
-  curves: { entity: number; type: string; construction: boolean; defined: boolean }[];
+  /** projection: index in the node's 'projected' references, -1 for a drawn curve */
+  curves: { entity: number; type: string; construction: boolean; defined: boolean; projection: number }[];
   regions: { index: number; area: number; selected: boolean }[] | null;
   profileIssues: string[];
   selection: string[];
@@ -161,6 +165,8 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
   const [construction, setConstruction] = useState(false);
   const [gridSnap, setGridSnap] = useState(false);
   const [reference, setReference] = useState(false);
+  const [offsetBoth, setOffsetBoth] = useState(false);
+  const [offsetCorners, setOffsetCorners] = useState<'extend' | 'round'>('extend');
   const [params, setParams] = useState({
     filletRadius: '5',
     chamfer1: '5',
@@ -306,6 +312,31 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
         setSelection([]);
         setSelectedConstraints([]);
         return (await solveAndCommit(out.sketch, true)) !== null;
+      } catch (e) {
+        setMessage(errorText(e));
+        return false;
+      }
+    });
+
+  /** Projects a model edge or face under the click (doc.projectToSketch). */
+  const runProject = (x: number, y: number, tolerance: number): Promise<boolean> =>
+    enqueue(async () => {
+      const placement = solutionRef.current?.placement;
+      const pick = body && placement ? pickBodyElement(body, placement, x, y, tolerance) : null;
+      if (!pick) {
+        setMessage(t('sketch.projectNothing'));
+        return false;
+      }
+      try {
+        const out = await doc.projectToSketch(featureId, dataRef.current, [pick], { construction });
+        if (out.created.length === 0) {
+          setMessage(t('sketch.projectPoint'));
+          return false;
+        }
+        setSelection(out.created.map(entityRef));
+        if ((await solveAndCommit(out.sketch, true)) === null) return false;
+        setMessage(t('sketch.projected', { n: out.created.length }));
+        return true;
       } catch (e) {
         setMessage(errorText(e));
         return false;
@@ -605,6 +636,9 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
       case 'regions':
         toggleRegion(e.x, e.y);
         return;
+      case 'project':
+        void runProject(e.x, e.y, PICK_PIXELS * e.unitsPerPixel);
+        return;
     }
   };
 
@@ -656,7 +690,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
     if (!solution) return [];
     const out: DimensionGraphic[] = [];
     data.constraints.forEach((c, i) => {
-      if (!DIMENSION_TYPES.has(c.type)) return;
+      if (!isDimension(c)) return;
       const g = dimensionGraphic(data, solution, i + 1, 24 * unitsPerPixel, offsets[i + 1]);
       if (g) out.push(g);
     });
@@ -702,7 +736,13 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
       state: constraintState(i + 1, marks),
     })),
     points: solution?.points ?? [],
-    curves: (solution?.curves ?? []).map((c) => ({ entity: c.entity, type: c.type, construction: c.construction, defined: c.defined })),
+    curves: (solution?.curves ?? []).map((c) => ({
+      entity: c.entity,
+      type: c.type,
+      construction: c.construction,
+      defined: c.defined,
+      projection: data.geometry[c.entity - 1]?.projection ?? -1,
+    })),
     regions: profile ? profile.regions.map((r) => ({ index: r.index, area: r.area, selected: r.selected })) : null,
     profileIssues: profile ? profile.issues.map((i) => i.kind) : [],
     selection: selection.map(refKey),
@@ -921,12 +961,27 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
             {selEntities.length > 0 && (
               <div className="sk-subtools">
                 {paramField('offset', t('sketch.offsetField'))}
+                <label className="sk-check">
+                  <input type="checkbox" checked={offsetBoth} data-testid="sketch-offset-both" onChange={(e) => setOffsetBoth(e.target.checked)} />
+                  {t('sketch.offsetBoth')}
+                </label>
+                <label className="sk-param">
+                  <span>{t('sketch.offsetCorners')}</span>
+                  <select
+                    value={offsetCorners}
+                    data-testid="sketch-offset-corners"
+                    onChange={(e) => setOffsetCorners(e.target.value as 'extend' | 'round')}
+                  >
+                    <option value="extend">{t('sketch.offsetCorners.extend')}</option>
+                    <option value="round">{t('sketch.offsetCorners.round')}</option>
+                  </select>
+                </label>
                 <button
                   type="button"
                   data-testid="sketch-offset"
                   onClick={() => {
                     const d = numberParam('offset', 'sketch.what.offset');
-                    if (d !== null) void runTool({ name: 'offset', chain: selEntities, distance: d });
+                    if (d !== null) void runTool({ name: 'offset', chain: selEntities, distance: d, bothSides: offsetBoth, corners: offsetCorners });
                   }}
                 >
                   {t('sketch.offset')}
@@ -1036,13 +1091,13 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
                   <button type="button" className="sk-c-name" onClick={() => setSelectedConstraints(selectedConstraints.includes(k) ? [] : [k])}>
                     #{k} {describeConstraint(c, solution?.constraintValues[i], t)}
                   </button>
-                  {DIMENSION_TYPES.has(c.type) && (
+                  {isDimension(c) && (
                     <label title={t('sketch.drivenHint')}>
                       <input type="checkbox" checked={Boolean(c.driven)} data-testid={`constraint-driven-${k}`} onChange={() => toggleDriven(k)} />
                       {t('sketch.driven')}
                     </label>
                   )}
-                  {hasValue(c.type) && !c.driven && (
+                  {hasValue(c.type) && !c.driven && masterOf(c) === 0 && (
                     <input
                       className="sk-c-value"
                       defaultValue={c.value}

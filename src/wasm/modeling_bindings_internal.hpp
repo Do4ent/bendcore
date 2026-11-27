@@ -83,6 +83,10 @@ val point(const k::Point3& p);
 val placementJs(const m::SketchPlacement& p);
 
 val toJs(const m::SketchData& d);
+val toJs(const m::TopoReference& r);
+m::TopoReference referenceFromJs(const val& v, const std::string& what);
+// Shape addressed by a target string: final, before:<id>, after:<id>, sketch:<id>.
+m::NamedShape targetShape(const m::PartDocument& doc, const val& targetValue);
 
 // Decimal spelling of a value written into sketch expressions. The expression parser has no
 // exponent notation, so tiny values (solver noise around 0) become 0 and the rest is written in

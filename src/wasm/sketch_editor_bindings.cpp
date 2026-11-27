@@ -34,6 +34,8 @@
 #include <bendcore/modeling/sketch_tools.hpp>
 
 #include <Geom2dAPI_InterCurveCurve.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopoDS.hxx>
 #include <Geom2d_TrimmedCurve.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Pln.hxx>
@@ -136,23 +138,35 @@ Built build(const m::PartDocument& doc, const m::FeatureInfo& f, const m::Sketch
     }
     std::vector<double> radii(ng);
     std::vector<std::optional<double>> projectedRadius(ng);
+    std::vector<std::optional<m::BSpline2d>> projectedSpline(ng);
     const m::SketchResult* last = f.sketchResult.get();
     for (std::size_t g = 0; g < ng; ++g) {
         const m::SketchGeometryDef& def = data.geometry[g];
         const std::string where = "sketch entity " + std::to_string(g + 1);
         radii[g] = evaluate(doc, def.radius, where + " radius");
         if (def.projection < 0) continue;
-        for (int p : {def.start, def.end, def.center}) {
-            if (p < 0) continue;
+        std::vector<int> pts = def.poles;
+        for (int p : {def.start, def.end, def.center, def.focus}) {
+            if (p >= 0) pts.push_back(p);
+        }
+        for (int p : pts) {
             if (static_cast<std::size_t>(p) >= np) throw InputError(where + ": point " + std::to_string(p) + " does not exist");
             out.pinned[static_cast<std::size_t>(p)] = true;
             if (last && static_cast<std::size_t>(p) < last->points.size()) pos[static_cast<std::size_t>(p)] = last->points[static_cast<std::size_t>(p)];
         }
-        if (def.type == m::SketchGeometryType::Circle && last) {
+        const bool circle = def.type == m::SketchGeometryType::Circle;
+        const bool ellipse = def.type == m::SketchGeometryType::Ellipse || def.type == m::SketchGeometryType::EllipticalArc;
+        if (circle || ellipse) projectedRadius[g] = radii[g];
+        if (last) {
             for (const m::SketchCurve& c : last->curves) {
-                if (c.id == g + 1 && std::holds_alternative<m::Circle2d>(c.geometry)) {
-                    radii[g] = std::get<m::Circle2d>(c.geometry).radius;
-                    projectedRadius[g] = radii[g];
+                if (c.id != g + 1) continue;
+                if (circle && std::holds_alternative<m::Circle2d>(c.geometry)) radii[g] = std::get<m::Circle2d>(c.geometry).radius;
+                const m::Ellipse2d* e = std::get_if<m::Ellipse2d>(&c.geometry);
+                if (const auto* a = std::get_if<m::EllipticalArc2d>(&c.geometry)) e = &a->ellipse;
+                if (ellipse && e) radii[g] = std::min(e->majorRadius, e->minorRadius);
+                if (circle || ellipse) projectedRadius[g] = radii[g];
+                if (const auto* sp = std::get_if<m::BSpline2d>(&c.geometry); sp && sp->poles.size() == def.poles.size()) {
+                    projectedSpline[g] = *sp;
                 }
             }
         }
@@ -183,8 +197,8 @@ Built build(const m::PartDocument& doc, const m::FeatureInfo& f, const m::Sketch
                     if (def.type == m::SketchGeometryType::Ellipse) {
                         bs.addEllipse(def.center, def.focus, radii[g], def.construction);
                     } else {
-                        bs.addEllipticalArc(def.center, def.focus, radii[g], def.start, def.end, def.counterClockwise,
-                                            def.construction);
+                        bs.addEllipticalArc(def.center, def.focus, radii[g], def.start, def.end,
+                                            def.projection >= 0 || def.counterClockwise, def.construction);
                     }
                     break;
                 case m::SketchGeometryType::BSpline: {
@@ -195,6 +209,13 @@ Built build(const m::PartDocument& doc, const m::FeatureInfo& f, const m::Sketch
                     sd.multiplicities = def.multiplicities;
                     sd.weights = def.weights;
                     sd.periodic = def.periodic;
+                    if (const auto& ps = projectedSpline[g]) {
+                        sd.degree = ps->degree;
+                        sd.knots = ps->knots;
+                        sd.multiplicities = ps->multiplicities;
+                        sd.weights = ps->weights;
+                        sd.periodic = ps->periodic;
+                    }
                     bs.addBSpline(sd, def.construction);
                     break;
                 }
@@ -204,10 +225,11 @@ Built build(const m::PartDocument& doc, const m::FeatureInfo& f, const m::Sketch
         }
     }
     for (std::size_t g = 0; g < ng; ++g) {
-        if (projectedRadius[g]) {
-            out.internal.insert(bs.sketch().constrain_radius(bs.entity(static_cast<m::SketchEntityId>(g + 1)).circle,
-                                                             *projectedRadius[g]));
-        }
+        if (!projectedRadius[g]) continue;
+        const auto& e = bs.entity(static_cast<m::SketchEntityId>(g + 1));
+        out.internal.insert(e.kind == m::BoundSketch::EntityKind::Circle
+                                ? bs.sketch().constrain_radius(e.circle, *projectedRadius[g])
+                                : bs.sketch().constrain_minor_radius(e.geo, *projectedRadius[g]));
     }
     using SC = m::SketchConstraintType;
     using K = m::BoundSketch::EntityKind;
@@ -288,6 +310,20 @@ Built build(const m::PartDocument& doc, const m::FeatureInfo& f, const m::Sketch
                 case SC::Fix: tag = s.constrain_fix(c.a); break;
                 case SC::SymmetricPoint: tag = s.constrain_symmetric_point(c.a, c.b, c.c); break;
                 case SC::Rotation: tag = s.constrain_rotation(c.a, c.b, c.c, v); break;
+                case SC::OffsetDistance: {
+                    int master = 0;
+                    if (c.c >= 1) {
+                        if (static_cast<std::size_t>(c.c) > out.tags.size()) {
+                            throw std::invalid_argument("offset dimension " + std::to_string(c.c) + " is not an earlier constraint");
+                        }
+                        master = out.tags[static_cast<std::size_t>(c.c) - 1];
+                    } else {
+                        positive("offset distance");
+                    }
+                    tag = s.constrain_offset_distance(geo(c.a), geo(c.b), v, master);
+                    break;
+                }
+                case SC::EqualMinorRadius: tag = s.constrain_equal_minor_radius(geo(c.a), geo(c.b)); break;
             }
             if (c.driven) {
                 if (!s2::is_dimension(s.constraint(tag).kind)) {
@@ -695,6 +731,8 @@ m::SketchConstraintType typeOf(s2::ConstraintKind k) {
         case CK::Concentric: return SC::Concentric;
         case CK::Fix: return SC::Fix;
         case CK::Rotation: return SC::Rotation;
+        case CK::OffsetDistance: return SC::OffsetDistance;
+        case CK::EqualMinorRadius: return SC::EqualMinorRadius;
     }
     throw std::logic_error("unknown constraint kind");
 }
@@ -716,7 +754,8 @@ s2::ConstraintKind storedKind(m::SketchConstraintType t) {
                    s2::ConstraintKind::MinorRadius, s2::ConstraintKind::Parallel, s2::ConstraintKind::Perpendicular,
                    s2::ConstraintKind::Tangent, s2::ConstraintKind::Equal, s2::ConstraintKind::Symmetric,
                    s2::ConstraintKind::SymmetricPoint, s2::ConstraintKind::Midpoint, s2::ConstraintKind::PointOn,
-                   s2::ConstraintKind::Concentric, s2::ConstraintKind::Fix, s2::ConstraintKind::Rotation}) {
+                   s2::ConstraintKind::Concentric, s2::ConstraintKind::Fix, s2::ConstraintKind::Rotation,
+                   s2::ConstraintKind::OffsetDistance, s2::ConstraintKind::EqualMinorRadius}) {
         if (typeOf(k) == t) return k;
     }
     throw std::logic_error("unknown constraint type");
@@ -866,6 +905,21 @@ Converted toData(const Built& b, const m::SketchData& original) {
                 def.c = pt(info.c.id);
                 break;
             case CK::Fix: def.a = pt(info.a.id); break;
+            case CK::EqualMinorRadius:
+                def.a = ent(info.a);
+                def.b = ent(info.b);
+                break;
+            case CK::OffsetDistance: {
+                def.a = ent(info.a);
+                def.b = ent(info.b);
+                if (info.master != 0) {
+                    auto it = out.constraintMap.find(info.master);
+                    if (it == out.constraintMap.end()) throw std::logic_error("offset dimension of a removed constraint");
+                    def.c = it->second;
+                    def.value = "0";
+                }
+                break;
+            }
         }
         out.data.constraints.push_back(def);
         out.constraintMap[tag] = static_cast<int>(out.data.constraints.size());
@@ -924,7 +978,16 @@ val docSketchEdit(std::uint32_t handle, val featureId, val sketch, val tool) {
             const m::Point2 pick = xyArg(tool["pick"], "tool.pick");
             r = name == "trim" ? m::trimEntity(bs, e, pick) : m::extendEntity(bs, e, pick);
         } else if (name == "offset") {
-            r = m::offsetChain(bs, entityList(tool["chain"], ng, "tool.chain"), numberArg(tool, "distance"), constrain);
+            m::OffsetOptions o;
+            o.distance = numberArg(tool, "distance");
+            o.constrain = constrain;
+            o.bothSides = optionalBool(tool, "bothSides", false, "tool");
+            if (present(tool["corners"])) {
+                const std::string corners = requireString(tool["corners"], "tool.corners");
+                if (corners == "round") o.corners = m::OffsetCorners::Round;
+                else if (corners != "extend") throw InputError("tool.corners must be 'extend' or 'round'");
+            }
+            r = m::offsetChain(bs, entityList(tool["chain"], ng, "tool.chain"), o);
         } else if (name == "mirror") {
             r = m::mirrorEntities(bs, entityList(tool["entities"], ng, "tool.entities"),
                                   entityArg(tool["axis"], ng, "tool.axis"), constrain);
@@ -976,6 +1039,86 @@ val docSketchEdit(std::uint32_t handle, val featureId, val sketch, val tool) {
             if (it != c.constraintMap.end()) cons.call<void>("push", it->second);
         }
         o.set("constraints", cons);
+        if (res.dimension != 0) {
+            auto it = c.constraintMap.find(res.dimension);
+            if (it != c.constraintMap.end()) o.set("dimension", it->second);
+        }
+        return success(o);
+    });
+}
+
+// ------------------------------------------------------------------ projection of model edges
+
+// Projects edges of the body the sketch is drawn on (target before:<feature>) onto the sketch
+// plane: every edge, and every edge of every face, of `elements` [{kind: 'edge' | 'face', index}]
+// becomes a reference of the node's "projected" slot (an edge already there is reused) and a
+// sketch curve pinned at its projection (projectedDefinition), so it follows the model at every
+// rebuild. Edges that project to a point are skipped (`skipped`). The node's references change
+// at once (inside the caller's transaction); the sketch data is returned, not stored.
+val docSketchProject(std::uint32_t handle, val featureId, val sketch, val elements, val options) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        const m::FeatureInfo f = sketchFeature(doc, featureId);
+        m::SketchData data = sketchFromJs(sketch);
+        const bool construction = present(options) && optionalBool(options, "construction", false, "options");
+        const m::NamedShape shape = targetShape(doc, val("before:" + f.id));
+        const m::SketchPlacement placement = placementOf(f);
+        std::vector<std::size_t> edges;
+        auto addEdge = [&](std::size_t i) {
+            if (std::find(edges.begin(), edges.end(), i) == edges.end()) edges.push_back(i);
+        };
+        for (const val& e : arrayItems(elements, "elements")) {
+            if (!isObject(e)) throw InputError("elements[] must be {kind, index}");
+            const std::string kind = requireString(e["kind"], "elements[].kind");
+            const int index = requireInt(e["index"], "elements[].index");
+            const m::ElementKind k = kind == "edge" ? m::ElementKind::Edge : kind == "face" ? m::ElementKind::Face : m::ElementKind::Vertex;
+            if (k == m::ElementKind::Vertex) throw InputError("elements[].kind must be 'edge' or 'face'");
+            if (index < 0 || static_cast<std::size_t>(index) >= shape.count(k)) {
+                throw InputError(kind + " index " + std::to_string(index) + " is out of range (body has " +
+                                 std::to_string(shape.count(k)) + ")");
+            }
+            if (k == m::ElementKind::Edge) {
+                addEdge(static_cast<std::size_t>(index));
+            } else {
+                for (TopExp_Explorer ex(shape.element(k, static_cast<std::size_t>(index)), TopAbs_EDGE); ex.More(); ex.Next()) {
+                    if (auto i = shape.indexOf(m::ElementKind::Edge, ex.Current())) addEdge(*i);
+                }
+            }
+        }
+        if (edges.empty()) throw InputError("elements must name at least one edge or face");
+        std::vector<m::TopoReference> refs;
+        if (auto it = f.references.find("projected"); it != f.references.end()) refs = it->second;
+        val created = val::array();
+        val skipped = val::array();
+        const std::size_t refsBefore = refs.size();
+        for (std::size_t i : edges) {
+            const TopoDS_Shape& edge = shape.element(m::ElementKind::Edge, i);
+            auto pe = m::projectEdge(placement, TopoDS::Edge(edge));
+            if (!pe) return failure(pe.error());
+            if (!pe.value().curve) {
+                skipped.call<void>("push", static_cast<double>(i));
+                continue;
+            }
+            auto ref = m::makeReference(shape, edge);
+            if (!ref) return failure(ref.error());
+            int index = -1;
+            for (std::size_t r = 0; r < refs.size(); ++r) {
+                if (refs[r].name == ref.value().name && refs[r].kind == ref.value().kind) index = static_cast<int>(r);
+            }
+            if (index < 0) {
+                index = static_cast<int>(refs.size());
+                refs.push_back(ref.value());
+            }
+            data.geometry.push_back(m::projectedDefinition(data, *pe.value().curve, index, construction));
+            created.call<void>("push", static_cast<double>(data.geometry.size()));
+        }
+        if (refs.size() != refsBefore) {
+            if (auto st = doc.setReferences(f.id, "projected", refs); !st) return failure(st.error());
+        }
+        val o = val::object();
+        o.set("sketch", toJs(data));
+        o.set("created", created);
+        o.set("skipped", skipped);
+        o.set("references", static_cast<double>(refs.size()));
         return success(o);
     });
 }
@@ -987,4 +1130,5 @@ val docSketchEdit(std::uint32_t handle, val featureId, val sketch, val tool) {
 EMSCRIPTEN_BINDINGS(bendcore_sketch_editor) {
     emscripten::function("docSketchSolve", &bendcore::wasm_modeling::docSketchSolve);
     emscripten::function("docSketchEdit", &bendcore::wasm_modeling::docSketchEdit);
+    emscripten::function("docSketchProject", &bendcore::wasm_modeling::docSketchProject);
 }

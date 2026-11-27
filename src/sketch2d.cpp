@@ -749,6 +749,7 @@ void Sketch::set_constraint_value(Id c, double value) {
 
 double Sketch::constraint_value(Id c) const {
     const ConstraintInfo& i = constraint(c);
+    if (i.kind == ConstraintKind::OffsetDistance && i.master != 0) return offset_distance_value(c);
     return i.driving ? i.value : measure(c);
 }
 
