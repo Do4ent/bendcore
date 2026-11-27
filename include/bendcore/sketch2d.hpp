@@ -71,6 +71,8 @@ enum class ConstraintKind {
     OffsetDistance,     // кривая a смещена от кривой b на value (отрезки — расстояние от начала a
                         // до прямой b; окружности/дуги — разность радиусов); с master — на значение
                         // размера master (эквидистанта: один размер на цепочку)
+    EqualMinorRadius,   // эллипсы/дуги эллипсов a, b: равные малые полуоси (зеркало и массивы:
+                        // большая полуось следует из образов центра и фокуса)
 };
 
 const char* to_string(ConstraintKind kind) noexcept;
@@ -215,6 +217,7 @@ public:
     // master > 0 — значение берётся у размера-смещения master (справочного — измеренное);
     // удаление master удаляет и это ограничение. Такое ограничение не может быть справочным.
     Id constrain_offset_distance(Geo offset, Geo original, double d, Id master = 0);
+    Id constrain_equal_minor_radius(Geo a, Geo b);
     // Значение смещения, которое использует OffsetDistance (по цепочке master).
     double offset_distance_value(Id c) const;
 

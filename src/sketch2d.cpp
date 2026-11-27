@@ -162,6 +162,7 @@ const char* to_string(ConstraintKind kind) noexcept {
         case ConstraintKind::Fix: return "fix";
         case ConstraintKind::Rotation: return "rotation";
         case ConstraintKind::OffsetDistance: return "offset-distance";
+        case ConstraintKind::EqualMinorRadius: return "equal-minor-radius";
     }
     return "unknown";
 }
@@ -675,6 +676,12 @@ Id Sketch::constrain_offset_distance(Geo offset, Geo original, double d, Id mast
     return add_constraint(i);
 }
 
+Id Sketch::constrain_equal_minor_radius(Geo a, Geo b) {
+    require(a, {GeoKind::Ellipse, GeoKind::EllipseArc}, "равенство малых полуосей");
+    require(b, {GeoKind::Ellipse, GeoKind::EllipseArc}, "равенство малых полуосей");
+    return add_constraint(make(ConstraintKind::EqualMinorRadius, a, b));
+}
+
 double Sketch::offset_distance_value(Id c) const {
     const ConstraintInfo* i = &constraint(c);
     for (std::size_t guard = 0; i->master != 0; ++guard) {
@@ -952,6 +959,7 @@ double Sketch::residual(Id id) const {
             return std::abs(dist(p, f) + dist(p, f2) - 2 * ellipse_major_radius(c.b));
         }
         case ConstraintKind::Concentric: return dist(center(c.a), center(c.b));
+        case ConstraintKind::EqualMinorRadius: return std::abs(crec(c.a).radius - crec(c.b).radius);
         case ConstraintKind::Rotation: {
             const Point2 p = P(c.a), q = P(c.b), o = P(c.c);
             const double co = std::cos(c.value * kDeg), si = std::sin(c.value * kDeg);
@@ -1305,6 +1313,9 @@ struct SolverModel {
                 } else {
                     sys.addConstraintEqualRadii(elliptic(c.a), elliptic(c.b), tag, true);
                 }
+                break;
+            case ConstraintKind::EqualMinorRadius:
+                sys.addConstraintEqual(elliptic(c.a).radmin, elliptic(c.b).radmin, tag, true);
                 break;
             case ConstraintKind::Symmetric: sys.addConstraintP2PSymmetric(P(c.a), P(c.b), gl[c.c.id], tag, true); break;
             case ConstraintKind::SymmetricPoint: sys.addConstraintP2PSymmetric(P(c.a), P(c.b), P(c.c), tag, true); break;

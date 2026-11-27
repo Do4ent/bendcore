@@ -757,3 +757,57 @@ TEST(SketchTools, OffsetChainWithArcAndSpline) {
     EXPECT_TRUE(rep.redundant.empty()) << rep.status;
     (void)line;
 }
+
+// ---- Mirror and patterns of ellipses and splines; circular pattern against the formula -------
+
+TEST(SketchTools, MirrorAndPatternOfEllipsesFollowTheMinorRadius) {
+    BoundSketch b;
+    auto& s = b.sketch();
+    const Id a0 = fixedPoint(b, 0, -10), a1 = fixedPoint(b, 0, 10);
+    const auto axis = b.addLine(a0, a1, true);
+    const auto el = b.addEllipse(fixedPoint(b, 10, 0), fixedPoint(b, 14, 3), 2);
+    const Id minor = s.constrain_minor_radius(b.entity(el).geo, 2);
+    auto m = mirrorEntities(b, {el}, axis);
+    ASSERT_TRUE(m.ok()) << m.error().message;
+    auto lp = linearPattern(b, {el}, {0, 20}, 2);
+    ASSERT_TRUE(lp.ok()) << lp.error().message;
+    auto rep = b.solve();
+    EXPECT_EQ(rep.dof, 0) << rep.status;
+    EXPECT_TRUE(rep.redundant.empty()) << rep.status;
+    s.set_constraint_value(minor, 3);
+    rep = b.solve();
+    ASSERT_TRUE(rep.converged);
+    for (SketchEntityId id : {m.value().created[0], lp.value().created[0]}) {
+        EXPECT_NEAR(s.ellipse(b.entity(id).geo.id).minor_radius, 3, 1e-9);
+        EXPECT_NEAR(s.ellipse_major_radius(b.entity(id).geo), std::sqrt(25.0 + 9.0), 1e-9);
+    }
+    expectPoint(b, b.entity(m.value().created[0]).focus, -14, 3);
+    expectPoint(b, b.entity(lp.value().created[0]).focus, 14, 23);
+}
+
+TEST(SketchTools, CircularPatternCoordinatesByFormula) {
+    BoundSketch b;
+    auto& s = b.sketch();
+    const Id o = fixedPoint(b, 5, -3);
+    const Id p = s.add_point(25, -3);  // moved below by dimensions: polar (18, 30°) around o
+    const auto c = b.addCircle(p, 2);
+    s.constrain_radius(b.entity(c).circle, 2);
+    const int n = 7;
+    const double step = 360.0 / n;
+    auto cp = circularPattern(b, {c}, o, n, step);
+    ASSERT_TRUE(cp.ok()) << cp.error().message;
+    ASSERT_EQ(cp.value().created.size(), static_cast<std::size_t>(n - 1));
+    const auto guide = b.addLine(o, p, true);
+    s.constrain_length(b.entity(guide).line, 18);
+    const auto ref = b.addLine(o, fixedPoint(b, 15, -3), true);
+    s.constrain_angle(b.entity(ref).line, b.entity(guide).line, 30);
+    const auto rep = b.solve();
+    ASSERT_TRUE(rep.converged);
+    EXPECT_EQ(rep.dof, 0) << rep.status;
+    for (int k = 1; k < n; ++k) {
+        const double ang = (30 + k * step) * kPi / 180;
+        const auto& e = b.entity(cp.value().created[static_cast<std::size_t>(k - 1)]);
+        expectPoint(b, e.center, 5 + 18 * std::cos(ang), -3 + 18 * std::sin(ang), 1e-9);
+        EXPECT_NEAR(s.circle_radius(e.circle), 2, 1e-12);
+    }
+}

@@ -1215,8 +1215,13 @@ Result<SketchEditResult> copyEntities(BoundSketch& s, const std::vector<SketchEn
     return r;
 }
 
+// Radii the point images do not fix: circles (radius) and ellipses (minor radius; the major radius
+// follows from the centre and focus images).
 void equalRadius(BoundSketch& s, SketchEditResult& r, const BoundSketch::Entity& from, const BoundSketch::Entity& to) {
     if (from.kind == K::Circle) r.constraints.push_back(s.sketch().constrain_equal(from.geo, to.geo));
+    if (from.kind == K::Ellipse || from.kind == K::EllipticalArc) {
+        r.constraints.push_back(s.sketch().constrain_equal_minor_radius(from.geo, to.geo));
+    }
 }
 
 }  // namespace
