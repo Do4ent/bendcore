@@ -31,29 +31,53 @@ import type { EdgeBuffers } from './edgeBuffers';
 import { closestPointOnSegmentToRay, edgeCandidates } from './edgePick';
 import { shouldReframePart } from './autoFrame';
 import { buildReferenceMesh, referenceMeshHit } from './referenceMeshObject';
+import {
+  NO_BODY,
+  boxKind,
+  boxSelect as boxSelectMesh,
+  defaultFilter,
+  edgeAllowed,
+  facesOfBodies,
+  faceAllowed,
+  normalizeRect,
+  selectOp,
+} from './selection';
+import type { BoxResult, SelectOp, SelectionFilter } from './selection';
 import type { MeshPick, ReferenceMeshDisplay } from './referenceMeshObject';
 
-export type { MeshPick, ReferenceMeshDisplay };
+export type { MeshPick, ReferenceMeshDisplay, BoxResult, SelectOp, SelectionFilter };
 
 export interface FacePick {
+  /** Shift adds to the selection, Ctrl removes from it (selection.ts, selectOp). */
+  op?: SelectOp;
   faceIndex: number;
   /** Hit point in model coordinates, mm. */
   point: [number, number, number];
 }
 
 export interface EdgePick {
+  op?: SelectOp;
   edgeIndex: number;
   /** Closest point of the edge polyline to the cursor, mm. */
   point: [number, number, number];
 }
 
 export interface VertexPick {
+  op?: SelectOp;
   vertexIndex: number;
   /** Position of the vertex, mm. */
   point: [number, number, number];
 }
 
-export type PickMode = 'face' | 'edge' | 'vertex' | 'none';
+/** A body (solid) of the shown shape, picked through one of its faces. */
+export interface BodyPick {
+  op?: SelectOp;
+  bodyIndex: number;
+  faceIndex: number;
+  point: [number, number, number];
+}
+
+export type PickMode = 'face' | 'edge' | 'vertex' | 'body' | 'none';
 
 type Vec3 = [number, number, number];
 
@@ -103,6 +127,24 @@ export interface KernelViewportProps {
   selectedVertices?: readonly number[];
   /** Datum points, coordinate systems, planes and axes drawn over the model. */
   datums?: readonly DatumGlyph[];
+  /**
+   * Selection filter by geometry type (selection.ts): hover highlight, clicks and the box take only
+   * faces/edges that pass it. Its `mode` is ignored: `pickMode` decides the element kind.
+   */
+  filter?: SelectionFilter;
+  /** Surface type of every face and curve type of every edge (KernelShape.faceTypes(), PartMesh.faceTypes). */
+  faceTypes?: readonly string[] | null;
+  edgeTypes?: readonly string[] | null;
+  /** Body of every face (PartMesh.faceBodies) for the body mode. */
+  faceBodies?: ArrayLike<number> | null;
+  onPickBody?: (pick: BodyPick | null) => void;
+  selectedBodies?: readonly number[];
+  /**
+   * Box selection: the left button drags a rectangle instead of orbiting (left to right takes the
+   * elements entirely inside, right to left the touched ones; Shift adds, Ctrl removes).
+   */
+  boxSelect?: boolean;
+  onBoxSelect?: (result: BoxResult, op: SelectOp, kind: 'inside' | 'cross') => void;
   /** Translucent mesh drawn over the model (e.g. sketch regions); not pickable. */
   overlay?: KernelMesh | null;
   /**
@@ -130,6 +172,7 @@ export interface KernelViewportProps {
 
 const FACE_COLOR = 0xb8c4d6;
 const SELECTED_COLOR = 0xff8c1a;
+const HOVER_COLOR = 0xffd166;
 const EDGE_COLOR = 0x1d2733;
 const OVERLAY_COLOR = 0x2f7de1;
 const SECTION_COLOR = 0xd62828;
@@ -154,6 +197,10 @@ interface SceneState {
   faces: THREE.Mesh | null;
   edgeBuffers: EdgeBuffers | null;
   highlight: THREE.Group;
+  /** hover highlight of edges and vertices (faces use material 2) */
+  hover: THREE.Group;
+  selectedFaceSet: Set<number>;
+  hoverFaceSet: Set<number>;
   overlay: THREE.Group;
   /** reference meshes (pickable for measurements only) */
   meshes: THREE.Group;
@@ -198,10 +245,21 @@ function buildFaces(mesh: KernelMesh): THREE.Mesh {
   const materials = [
     new THREE.MeshPhongMaterial({ color: FACE_COLOR, shininess: 40, ...offset }),
     new THREE.MeshPhongMaterial({ color: SELECTED_COLOR, shininess: 40, ...offset }),
+    new THREE.MeshPhongMaterial({ color: HOVER_COLOR, shininess: 40, ...offset }),
   ];
   const faces = new THREE.Mesh(geometry, materials);
   faces.name = 'kernel-faces';
   return faces;
+}
+
+/** Draw groups of the faces: selected faces use material 1, the hovered ones material 2. */
+function applyFaceMaterials(state: SceneState, mesh: KernelMesh | null): void {
+  if (!state.faces || !mesh) return;
+  const groups = state.faces.geometry.groups;
+  for (let g = 0; g < groups.length; ++g) {
+    const face = mesh.faceSpans[g * 3];
+    groups[g].materialIndex = state.selectedFaceSet.has(face) ? 1 : state.hoverFaceSet.has(face) ? 2 : 0;
+  }
 }
 
 function buildEdges(buffers: EdgeBuffers, color = EDGE_COLOR): THREE.LineSegments {
@@ -344,6 +402,14 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
   onPickVertex,
   selectedVertices,
   datums,
+  filter = defaultFilter(),
+  faceTypes = null,
+  edgeTypes = null,
+  faceBodies = null,
+  onPickBody,
+  selectedBodies,
+  boxSelect = false,
+  onBoxSelect,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
@@ -360,6 +426,18 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
   onPickMeshRef.current = onPickMesh;
   const pickModeRef = useRef(pickMode);
   pickModeRef.current = pickMode;
+  const onPickBodyRef = useRef(onPickBody);
+  onPickBodyRef.current = onPickBody;
+  const onBoxSelectRef = useRef(onBoxSelect);
+  onBoxSelectRef.current = onBoxSelect;
+  const boxSelectRef = useRef(boxSelect);
+  boxSelectRef.current = boxSelect;
+  // The filter in force: the element kind is the pick mode.
+  const activeFilter: SelectionFilter = { ...filter, mode: pickMode === 'none' ? 'face' : pickMode };
+  const filterRef = useRef(activeFilter);
+  filterRef.current = activeFilter;
+  const typesRef = useRef({ faceTypes, edgeTypes, faceBodies });
+  typesRef.current = { faceTypes, edgeTypes, faceBodies };
   meshRef.current = mesh;
 
   useEffect(() => {
@@ -392,6 +470,8 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     scene.add(toolsGroup);
     const marksGroup = new THREE.Group();
     scene.add(marksGroup);
+    const hoverGroup = new THREE.Group();
+    scene.add(hoverGroup);
     const datumsGroup = new THREE.Group();
     scene.add(datumsGroup);
 
@@ -411,6 +491,9 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       faces: null,
       edgeBuffers: null,
       highlight,
+      hover: hoverGroup,
+      selectedFaceSet: new Set(),
+      hoverFaceSet: new Set(),
       overlay: overlayGroup,
       meshes: meshesGroup,
       tools: toolsGroup,
@@ -438,45 +521,50 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     observer.observe(container);
     resize();
 
-    let down: { x: number; y: number } | null = null;
-    const onPointerDown = (e: PointerEvent) => {
-      down = { x: e.clientX, y: e.clientY };
+    type Picked =
+      | { kind: 'face'; faceIndex: number; point: Vec3 }
+      | { kind: 'edge'; edgeIndex: number; point: Vec3 }
+      | { kind: 'vertex'; vertexIndex: number; point: Vec3 }
+      | { kind: 'body'; bodyIndex: number; faceIndex: number; point: Vec3 }
+      /** something lies under the cursor but the filter refuses it */
+      | { kind: 'blocked' }
+      | null;
+
+    const clientProjector = (rect: DOMRect) => (x: number, y: number, z: number) => {
+      const world = new THREE.Vector3(x, y, z);
+      const p = world.clone().project(camera);
+      const clipped = state.clip ? state.clip.distanceToPoint(world) < -1e-6 : false;
+      return {
+        x: rect.left + ((p.x + 1) / 2) * rect.width,
+        y: rect.top + ((1 - p.y) / 2) * rect.height,
+        visible: p.z > -1 && p.z < 1 && !clipped,
+      };
     };
-    const onPointerUp = (e: PointerEvent) => {
-      if (!down || e.button !== 0) return;
-      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
-      down = null;
-      if (moved > CLICK_TOLERANCE) return;
-      const current = meshRef.current;
-      const mode = pickModeRef.current;
-      if (mode === 'none') return;
+
+    const castRay = (clientX: number, clientY: number) => {
       const rect = renderer.domElement.getBoundingClientRect();
-      const ndc = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1,
-      );
+      const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
       const raycaster = new THREE.Raycaster();
       raycaster.setFromCamera(ndc, camera);
+      const current = meshRef.current;
       // The first hit on the kept side of the section plane.
       const hit =
         state.faces && current
           ? raycaster.intersectObject(state.faces, false).find((h) => !state.clip || state.clip.distanceToPoint(h.point) >= 0)
           : undefined;
-      // A point on a reference mesh in front of the model (measurements).
-      const meshPick = onPickMeshRef.current;
-      if (meshPick) {
-        const mh = referenceMeshHit(raycaster, state.meshes, (p) => !state.clip || state.clip.distanceToPoint(p) >= 0);
-        if (mh && (!hit || mh.distance < hit.distance)) {
-          meshPick(mh.pick);
-          return;
-        }
-      }
+      return { rect, raycaster, hit };
+    };
+
+    /** What the cursor is over in the pick mode, with the selection filter applied. */
+    const pickAt = (clientX: number, clientY: number, ray: ReturnType<typeof castRay>): Picked => {
+      const mode = pickModeRef.current;
+      const current = meshRef.current;
+      const { rect, raycaster, hit } = ray;
+      const types = typesRef.current;
+      const active = filterRef.current;
       if (mode === 'vertex') {
         const points = verticesRef.current;
-        if (!points || points.length === 0) {
-          onPickVertexRef.current?.(null);
-          return;
-        }
+        if (!points || points.length === 0) return null;
         const size = state.faces?.geometry.boundingSphere?.radius ?? 1;
         const { origin, direction } = raycaster.ray;
         // Nearest vertex on screen within the tolerance, not hidden by a face nor clipped away.
@@ -488,65 +576,202 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
           if (!(q.z > -1 && q.z < 1)) continue;
           const sx = rect.left + ((q.x + 1) / 2) * rect.width;
           const sy = rect.top + ((1 - q.y) / 2) * rect.height;
-          const distance = Math.hypot(sx - e.clientX, sy - e.clientY);
+          const distance = Math.hypot(sx - clientX, sy - clientY);
           if (distance > VERTEX_TOLERANCE || (best && distance >= best.distance)) continue;
           const along = p.clone().sub(origin).dot(direction);
           if (hit && along > hit.distance + size * 2e-3) continue;
           best = { index: i, distance };
         }
         const k = best ? best.index * 3 : -1;
-        onPickVertexRef.current?.(best ? { vertexIndex: best.index, point: [points[k], points[k + 1], points[k + 2]] } : null);
-        return;
+        return best ? { kind: 'vertex', vertexIndex: best.index, point: [points[k], points[k + 1], points[k + 2]] } : null;
       }
       if (mode === 'edge') {
         const buffers = state.edgeBuffers;
-        if (!buffers || !current) {
-          onPickEdgeRef.current?.(null);
-          return;
-        }
-        const project = (x: number, y: number, z: number) => {
-          const p = new THREE.Vector3(x, y, z).project(camera);
-          return {
-            x: rect.left + ((p.x + 1) / 2) * rect.width,
-            y: rect.top + ((1 - p.y) / 2) * rect.height,
-            visible: p.z > -1 && p.z < 1,
-          };
-        };
+        if (!buffers || !current) return null;
         const size = state.faces?.geometry.boundingSphere?.radius ?? 1;
         const { origin, direction } = raycaster.ray;
-        const o: [number, number, number] = [origin.x, origin.y, origin.z];
-        const d: [number, number, number] = [direction.x, direction.y, direction.z];
-        const vertex = (v: number): [number, number, number] => [
-          buffers.positions[v * 3],
-          buffers.positions[v * 3 + 1],
-          buffers.positions[v * 3 + 2],
-        ];
-        // Nearest edge not hidden by a face: its point closest to the cursor ray must not lie
-        // behind the first face the ray hits.
-        let picked: EdgePick | null = null;
-        for (const c of edgeCandidates(buffers, project, e.clientX, e.clientY, EDGE_TOLERANCE)) {
-          const near = closestPointOnSegmentToRay(
-            o,
-            d,
-            vertex(buffers.indices[c.segment * 2]),
-            vertex(buffers.indices[c.segment * 2 + 1]),
-          );
+        const o: Vec3 = [origin.x, origin.y, origin.z];
+        const d: Vec3 = [direction.x, direction.y, direction.z];
+        const vertex = (v: number): Vec3 => [buffers.positions[v * 3], buffers.positions[v * 3 + 1], buffers.positions[v * 3 + 2]];
+        // Nearest edge not hidden by a face (its point closest to the cursor ray must not lie
+        // behind the first face the ray hits) and passing the type filter.
+        for (const c of edgeCandidates(buffers, clientProjector(rect), clientX, clientY, EDGE_TOLERANCE)) {
+          if (!edgeAllowed(active, types.edgeTypes?.[c.edgeIndex])) continue;
+          const near = closestPointOnSegmentToRay(o, d, vertex(buffers.indices[c.segment * 2]), vertex(buffers.indices[c.segment * 2 + 1]));
           if (hit && near.rayDistance > hit.distance + size * 2e-3) continue;
-          picked = { edgeIndex: c.edgeIndex, point: near.point };
-          break;
+          return { kind: 'edge', edgeIndex: c.edgeIndex, point: near.point };
         }
-        onPickEdgeRef.current?.(picked);
-        return;
+        return null;
       }
-      if (!hit || hit.faceIndex === undefined || !current) {
-        onPickRef.current(null);
-        return;
-      }
+      if (!hit || hit.faceIndex === undefined || !current) return null;
       const faceIndex = faceOfTriangle(current.faceSpans, hit.faceIndex);
-      onPickRef.current(faceIndex < 0 ? null : { faceIndex, point: [hit.point.x, hit.point.y, hit.point.z] });
+      if (faceIndex < 0) return null;
+      const point: Vec3 = [hit.point.x, hit.point.y, hit.point.z];
+      if (mode === 'body') {
+        const body = types.faceBodies?.[faceIndex];
+        return body === undefined || body === NO_BODY ? null : { kind: 'body', bodyIndex: body, faceIndex, point };
+      }
+      if (!faceAllowed(active, types.faceTypes?.[faceIndex])) return { kind: 'blocked' };
+      return { kind: 'face', faceIndex, point };
+    };
+
+    const hoverKeyOf = (picked: Picked): string => {
+      if (!picked) return '';
+      if (picked.kind === 'face') return `face:${picked.faceIndex}`;
+      if (picked.kind === 'body') return `body:${picked.bodyIndex}`;
+      if (picked.kind === 'edge') return `edge:${picked.edgeIndex}`;
+      if (picked.kind === 'vertex') return `vertex:${picked.vertexIndex}`;
+      return '';
+    };
+
+    // ---- hover: only elements the filter allows are highlighted
+    let hoverKey = '';
+    let hoverFrame = 0;
+    const setHover = (picked: Picked) => {
+      const current = meshRef.current;
+      const faces = new Set<number>();
+      disposeModel(state.hover);
+      if (picked && picked.kind === 'face') {
+        faces.add(picked.faceIndex);
+      } else if (picked && picked.kind === 'body') {
+        for (const f of facesOfBodies(typesRef.current.faceBodies ?? undefined, [picked.bodyIndex])) faces.add(f);
+      } else if (picked && picked.kind === 'edge' && current) {
+        const chosen = current.edges.filter((e) => e.edgeIndex === picked.edgeIndex);
+        const lines = buildEdges(packEdgePolylines(chosen), HOVER_COLOR);
+        lines.name = 'kernel-hover-edge';
+        lines.renderOrder = 9;
+        (lines.material as unknown as { depthTest: boolean }).depthTest = false;
+        state.hover.add(lines);
+      } else if (picked && picked.kind === 'vertex') {
+        state.hover.add(pointsObject(picked.point, HOVER_COLOR, 12, 'kernel-hover-vertex'));
+      }
+      state.hoverFaceSet = faces;
+      applyFaceMaterials(state, current);
+      hoverKey = hoverKeyOf(picked);
+      renderer.domElement.parentElement?.setAttribute('data-hover', hoverKey);
+      render();
+    };
+    const hoverAt = (clientX: number, clientY: number) => {
+      if (pickModeRef.current === 'none') {
+        if (hoverKey) setHover(null);
+        return;
+      }
+      const picked = pickAt(clientX, clientY, castRay(clientX, clientY));
+      const next = picked && picked.kind !== 'blocked' ? picked : null;
+      if (hoverKeyOf(next) !== hoverKey) setHover(next);
+    };
+
+    // ---- box selection rectangle
+    let down: { x: number; y: number } | null = null;
+    let boxElement: HTMLDivElement | null = null;
+    const drawBox = (x0: number, y0: number, x1: number, y1: number) => {
+      const host = renderer.domElement.parentElement;
+      if (!host) return;
+      if (!boxElement) {
+        boxElement = document.createElement('div');
+        boxElement.className = 'kernel-box';
+        boxElement.setAttribute('data-testid', 'box-rect');
+        host.appendChild(boxElement);
+      }
+      const rect = renderer.domElement.getBoundingClientRect();
+      const box = normalizeRect({ x: x0, y: y0 }, { x: x1, y: y1 });
+      boxElement.style.left = `${box.x0 - rect.left}px`;
+      boxElement.style.top = `${box.y0 - rect.top}px`;
+      boxElement.style.width = `${box.x1 - box.x0}px`;
+      boxElement.style.height = `${box.y1 - box.y0}px`;
+      boxElement.setAttribute('data-direction', x1 >= x0 ? 'inside' : 'cross');
+    };
+    const hideBox = () => {
+      boxElement?.remove();
+      boxElement = null;
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      down = { x: e.clientX, y: e.clientY };
+      if (hoverKey) setHover(null);
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (down) {
+        if (boxSelectRef.current && (e.buttons & 1) !== 0 && Math.hypot(e.clientX - down.x, e.clientY - down.y) > CLICK_TOLERANCE) {
+          drawBox(down.x, down.y, e.clientX, e.clientY);
+        }
+        return;
+      }
+      if (hoverFrame) cancelAnimationFrame(hoverFrame);
+      const { clientX, clientY } = e;
+      hoverFrame = requestAnimationFrame(() => {
+        hoverFrame = 0;
+        hoverAt(clientX, clientY);
+      });
+    };
+    const onPointerLeave = () => {
+      if (hoverKey) setHover(null);
+    };
+    const finishBox = (start: { x: number; y: number }, e: PointerEvent): void => {
+      const current = meshRef.current;
+      hideBox();
+      if (!current) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      const kind = boxKind(start, { x: e.clientX });
+      const types = typesRef.current;
+      const result = boxSelectMesh(
+        {
+          ...current,
+          vertices: verticesRef.current,
+          faceTypes: types.faceTypes ?? undefined,
+          edgeTypes: types.edgeTypes ?? undefined,
+          faceBodies: types.faceBodies ?? undefined,
+        },
+        clientProjector(rect),
+        normalizeRect(start, { x: e.clientX, y: e.clientY }),
+        kind,
+        filterRef.current,
+      );
+      onBoxSelectRef.current?.(result, selectOp(e), kind);
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (!down || e.button !== 0) return;
+      const start = down;
+      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      down = null;
+      if (moved > CLICK_TOLERANCE) {
+        if (boxSelectRef.current && pickModeRef.current !== 'none') finishBox(start, e);
+        return;
+      }
+      const current = meshRef.current;
+      const mode = pickModeRef.current;
+      if (mode === 'none') return;
+      const ray = castRay(e.clientX, e.clientY);
+      const { raycaster, hit } = ray;
+      const op = selectOp(e);
+      // A point on a reference mesh in front of the model (measurements).
+      const meshPick = onPickMeshRef.current;
+      if (meshPick) {
+        const mh = referenceMeshHit(raycaster, state.meshes, (p) => !state.clip || state.clip.distanceToPoint(p) >= 0);
+        if (mh && (!hit || mh.distance < hit.distance)) {
+          meshPick(mh.pick);
+          return;
+        }
+      }
+      const picked = pickAt(e.clientX, e.clientY, ray);
+      if (picked && picked.kind === 'blocked') return;
+      if (mode === 'vertex') {
+        onPickVertexRef.current?.(picked && picked.kind === 'vertex' ? { op, vertexIndex: picked.vertexIndex, point: picked.point } : null);
+      } else if (mode === 'edge') {
+        onPickEdgeRef.current?.(picked && picked.kind === 'edge' ? { op, edgeIndex: picked.edgeIndex, point: picked.point } : null);
+      } else if (mode === 'body') {
+        onPickBodyRef.current?.(
+          picked && picked.kind === 'body' ? { op, bodyIndex: picked.bodyIndex, faceIndex: picked.faceIndex, point: picked.point } : null,
+        );
+      } else if (!current) {
+        onPickRef.current(null);
+      } else {
+        onPickRef.current(picked && picked.kind === 'face' ? { op, faceIndex: picked.faceIndex, point: picked.point } : null);
+      }
     };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerleave', onPointerLeave);
 
     onReady?.({
       worldToClient(x, y, z) {
@@ -561,10 +786,15 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       observer.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('pointermove', onPointerMove);
+      renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
+      if (hoverFrame) cancelAnimationFrame(hoverFrame);
+      hideBox();
       controls.removeEventListener('change', render);
       controls.dispose();
       disposeModel(model);
       disposeModel(highlight);
+      disposeModel(hoverGroup);
       disposeModel(overlayGroup);
       disposeModel(meshesGroup);
       disposeModel(toolsGroup);
@@ -583,6 +813,14 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     const state = stateRef.current;
     if (state) state.framed = false;
   }, [frameKey]);
+
+  // Box selection: the left button drags a rectangle, so it no longer orbits.
+  useEffect(() => {
+    const state = stateRef.current;
+    if (!state) return;
+    state.controls.mouseButtons.LEFT = boxSelect ? -1 : 0;
+    state.renderer.domElement.parentElement?.setAttribute('data-box-select', boxSelect ? '1' : '0');
+  }, [boxSelect]);
 
   // Replace the model when the kernel mesh changes.
   useEffect(() => {
@@ -618,20 +856,18 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mesh]);
 
-  // Highlight: the selected faces' draw groups use material 1; selected edges are redrawn.
+  // Highlight: the selected faces' draw groups use material 1 (hovered ones 2); selected edges are redrawn.
   const faceKey = [selectedFace ?? -1, ...(selectedFaces ?? [])].join(',');
   const edgeKey = (selectedEdges ?? []).join(',');
+  const bodyKey = (selectedBodies ?? []).join(',');
   useEffect(() => {
     const state = stateRef.current;
     if (!state) return;
     const faceSet = new Set<number>(selectedFaces ?? []);
     if (selectedFace !== null && selectedFace !== undefined) faceSet.add(selectedFace);
-    if (state.faces && mesh) {
-      const groups = state.faces.geometry.groups;
-      for (let g = 0; g < groups.length; ++g) {
-        groups[g].materialIndex = faceSet.has(mesh.faceSpans[g * 3]) ? 1 : 0;
-      }
-    }
+    for (const f of facesOfBodies(faceBodies ?? undefined, selectedBodies ?? [])) faceSet.add(f);
+    state.selectedFaceSet = faceSet;
+    applyFaceMaterials(state, mesh);
     disposeModel(state.highlight);
     if (mesh && selectedEdges && selectedEdges.length > 0) {
       const edgeSet = new Set(selectedEdges);
@@ -641,9 +877,9 @@ const KernelViewport: React.FC<KernelViewportProps> = ({
       state.highlight.add(lines);
     }
     state.render();
-    // faceKey and edgeKey stand for the selection arrays.
+    // faceKey, edgeKey and bodyKey stand for the selection arrays.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mesh, faceKey, edgeKey]);
+  }, [mesh, faceKey, edgeKey, bodyKey, faceBodies]);
 
   // Vertex dots of the vertex mode and the selected vertices.
   const vertexKey = (selectedVertices ?? []).join(',');

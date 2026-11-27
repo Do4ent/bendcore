@@ -22,10 +22,14 @@ import type {
 } from '../../wasm/bendcore_kernel_api.mjs';
 import KernelViewport from './KernelViewport';
 import { MeasurePanel, SectionPanel } from './ViewToolsPanel';
+import { SelectionPanel } from './SelectionPanel';
+import { useElementSelection } from './useElementSelection';
+import { selectOp } from './selection';
+import type { BoxResult, SelectOp } from './selection';
 import { useViewTools } from './useViewTools';
 import type { ViewTools } from './useViewTools';
 import type { MeasureResult } from './viewTools';
-import type { EdgePick, FacePick, KernelViewportHandle } from './KernelViewport';
+import type { BodyPick, EdgePick, FacePick, KernelViewportHandle, VertexPick } from './KernelViewport';
 import { defaultKernelBaseUrl, loadKernelFrom } from './kernelLoader';
 import type { Remote, WasmClient } from '../worker/wasmClient';
 import { waitIdle } from '../worker/idle';
@@ -66,6 +70,18 @@ export interface KernelViewerState {
   selection: Selection | null;
   /** Measurement and section tools (docs/ui/KERNEL_VIEWPORT.md). */
   tools: ViewTools['state'] | null;
+  /** Selection mode, filters and the selected elements (docs/ui/KERNEL_VIEWPORT.md). */
+  elements: {
+    mode: string;
+    faceTypes: readonly string[];
+    edgeTypes: readonly string[];
+    boxSelect: boolean;
+    faces: number[];
+    edges: number[];
+    vertices: number[];
+    bodies: number[];
+    total: number | null;
+  } | null;
 }
 
 export interface KernelViewerTestApi {
@@ -153,8 +169,39 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
   });
   const toolsRef = useRef(tools);
   toolsRef.current = tools;
-  const stateRef = useRef<KernelViewerState>({ kernelStatus, busy, error, model, selection, tools: null });
-  stateRef.current = { kernelStatus, busy, error, model, selection, tools: tools.state };
+  const sel = useElementSelection({
+    modelKey: model,
+    total: async (kind, indices) => {
+      const shape = shapeRef.current;
+      if (!shape) throw new Error('no model');
+      // The kernel's own area of every face and length of every edge.
+      const parts = await Promise.all(
+        indices.map(async (index) =>
+          kind === 'face' ? (await shape.face(index)).area : ((await shape.measure({ type: 'length', a: { kind: 'edge', index } })) as MeasureResult).value,
+        ),
+      );
+      return parts.reduce((a, b) => a + b, 0);
+    },
+  });
+  const selRef = useRef(sel);
+  selRef.current = sel;
+  const stateRef = useRef<KernelViewerState>({ kernelStatus, busy, error, model, selection, tools: null, elements: null });
+  stateRef.current = {
+    kernelStatus,
+    busy,
+    error,
+    model,
+    selection,
+    tools: tools.state,
+    elements: {
+      mode: sel.filter.mode,
+      faceTypes: sel.filter.faceTypes,
+      edgeTypes: sel.filter.edgeTypes,
+      boxSelect: sel.boxSelect,
+      ...sel.selected,
+      total: sel.total ? sel.total.value : null,
+    },
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -285,15 +332,23 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
     }
   }, [tessellationParams]);
 
-  const onPickEdge = useCallback((pick: EdgePick | null) => toolsRef.current.onPickEdge(pick ? pick.edgeIndex : null), []);
+  const onPickEdge = useCallback((pick: EdgePick | null) => {
+    if (toolsRef.current.capturing) toolsRef.current.onPickEdge(pick ? pick.edgeIndex : null);
+    else selRef.current.pick('edge', pick ? pick.edgeIndex : null, pick?.op);
+  }, []);
+  const onPickVertex = useCallback((pick: VertexPick | null) => selRef.current.pick('vertex', pick ? pick.vertexIndex : null, pick?.op), []);
+  const onPickBody = useCallback((pick: BodyPick | null) => selRef.current.pick('body', pick ? pick.bodyIndex : null, pick?.op), []);
+  const onBoxSelect = useCallback((result: BoxResult, op: SelectOp) => selRef.current.box(result, op), []);
 
   const onPick = useCallback(async (pick: FacePick | null) => {
     if (toolsRef.current.capturing) {
       toolsRef.current.onPickFace(pick ? pick.faceIndex : null);
       return;
     }
+    selRef.current.pick('face', pick ? pick.faceIndex : null, pick?.op);
     const shape = shapeRef.current;
-    if (!pick || !shape) {
+    // The face panel shows a face picked alone; Shift and Ctrl edit a set of faces.
+    if (!pick || !shape || (pick.op ?? selectOp({})) !== 'replace') {
       setSelection(null);
       return;
     }
@@ -368,12 +423,23 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
       <main className="kv-main">
         <KernelViewport
           mesh={mesh}
-          selectedFace={tools.capturing ? null : selection?.face.index ?? null}
-          selectedFaces={tools.capturing ? tools.picks.filter((p) => p.kind === 'face').map((p) => p.index) : []}
-          selectedEdges={tools.capturing ? tools.picks.filter((p) => p.kind === 'edge').map((p) => p.index) : []}
-          pickMode={tools.capturing ? tools.pickMode : 'face'}
+          selectedFace={null}
+          selectedFaces={tools.capturing ? tools.picks.filter((p) => p.kind === 'face').map((p) => p.index) : sel.selected.faces}
+          selectedEdges={tools.capturing ? tools.picks.filter((p) => p.kind === 'edge').map((p) => p.index) : sel.selected.edges}
+          selectedVertices={tools.capturing ? [] : sel.selected.vertices}
+          selectedBodies={tools.capturing ? [] : sel.selected.bodies}
+          pickMode={tools.capturing ? tools.pickMode : sel.filter.mode}
+          filter={sel.filter}
+          faceTypes={mesh?.faceTypes ?? null}
+          edgeTypes={mesh?.edgeTypes ?? null}
+          faceBodies={mesh?.faceBodies ?? null}
+          vertices={mesh?.vertices ?? null}
+          boxSelect={!tools.capturing && sel.boxSelect}
+          onBoxSelect={onBoxSelect}
           onPick={onPick}
           onPickEdge={onPickEdge}
+          onPickVertex={onPickVertex}
+          onPickBody={onPickBody}
           clip={tools.viewport.clip}
           sectionLines={tools.viewport.sectionLines}
           measure={tools.viewport.measure}
@@ -435,6 +501,21 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
               <p className="kv-hint">{model ? t('viewer.pickHint') : '—'}</p>
             )}
           </section>
+          {model && !tools.capturing && (
+            <SelectionPanel
+              filter={sel.filter}
+              onFilter={sel.setFilter}
+              boxSelect={sel.boxSelect}
+              onBoxSelect={sel.setBoxSelect}
+              modes={['face', 'edge', 'vertex', 'body']}
+              count={sel.current.length}
+              total={sel.total}
+              onClear={() => {
+                sel.clear();
+                setSelection(null);
+              }}
+            />
+          )}
           {model && <MeasurePanel {...tools.measurePanel} />}
           {model && tools.sectionPanel && <SectionPanel {...tools.sectionPanel} />}
         </aside>

@@ -89,3 +89,5 @@
   white-space: nowrap;
   pointer-events: none;
 }
+.kernel-box { position: absolute; z-index: 5; pointer-events: none; border: 1px solid #1f5fd6; background: rgba(47, 125, 225, 0.15); }
+.kernel-box[data-direction='cross'] { border-style: dashed; background: rgba(42, 157, 56, 0.15); border-color: #2a9d38; }

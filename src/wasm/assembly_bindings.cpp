@@ -1799,11 +1799,12 @@ val asmMeasure(std::uint32_t handle, val spec) {
 // Section of the whole assembly by the plane {origin, normal}: every placed part (its shape in the
 // world frame) is cut by the kernel (sectionByPlane); {area, polylines, parts}. `area` is the sum of
 // the part sections (overlapping parts are counted twice), `parts` the number of cut parts.
-val asmSection(std::uint32_t handle, val plane, double deflection) {
+val asmSection(std::uint32_t handle, val plane, double deflection, val options) {
     return withSession(handle, [&](Session& s) {
         namespace wa = bendcore::wasm_analysis;
         const a::AssemblyDocument& doc = s.active();
-        const auto placed = take(doc.placedParts());
+        const auto overrides = overridesFromJs(doc, options);
+        const auto placed = take(doc.placedParts(overrides ? &*overrides : nullptr));
         double area = 0.0;
         std::uint32_t cut = 0;
         val lines = val::array();
