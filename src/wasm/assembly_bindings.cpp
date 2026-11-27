@@ -600,6 +600,8 @@ f::FastenerSpec fastenerSpecFromJs(const val& v, const std::string& what) {
     spec.standard = standardFromJs(v["standard"], what + ".standard");
     spec.size = requireInt(v["size"], what + ".size");
     spec.length = optionalNumber(v, "length", 0.0, what);
+    spec.pitch = optionalNumber(v, "pitch", 0.0, what);  // 0 — coarse (FASTENERS.md, «Мелкий шаг»)
+    spec.strengthClass = optionalString(v, "strengthClass", "", what);
     return spec;
 }
 
@@ -1049,6 +1051,20 @@ val fastenerCatalog() {
             val sizes = val::array();
             for (int d : info.sizes) sizes.call<void>("push", d);
             x.set("sizes", sizes);
+            // Fine pitches by size and strength classes (empty for washers and pins).
+            val fine = val::object();
+            val classes = val::object();
+            for (int d : info.sizes) {
+                val pitches = val::array();
+                if (f::finePitchStandard(s))
+                    for (double p : f::finePitches(d)) pitches.call<void>("push", p);
+                fine.set(std::to_string(d), pitches);
+                val cl = val::array();
+                for (const std::string& c : f::strengthClasses(s, d)) cl.call<void>("push", c);
+                classes.set(std::to_string(d), cl);
+            }
+            x.set("finePitches", fine);
+            x.set("strengthClasses", classes);
             x.set("verified", info.verified);
             x.set("source", info.source);
             x.set("verification", info.verification);
@@ -1068,6 +1084,7 @@ val fastenerDescribe(val spec) {
         out.set("designation", fs.properties.designation);
         out.set("equivalentDesignation", fs.properties.equivalentDesignation);
         out.set("material", fs.properties.material);
+        out.set("strengthClass", fs.properties.strengthClass);
         out.set("density", fs.properties.density);
         out.set("volume", fs.properties.volume);
         out.set("mass", fs.properties.mass);
@@ -1075,6 +1092,7 @@ val fastenerDescribe(val spec) {
         thread.set("present", fs.thread.present);
         thread.set("designation", fs.thread.designation);
         thread.set("pitch", fs.thread.pitch);
+        thread.set("fine", fs.thread.fine);
         thread.set("length", fs.thread.length);
         out.set("thread", thread);
         val dims = val::object();

@@ -60,6 +60,8 @@ std::string num(double v) {
     return os.str();
 }
 
+bool same(double a, double b) { return std::abs(a - b) < 1e-9; }
+
 // Число для обозначения: без лишних нулей, десятичный разделитель — запятая (ГОСТ) или точка (ISO).
 std::string designationNumber(double v, bool gost) {
     std::ostringstream os;
@@ -251,14 +253,82 @@ double volumeOf(const TopoDS_Shape& s) {
     return props.Mass();
 }
 
-void setThreadExternal(Fastener& f, double d, double pitch, double length) {
+// Резьба изделия: шаг (крупный по таблице или мелкий из ряда finePitches) и класс прочности.
+struct ThreadChoice {
+    double pitch = 0.0;
+    bool fine = false;
+    std::string strengthClass;
+};
+
+ThreadChoice chooseThread(const FastenerSpec& spec, int d, double coarse) {
+    ThreadChoice t;
+    t.pitch = coarse;
+    if (!(spec.pitch >= 0.0) || !std::isfinite(spec.pitch)) fail(ErrorCode::InvalidInput, "thread pitch must be >= 0");
+    if (spec.pitch > 0.0 && !same(spec.pitch, coarse)) {
+        const std::vector<double> row = finePitches(d);
+        if (!std::any_of(row.begin(), row.end(), [&](double p) { return same(p, spec.pitch); })) {
+            std::string list;
+            for (double p : row) list += (list.empty() ? "" : ", ") + designationNumber(p, false);
+            fail(ErrorCode::InvalidInput, std::string(toString(spec.standard)) + " M" + std::to_string(d) + ": pitch " +
+                                              num(spec.pitch) + " mm is neither the coarse " + num(coarse) +
+                                              " nor a fine pitch (" + (list.empty() ? "none" : list) + ")");
+        }
+        t.pitch = spec.pitch;
+        t.fine = true;
+    }
+    if (!spec.strengthClass.empty()) {
+        const std::vector<std::string> classes = strengthClasses(spec.standard, d);
+        if (std::find(classes.begin(), classes.end(), spec.strengthClass) == classes.end()) {
+            std::string list;
+            for (const std::string& c : classes) list += (list.empty() ? "" : ", ") + c;
+            fail(ErrorCode::InvalidInput, std::string(toString(spec.standard)) + " M" + std::to_string(d) +
+                                              ": strength class '" + spec.strengthClass + "' is not available (" +
+                                              (list.empty() ? std::string("no strength classes") : list) + ")");
+        }
+        t.strengthClass = spec.strengthClass;
+    }
+    return t;
+}
+
+// Стандарт обозначения: ISO с мелким шагом — стандарт мелкой резьбы (ISO 8765 и т. п.).
+std::string designationStandard(FastenerStandard st, const ThreadChoice& t) {
+    if (t.fine) {
+        if (auto f = finePitchStandard(st)) return *f;
+    }
+    return toString(st);
+}
+
+// Резьба в обозначении: «М12» / «М12×1,25» (ГОСТ, кириллическая М), «M12» / «M12 x 1,5» (ISO);
+// шаг пишется с запятой, как в обоих стандартах.
+std::string threadText(int d, const ThreadChoice& t, bool gost) {
+    std::string s = (gost ? "М" : "M") + std::to_string(d);
+    if (t.fine) s += (gost ? "×" : " x ") + designationNumber(t.pitch, true);
+    return s;
+}
+
+// Класс прочности в обозначении ГОСТ: «8.8» → «88», «10.9» → «109», гайка «8» → «8».
+std::string gostClass(const std::string& c) {
+    std::string s = c;
+    s.erase(std::remove(s.begin(), s.end(), '.'), s.end());
+    return s;
+}
+
+void setThreadExternal(Fastener& f, double d, const ThreadChoice& t, double length) {
     f.thread.present = true;
     f.thread.internal = false;
     f.thread.nominalDiameter = d;
-    f.thread.pitch = pitch;
-    f.thread.minorDiameter = externalMinorDiameter(d, pitch);
+    f.thread.pitch = t.pitch;
+    f.thread.fine = t.fine;
+    f.thread.minorDiameter = externalMinorDiameter(d, t.pitch);
     f.thread.length = length;
-    f.thread.designation = "M" + designationNumber(d, false);
+    f.thread.designation = "M" + designationNumber(d, false) + (t.fine ? "×" + designationNumber(t.pitch, true) : "");
+}
+
+// Материал с классом прочности: «Сталь, класс прочности 8.8 ГОСТ 1759.4-87».
+void setStrengthClass(Fastener& f, const ThreadChoice& t) {
+    f.properties.strengthClass = t.strengthClass;
+    if (t.strengthClass.empty()) return;
+    f.properties.material = "Сталь, класс прочности " + t.strengthClass + " " + strengthClassStandard(f.spec.standard);
 }
 
 // Длина резьбы b болта ISO 4014 / ГОСТ 7798 по длине l (ISO 4014: 2d+6 при l ≤ 125,
@@ -269,23 +339,52 @@ double boltThreadLength(int d, double l) {
     return 2.0 * d + 25;
 }
 
-std::string boltDesignation(FastenerStandard st, int d, double l) {
+// Болт и винт: ГОСТ — «Болт М12×1,25×60 ГОСТ 7798-70», с классом прочности — с полем допуска
+// резьбы «-6g» и классом через точку после длины: «Болт М12×1,25-6g×60.88 ГОСТ 7798-70»
+// (пример условного обозначения ГОСТ 7798); ISO — «Болт ISO 8765 - M12 x 1,5 x 60 - 8.8».
+std::string externalDesignation(const char* what, FastenerStandard st, int d, double l, const ThreadChoice& t) {
     if (isGost(st)) {
-        return "Болт М" + std::to_string(d) + "×" + designationNumber(l, true) + " " + toString(st);
+        std::string s = std::string(what) + " " + threadText(d, t, true);
+        if (!t.strengthClass.empty()) s += "-6g";
+        s += "×" + designationNumber(l, true);
+        if (!t.strengthClass.empty()) s += "." + gostClass(t.strengthClass);
+        return s + " " + toString(st);
     }
-    return std::string("Болт ") + toString(st) + " - M" + std::to_string(d) + " x " + designationNumber(l, false);
+    std::string s = std::string(what) + " " + designationStandard(st, t) + " - " + threadText(d, t, false) + " x " +
+                    designationNumber(l, false);
+    if (!t.strengthClass.empty()) s += " - " + t.strengthClass;
+    return s;
 }
 
-std::string screwDesignation(FastenerStandard st, int d, double l) {
-    if (isGost(st)) {
-        return "Винт М" + std::to_string(d) + "×" + designationNumber(l, true) + " " + toString(st);
-    }
-    return std::string("Винт ") + toString(st) + " - M" + std::to_string(d) + " x " + designationNumber(l, false);
+std::string boltDesignation(FastenerStandard st, int d, double l, const ThreadChoice& t = {}) {
+    return externalDesignation("Болт", st, d, l, t);
 }
 
-std::string nutDesignation(FastenerStandard st, int d) {
-    if (isGost(st)) return "Гайка М" + std::to_string(d) + " " + toString(st);
-    return std::string("Гайка ") + toString(st) + " - M" + std::to_string(d);
+std::string screwDesignation(FastenerStandard st, int d, double l, const ThreadChoice& t = {}) {
+    return externalDesignation("Винт", st, d, l, t);
+}
+
+// Гайка: «Гайка М12×1,25 ГОСТ 5915-70», с классом — «Гайка М12×1,25-6Н.8 ГОСТ 5915-70»;
+// ISO — «Гайка ISO 8673 - M12 x 1,5 - 8».
+std::string nutDesignation(FastenerStandard st, int d, const ThreadChoice& t = {}) {
+    if (isGost(st)) {
+        std::string s = "Гайка " + threadText(d, t, true);
+        if (!t.strengthClass.empty()) s += "-6Н." + gostClass(t.strengthClass);
+        return s + " " + toString(st);
+    }
+    std::string s = std::string("Гайка ") + designationStandard(st, t) + " - " + threadText(d, t, false);
+    if (!t.strengthClass.empty()) s += " - " + t.strengthClass;
+    return s;
+}
+
+// Тот же шаг и класс у стандарта-соответствия, если он их допускает; иначе nullopt.
+std::optional<ThreadChoice> counterpartThread(FastenerStandard other, int d, const ThreadChoice& t) {
+    if (t.fine && !finePitchStandard(other)) return std::nullopt;
+    if (!t.strengthClass.empty()) {
+        const auto classes = strengthClasses(other, d);
+        if (std::find(classes.begin(), classes.end(), t.strengthClass) == classes.end()) return std::nullopt;
+    }
+    return t;
 }
 
 std::string washerDesignation(FastenerStandard st, int d) {
@@ -299,13 +398,12 @@ std::string pinDesignation(FastenerStandard st, int d, double l) {
     return std::string("Штифт ") + toString(st) + " - " + std::to_string(d) + " m6 x " + designationNumber(l, false);
 }
 
-bool same(double a, double b) { return std::abs(a - b) < 1e-9; }
-
 // ---- построители
 
 Fastener buildHexBolt(const FastenerSpec& spec) {
     const HexBoltRow row = unwrap(hexBoltRow(spec.standard, spec.size));
-    const double d = row.d, l = spec.length, P = row.pitch;
+    const ThreadChoice tc = chooseThread(spec, row.d, row.pitch);
+    const double d = row.d, l = spec.length, P = tc.pitch;
     const double d3 = externalMinorDiameter(d, P);
     if (!(l > d - d3)) fail(ErrorCode::InvalidInput, "bolt length " + num(l) + " mm is too short");
     double b = boltThreadLength(row.d, l);
@@ -341,16 +439,18 @@ Fastener buildHexBolt(const FastenerSpec& spec) {
         },
         {roles::kBearing, roles::kTop, roles::kTip, roles::kShank, roles::kHeadChamfer, roles::kTipChamfer,
          "Flat1", "Flat2", "Flat3", "Flat4", "Flat5", "Flat6"});
-    setThreadExternal(f, d, P, b);
+    setThreadExternal(f, d, tc, b);
+    setStrengthClass(f, tc);
     f.properties.name = "Болт";
-    f.properties.designation = boltDesignation(spec.standard, row.d, l);
+    f.properties.designation = boltDesignation(spec.standard, row.d, l, tc);
     // Соответствие: тот же размер под ключ и высота головки в таблице другого стандарта.
     if (auto cp = counterpart(spec.standard)) {
         FastenerStandard other = *cp;
         if (other == FastenerStandard::Iso4014 && b >= l) other = FastenerStandard::Iso4017;
         auto orow = hexBoltRow(other, row.d);
-        if (orow && same(orow.value().s, row.s) && same(orow.value().k, row.k)) {
-            f.properties.equivalentDesignation = boltDesignation(other, row.d, l);
+        const auto otc = counterpartThread(other, row.d, tc);
+        if (orow && otc && same(orow.value().s, row.s) && same(orow.value().k, row.k)) {
+            f.properties.equivalentDesignation = boltDesignation(other, row.d, l, *otc);
         }
     }
     f.dimensions = {{"d", d}, {"P", P}, {"s", row.s}, {"e", 2 * row.s / std::sqrt(3.0)}, {"k", k}, {"l", l}, {"b", b}};
@@ -360,7 +460,8 @@ Fastener buildHexBolt(const FastenerSpec& spec) {
 
 Fastener buildSocketScrew(const FastenerSpec& spec) {
     const SocketScrewRow row = unwrap(socketScrewRow(spec.standard, spec.size));
-    const double d = row.d, l = spec.length, P = row.pitch, k = row.k;
+    const ThreadChoice tc = chooseThread(spec, row.d, row.pitch);
+    const double d = row.d, l = spec.length, P = tc.pitch, k = row.k;
     const double d3 = externalMinorDiameter(d, P);
     if (!(l > d - d3)) fail(ErrorCode::InvalidInput, "screw length " + num(l) + " mm is too short");
     const double b = std::min(l, 2.0 * row.d + 12);  // ISO 4762: b ref = 2d + 12
@@ -394,14 +495,16 @@ Fastener buildSocketScrew(const FastenerSpec& spec) {
         },
         {roles::kBearing, roles::kTop, roles::kTip, roles::kSocketBottom, roles::kShank, roles::kOuter,
          roles::kHeadChamfer, roles::kTipChamfer, "Socket1", "Socket6"});
-    setThreadExternal(f, d, P, b);
+    setThreadExternal(f, d, tc, b);
+    setStrengthClass(f, tc);
     f.properties.name = "Винт";
-    f.properties.designation = screwDesignation(spec.standard, row.d, l);
+    f.properties.designation = screwDesignation(spec.standard, row.d, l, tc);
     if (auto cp = counterpart(spec.standard)) {
         auto orow = socketScrewRow(*cp, row.d);
-        if (orow && same(orow.value().dk, row.dk) && same(orow.value().k, row.k) && same(orow.value().s, row.s) &&
+        const auto otc = counterpartThread(*cp, row.d, tc);
+        if (orow && otc && same(orow.value().dk, row.dk) && same(orow.value().k, row.k) && same(orow.value().s, row.s) &&
             same(orow.value().t, row.t)) {
-            f.properties.equivalentDesignation = screwDesignation(*cp, row.d, l);
+            f.properties.equivalentDesignation = screwDesignation(*cp, row.d, l, *otc);
         }
     }
     f.dimensions = {{"d", d}, {"P", P}, {"dk", row.dk}, {"k", k}, {"s", row.s}, {"t", row.t},
@@ -411,7 +514,8 @@ Fastener buildSocketScrew(const FastenerSpec& spec) {
 
 Fastener buildHexNut(const FastenerSpec& spec) {
     const HexNutRow row = unwrap(hexNutRow(spec.standard, spec.size));
-    const double d = row.d, m = row.m, P = row.pitch;
+    const ThreadChoice tc = chooseThread(spec, row.d, row.pitch);
+    const double d = row.d, m = row.m, P = tc.pitch;
     Fastener f;
     f.spec = spec;
     f.kind = FastenerKind::HexNut;
@@ -435,13 +539,16 @@ Fastener buildHexNut(const FastenerSpec& spec) {
     f.thread.pitch = P;
     f.thread.minorDiameter = d - 1.082532 * P;  // D1 = D − 1,082532·P (ISO 724)
     f.thread.length = m;
-    f.thread.designation = "M" + std::to_string(row.d);
+    f.thread.fine = tc.fine;
+    f.thread.designation = "M" + std::to_string(row.d) + (tc.fine ? "×" + designationNumber(P, true) : "");
+    setStrengthClass(f, tc);
     f.properties.name = "Гайка";
-    f.properties.designation = nutDesignation(spec.standard, row.d);
+    f.properties.designation = nutDesignation(spec.standard, row.d, tc);
     if (auto cp = counterpart(spec.standard)) {
         auto orow = hexNutRow(*cp, row.d);
-        if (orow && same(orow.value().s, row.s) && same(orow.value().m, row.m)) {
-            f.properties.equivalentDesignation = nutDesignation(*cp, row.d);
+        const auto otc = counterpartThread(*cp, row.d, tc);
+        if (orow && otc && same(orow.value().s, row.s) && same(orow.value().m, row.m)) {
+            f.properties.equivalentDesignation = nutDesignation(*cp, row.d, *otc);
         }
     }
     f.dimensions = {{"d", d}, {"P", P}, {"s", row.s}, {"e", 2 * row.s / std::sqrt(3.0)}, {"m", m}};
@@ -545,7 +652,13 @@ std::optional<double> Fastener::dimension(const std::string& key) const {
 kernel::Result<Fastener> makeFastener(const FastenerSpec& spec) {
     try {
         Fastener f;
-        switch (kindOf(spec.standard)) {
+        const FastenerKind kind = kindOf(spec.standard);
+        if (kind == FastenerKind::PlainWasher || kind == FastenerKind::SpringWasher || kind == FastenerKind::ParallelPin) {
+            if (spec.pitch != 0.0) fail(ErrorCode::InvalidInput, std::string(toString(spec.standard)) + " has no thread pitch");
+            if (!spec.strengthClass.empty())
+                fail(ErrorCode::InvalidInput, std::string(toString(spec.standard)) + " has no strength classes");
+        }
+        switch (kind) {
             case FastenerKind::HexBolt: f = buildHexBolt(spec); break;
             case FastenerKind::SocketHeadScrew: f = buildSocketScrew(spec); break;
             case FastenerKind::HexNut: f = buildHexNut(spec); break;
