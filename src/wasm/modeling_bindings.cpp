@@ -744,14 +744,14 @@ val propertiesToJs(const m::PartDocument& doc) {
     return o;
 }
 
-val docProperties(std::uint32_t handle) {
+val docDocumentProperties(std::uint32_t handle) {
     return withDocument(handle, [&](m::PartDocument& doc) { return success(propertiesToJs(doc)); });
 }
 
 // Fields absent from `v` keep their values; density null clears it. One undo entry.
-val docSetProperties(std::uint32_t handle, val v) {
+val docSetDocumentProperties(std::uint32_t handle, val v) {
     return withDocument(handle, [&](m::PartDocument& doc) {
-        if (!v.isObject() || v.isArray()) throw InputError("properties must be an object");
+        if (v.isNull() || v.isUndefined() || v.typeOf().as<std::string>() != "object" || v.isArray()) throw InputError("properties must be an object");
         m::DocumentProperties p = doc.properties();
         const std::pair<const char*, std::string*> fields[] = {{"designation", &p.designation},   {"name", &p.name},
                                                                {"material", &p.material},         {"developer", &p.developer},
@@ -1552,8 +1552,8 @@ EMSCRIPTEN_BINDINGS(bendcore_modeling) {
     emscripten::function("docMeshSectionSketch", &docMeshSectionSketch);
     emscripten::function("materialLibrary", &materialLibrary);
     emscripten::function("docConfigurations", &docConfigurations);
-    emscripten::function("docProperties", &docProperties);
-    emscripten::function("docSetProperties", &docSetProperties);
+    emscripten::function("docDocumentProperties", &docDocumentProperties);
+    emscripten::function("docSetDocumentProperties", &docSetDocumentProperties);
     emscripten::function("docSetConfigurations", &docSetConfigurations);
     emscripten::function("docSetConfigurationCell", &docSetConfigurationCell);
     emscripten::function("docAddConfigurationColumn", &docAddConfigurationColumn);

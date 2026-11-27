@@ -696,7 +696,8 @@ json describe(Session& s) {
             sheet["computedScale"] = scaleJson(cs->scale);
             const dv::TitleBlockData& td = cs->title;
             sheet["titleShown"] = {{"designation", td.designation}, {"name", td.name}, {"material", td.material},
-                                   {"mass", td.mass}, {"scale", td.scale}, {"sheet", td.sheet}, {"sheets", td.sheets}};
+                                   {"mass", td.mass}, {"scale", td.scale}, {"sheet", td.sheet}, {"sheets", td.sheets},
+                                   {"organization", td.organization}, {"developer", td.developer.surname}};
             const dv::Iso7200Data& iso = cs->isoTitle;
             sheet["isoTitleShown"] = {{"legalOwner", iso.legalOwner}, {"identification", iso.identification}, {"title", iso.title},
                                       {"documentType", iso.documentType}, {"documentStatus", iso.documentStatus},

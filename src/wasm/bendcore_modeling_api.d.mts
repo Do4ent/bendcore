@@ -450,8 +450,8 @@ export class PartDocumentHandle {
   save(options?: { includeCache?: boolean; material?: PartMaterial }): string;
   configurations(): ConfigurationTable;
   /** Document properties (designation, name, material, developer, organization, note). */
-  properties(): PartDocumentProperties;
-  setProperties(properties: Partial<Omit<PartDocumentProperties, 'effective'>>): void;
+  documentProperties(): PartDocumentProperties;
+  setDocumentProperties(properties: Partial<Omit<PartDocumentProperties, 'effective'>>): void;
   setConfigurations(table: { columns: ConfigurationColumn[]; rows: ConfigurationRow[]; active?: string }): void;
   setConfigurationCell(row: number, column: number, value: Expr): void;
   addConfigurationColumn(column: ConfigurationColumn): void;

@@ -412,7 +412,17 @@ const char* useName(a::EntityUse u) {
 a::GeometryRef refFromJs(const val& v, const std::string& what, bool requireElement = true) {
     if (!isObject(v)) throw InputError(what + " must be an object");
     a::GeometryRef r;
-    r.path = pathFromJs(v["path"], what + ".path");
+    // A side through a pattern instance by its key (docs/assembly/ASSEMBLY_DOCUMENT.md, section 5);
+    // the path may then be empty.
+    if (present(v["instance"])) {
+        const val i = v["instance"];
+        if (!isObject(i)) throw InputError(what + ".instance must be {pattern, key}");
+        r.instance = a::PatternInstanceRef{requireId(i["pattern"], what + ".instance.pattern"),
+                                           requireString(i["key"], what + ".instance.key")};
+        if (present(v["path"])) r.path = pathFromJs(v["path"], what + ".path");
+    } else {
+        r.path = pathFromJs(v["path"], what + ".path");
+    }
     if (!requireElement && !present(v["kind"])) return r;
     r.element.kind = kindFromString(optionalString(v, "kind", "face", what), what + ".kind");
     if (present(v["index"])) r.element.index = requireId(v["index"], what + ".index");
@@ -429,6 +439,12 @@ val refToJs(const a::GeometryRef& r) {
     if (r.element.index) out.set("index", static_cast<double>(*r.element.index));
     if (!r.element.name.empty()) out.set("name", r.element.name);
     out.set("use", std::string(useName(r.use)));
+    if (r.instance) {
+        val i = val::object();
+        i.set("pattern", static_cast<double>(r.instance->pattern));
+        i.set("key", r.instance->key);
+        out.set("instance", i);
+    }
     return out;
 }
 
@@ -723,6 +739,17 @@ val stateToJs(const Session& s) {
         x.set("name", d.name);
         x.set("properties", propertiesToJs(d.properties));
         x.set("source", d.source);
+        // Pattern features of the part document (component patterns "by a part pattern").
+        val partPatterns = val::array();
+        for (const a::PartFeaturePattern& pp : d.partPatterns) {
+            val y = val::object();
+            y.set("feature", pp.feature);
+            y.set("label", pp.label);
+            y.set("type", pp.type);
+            y.set("copies", static_cast<double>(pp.transforms.size()));
+            partPatterns.call<void>("push", y);
+        }
+        x.set("partPatterns", partPatterns);
         {
             const auto [path, configuration] = a::splitConfigurationSource(d.source);
             x.set("configuration", configuration);
@@ -801,6 +828,10 @@ val stateToJs(const Session& s) {
         x.set("kind", std::string(a::toString(p.kind)));
         x.set("seed", static_cast<double>(p.seed));
         x.set("instances", idArray(p.instances));
+        val keys = val::array();
+        for (const std::string& k : p.keys) keys.call<void>("push", k);
+        x.set("keys", keys);
+        if (const auto* f = std::get_if<a::FeaturePatternSpec>(&p.spec)) x.set("partPattern", f->partPattern);
         patterns.call<void>("push", x);
     }
     out.set("patterns", patterns);
@@ -1612,6 +1643,7 @@ val asmAddPattern(std::uint32_t handle, val spec) {
             p.seed = seed;
             p.seedHole = refFromJs(spec["seedHole"], "pattern.seedHole");
             if (present(spec["radius"])) p.radius = requireNumber(spec["radius"], "pattern.radius");
+            p.partPattern = optionalString(spec, "partPattern", "", "pattern");
             edit(s, "Feature pattern", [&](a::AssemblyDocument& d) { id = take(d.addFeaturePattern(p)); });
         } else {
             throw InputError("pattern.kind must be linear, circular or feature");

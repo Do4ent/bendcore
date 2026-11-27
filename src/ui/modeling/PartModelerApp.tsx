@@ -24,6 +24,7 @@ import type {
   ModelingKernel,
   PartMeshInfo,
   PartDocumentHandle,
+  PartDocumentProperties,
   PartMaterial,
   PartMesh,
   PartProperties,
@@ -44,6 +45,7 @@ import { boxOfPositions, meshSnap, unionBox } from '../kernel/viewTools';
 import type { MeasureResult } from '../kernel/viewTools';
 import FeaturePanel from './FeaturePanel';
 import ConfigurationPanel from './ConfigurationPanel';
+import { DocumentPropertiesPanel } from './DocumentPropertiesPanel';
 import FeatureTree from './FeatureTree';
 import SketchEditor from './sketch/SketchEditor';
 import {
@@ -96,6 +98,7 @@ interface Snapshot {
   variables: VariableView[];
   properties: PartProperties | null;
   configurations: ConfigurationTable | null;
+  documentProperties: PartDocumentProperties | null;
 }
 
 interface SelectionInfo {
@@ -119,6 +122,8 @@ export interface PartModelerState {
   sketchMode: { featureId: string; isNew: boolean } | null;
   /** Material of the part ('custom': density typed by hand) and the library size. */
   material: { id: string; density: number | null; libraryCount: number };
+  /** Document properties of the part (designation, name, developer, organization, note; effective). */
+  documentProperties: PartDocumentProperties | null;
   /** Measurement and section tools (docs/ui/KERNEL_VIEWPORT.md). */
   tools: ViewTools['state'];
   /** Selection mode, type filters and the selected elements (docs/ui/KERNEL_VIEWPORT.md). */
@@ -188,7 +193,14 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<PartModelerState['status']>('loading');
   const [catalog, setCatalog] = useState<FeatureTypeSpec[]>([]);
-  const [snapshot, setSnapshot] = useState<Snapshot>({ features: [], doc: null, variables: [], properties: null, configurations: null });
+  const [snapshot, setSnapshot] = useState<Snapshot>({
+    features: [],
+    doc: null,
+    variables: [],
+    properties: null,
+    configurations: null,
+    documentProperties: null,
+  });
   const [configChecks, setConfigChecks] = useState<ConfigurationCheck[] | null>(null);
   const [mesh, setMesh] = useState<PartMesh | null>(null);
   const [shownBodies, setShownBodies] = useState<number | null>(null);
@@ -269,7 +281,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     const doc = docRef.current;
     if (!doc) return;
     try {
-      const [features, state, variables, properties, shown, configurations, meshList] = await Promise.all([
+      const [features, state, variables, properties, shown, configurations, meshList, documentProperties] = await Promise.all([
         doc.features(),
         doc.state(),
         doc.variables(),
@@ -277,6 +289,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
         doc.tessellate(shownTarget(p), MESH_PARAMS),
         doc.configurations(),
         doc.meshes(),
+        doc.documentProperties(),
       ]);
       // Display meshes: fetched again only when the placement of a mesh changed.
       const cache = meshCacheRef.current;
@@ -298,7 +311,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
       const target = shownTarget(p);
       const bodies = target === 'final' ? properties.counts.solids : (await doc.properties(target)).counts.solids;
       if (docRef.current !== doc) return;
-      setSnapshot({ features, doc: state, variables, properties, configurations });
+      setSnapshot({ features, doc: state, variables, properties, configurations, documentProperties });
       setMeshes(meshList);
       setMeshGeoms(geoms);
       setShownBodies(bodies);
@@ -981,6 +994,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     shownTarget: shownTarget(panel),
     sketchMode: sketchMode && { featureId: sketchMode.featureId, isNew: sketchMode.isNew },
     material: { id: materialId, density: densityValue(), libraryCount: materials.length },
+    documentProperties: snapshot.documentProperties,
     tools: tools.state,
     elements: {
       mode: sel.filter.mode,
@@ -1137,6 +1151,11 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                 await d.rebuild();
               })
             }
+          />
+          <DocumentPropertiesPanel
+            properties={snapshot.documentProperties}
+            disabled={busyPanel || status !== 'ready'}
+            onChange={(field, value) => void run((d) => d.setDocumentProperties({ [field]: value }))}
           />
           <ConfigurationPanel
             table={snapshot.configurations}

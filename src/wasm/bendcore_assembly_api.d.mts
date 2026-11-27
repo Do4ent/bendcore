@@ -56,6 +56,8 @@ export interface GeometryRef {
   index?: number;
   name?: string;
   use?: EntityUse;
+  /** A side through a pattern instance by its stable key; the path follows the instance. */
+  instance?: { pattern: number; key: string };
 }
 
 export interface MateSpec {
@@ -96,6 +98,8 @@ export interface DefinitionInfo {
   source: string;
   /** Configuration of the part document ("<source>#<configuration>"); '' — as saved. */
   configuration: string;
+  /** Pattern features of the part document (for patterns with kind 'feature' and partPattern). */
+  partPatterns: { feature: string; label: string; type: string; copies: number }[];
   /** Registered part document of the definition (registerPartSource), or null. */
   partSource: string | null;
   /** Registered subassembly document of an assembly definition (registerSource), if any. */
