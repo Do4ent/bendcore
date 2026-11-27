@@ -141,11 +141,19 @@ void BoundSketch::setEndPoints(SketchEntityId id, sketch2d::Id start, sketch2d::
         sketch_.set_line_points(e.line, start, end);
     } else if (e.kind == EntityKind::Arc) {
         sketch_.set_arc_points(e.arc, start, end);
+    } else if (e.kind == EntityKind::EllipticalArc) {
+        sketch_.set_ellipse_arc_points(e.geo.id, start, end);
     } else {
-        throw std::invalid_argument("end points can be replaced only for lines and arcs");
+        throw std::invalid_argument("end points can be replaced only for lines, arcs and elliptical arcs");
     }
     e.start = start;
     e.end = end;
+}
+
+void BoundSketch::setBSpline(SketchEntityId id, const sketch2d::BSplineData& data) {
+    const Entity& e = entity(id);
+    if (e.kind != EntityKind::BSpline) throw std::invalid_argument("entity " + std::to_string(id) + " is not a B-spline");
+    sketch_.set_bspline(e.geo.id, data);
 }
 
 Result<SketchCurve> BoundSketch::curve(SketchEntityId id, double tolerance) const {

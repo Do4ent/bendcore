@@ -68,6 +68,7 @@ enum class ConstraintKind {
     Concentric,         // центры кривых a, b совпадают
     Fix,                // точка a закреплена в (value, value2)
     Rotation,           // точка b = точка a, повёрнутая вокруг точки c на value градусов
+    EqualDistance,      // точка a на расстоянии от отрезка/окружности/дуги b, равном размеру master
 };
 
 const char* to_string(ConstraintKind kind) noexcept;
@@ -81,6 +82,7 @@ struct ConstraintInfo {
     double value2 = 0.0;   // Fix: y
     bool driving = true;   // false — справочный размер: в решении не участвует, измеряется
     bool removed = false;
+    Id master = 0;         // EqualDistance: размер, значение которого используется
 };
 
 enum class Definition { Fully, Under, Over };
@@ -165,6 +167,9 @@ public:
     bool is_construction(Geo g) const;
     void set_line_points(Id line, Id start, Id end);
     void set_arc_points(Id arc, Id start, Id end);
+    void set_ellipse_arc_points(Id arc, Id start, Id end);
+    // Новые данные сплайна (полюса, узлы); ограничения, ссылающиеся на сплайн, сохраняются.
+    void set_bspline(Id s, const BSplineData& data);
     // Удаление кривой или точки вместе с ограничениями, которые на неё ссылаются. Точки кривой
     // остаются. Точка, занятая живой кривой, не удаляется (std::invalid_argument).
     void remove(Geo g);
@@ -202,6 +207,12 @@ public:
     Id constrain_point_on(Id p, Geo curve);
     Id constrain_symmetric_point(Id p1, Id p2, Id center);
     Id constrain_rotation(Id p, Id q, Id center, double deg);
+    // Расстояние от точки p до кривой (как PointCurveDistance) равно значению размера master
+    // (Distance, PointCurveDistance или другого EqualDistance; справочный — измеренное
+    // значение). Удаление master удаляет и это ограничение. Эквидистанта: один размер на цепочку.
+    Id constrain_equal_distance(Id p, Geo curve, Id master);
+    // Значение расстояния, которое использует EqualDistance (по цепочке master).
+    double equal_distance_value(Id c) const;
 
     // ---- размеры
     Id constrain_distance_x(Id a, Id b, double d);

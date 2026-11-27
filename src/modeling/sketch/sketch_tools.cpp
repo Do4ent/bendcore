@@ -5,11 +5,18 @@
 #include "sketch_internal.hpp"
 
 #include <Geom2dAPI_InterCurveCurve.hxx>
+#include <Geom2dAPI_ProjectPointOnCurve.hxx>
+#include <Geom2d_BSplineCurve.hxx>
 #include <Geom2d_Circle.hxx>
+#include <Geom2d_Ellipse.hxx>
 #include <Geom2d_Line.hxx>
 #include <Geom2d_TrimmedCurve.hxx>
+#include <GeomLib.hxx>
+#include <Geom_BSplineCurve.hxx>
+#include <Geom_BoundedCurve.hxx>
 #include <gp_Ax22d.hxx>
 #include <gp_Ax2d.hxx>
+#include <gp_Pnt.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -62,15 +69,32 @@ double sketchScale(const BoundSketch& s) {
     return m;
 }
 
-// Line or circle that carries a line, arc or circle entity, parameterised as below.
+// Line, circle or ellipse that carries a line, arc, circle, ellipse or elliptical arc entity,
+// parameterised as below. Ellipse angles are parameters in the (U, V) frame of the ellipse
+// (U towards the focus, V = U turned by +90°), so they grow counter-clockwise like circle angles.
 struct Carrier {
     K kind = K::Line;
     Point2 a, b;          // line: start, end (t = 0, 1)
-    Point2 c;             // circle/arc: centre
-    double r = 0.0;
+    Point2 c;             // circle/arc/ellipse: centre
+    double r = 0.0;       // circle: radius; ellipse: major radius
+    double rb = 0.0;      // ellipse: minor radius
+    Point2 u{1, 0};       // ellipse: major direction
     double startAngle = 0.0;  // arc: angle of the start point
     double sweep = 2 * kPi;   // arc: sweep from start in the arc direction
     bool ccw = true;
+    bool elliptic() const { return kind == K::Ellipse || kind == K::EllipticalArc; }
+    bool closed() const { return kind == K::Circle || kind == K::Ellipse; }
+    double angleOf(Point2 p) const {
+        if (!elliptic()) return std::atan2(p.y - c.y, p.x - c.x);
+        const Point2 d{p.x - c.x, p.y - c.y};
+        const Point2 v{-u.y, u.x};
+        return std::atan2((d.x * v.x + d.y * v.y) / rb, (d.x * u.x + d.y * u.y) / r);
+    }
+    Point2 at(double ang) const {
+        if (!elliptic()) return {c.x + r * std::cos(ang), c.y + r * std::sin(ang)};
+        const double x = r * std::cos(ang), y = rb * std::sin(ang);
+        return {c.x + x * u.x - y * u.y, c.y + x * u.y + y * u.x};
+    }
 };
 
 Result<Carrier> carrierOf(const BoundSketch& s, SketchEntityId id) {
@@ -100,7 +124,27 @@ Result<Carrier> carrierOf(const BoundSketch& s, SketchEntityId id) {
             c.sweep = s.sketch().arc_sweep(e.arc);
             return c;
         }
-        default: return err<Carrier>("entity " + std::to_string(id) + ": only lines, arcs and circles can be trimmed or extended");
+        case K::Ellipse:
+        case K::EllipticalArc: {
+            const auto& sk = s.sketch();
+            const bool full = e.kind == K::Ellipse;
+            c.c = P(s, full ? sk.ellipse(e.geo.id).center : sk.ellipse_arc(e.geo.id).center);
+            c.rb = full ? sk.ellipse(e.geo.id).minor_radius : sk.ellipse_arc(e.geo.id).minor_radius;
+            c.r = sk.ellipse_major_radius(e.geo);
+            const auto d = sk.ellipse_major_direction(e.geo);
+            c.u = {d.x, d.y};
+            if (!(c.rb > 0) || !(c.r > 0)) return err<Carrier>("entity " + std::to_string(id) + " is a degenerate ellipse");
+            if (!full) {
+                const auto a = sk.ellipse_arc(e.geo.id);
+                c.ccw = a.ccw;
+                c.startAngle = c.angleOf(P(s, a.start));
+                const double endAngle = c.angleOf(P(s, a.end));
+                c.sweep = wrap2pi(c.ccw ? endAngle - c.startAngle : c.startAngle - endAngle);
+                if (c.sweep < 1e-12) c.sweep = 2 * kPi;
+            }
+            return c;
+        }
+        default: return err<Carrier>("entity " + std::to_string(id) + ": not a line, arc, circle or ellipse");
     }
 }
 
@@ -111,15 +155,9 @@ double paramOf(const Carrier& c, Point2 p) {
         const Point2 d = sub(c.b, c.a);
         return dot(sub(p, c.a), d) / dot(d, d);
     }
-    const double ang = std::atan2(p.y - c.c.y, p.x - c.c.x);
-    if (c.kind == K::Circle) return wrap2pi(ang);
+    const double ang = c.angleOf(p);
+    if (c.closed()) return wrap2pi(ang);
     return wrap2pi(c.ccw ? ang - c.startAngle : c.startAngle - ang);
-}
-
-Point2 pointAt(const Carrier& c, double u) {
-    if (c.kind == K::Line) return add(c.a, mul(sub(c.b, c.a), u));
-    const double ang = c.kind == K::Circle ? u : (c.ccw ? c.startAngle + u : c.startAngle - u);
-    return {c.c.x + c.r * std::cos(ang), c.c.y + c.r * std::sin(ang)};
 }
 
 struct Hit {
@@ -137,6 +175,9 @@ Result<std::vector<Hit>> intersections(const BoundSketch& s, SketchEntityId id, 
         const Point2 d = unit(sub(c.b, c.a));
         const double L = 1e3 * scale;
         carrier = new Geom2d_TrimmedCurve(new Geom2d_Line(gp_Pnt2d(c.a.x, c.a.y), gp_Dir2d(d.x, d.y)), -L, L);
+    } else if (c.elliptic()) {
+        carrier = new Geom2d_Ellipse(gp_Ax22d(gp_Pnt2d(c.c.x, c.c.y), gp_Dir2d(c.u.x, c.u.y), gp_Dir2d(-c.u.y, c.u.x)), c.r,
+                                     c.rb);
     } else {
         carrier = new Geom2d_Circle(gp_Ax22d(gp_Pnt2d(c.c.x, c.c.y), gp_Dir2d(1, 0), gp_Dir2d(0, 1)), c.r);
     }
@@ -214,6 +255,8 @@ void retarget(BoundSketch& s, SketchEditResult& r, sketch2d::Geo from, sketch2d:
             case CK::Concentric: added = sk.constrain_concentric(pick(info.a), pick(info.b)); break;
             case CK::Tangent: added = sk.constrain_tangent(pick(info.a), pick(info.b)); break;
             case CK::PointOn: added = sk.constrain_point_on(info.a.id, to); break;
+            case CK::MajorRadius: added = sk.constrain_major_radius(to, info.value); break;
+            case CK::MinorRadius: added = sk.constrain_minor_radius(to, info.value); break;
             default: break;
         }
         if (added) {
@@ -221,6 +264,307 @@ void retarget(BoundSketch& s, SketchEditResult& r, sketch2d::Geo from, sketch2d:
             r.constraints.push_back(added);
         }
     }
+}
+
+
+// ---- B-splines --------------------------------------------------------------------------------
+
+occ::handle<Geom2d_BSplineCurve> splineCurve(const BoundSketch& s, SketchEntityId id) {
+    const auto& d = s.sketch().bspline(s.entity(id).geo.id);
+    const int n = static_cast<int>(d.poles.size());
+    NCollection_Array1<gp_Pnt2d> poles(1, n);
+    for (int i = 0; i < n; ++i) {
+        const Point2 q = P(s, d.poles[static_cast<std::size_t>(i)]);
+        poles.SetValue(i + 1, gp_Pnt2d(q.x, q.y));
+    }
+    const int nk = static_cast<int>(d.knots.size());
+    NCollection_Array1<double> knots(1, nk);
+    NCollection_Array1<int> mults(1, nk);
+    for (int i = 0; i < nk; ++i) {
+        knots.SetValue(i + 1, d.knots[static_cast<std::size_t>(i)]);
+        mults.SetValue(i + 1, d.multiplicities[static_cast<std::size_t>(i)]);
+    }
+    if (d.weights.empty()) return new Geom2d_BSplineCurve(poles, knots, mults, d.degree, d.periodic);
+    NCollection_Array1<double> w(1, n);
+    for (int i = 0; i < n; ++i) w.SetValue(i + 1, d.weights[static_cast<std::size_t>(i)]);
+    return new Geom2d_BSplineCurve(poles, w, knots, mults, d.degree, d.periodic);
+}
+
+// Parameter of the point of `curve` nearest to p.
+double nearestParameter(const occ::handle<Geom2d_Curve>& curve, Point2 p, double first, double last) {
+    Geom2dAPI_ProjectPointOnCurve proj(gp_Pnt2d(p.x, p.y), curve, first, last);
+    double best = proj.NbPoints() > 0 ? proj.LowerDistance() : 1e300;
+    double u = proj.NbPoints() > 0 ? proj.LowerDistanceParameter() : first;
+    // The nearest point may be an end.
+    for (double e : {first, last}) {
+        const double d = curve->Value(e).Distance(gp_Pnt2d(p.x, p.y));
+        if (d < best) {
+            best = d;
+            u = e;
+        }
+    }
+    return u;
+}
+
+// Intersections of `curve` (parameters on it) with every other live entity.
+Result<std::vector<Hit>> curveHits(const BoundSketch& s, SketchEntityId id, const occ::handle<Geom2d_Curve>& curve,
+                                   double first, double last) {
+    const double scale = sketchScale(s);
+    const double tol = 1e-9 * scale;
+    std::vector<Hit> hits;
+    for (const auto& e : s.entities()) {
+        if (e.removed || e.id == id) continue;
+        auto cv = s.curve(e.id, 1e-6 * scale);
+        if (!cv) return cv.error();
+        auto seg = detail::toGeom2d(cv.value().geometry, tol);
+        if (!seg) continue;
+        occ::handle<Geom2d_Curve> other = seg.value().basis;
+        if (!seg.value().closed) other = new Geom2d_TrimmedCurve(other, seg.value().first, seg.value().last);
+        try {
+            Geom2dAPI_InterCurveCurve inter(curve, other, tol);
+            for (int i = 1; i <= inter.NbPoints(); ++i) {
+                const gp_Pnt2d q = inter.Point(i);
+                const Point2 p{q.X(), q.Y()};
+                hits.push_back({nearestParameter(curve, p, first, last), p, e.id});
+            }
+        } catch (const Standard_Failure& f) {
+            return Result<std::vector<Hit>>::failure(ErrorCode::OperationFailed, detail::failureText(f));
+        }
+    }
+    return hits;
+}
+
+// Sketch data of an OCCT spline. Poles at the position of an existing pole of `reuse` keep that
+// point (with its constraints); the others become new points.
+sketch2d::BSplineData splineData(BoundSketch& s, SketchEditResult& r, const occ::handle<Geom2d_BSplineCurve>& c,
+                                 const std::vector<Id>& reuse, std::vector<Id>& taken) {
+    const double tol = 1e-9 * sketchScale(s);
+    sketch2d::BSplineData d;
+    d.degree = c->Degree();
+    d.periodic = c->IsPeriodic();
+    for (int i = 1; i <= c->NbPoles(); ++i) {
+        const gp_Pnt2d q = c->Pole(i);
+        const Point2 p{q.X(), q.Y()};
+        Id id = -1;
+        for (Id o : reuse) {
+            if (std::find(taken.begin(), taken.end(), o) == taken.end() && dist(P(s, o), p) < tol) {
+                id = o;
+                break;
+            }
+        }
+        if (id < 0) id = newPoint(s, r, p);
+        taken.push_back(id);
+        d.poles.push_back(id);
+    }
+    for (int i = 1; i <= c->NbKnots(); ++i) {
+        d.knots.push_back(c->Knot(i));
+        d.multiplicities.push_back(c->Multiplicity(i));
+    }
+    if (c->IsRational()) {
+        for (int i = 1; i <= c->NbPoles(); ++i) d.weights.push_back(c->Weight(i));
+    }
+    return d;
+}
+
+// Piece [u1, u2] of a spline as a clamped non-periodic spline.
+Result<occ::handle<Geom2d_BSplineCurve>> splinePiece(const occ::handle<Geom2d_BSplineCurve>& c, double u1, double u2) {
+    try {
+        occ::handle<Geom2d_BSplineCurve> piece = occ::down_cast<Geom2d_BSplineCurve>(c->Copy());
+        if (piece->IsPeriodic()) {
+            const double period = piece->LastParameter() - piece->FirstParameter();
+            while (u2 <= u1) u2 += period;
+        }
+        piece->Segment(u1, u2);
+        if (piece->IsPeriodic()) piece->SetNotPeriodic();
+        return piece;
+    } catch (const Standard_Failure& f) {
+        return Result<occ::handle<Geom2d_BSplineCurve>>::failure(ErrorCode::OperationFailed, detail::failureText(f));
+    }
+}
+
+void removeUnusedPoles(BoundSketch& s, const std::vector<Id>& poles) {
+    for (Id p : poles) removeIfUnused(s, p);
+}
+
+Result<SketchEditResult> trimSpline(BoundSketch& s, SketchEntityId id, const Point2& pick) {
+    using R = SketchEditResult;
+    const BoundSketch::Entity e = s.entity(id);
+    const sketch2d::BSplineData old = s.sketch().bspline(e.geo.id);
+    occ::handle<Geom2d_BSplineCurve> c = splineCurve(s, id);
+    const double u0 = c->FirstParameter(), u1 = c->LastParameter();
+    auto hits = curveHits(s, id, c, u0, u1);
+    if (!hits) return hits.error();
+    const double eps = 1e-9 * (u1 - u0);
+    const double tp = nearestParameter(c, pick, u0, u1);
+    SketchEditResult r;
+    std::vector<Id> taken;
+    if (c->IsPeriodic()) {
+        std::vector<Hit> hs;
+        for (const Hit& h : hits.value()) {
+            if (std::none_of(hs.begin(), hs.end(), [&](const Hit& o) { return std::abs(o.u - h.u) < 1e-7 * (u1 - u0); })) {
+                hs.push_back(h);
+            }
+        }
+        if (hs.size() < 2) return err<R>("trim: closed spline " + std::to_string(id) + " needs at least two intersections");
+        std::sort(hs.begin(), hs.end(), [](const Hit& a, const Hit& b) { return a.u < b.u; });
+        std::size_t next = 0;
+        while (next < hs.size() && hs[next].u <= tp) ++next;
+        const Hit& hi = hs[next % hs.size()];
+        const Hit& lo = hs[(next + hs.size() - 1) % hs.size()];
+        auto piece = splinePiece(c, hi.u, lo.u);
+        if (!piece) return piece.error();
+        sketch2d::BSplineData d = splineData(s, r, piece.value(), old.poles, taken);
+        s.setBSpline(id, d);
+        r.modified.push_back(id);
+        pointOn(s, r, d.poles.front(), hi.with);
+        pointOn(s, r, d.poles.back(), lo.with);
+        removeUnusedPoles(s, old.poles);
+        return r;
+    }
+    std::optional<Hit> lo, hi;
+    for (const Hit& h : hits.value()) {
+        if (h.u <= u0 + eps || h.u >= u1 - eps) continue;
+        if (h.u < tp && (!lo || h.u > lo->u)) lo = h;
+        if (h.u > tp && (!hi || h.u < hi->u)) hi = h;
+    }
+    if (!lo && !hi) {
+        s.removeEntity(id);
+        r.removed.push_back(id);
+        removeUnusedPoles(s, old.poles);
+        return r;
+    }
+    // Kept pieces: [u0, lo] and [hi, u1]. The kept curve ends keep their points.
+    std::optional<sketch2d::BSplineData> first, second;
+    if (lo) {
+        auto piece = splinePiece(c, u0, lo->u);
+        if (!piece) return piece.error();
+        first = splineData(s, r, piece.value(), old.poles, taken);
+    }
+    if (hi) {
+        auto piece = splinePiece(c, hi->u, u1);
+        if (!piece) return piece.error();
+        second = splineData(s, r, piece.value(), old.poles, taken);
+    }
+    if (first) {
+        s.setBSpline(id, *first);
+        r.modified.push_back(id);
+        pointOn(s, r, first->poles.back(), lo->with);
+    }
+    if (second) {
+        if (first) {
+            r.created.push_back(s.addBSpline(*second, e.construction));
+        } else {
+            s.setBSpline(id, *second);
+            r.modified.push_back(id);
+        }
+        pointOn(s, r, second->poles.front(), hi->with);
+    }
+    removeUnusedPoles(s, old.poles);
+    return r;
+}
+
+// GeomLib::ExtendCurveToPoint works on 3D curves: the spline is lifted to z = 0.
+Result<occ::handle<Geom2d_BSplineCurve>> extendedSpline(const occ::handle<Geom2d_BSplineCurve>& c, Point2 to, bool after) {
+    using RC = Result<occ::handle<Geom2d_BSplineCurve>>;
+    try {
+        const int n = c->NbPoles();
+        NCollection_Array1<gp_Pnt> poles(1, n);
+        for (int i = 1; i <= n; ++i) poles.SetValue(i, gp_Pnt(c->Pole(i).X(), c->Pole(i).Y(), 0));
+        NCollection_Array1<double> knots(1, c->NbKnots());
+        NCollection_Array1<int> mults(1, c->NbKnots());
+        for (int i = 1; i <= c->NbKnots(); ++i) {
+            knots.SetValue(i, c->Knot(i));
+            mults.SetValue(i, c->Multiplicity(i));
+        }
+        occ::handle<Geom_BSplineCurve> c3;
+        if (c->IsRational()) {
+            NCollection_Array1<double> w(1, n);
+            for (int i = 1; i <= n; ++i) w.SetValue(i, c->Weight(i));
+            c3 = new Geom_BSplineCurve(poles, w, knots, mults, c->Degree());
+        } else {
+            c3 = new Geom_BSplineCurve(poles, knots, mults, c->Degree());
+        }
+        occ::handle<Geom_BoundedCurve> bounded = c3;
+        GeomLib::ExtendCurveToPoint(bounded, gp_Pnt(to.x, to.y, 0), std::clamp(c->Degree() - 1, 1, 2), after);
+        occ::handle<Geom_BSplineCurve> e3 = occ::down_cast<Geom_BSplineCurve>(bounded);
+        if (e3.IsNull()) return RC::failure(ErrorCode::OperationFailed, "extend: the spline could not be extended");
+        const int m = e3->NbPoles();
+        NCollection_Array1<gp_Pnt2d> p2(1, m);
+        for (int i = 1; i <= m; ++i) p2.SetValue(i, gp_Pnt2d(e3->Pole(i).X(), e3->Pole(i).Y()));
+        NCollection_Array1<double> k2(1, e3->NbKnots());
+        NCollection_Array1<int> m2(1, e3->NbKnots());
+        for (int i = 1; i <= e3->NbKnots(); ++i) {
+            k2.SetValue(i, e3->Knot(i));
+            m2.SetValue(i, e3->Multiplicity(i));
+        }
+        if (e3->IsRational()) {
+            NCollection_Array1<double> w(1, m);
+            for (int i = 1; i <= m; ++i) w.SetValue(i, e3->Weight(i));
+            return occ::handle<Geom2d_BSplineCurve>(new Geom2d_BSplineCurve(p2, w, k2, m2, e3->Degree()));
+        }
+        return occ::handle<Geom2d_BSplineCurve>(new Geom2d_BSplineCurve(p2, k2, m2, e3->Degree()));
+    } catch (const Standard_Failure& f) {
+        return RC::failure(ErrorCode::OperationFailed, detail::failureText(f));
+    }
+}
+
+Result<SketchEditResult> extendSpline(BoundSketch& s, SketchEntityId id, const Point2& pick) {
+    using R = SketchEditResult;
+    const BoundSketch::Entity e = s.entity(id);
+    const sketch2d::BSplineData old = s.sketch().bspline(e.geo.id);
+    if (old.periodic) return err<R>("extend: spline " + std::to_string(id) + " is closed");
+    occ::handle<Geom2d_BSplineCurve> c = splineCurve(s, id);
+    const double u0 = c->FirstParameter(), u1 = c->LastParameter();
+    const Point2 ps = P(s, old.poles.front()), pe = P(s, old.poles.back());
+    const double scale = sketchScale(s);
+    if (dist(ps, pe) < 1e-9 * scale) return err<R>("extend: spline " + std::to_string(id) + " is closed");
+    const bool atEnd = dist(pick, pe) < dist(pick, ps);
+    gp_Pnt2d endPnt;
+    gp_Vec2d tan;
+    c->D1(atEnd ? u1 : u0, endPnt, tan);
+    if (tan.Magnitude() < 1e-12) return err<R>("extend: spline " + std::to_string(id) + " has no tangent at that end");
+    const Point2 dir = unit({atEnd ? tan.X() : -tan.X(), atEnd ? tan.Y() : -tan.Y()});
+    const Point2 endP{endPnt.X(), endPnt.Y()};
+    // Probe extensions of growing length along the end tangent; the nearest intersection on the
+    // first probe that meets another entity is the target, and the spline is then extended
+    // exactly to it.
+    double chord = 0.0;
+    for (int i = 0; i <= 16; ++i) {
+        const gp_Pnt2d q = c->Value(u0 + (u1 - u0) * i / 16.0);
+        chord = std::max(chord, dist(endP, {q.X(), q.Y()}));
+    }
+    const double limit = 4 * scale + chord;
+    std::optional<Hit> best;
+    for (double len = std::max(chord, 1e-6 * scale); !best && len <= 2 * limit; len *= 2) {
+        auto probe = extendedSpline(c, add(endP, mul(dir, len)), atEnd);
+        if (!probe) continue;
+        const occ::handle<Geom2d_BSplineCurve>& pc = probe.value();
+        const double pf = pc->FirstParameter(), pl = pc->LastParameter();
+        const double ue = nearestParameter(pc, endP, pf, pl);  // the original end on the probe
+        auto hits = curveHits(s, id, pc, pf, pl);
+        if (!hits) return hits.error();
+        const double eps = 1e-9 * (pl - pf);
+        for (const Hit& h : hits.value()) {
+            const bool beyond = atEnd ? h.u > ue + eps : h.u < ue - eps;
+            if (!beyond || dist(h.at, endP) < 1e-9 * scale) continue;
+            if (!best || std::abs(h.u - ue) < std::abs(best->u - ue)) best = h;
+        }
+    }
+    if (!best) return err<R>("extend: entity " + std::to_string(id) + " meets nothing beyond that end");
+    auto ext = extendedSpline(c, best->at, atEnd);
+    if (!ext) return ext.error();
+    SketchEditResult r;
+    std::vector<Id> taken;
+    // Poles that keep their position keep their points; the extended end gets a new point.
+    std::vector<Id> reuse = old.poles;
+    const Id moved = atEnd ? old.poles.back() : old.poles.front();
+    reuse.erase(std::remove(reuse.begin(), reuse.end(), moved), reuse.end());
+    sketch2d::BSplineData d = splineData(s, r, ext.value(), reuse, taken);
+    s.setBSpline(id, d);
+    r.modified.push_back(id);
+    pointOn(s, r, atEnd ? d.poles.back() : d.poles.front(), best->with);
+    removeUnusedPoles(s, old.poles);
+    return r;
 }
 
 }  // namespace
@@ -232,6 +576,7 @@ void retarget(BoundSketch& s, SketchEditResult& r, sketch2d::Geo from, sketch2d:
 Result<SketchEditResult> trimEntity(BoundSketch& s, SketchEntityId id, const Point2& pick) {
     using R = SketchEditResult;
     if (id == 0 || id > s.entities().size() || s.entity(id).removed) return err<R>("no live sketch entity " + std::to_string(id));
+    if (s.entity(id).kind == K::BSpline) return trimSpline(s, id, pick);
     auto car = carrierOf(s, id);
     if (!car) return car.error();
     const Carrier c = car.value();
@@ -242,21 +587,26 @@ Result<SketchEditResult> trimEntity(BoundSketch& s, SketchEntityId id, const Poi
     const BoundSketch::Entity e = s.entity(id);
     SketchEditResult r;
 
-    if (c.kind == K::Circle) {
+    if (c.closed()) {
         std::vector<Hit> hs;
         for (const Hit& h : hits.value()) {
             if (std::none_of(hs.begin(), hs.end(), [&](const Hit& o) { return std::abs(o.u - h.u) < eps; })) hs.push_back(h);
         }
-        if (hs.size() < 2) return err<R>("trim: circle " + std::to_string(id) + " needs at least two intersections");
+        if (hs.size() < 2) {
+            return err<R>(std::string("trim: ") + (c.kind == K::Circle ? "circle " : "ellipse ") + std::to_string(id) +
+                          " needs at least two intersections");
+        }
         std::sort(hs.begin(), hs.end(), [](const Hit& a, const Hit& b) { return a.u < b.u; });
         // Neighbours of the pick angle (cyclic): the kept arc runs ccw from `next` to `prev`.
         std::size_t next = 0;
         while (next < hs.size() && hs[next].u <= tp) ++next;
         const Hit& hi = hs[next % hs.size()];
         const Hit& lo = hs[(next + hs.size() - 1) % hs.size()];
-        const auto ci = s.sketch().circle(e.circle);
         const Id ps = newPoint(s, r, hi.at), pe = newPoint(s, r, lo.at);
-        const SketchEntityId arc = s.addArc(ci.center, ps, pe, true, e.construction);
+        const SketchEntityId arc =
+            c.kind == K::Circle
+                ? s.addArc(e.center, ps, pe, true, e.construction)
+                : s.addEllipticalArc(e.center, e.focus, s.sketch().ellipse(e.geo.id).minor_radius, ps, pe, true, e.construction);
         r.created.push_back(arc);
         retarget(s, r, e.geo, s.entity(arc).geo);
         pointOn(s, r, ps, hi.with);
@@ -307,8 +657,13 @@ Result<SketchEditResult> trimEntity(BoundSketch& s, SketchEntityId id, const Poi
         piece = s.addLine(q2, finish, e.construction);
         r.constraints.push_back(s.sketch().constrain_point_on(q2, e.geo));
         r.constraints.push_back(s.sketch().constrain_point_on(finish, e.geo));
-    } else {
+    } else if (c.kind == K::Arc) {
         piece = s.addArc(e.center, q2, finish, e.counterClockwise, e.construction);
+        r.constraints.push_back(s.sketch().constrain_equal(e.geo, s.entity(piece).geo));
+    } else {
+        // Same centre and focus points; equal minor radii (sketch2d then equates only them).
+        piece = s.addEllipticalArc(e.center, e.focus, s.sketch().ellipse_arc(e.geo.id).minor_radius, q2, finish,
+                                   e.counterClockwise, e.construction);
         r.constraints.push_back(s.sketch().constrain_equal(e.geo, s.entity(piece).geo));
     }
     r.created.push_back(piece);
@@ -321,7 +676,10 @@ Result<SketchEditResult> extendEntity(BoundSketch& s, SketchEntityId id, const P
     using R = SketchEditResult;
     if (id == 0 || id > s.entities().size() || s.entity(id).removed) return err<R>("no live sketch entity " + std::to_string(id));
     const BoundSketch::Entity e = s.entity(id);
-    if (e.kind != K::Line && e.kind != K::Arc) return err<R>("extend: entity " + std::to_string(id) + " is not a line or an arc");
+    if (e.kind == K::BSpline) return extendSpline(s, id, pick);
+    if (e.kind != K::Line && e.kind != K::Arc && e.kind != K::EllipticalArc) {
+        return err<R>("extend: entity " + std::to_string(id) + " is closed (a circle or an ellipse)");
+    }
     auto car = carrierOf(s, id);
     if (!car) return car.error();
     const Carrier c = car.value();
