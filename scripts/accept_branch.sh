@@ -62,6 +62,8 @@ step "node assembly configurations" node_test tests/wasm/assembly_configurations
 step "node assembly design table" node_test tests/wasm/assembly_design_table.test.mjs --module $W/wasm_assembly
 step "node reference mesh" node_test tests/wasm/reference_mesh.test.mjs --modeling $W/wasm_modeling \
   --assembly $W/wasm_assembly
+step "node selection data" node_test tests/wasm/selection_data.test.mjs --modeling $W/wasm_modeling \
+  --kernel $W/wasm_kernel --assembly $W/wasm_assembly
 step "tsc" npx tsc --noEmit -p .
 step "jest" bash -c 'npx jest 2>&1 | grep -E "^Tests:"; exit ${PIPESTATUS[0]}'
 
