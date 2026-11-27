@@ -75,3 +75,9 @@ if(BENDCORE_NODE)
             --module "${BENDCORE_WASM_MODELING_OUT}")
   set_tests_properties(wasm_part_configurations PROPERTIES TIMEOUT 300)
 endif()
+
+# The JS API files are copied by the POST_BUILD step above, which runs only when the module
+# relinks: make a change of any of them relink the module, so an edited API never stays stale
+# in the build directory.
+file(GLOB bendcore_modeling_wasm_api_files "${BENDCORE_WASM_MODELING_ROOT}/src/wasm/*_api.mjs" "${BENDCORE_WASM_MODELING_ROOT}/src/wasm/*_api.d.mts")
+set_property(TARGET bendcore_modeling_wasm APPEND PROPERTY LINK_DEPENDS ${bendcore_modeling_wasm_api_files})
