@@ -55,6 +55,9 @@ struct PartProperties {
     // true — рассекается всегда, false — при продольном разрезе показывается нерассечённой;
     // пусто — правило по умолчанию (docs/drawing/VIEWS.md, «Условности разрезов сборок»).
     std::optional<bool> sectionCut;
+    // Примечание (графа «Примечание» спецификации ГОСТ 2.106), из свойств документа детали;
+    // примечание, заданное в спецификации (SpecificationOptions::notes), его заменяет.
+    std::string note;
 };
 
 
@@ -74,13 +77,23 @@ struct PartData {
 using PartResolver = std::function<kernel::Result<PartData>(const std::string& source)>;
 
 // Итоговая форма документа детали с картой элементов. Ошибка InvalidInput — пустая форма.
-// С активным исполнением таблицы параметров — также его свойства (PartData::properties).
+// Свойства (PartData::properties) — свойства документа детали (обозначение, наименование,
+// материал — наименование материала библиотеки, плотность, примечание), с активным
+// исполнением — его полное обозначение, наименование и материал
+// (PartDocument::effectiveProperties); пусто, если документ их не задаёт.
 kernel::Result<PartData> partDataFromDocument(const modeling::PartDocument& document);
 // Исполнение `configuration` документа детали (пусто — базовые значения): делает его активным,
 // перестраивает, возвращает форму и свойства исполнения: полное обозначение, наименование,
 // материал (наименование материала библиотеки) и плотность. Ошибки InvalidInput: нет такого
 // исполнения; исполнение не перестраивается (с причинами checkConfigurations).
 kernel::Result<PartData> partDataFromDocument(modeling::PartDocument& document, const std::string& configuration);
+
+// Документ детали как документ XCAF из одного прототипа-детали для writeStepAssembly
+// (docs/kernel/XCAF_IO.md): форма — finalShape(), PRODUCT id — обозначение
+// (effectiveProperties: с активным исполнением — его полное обозначение), name и description —
+// наименование (пустое — обозначение, затем fallbackName). Пустая форма — shape пуст
+// (writeStepAssembly отвечает InvalidInput).
+kernel::AssemblyDocument partStepDocument(const modeling::PartDocument& document, const std::string& fallbackName = {});
 
 // Источник детали-исполнения: «<путь>#<обозначение исполнения>» (docs/assembly/ASSEMBLY_DOCUMENT.md,
 // раздел «Исполнения»). splitConfigurationSource — {путь, исполнение} (исполнения нет — пусто).

@@ -449,6 +449,9 @@ export class PartDocumentHandle {
   /** material: written as the top-level field "material" of the file (kg/m^3). */
   save(options?: { includeCache?: boolean; material?: PartMaterial }): string;
   configurations(): ConfigurationTable;
+  /** Document properties (designation, name, material, developer, organization, note). */
+  properties(): PartDocumentProperties;
+  setProperties(properties: Partial<Omit<PartDocumentProperties, 'effective'>>): void;
   setConfigurations(table: { columns: ConfigurationColumn[]; rows: ConfigurationRow[]; active?: string }): void;
   setConfigurationCell(row: number, column: number, value: Expr): void;
   addConfigurationColumn(column: ConfigurationColumn): void;
@@ -572,3 +575,18 @@ export class ModelingKernel {
 export type ModelingModuleFactory = (options?: Record<string, unknown>) => Promise<unknown>;
 
 export function loadModeling(factory: ModelingModuleFactory, moduleOptions?: Record<string, unknown>): Promise<ModelingKernel>;
+
+/** Properties of a part document (docs/modeling/PART_DOCUMENT.md, "Свойства документа"). */
+export interface PartDocumentProperties {
+  designation: string;
+  name: string;
+  /** Kernel library material id, 'custom' or empty. */
+  material: string;
+  /** kg/m^3; null - not set. */
+  density: number | null;
+  developer: string;
+  organization: string;
+  note: string;
+  /** As the active configuration shows them (its full designation, name and material). */
+  effective: { designation: string; name: string; material: string; density: number | null };
+}

@@ -4,6 +4,7 @@
 
 #include <bendcore/assembly_v2/bom.hpp>
 #include <bendcore/drawing_v2/drawing_document.hpp>
+#include <bendcore/kernel/material.hpp>
 #include <bendcore/modeling/part_features.hpp>
 
 #include <BRep_Builder.hxx>
@@ -41,6 +42,46 @@ std::string hashHex(std::uint64_t hash) {
     return buf;
 }
 
+ModelProperties titleProperties(const ModelProperties& link, const std::optional<ModelProperties>& doc) {
+    ModelProperties p = link;
+    if (!doc) return p;
+    auto take = [](std::string& to, const std::string& from) {
+        if (!from.empty()) to = from;
+    };
+    take(p.designation, doc->designation);
+    take(p.name, doc->name);
+    take(p.material, doc->material);
+    take(p.developer, doc->developer);
+    take(p.organization, doc->organization);
+    if (doc->density) p.density = doc->density;
+    return p;
+}
+
+namespace {
+
+// Свойства документа детали для основной надписи; nullopt — документ их не задаёт.
+std::optional<ModelProperties> partDocumentProperties(const modeling::PartDocument& document) {
+    const modeling::ConfigurationProperties e = document.effectiveProperties();
+    ModelProperties p;
+    p.designation = e.designation;
+    p.name = e.name;
+    p.density = e.density;
+    p.developer = document.properties().developer;
+    p.organization = document.properties().organization;
+    // «custom» — плотность, заданная вручную на странице детали: наименования материала нет.
+    if (!e.material.empty() && e.material != "custom") {
+        p.material = e.material;
+        for (const kernel::Material& m : kernel::builtInMaterials())
+            if (m.id == e.material) p.material = m.name;
+    }
+    if (p.designation.empty() && p.name.empty() && p.material.empty() && !p.density && p.developer.empty() &&
+        p.organization.empty())
+        return std::nullopt;
+    return p;
+}
+
+}  // namespace
+
 Result<ModelSnapshot> snapshotPart(const modeling::PartDocument& document, const ModelProperties& properties) {
     modeling::NamedShape named = document.finalShape();
     if (named.isNull()) return invalid("drawing model: the part document has no body");
@@ -58,15 +99,18 @@ Result<ModelSnapshot> snapshotPart(const modeling::PartDocument& document, const
     s.named = std::make_shared<const modeling::NamedShape>(std::move(named));
     s.historyNames = true;
     s.properties = properties;
+    s.documentProperties = partDocumentProperties(document);
     auto hash = views::shapeContentHash(s.shape);
     if (!hash) return hash.error();
     s.contentHash = hash.value();
-    if (properties.density) {
-        if (!(*properties.density > 0)) return invalid("drawing model: density must be positive");
+    // Плотность документа детали, иначе — записанная в чертеже.
+    const std::optional<double> density = titleProperties(properties, s.documentProperties).density;
+    if (density) {
+        if (!(*density > 0)) return invalid("drawing model: density must be positive");
         auto vp = real.volumeProperties();
         if (!vp) return vp.error();
         // Объём, мм³ → м³ (1e-9) · плотность, кг/м³.
-        s.massKg = std::abs(vp.value().volume) * 1e-9 * *properties.density;
+        s.massKg = std::abs(vp.value().volume) * 1e-9 * *density;
     }
     return s;
 }

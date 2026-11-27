@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <limits>
@@ -616,6 +617,23 @@ Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
             }
             doc["referenceMeshes"] = meshes;
         }
+        // Document properties: optional fields, readers of v3-v5 without them ignore them; the
+        // material keeps the shape the page has written since v3 ({"id", "density"}).
+        json props = json::object();
+        const std::pair<const char*, const std::string*> fields[] = {{"designation", &properties_.designation},
+                                                                     {"name", &properties_.name},
+                                                                     {"developer", &properties_.developer},
+                                                                     {"organization", &properties_.organization},
+                                                                     {"note", &properties_.note}};
+        for (const auto& [key, value] : fields)
+            if (!value->empty()) props[key] = *value;
+        if (!props.empty()) doc["properties"] = std::move(props);
+        if (!properties_.material.empty() || properties_.density) {
+            json m = json::object();
+            m["id"] = properties_.material.empty() ? std::string("custom") : properties_.material;
+            if (properties_.density) m["density"] = *properties_.density;
+            doc["material"] = std::move(m);
+        }
         if (options.includeCache) doc["cache"] = cache;
         return doc.dump(1);
     } catch (const std::exception& e) {
@@ -695,6 +713,35 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
             table.active = cj.value("active", std::string());
             auto st = part.setConfigurationTable(std::move(table));
             if (!st) return R::failure(ErrorCode::ParseError, "configurations: " + st.error().message);
+        }
+        {
+            DocumentProperties props;
+            if (doc.contains("properties")) {
+                const json& pj = doc.at("properties");
+                if (!pj.is_object()) return R::failure(ErrorCode::ParseError, "properties: expected an object");
+                for (auto [key, target] : {std::pair<const char*, std::string*>{"designation", &props.designation},
+                                           {"name", &props.name},
+                                           {"developer", &props.developer},
+                                           {"organization", &props.organization},
+                                           {"note", &props.note}}) {
+                    if (!pj.contains(key)) continue;
+                    if (!pj.at(key).is_string())
+                        return R::failure(ErrorCode::ParseError, std::string("properties: '") + key + "' must be a string");
+                    *target = pj.at(key).get<std::string>();
+                }
+            }
+            // The material written by the page since v3; a malformed field is ignored as the
+            // page does (docs/ui/PART_MODELING_UI.md, "Материал").
+            if (doc.contains("material") && doc.at("material").is_object()) {
+                const json& mj = doc.at("material");
+                if (mj.contains("id") && mj.at("id").is_string()) props.material = mj.at("id").get<std::string>();
+                if (mj.contains("density") && mj.at("density").is_number()) {
+                    const double rho = mj.at("density").get<double>();
+                    if (std::isfinite(rho) && rho > 0) props.density = rho;
+                }
+            }
+            if (auto st = part.setProperties(std::move(props)); !st)
+                return R::failure(ErrorCode::ParseError, "properties: " + st.error().message);
         }
         if (doc.contains("referenceMeshes")) {
             for (const auto& m : doc.at("referenceMeshes")) {

@@ -84,6 +84,20 @@ export class PartDocumentHandle {
     return this.#call('docConfigurations');
   }
 
+  /**
+   * Document properties (docs/modeling/PART_DOCUMENT.md, "Свойства документа"): { designation, name,
+   * material, density, developer, organization, note, effective: { designation, name, material,
+   * density } } - effective: as the active configuration shows them.
+   */
+  properties() {
+    return this.#call('docProperties');
+  }
+
+  /** Changes the given fields (density null clears it); one undo entry, no rebuild needed. */
+  setProperties(properties) {
+    this.#call('docSetProperties', properties);
+  }
+
   /** Replaces the table { columns, rows, active } (checked against the document; one undo entry). */
   setConfigurations(table) {
     this.#call('docSetConfigurations', table);

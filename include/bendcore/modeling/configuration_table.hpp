@@ -59,6 +59,9 @@ struct ConfigurationTable {
 // Полное обозначение исполнения: суффикс «-01» дополняется обозначением первой строки
 // («РЦ.080.00.010» + «-01» → «РЦ.080.00.010-01»), иначе — как записано.
 std::string fullDesignation(const ConfigurationTable& table, std::size_t row);
+// То же с обозначением документа детали base: суффикс дополняет base, если оно задано,
+// иначе — обозначение первой строки (PartDocument::configurationDesignation).
+std::string fullDesignation(const ConfigurationTable& table, std::size_t row, const std::string& base);
 
 // Значение ячейки подавления: 1/0, true/false, yes/no, да/нет (регистр не важен);
 // nullopt — недопустимое значение.

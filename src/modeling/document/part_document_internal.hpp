@@ -88,6 +88,7 @@ struct PartDocument::State {
     std::optional<std::size_t> rollback;
     std::vector<NodeDefinition> nodes;
     ConfigurationTable table;
+    DocumentProperties properties;
     std::vector<MeshEntry> meshes;
 };
 

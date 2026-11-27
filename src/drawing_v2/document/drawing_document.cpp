@@ -1776,7 +1776,9 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
 
         // 8. Основная надпись.
         TitleBlockData& td = cs.title;
-        const ModelProperties& mp = model.kind == ModelKind::Part ? model_.properties : model.properties;
+        // Деталь: свойства документа детали поверх записанных в чертеже; графы листа — поверх всего.
+        const ModelProperties mp =
+            model.kind == ModelKind::Part ? titleProperties(model_.properties, model.documentProperties) : model.properties;
         td.designation = !sd.title.designation.empty() ? sd.title.designation
                                                        : (mp.designation + (model.kind == ModelKind::Assembly && !mp.designation.empty() ? " СБ" : ""));
         td.name = !sd.title.name.empty() ? sd.title.name : mp.name;
@@ -1801,8 +1803,9 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
             if (sd.title.material.empty()) td.material = materialDiffers ? "См. табл." : base.material;
         }
         td.litera = sd.title.litera;
-        td.organization = sd.title.organization;
+        td.organization = !sd.title.organization.empty() ? sd.title.organization : mp.organization;
         td.developer = sd.title.developer;
+        if (td.developer.surname.empty()) td.developer.surname = mp.developer;
         td.checker = sd.title.checker;
         td.techControl = sd.title.techControl;
         td.normControl = sd.title.normControl;

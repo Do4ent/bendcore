@@ -165,24 +165,22 @@ Result<AssemblyDocument> AssemblyDocument::importStep(std::string_view step) {
 
 namespace {
 
-// Свойства активного исполнения документа детали; nullopt — исполнение не выбрано.
-std::optional<PartProperties> activeConfigurationProperties(const modeling::PartDocument& document) {
-    const modeling::ConfigurationTable& t = document.configurationTable();
-    if (t.active.empty()) return std::nullopt;
-    auto row = t.rowOf(t.active);
-    if (!row) return std::nullopt;
+// Свойства документа детали с активным исполнением (PartDocument::effectiveProperties);
+// nullopt — документ не задаёт ни одного свойства.
+std::optional<PartProperties> documentProperties(const modeling::PartDocument& document) {
+    const modeling::ConfigurationProperties e = document.effectiveProperties();
     PartProperties p;
-    p.designation = modeling::fullDesignation(t, *row);
-    p.name = t.rows[*row].name;
-    const std::string material = document.configurationMaterial();
-    if (!material.empty()) {
-        for (const kernel::Material& m : kernel::builtInMaterials()) {
-            if (m.id == material) {
-                p.material = m.name;
-                p.density = m.density;
-            }
-        }
+    p.designation = e.designation;
+    p.name = e.name;
+    p.density = e.density;
+    p.note = document.properties().note;
+    // «custom» — плотность задана вручную (страница детали): материала-наименования нет.
+    if (!e.material.empty() && e.material != "custom") {
+        p.material = e.material;  // материал не из библиотеки — как записан
+        for (const kernel::Material& m : kernel::builtInMaterials())
+            if (m.id == e.material) p.material = m.name;
     }
+    if (p.designation.empty() && p.name.empty() && p.material.empty() && !p.density && p.note.empty()) return std::nullopt;
     return p;
 }
 
@@ -194,7 +192,7 @@ Result<PartData> partDataFromDocument(const modeling::PartDocument& document) {
     PartData data;
     data.shape = named.shape();
     data.elementMap = std::make_shared<const modeling::NamedShape>(std::move(named));
-    data.properties = activeConfigurationProperties(document);
+    data.properties = documentProperties(document);
     return data;
 }
 
@@ -217,6 +215,24 @@ Result<PartData> partDataFromDocument(modeling::PartDocument& document, const st
                                                   "' does not build: " + why};
     }
     return partDataFromDocument(static_cast<const modeling::PartDocument&>(document));
+}
+
+kernel::AssemblyDocument partStepDocument(const modeling::PartDocument& document, const std::string& fallbackName) {
+    kernel::AssemblyDocument x;
+    const modeling::NamedShape named = document.finalShape();
+    const modeling::ConfigurationProperties p = document.effectiveProperties();
+    kernel::AssemblyDefinition def;
+    def.kind = kernel::DefinitionKind::Part;
+    // PRODUCT name — наименование (иначе обозначение, иначе имя файла), id — обозначение,
+    // description — наименование (как у деталей сборки, раздел 9).
+    def.name = !p.name.empty() ? p.name : !p.designation.empty() ? p.designation
+                                       : fallbackName.empty() ? std::string("Part") : fallbackName;
+    if (!p.designation.empty()) def.productId = p.designation;
+    def.description = p.name;
+    if (!named.isNull()) def.shape = kernel::Shape(named.shape());
+    x.definitions.push_back(std::move(def));
+    x.roots = {0};
+    return x;
 }
 
 std::string configurationSource(const std::string& path, const std::string& configuration) {

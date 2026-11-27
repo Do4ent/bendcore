@@ -205,6 +205,7 @@ json propertiesJson(const PartProperties& p) {
     json j = {{"designation", p.designation}, {"name", p.name}, {"material", p.material}};
     j["density"] = p.density ? json(*p.density) : json(nullptr);
     if (p.sectionCut) j["sectionCut"] = *p.sectionCut;  // необязательное поле (чертёж, ГОСТ 2.305)
+    if (!p.note.empty()) j["note"] = p.note;             // необязательное поле (спецификация, «Примечание»)
     return j;
 }
 
@@ -222,6 +223,7 @@ PartProperties propertiesFrom(const json& j) {
         if (!j.at("sectionCut").is_boolean()) bad("sectionCut must be a boolean");
         p.sectionCut = j.at("sectionCut").get<bool>();
     }
+    if (j.contains("note") && !j.at("note").is_null()) p.note = text(j, "note");
     return p;
 }
 

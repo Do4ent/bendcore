@@ -892,7 +892,7 @@ const PartSource& registerPartSource(const std::string& name, const std::string&
     src.text = text;
     const m::ConfigurationTable& t = doc.value().configurationTable();
     for (std::size_t r = 0; r < t.rows.size(); ++r) {
-        src.configurations.emplace_back(t.rows[r].designation, m::fullDesignation(t, r));
+        src.configurations.emplace_back(t.rows[r].designation, doc.value().configurationDesignation(r));
         src.names.push_back(t.rows[r].name);
     }
     return partSources()[name] = std::move(src);

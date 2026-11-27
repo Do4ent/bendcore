@@ -302,13 +302,16 @@ json roughJson(const an::RoughnessSpec& r) {
 
 json propertiesJson(const dd::ModelProperties& p) {
     return {{"designation", p.designation}, {"name", p.name}, {"material", p.material},
-            {"density", p.density ? json(*p.density) : json(nullptr)}};
+            {"density", p.density ? json(*p.density) : json(nullptr)}, {"developer", p.developer},
+            {"organization", p.organization}};
 }
 void propertiesApply(dd::ModelProperties& p, const json& j) {
     if (!j.is_object()) throw InputError("model properties must be an object");
     if (j.contains("designation")) p.designation = strOr(j, "designation");
     if (j.contains("name")) p.name = strOr(j, "name");
     if (j.contains("material")) p.material = strOr(j, "material");
+    if (j.contains("developer")) p.developer = strOr(j, "developer");
+    if (j.contains("organization")) p.organization = strOr(j, "organization");
     if (j.contains("density")) {
         if (j.at("density").is_null()) {
             p.density.reset();
@@ -850,13 +853,14 @@ json stalenessJson(const dd::StalenessReport& r);
 
 // Configuration table of the part (docs/modeling/PART_DOCUMENT.md, "Таблица параметров"): the
 // source of the group drawing (GOST 2.113).
-json configurationTableJson(const m::ConfigurationTable& t) {
+json configurationTableJson(const m::PartDocument& part) {
+    const m::ConfigurationTable& t = part.configurationTable();
     json columns = json::array();
     for (const m::ConfigurationColumn& c : t.columns)
         columns.push_back({{"kind", m::toString(c.kind)}, {"target", c.target}, {"title", m::columnTitle(c)}});
     json rows = json::array();
     for (std::size_t r = 0; r < t.rows.size(); ++r)
-        rows.push_back({{"designation", t.rows[r].designation}, {"fullDesignation", m::fullDesignation(t, r)},
+        rows.push_back({{"designation", t.rows[r].designation}, {"fullDesignation", part.configurationDesignation(r)},
                         {"name", t.rows[r].name}, {"cells", t.rows[r].cells}});
     return {{"columns", columns}, {"rows", rows}, {"active", t.active}};
 }
@@ -865,7 +869,7 @@ std::string modelConfigurations(std::uint32_t handle) {
     return guarded([&]() -> json {
         Session& s = session(handle);
         if (s.kind != dd::ModelKind::Part) raise({k::ErrorCode::Unsupported, "configurations: the drawing model is an assembly"});
-        return configurationTableJson(s.part->configurationTable());
+        return configurationTableJson(*s.part);
     });
 }
 
@@ -888,7 +892,7 @@ std::string modelSetConfigurationCell(std::uint32_t handle, int row, int column,
                                                       (c.problems.empty() ? std::string("unknown problem") : c.problems.front())});
         }
         json out = stalenessJson(s.doc.checkModel(partSnapshot(s)));
-        out["configurations"] = configurationTableJson(s.part->configurationTable());
+        out["configurations"] = configurationTableJson(*s.part);
         return out;
     });
 }

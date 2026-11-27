@@ -9,6 +9,7 @@
 #include <GProp_GProps.hxx>
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 
 namespace bendcore::modeling {
@@ -198,7 +199,7 @@ std::vector<ConfigurationCheck> PartDocument::checkConfigurations() {
         rebuild();
         ConfigurationCheck c;
         c.designation = table_.rows[r].designation;
-        c.fullDesignation = fullDesignation(table_, r);
+        c.fullDesignation = configurationDesignation(r);
         for (const auto& [name, value] : variableValues_) {
             if (!value) c.problems.push_back("variable '" + name + "': " + value.error().message);
         }
@@ -223,6 +224,68 @@ std::vector<ConfigurationCheck> PartDocument::checkConfigurations() {
     }
     table_.active = saved;
     rebuild();
+    return out;
+}
+
+// ---------------------------------------------------------------- document properties
+
+namespace {
+
+const kernel::Material* libraryMaterial(const std::string& id) {
+    for (const kernel::Material& m : kernel::builtInMaterials())
+        if (m.id == id) return &m;
+    return nullptr;
+}
+
+}  // namespace
+
+bool DocumentProperties::empty() const noexcept {
+    return designation.empty() && name.empty() && material.empty() && !density && developer.empty() &&
+           organization.empty() && note.empty();
+}
+
+const DocumentProperties& PartDocument::properties() const noexcept { return properties_; }
+
+Status PartDocument::setProperties(DocumentProperties p) {
+    if (p.density && !(std::isfinite(*p.density) && *p.density > 0.0))
+        return fail(ErrorCode::InvalidInput, "density must be a positive number (kg/m^3)");
+    const std::pair<const char*, const std::string*> lines[] = {{"designation", &p.designation},
+                                                                {"name", &p.name},
+                                                                {"material", &p.material},
+                                                                {"developer", &p.developer},
+                                                                {"organization", &p.organization}};
+    for (const auto& [what, text] : lines)
+        if (text->find_first_of("\r\n") != std::string::npos)
+            return fail(ErrorCode::InvalidInput, std::string(what) + " must be a single line");
+    if (p == properties_) return std::monostate{};
+    State before = captureState();
+    properties_ = std::move(p);
+    recordEdit("properties", std::move(before));
+    return std::monostate{};
+}
+
+std::string PartDocument::configurationDesignation(std::size_t row) const {
+    return fullDesignation(table_, row, properties_.designation);
+}
+
+ConfigurationProperties PartDocument::effectiveProperties() const {
+    ConfigurationProperties out;
+    out.designation = properties_.designation;
+    out.name = properties_.name;
+    out.material = properties_.material;
+    out.density = properties_.density;
+    if (!out.density && !out.material.empty()) {
+        if (const kernel::Material* m = libraryMaterial(out.material)) out.density = m->density;
+    }
+    auto row = table_.active.empty() ? std::nullopt : table_.rowOf(table_.active);
+    if (!row) return out;
+    out.designation = configurationDesignation(*row);
+    if (!table_.rows[*row].name.empty()) out.name = table_.rows[*row].name;
+    const std::string cell = configurationMaterial();
+    if (!cell.empty()) {
+        out.material = cell;
+        if (const kernel::Material* m = libraryMaterial(cell)) out.density = m->density;
+    }
     return out;
 }
 

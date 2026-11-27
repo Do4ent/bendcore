@@ -60,6 +60,13 @@ std::string fullDesignation(const ConfigurationTable& table, std::size_t row) {
     return d;
 }
 
+std::string fullDesignation(const ConfigurationTable& table, std::size_t row, const std::string& base) {
+    if (row >= table.rows.size()) return {};
+    const std::string& d = table.rows[row].designation;
+    if (!d.empty() && d.front() == '-' && !base.empty()) return base + d;
+    return fullDesignation(table, row);
+}
+
 namespace {
 
 std::string trim(std::string_view s) {

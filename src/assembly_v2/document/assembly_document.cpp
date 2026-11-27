@@ -134,6 +134,14 @@ AssemblyDocument::AssemblyDocument(std::string name) {
 
 Result<DefinitionId> AssemblyDocument::addPart(std::string name, PartData data, PartProperties properties) {
     if (auto c = checkPartData(data); !c) return c.error();
+    // Свойства источника (документа детали) дополняют пустые поля заданных свойств.
+    if (const auto& from = data.properties) {
+        if (properties.designation.empty()) properties.designation = from->designation;
+        if (properties.name.empty()) properties.name = from->name;
+        if (properties.material.empty()) properties.material = from->material;
+        if (!properties.density) properties.density = from->density;
+        if (properties.note.empty()) properties.note = from->note;
+    }
     if (properties.density && !(*properties.density >= 0.0))
         return Error{ErrorCode::InvalidInput, "density must be >= 0"};
     auto topo = buildTopology(data.shape);
@@ -141,6 +149,8 @@ Result<DefinitionId> AssemblyDocument::addPart(std::string name, PartData data, 
     Definition d;
     d.id = static_cast<DefinitionId>(definitions_.size());
     d.kind = DefinitionKind::Part;
+    // Без имени — наименование, затем обозначение детали (имена вхождений «<имя>:<n>»).
+    if (name.empty()) name = !properties.name.empty() ? properties.name : properties.designation;
     d.name = name.empty() ? "Part" + std::to_string(d.id) : std::move(name);
     d.properties = std::move(properties);
     d.shape = data.shape;
@@ -155,12 +165,6 @@ Result<DefinitionId> AssemblyDocument::addPartFromSource(std::string name, std::
     if (!resolver) return Error{ErrorCode::InvalidInput, "part resolver is empty"};
     auto data = resolver(source);
     if (!data) return Error{data.error().code, "cannot load part '" + source + "': " + data.error().message};
-    if (const auto& from = data.value().properties) {
-        if (properties.designation.empty()) properties.designation = from->designation;
-        if (properties.name.empty()) properties.name = from->name;
-        if (properties.material.empty()) properties.material = from->material;
-        if (!properties.density) properties.density = from->density;
-    }
     auto id = addPart(std::move(name), std::move(data).value(), std::move(properties));
     if (!id) return id;
     definitions_[id.value()].source = std::move(source);
@@ -837,6 +841,7 @@ Result<ReplaceReport> AssemblyDocument::setOccurrenceConfiguration(OccurrenceId 
             if (!from->name.empty()) props.name = from->name;
             if (!from->material.empty()) props.material = from->material;
             if (from->density) props.density = from->density;
+            if (!from->note.empty()) props.note = from->note;
         }
         std::string name = splitConfigurationSource(old.name).first;
         if (!configuration.empty()) name += "#" + configuration;
