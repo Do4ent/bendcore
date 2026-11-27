@@ -138,7 +138,8 @@ struct ProjectedPins {
     std::optional<double> radius;
     std::optional<BSpline2d> spline;
 };
-Result<ProjectedPins> projectedPins(const SketchGeometryDef& def, const Curve2d& projection);
+// `where` prefixes the error messages ("sketch entity N").
+Result<ProjectedPins> projectedPins(const SketchGeometryDef& def, const Curve2d& projection, const std::string& where);
 
 // Geometry definition of a new curve projected from reference `referenceIndex`: the type of the
 // projection, its points appended to `data` (positions of the projection; pinned at rebuild).

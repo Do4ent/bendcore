@@ -143,10 +143,10 @@ Point2 ellipseFocus(const Ellipse2d& e) {
 
 }  // namespace
 
-Result<ProjectedPins> projectedPins(const SketchGeometryDef& def, const Curve2d& c) {
+Result<ProjectedPins> projectedPins(const SketchGeometryDef& def, const Curve2d& c, const std::string& where) {
     ProjectedPins out;
     auto wrong = [&]() {
-        return Result<ProjectedPins>::failure(ErrorCode::InvalidInput, std::string("projected edge is not a ") + toString(def.type));
+        return Result<ProjectedPins>::failure(ErrorCode::InvalidInput, where + ": projected edge is not a " + toString(def.type));
     };
     switch (def.type) {
         case SketchGeometryType::Line: {
@@ -196,8 +196,9 @@ Result<ProjectedPins> projectedPins(const SketchGeometryDef& def, const Curve2d&
             const BSpline2d& sp = std::get<BSpline2d>(c);
             if (sp.poles.size() != def.poles.size()) {
                 return Result<ProjectedPins>::failure(
-                    ErrorCode::InvalidInput, "projected spline has " + std::to_string(sp.poles.size()) + " poles, the sketch curve " +
-                                                 std::to_string(def.poles.size()) + " (project the edge again)");
+                    ErrorCode::InvalidInput, where + ": projected spline has " + std::to_string(sp.poles.size()) +
+                                                 " poles, the sketch curve " + std::to_string(def.poles.size()) +
+                                                 " (project the edge again)");
             }
             for (std::size_t k = 0; k < sp.poles.size(); ++k) out.points.push_back({def.poles[k], sp.poles[k]});
             out.spline = sp;
@@ -540,8 +541,8 @@ public:
             auto pe = projectEdge(pl, TopoDS::Edge(projected[static_cast<std::size_t>(def.projection)]));
             if (!pe) return fail(pe.error().code, where + ": " + pe.error().message);
             if (!pe.value().curve) return fail(ErrorCode::InvalidInput, where + ": the edge projects to a point");
-            auto pins = projectedPins(def, *pe.value().curve);
-            if (!pins) return fail(pins.error().code, where + ": " + pins.error().message);
+            auto pins = projectedPins(def, *pe.value().curve, where);
+            if (!pins) return pins.error();
             for (const auto& [p, at] : pins.value().points) {
                 if (p < 0 || static_cast<std::size_t>(p) >= np) {
                     return fail(ErrorCode::InvalidInput, where + ": point " + std::to_string(p) + " does not exist");
