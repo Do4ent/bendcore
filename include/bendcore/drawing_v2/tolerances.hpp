@@ -67,7 +67,7 @@ Result<LimitDeviations> limitDeviations(double nominalMm, const ToleranceClass& 
 Result<LimitDeviations> limitDeviations(double nominalMm, const std::string& cls);
 
 // Посадка: отверстие/вал, например «H7/s6». Зазор положительный, натяг — отрицательный
-// (ISO 286-1, п. 3.8: зазор = размер отверстия − размер вала).
+// (ISO 286-1: зазор = размер отверстия − размер вала).
 enum class FitType { Clearance, Transition, Interference };
 
 struct FitResult {
