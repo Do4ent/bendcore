@@ -348,7 +348,20 @@ Status checkSketch(const SketchData& s) {
             case SketchConstraintType::Tangent:
             case SketchConstraintType::Equal:
             case SketchConstraintType::Concentric:
+            case SketchConstraintType::EqualMinorRadius:
                 if (!(st = entity(c.a, where)) || !(st = entity(c.b, where))) return st;
+                break;
+            case SketchConstraintType::OffsetDistance:
+                if (!(st = entity(c.a, where)) || !(st = entity(c.b, where))) return st;
+                if (c.c >= 1) {
+                    if (static_cast<std::size_t>(c.c) > k) {
+                        return fail(ErrorCode::InvalidInput, where + ": offset dimension " + std::to_string(c.c) +
+                                                                 " must be an earlier constraint");
+                    }
+                    if (s.constraints[static_cast<std::size_t>(c.c) - 1].type != SketchConstraintType::OffsetDistance) {
+                        return fail(ErrorCode::InvalidInput, where + ": constraint " + std::to_string(c.c) + " is not an offset distance");
+                    }
+                }
                 break;
             case SketchConstraintType::Midpoint:
             case SketchConstraintType::PointOn:

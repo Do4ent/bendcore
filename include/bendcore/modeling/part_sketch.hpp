@@ -47,7 +47,9 @@ std::optional<SketchGeometryType> sketchGeometryTypeFromString(std::string_view 
 // construction: auxiliary geometry, never part of the profile.
 // projection >= 0: the curve is the projection of model edge #projection of the sketch's
 // "projected" reference slot; its points are pinned at the projection (a projected line is
-// oriented so that its start has the smaller x, then the smaller y).
+// oriented so that its start has the smaller x, then the smaller y; arcs and elliptical arcs run
+// counter-clockwise; an ellipse's focus is on its major axis; a spline's poles, knots, weights
+// and degree are those of the projection, whose number of poles must stay the same).
 struct SketchGeometryDef {
     SketchGeometryType type = SketchGeometryType::Line;
     int start = -1;
@@ -95,6 +97,10 @@ enum class SketchConstraintType {
     MinorRadius,    // ellipse/elliptical arc entity a; value mm
     SymmetricPoint, // points a, b about point c
     Rotation,       // point b = point a rotated about point c by value degrees
+    OffsetDistance, // entity a is the offset of entity b (both lines, or circles/arcs) by value mm;
+                    // c >= 1: by the value of OffsetDistance constraint c (an earlier one; value
+                    // unused) — the offset of a chain has one dimension
+    EqualMinorRadius,  // ellipse/elliptical arc entities a, b: equal minor radii
 };
 
 const char* toString(SketchConstraintType type) noexcept;
@@ -122,6 +128,22 @@ struct SketchData {
     // regions qualify — an edge shared by adjacent regions — the smaller one).
     std::vector<SketchEntityId> regions;
 };
+
+// Pinned state of a projected curve: positions of its data points, radius (circle radius or
+// ellipse minor radius) and, for a spline, the knots, weights and degree of the projection.
+// InvalidInput when the projection is not of the definition's type (or has another number of
+// spline poles).
+struct ProjectedPins {
+    std::vector<std::pair<int, Point2>> points;
+    std::optional<double> radius;
+    std::optional<BSpline2d> spline;
+};
+Result<ProjectedPins> projectedPins(const SketchGeometryDef& def, const Curve2d& projection);
+
+// Geometry definition of a new curve projected from reference `referenceIndex`: the type of the
+// projection, its points appended to `data` (positions of the projection; pinned at rebuild).
+SketchGeometryDef projectedDefinition(SketchData& data, const Curve2d& projection, int referenceIndex,
+                                      bool construction);
 
 // Expressions of a sketch in evaluation order: points (x, y), geometry (radius), constraints
 // (value). The document evaluates them; the sketch feature receives the values in this order.
