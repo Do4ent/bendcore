@@ -1298,7 +1298,7 @@ a::PartData partFromJs(const val& v) {
 val asmInsertPart(std::uint32_t handle, val spec) {
     return withSession(handle, [&](Session& s) {
         if (!isObject(spec)) throw InputError("part must be an object");
-        const std::string name = optionalString(spec, "name", "Part", "part");
+        std::string name = optionalString(spec, "name", "Part", "part");
         // A part document with a configuration table becomes a registered source (spec.source,
         // default "<name>.part.json"), so that components can switch configurations.
         std::string source;
@@ -1307,6 +1307,11 @@ val asmInsertPart(std::uint32_t handle, val spec) {
             const std::string text = requireString(spec["data"], "part.data");
             auto probe = m::PartDocument::fromJson(text, registry());
             if (!probe) throw KernelFailure(probe.error());
+            // The component is named after the part document (its name, else its designation;
+            // docs/modeling/PART_DOCUMENT.md, "Свойства документа"), else after the file.
+            const m::ConfigurationProperties own = probe.value().effectiveProperties();
+            if (!own.name.empty()) name = own.name;
+            else if (!own.designation.empty()) name = own.designation;
             if (!probe.value().configurationTable().rows.empty() || present(spec["source"])) {
                 source = optionalString(spec, "source", name + ".part.json", "part");
                 if (source.find('#') != std::string::npos) throw InputError("part.source must not contain '#'");
