@@ -82,6 +82,8 @@ import type { DocumentFile, EditorHostProps } from '../app/editorHost';
 import { useFaultReport } from '../app/faultReport';
 import { DRAWING_FILE_EXTENSION, drawingFileName, packDrawingFile, readDrawingFiles, storedGroupSpecification, unpackDrawingFile } from './drawingFile';
 import type { DrawingFileContent, DrawingFileError, GroupSpecificationSettings } from './drawingFile';
+import Ribbon from '../app/Ribbon';
+import { drawingRibbon } from './drawingRibbon';
 import './DrawingEditor.css';
 
 type Variable = { name: string; expression: string; value: number | null; error: string | null };
@@ -161,23 +163,6 @@ function errorOf(e: unknown): { code: string; message: string } {
   }
   return { code: 'Error', message: e instanceof Error ? e.message : String(e) };
 }
-
-const STANDARD_PROJECTED: StandardView[] = ['top', 'left', 'right', 'bottom', 'rear'];
-
-const TOOLS: Tool[] = [
-  'select',
-  'dimension',
-  'chain',
-  'baseline',
-  'roughness',
-  'tolerance',
-  'datum',
-  'balloon',
-  'thread',
-  'section',
-  'localSection',
-  'detail',
-];
 
 const SPEC_COLUMNS = ['format', 'zone', 'position', 'designation', 'name', 'quantity', 'note'] as const;
 
@@ -865,52 +850,100 @@ export default function DrawingEditorApp({
   };
   const history = desc?.history;
 
+  const arrangeDimensions = () => {
+    if (!sheet || !selected) return;
+    const sid = sheet.id;
+    const vid = selected.id;
+    run(t('drawing.done.dimsArranged'), async (d) => {
+      const r = await d.arrangeDimensions(sid, vid);
+      const left = r.crossings + r.collisions;
+      return { ...r, warnings: left > 0 ? [...r.warnings, t('drawing.arrangeLeft', { count: left })] : r.warnings };
+    });
+  };
+  const arrangeBalloons = () => {
+    if (!sheet) return;
+    const sid = sheet.id;
+    run(t('drawing.done.balloonsArranged'), async (d) => {
+      const r = await d.arrangeBalloons(sid);
+      const notes = r.views.flatMap((v) => [
+        ...(v.ordered ? [] : [t('drawing.balloonsUnordered', { view: v.view })]),
+        ...(v.crossings > 0 ? [t('drawing.balloonsCrossing', { view: v.view, count: v.crossings })] : []),
+      ]);
+      return { ...r, warnings: [...r.warnings, ...notes] };
+    });
+  };
+  const ribbon = drawingRibbon(
+    t,
+    {
+      kernel: Boolean(kernel),
+      drawing: Boolean(drawing && sheet),
+      tool,
+      canUndo: Boolean(history?.canUndo),
+      canRedo: Boolean(history?.canRedo),
+      undoLabel: history?.undoLabel ?? '',
+      redoLabel: history?.redoLabel ?? '',
+      hasBase,
+      assembly: desc?.model.kind === 'assembly',
+      auxiliaryReady: auxAngle.trim() !== '' && Number.isFinite(Number(auxAngle.replace(',', '.'))),
+      canArrangeDimensions: Boolean(sheet && selected && sheet.dimensions.some((x) => x.view === selected.id)),
+      canArrangeBalloons: desc?.model.kind === 'assembly' && (sheet?.balloons ?? []).length > 0,
+      modelChanged: Boolean(staleness?.modelChanged),
+      picture: Boolean(picture),
+      tab,
+    },
+    {
+      openModel: (e) => void onOpenModel(e.target.files),
+      openDrawing: (e) => void onOpenDrawing(e.target.files),
+      openDrawingRef: openDrawingInput,
+      replaceModel: (e) => void onReplaceModel(e.target.files),
+      save: () => void onSave(),
+      undo: () => onUndoRedo(true),
+      redo: () => onUndoRedo(false),
+      setTool: switchTool,
+      baseStandard: () => (
+        <select value={baseStandard} aria-label={t('ribbon.tip.baseView')} disabled={!drawing || hasBase} onChange={(e) => setBaseStandard(e.target.value as StandardView)}>
+          {STANDARD_VIEWS.map((v) => (
+            <option key={v} value={v}>{t('drawing.viewOf', { side: t(`drawing.side.${v}`) })}</option>
+          ))}
+        </select>
+      ),
+      addBase: () => sheet && run(t('drawing.done.baseView'), (d) => d.addView(sheet.id, { kind: 'base', standard: baseStandard })),
+      addProjected: (side) =>
+        sheet && run(t('drawing.done.projected', { side: t(`drawing.side.${side}`) }), (d) => d.addView(sheet.id, { kind: 'projected', standard: side })),
+      addAxonometric: (kind) => sheet && run(t(kind === 'isometric' ? 'drawing.done.isometric' : 'drawing.done.dimetric'), (d) => d.addView(sheet.id, { kind: 'axonometric', axonometry: kind })),
+      auxiliaryFields: () => (
+        <>
+          <label title={t('drawing.auxiliaryHint')}>
+            {t('drawing.auxiliaryAngle')}
+            <input value={auxAngle} size={4} onChange={(e) => setAuxAngle(e.target.value)} data-testid="aux-angle" disabled={!drawing || !hasBase} />
+          </label>
+          <label className="dr-check">
+            <input type="checkbox" checked={auxRotated} onChange={(e) => setAuxRotated(e.target.checked)} data-testid="aux-rotated" disabled={!drawing || !hasBase} />
+            {t('drawing.auxiliaryRotated')}
+          </label>
+        </>
+      ),
+      addAuxiliary: () => {
+        if (!sheet) return;
+        const parent = auxiliaryParent(sheet.views, selectedView);
+        const arrowAngle = Number(auxAngle.replace(',', '.'));
+        const rotated = auxRotated;
+        void run(t('drawing.done.auxiliary', { id: parent ?? '' }), (d) => d.addView(sheet.id, { kind: 'auxiliary', parent: parent ?? undefined, arrowAngle, rotated }));
+      },
+      update: onUpdate,
+      fit: () => canvas.current?.fit(),
+      arrangeDimensions,
+      arrangeBalloons,
+      showTab: setTab,
+      exportFile: (format) => void onExport(format),
+      exportSheetPdf: () => void onExportSheetPdf(),
+      print: () => void onPrint(),
+    },
+  );
+
   return (
     <div className="dr-root">
-      <header className="dr-toolbar">
-        <strong className="dr-title">{t('drawing.title')}</strong>
-        <label className="dr-file">
-          {t('drawing.openModel')}
-          <input type="file" accept=".json,application/json" data-testid="open-model" onChange={(e) => void onOpenModel(e.target.files)} disabled={!kernel} />
-        </label>
-        <label className="dr-file" title={t('drawing.file.openHint')}>
-          {t('drawing.file.open')}
-          <input ref={openDrawingInput} type="file" accept=".json,application/json" multiple data-testid="open-drawing" onChange={(e) => void onOpenDrawing(e.target.files)} disabled={!kernel} />
-        </label>
-        <label className="dr-file" title={t('drawing.file.replaceModelHint')}>
-          {t('drawing.file.replaceModel')}
-          <input type="file" accept=".json,application/json" data-testid="replace-model" onChange={(e) => void onReplaceModel(e.target.files)} disabled={!drawing} />
-        </label>
-        <button onClick={() => void onSave()} disabled={!drawing} data-testid="drawing-save" title="Ctrl+S">{t('drawing.save')}</button>
-        <button onClick={() => onUndoRedo(true)} disabled={!drawing || !history?.canUndo} data-testid="drawing-undo" title={t('drawing.undoHint', { label: history?.undoLabel ?? '' })}>
-          {t('drawing.undo')}
-        </button>
-        <button onClick={() => onUndoRedo(false)} disabled={!drawing || !history?.canRedo} data-testid="drawing-redo" title={t('drawing.redoHint', { label: history?.redoLabel ?? '' })}>
-          {t('drawing.redo')}
-        </button>
-        <span className="dr-sep" />
-        <button onClick={() => void onExport('pdf')} disabled={!drawing} data-testid="export-pdf">PDF</button>
-        <button onClick={() => void onExport('dxf')} disabled={!drawing} data-testid="export-dxf">DXF</button>
-        <button onClick={() => void onExport('svg')} disabled={!drawing} data-testid="export-svg">SVG</button>
-        <button onClick={() => void onExportSheetPdf()} disabled={!drawing} data-testid="export-sheet-pdf" title={t('drawing.pdfSheetHint')}>{t('drawing.pdfSheet')}</button>
-        <button onClick={() => void onPrint()} disabled={!drawing} data-testid="drawing-print" title={t('drawing.printHint')}>{t('drawing.print')}</button>
-        <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
-        <span className="dr-sep" />
-        {TOOLS.map((k) => (
-          <button
-            key={k}
-            className={tool === k ? 'dr-active' : ''}
-            onClick={() => switchTool(k)}
-            disabled={!drawing || (k === 'balloon' && desc?.model.kind !== 'assembly')}
-            title={k === 'balloon' && desc?.model.kind !== 'assembly' ? t('drawing.help.balloonPart') : undefined}
-            data-testid={`tool-${k}`}
-          >
-            {t(`drawing.tool.${k}`)}
-          </button>
-        ))}
-        <span className="dr-sep" />
-        <button onClick={() => canvas.current?.fit()} disabled={!picture}>{t('drawing.fit')}</button>
-      </header>
+      <Ribbon title={t('drawing.title')} testId="drawing-ribbon" quick={ribbon.quick} tabs={ribbon.tabs} status={<BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />} />
 
       <div className="dr-main">
         <aside className="dr-left">
@@ -1066,57 +1099,6 @@ export default function DrawingEditorApp({
               )}
 
               <h2>{t('drawing.views')}</h2>
-              {!hasBase && (
-                <div className="dr-row">
-                  <select value={baseStandard} onChange={(e) => setBaseStandard(e.target.value as StandardView)}>
-                    {STANDARD_VIEWS.map((s) => (
-                      <option key={s} value={s}>{t('drawing.viewOf', { side: t(`drawing.side.${s}`) })}</option>
-                    ))}
-                  </select>
-                  <button data-testid="add-base" onClick={() => run(t('drawing.done.baseView'), (d) => d.addView(sheet.id, { kind: 'base', standard: baseStandard }))}>
-                    {t('drawing.baseView')}
-                  </button>
-                </div>
-              )}
-              {hasBase && (
-                <div className="dr-buttons">
-                  {STANDARD_PROJECTED.map((s) => (
-                    <button key={s} data-testid={`add-${s}`} onClick={() => run(t('drawing.done.projected', { side: t(`drawing.side.${s}`) }), (d) => d.addView(sheet.id, { kind: 'projected', standard: s }))}>
-                      {t('drawing.projectedView', { side: t(`drawing.side.${s}`) })}
-                    </button>
-                  ))}
-                  <button data-testid="add-isometric" onClick={() => run(t('drawing.done.isometric'), (d) => d.addView(sheet.id, { kind: 'axonometric', axonometry: 'isometric' }))}>
-                    {t('drawing.isometric')}
-                  </button>
-                  <button data-testid="add-dimetric" onClick={() => run(t('drawing.done.dimetric'), (d) => d.addView(sheet.id, { kind: 'axonometric', axonometry: 'dimetric' }))}>
-                    {t('drawing.dimetric')}
-                  </button>
-                </div>
-              )}
-              {hasBase && (
-                <div className="dr-row" title={t('drawing.auxiliaryHint')}>
-                  <label>
-                    {t('drawing.auxiliaryAngle')}
-                    <input value={auxAngle} size={4} onChange={(e) => setAuxAngle(e.target.value)} data-testid="aux-angle" />
-                  </label>
-                  <label className="dr-check">
-                    <input type="checkbox" checked={auxRotated} onChange={(e) => setAuxRotated(e.target.checked)} data-testid="aux-rotated" />
-                    {t('drawing.auxiliaryRotated')}
-                  </label>
-                  <button
-                    data-testid="add-auxiliary"
-                    disabled={!Number.isFinite(Number(auxAngle.replace(',', '.'))) || auxAngle.trim() === ''}
-                    onClick={() => {
-                      const parent = auxiliaryParent(sheet.views, selectedView);
-                      const arrowAngle = Number(auxAngle.replace(',', '.'));
-                      const rotated = auxRotated;
-                      void run(t('drawing.done.auxiliary', { id: parent ?? '' }), (d) => d.addView(sheet.id, { kind: 'auxiliary', parent: parent ?? undefined, arrowAngle, rotated }));
-                    }}
-                  >
-                    {t('drawing.auxiliaryView')}
-                  </button>
-                </div>
-              )}
               <ul className="dr-list" data-testid="view-list">
                 {sheet.views.map((v) => (
                   <li key={v.id} className={v.id === selectedView ? 'dr-selected' : ''} onClick={() => setSelectedView(v.id)}>
@@ -1230,21 +1212,6 @@ export default function DrawingEditorApp({
                   ))}
                   {selected.position && (
                     <button onClick={() => run(t('drawing.done.autoPosition'), (d) => d.setView(sheet.id, selected.id, { position: null }))}>{t('drawing.autoPosition')}</button>
-                  )}
-                  {sheet.dimensions.some((x) => x.view === selected.id) && (
-                    <button
-                      data-testid="view-arrange-dimensions"
-                      title={t('drawing.arrangeDimensionsHint')}
-                      onClick={() =>
-                        run(t('drawing.done.dimsArranged'), async (d) => {
-                          const r = await d.arrangeDimensions(sheet.id, selected.id);
-                          const left = r.crossings + r.collisions;
-                          return { ...r, warnings: left > 0 ? [...r.warnings, t('drawing.arrangeLeft', { count: left })] : r.warnings };
-                        })
-                      }
-                    >
-                      {t('drawing.arrangeDimensions')}
-                    </button>
                   )}
                   <button
                     onClick={() =>
@@ -1485,24 +1452,6 @@ export default function DrawingEditorApp({
                   </li>
                 ))}
               </ul>
-              {desc?.model.kind === 'assembly' && (sheet.balloons ?? []).length > 0 && (
-                <button
-                  data-testid="arrange-balloons"
-                  title={t('drawing.arrangeBalloonsHint')}
-                  onClick={() =>
-                    run(t('drawing.done.balloonsArranged'), async (d) => {
-                      const r = await d.arrangeBalloons(sheet.id);
-                      const notes = r.views.flatMap((v) => [
-                        ...(v.ordered ? [] : [t('drawing.balloonsUnordered', { view: v.view })]),
-                        ...(v.crossings > 0 ? [t('drawing.balloonsCrossing', { view: v.view, count: v.crossings })] : []),
-                      ]);
-                      return { ...r, warnings: [...r.warnings, ...notes] };
-                    })
-                  }
-                >
-                  {t('drawing.arrangeBalloons')}
-                </button>
-              )}
               <TechnicalRequirements
                 key={`${sheet.id}-${sheet.technicalRequirements.join('|')}`}
                 items={sheet.technicalRequirements}
@@ -1664,7 +1613,6 @@ export default function DrawingEditorApp({
                     ? t('drawing.modelChanged', { views: staleness.staleViews.length, dimensions: staleness.dimensions.length })
                     : t('drawing.modelSame')}
                 </div>
-                <button data-testid="update-from-model" onClick={onUpdate}>{t('drawing.updateButton')}</button>
                 {report && (
                   <div className="dr-report" data-testid="update-report">
                     <div>
