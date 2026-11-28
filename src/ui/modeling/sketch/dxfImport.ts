@@ -8,6 +8,7 @@
 import type { DxfSketchImport, DxfSketchOptions } from '../../../wasm/bendcore_modeling_api.mjs';
 import { caption } from '../../app/i18n';
 import type { Translate } from '../../app/i18n';
+import { localizeKernelMessage } from '../../app/kernelMessages';
 import { formatValue } from './dimensionLayout';
 
 /** $INSUNITS codes offered when the file has none or the user overrides it. */
@@ -80,6 +81,6 @@ export function dxfSummary(r: DxfSketchImport, t: Translate): string[] {
   if (r.ignored.texts + r.ignored.paperSpace + r.ignored.otherLayers > 0) {
     lines.push(t('sketch.dxf.ignored', { texts: r.ignored.texts, paper: r.ignored.paperSpace, other: r.ignored.otherLayers }));
   }
-  if (r.warnings.length > 0) lines.push(t('sketch.dxf.warnings', { list: r.warnings.join('; ') }));
+  if (r.warnings.length > 0) lines.push(t('sketch.dxf.warnings', { list: r.warnings.map((w) => localizeKernelMessage(t, 'message', w).text ?? w).join('; ') }));
   return lines;
 }

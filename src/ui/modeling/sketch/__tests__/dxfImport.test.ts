@@ -85,6 +85,9 @@ describe('summary of the answer', () => {
     expect(lines).toContain('Незамкнутых концов: 2');
     expect(lines).toContain('Вырожденных кривых (короче допуска): 1');
     expect(lines).toContain('Предупреждения чтения: Z dropped');
+    // A warning of the DXF reader with a template is shown in the interface language.
+    const known = dxfSummary(answer({ warnings: ['file has no EOF marker', '3 entities have non-zero Z or elevation; they are projected onto XY'] }), t);
+    expect(known).toContain('Предупреждения чтения: В файле нет метки конца (EOF): возможно, он записан не полностью; Объектов с ненулевой координатой Z или возвышением: 3; они спроецированы на плоскость XY');
     const none = dxfSummary(answer({ entities: new Int32Array([]), bounds: null, skipped: {}, ignored: { texts: 0, paperSpace: 0, otherLayers: 0 } }), t);
     expect(none[0]).toBe('На выбранных слоях нет кривых');
     expect(none.some((l) => l.startsWith('Габарит'))).toBe(false);
