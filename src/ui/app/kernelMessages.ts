@@ -13,7 +13,8 @@
  *
  * Fields: {name} — any text (numbers are written without trailing zeros), {name:id} — one
  * word without spaces, quotes or colons, {name:num} — a number, {name:op} / {name:kind} — a term
- * of the dictionary (kernel.op.* / kernel.kind.*), {name:msg} — a nested kernel message.
+ * of the dictionary (kernel.op.* / kernel.kind.*), {name:msg} — a nested kernel message,
+ * {name:ref} — a model element of a drawing reference ("face #3 'name'": the kind is translated).
  */
 
 import { isMessageKey } from './i18n';
@@ -750,9 +751,110 @@ export const KERNEL_TEMPLATES: readonly (readonly [string, string])[] = [
   ['threeMfModel', '3MF model: {what}'],
   ['meshScalePositive', 'mesh scale must be positive'],
   ['meshFileKind', 'mesh file \'{file}\' is neither .stl nor .3mf'],
+  // Fully localized: assembly files, part files, gear and misc messages (kernel message coverage, step 1)
+  ['asmFileRefPath', 'reference path must be a non-empty array'],
+  ['asmFileRefOccurrence', 'reference to unknown top-level occurrence {o:num}'],
+  ['base64Length', 'base64: invalid length'],
+  ['base64Padding', 'base64: data after padding'],
+  ['base64Char', 'base64: invalid character'],
+  ['asmFileDuplicateMate', 'duplicate mate id {id:num}'],
+  ['fileMissingField', 'missing field \'{field}\''],
+  ['asmFileGearPhaseNumbers', 'mate gearPhase must be two numbers'],
+  ['asmFileGearPhaseMissing', 'gear mate {id:num} has no gearPhase'],
+  ['asmFileBoundSides', 'mate bound must have two sides'],
+  ['fileFieldNumber', 'field \'{field}\' must be a number'],
+  ['asmFilePatternUnknown', 'occurrence {o:num} refers to unknown pattern {p:num}'],
+  ['fileNonNegativeInteger', '{what} must be a non-negative integer'],
+  ['fileOutOfRange', '{what} is out of range'],
+  ['asmFileDuplicateMesh', 'duplicate reference mesh id {id}'],
+  ['asmFileMeshFormat', 'reference mesh {id}: unknown format \'{format}\''],
+  ['asmFileMeshPrefix', 'reference mesh {id}: {detail:msg}'],
+  ['asmFileConfigurationsObject', 'configurations must be an object'],
+  ['fileFieldString', 'field \'{field}\' must be a string'],
+  ['fileFieldBoolean', 'field \'{field}\' must be true or false'],
+  ['fileVector3', 'vector must have 3 numbers'],
+  ['asmFileMatrix12', 'v1 placement matrix must have 12 numbers'],
+  ['asmFileMatrixRotation', 'v1 placement matrix is not a rotation'],
+  ['asmFileQuaternion', 'rotation must be a quaternion [w, x, y, z]'],
+  ['asmFileQuaternionZero', 'rotation quaternion is zero'],
+  ['fileColour', 'colour must be [r, g, b, alpha]'],
+  ['fileColourRange', 'colour component outside [0, 1]'],
+  ['asmFileSectionCut', 'sectionCut must be a boolean'],
+  ['asmFileElementKind', 'unknown element kind \'{kind}\''],
+  ['asmFileAlignment', 'unknown alignment \'{value}\''],
+  ['asmFileNameOrigin', 'unknown name origin \'{value}\''],
+  ['fileUnknownValue', 'unknown {what} \'{value}\''],
+  ['asmFileAttributePair', 'element attribute must be a pair of strings'],
+  ['asmFileIndexPart', 'cannot index part shape: {detail}'],
+  ['asmFileVersionInteger', 'version must be an integer'],
+  ['asmFileVersionInvalid', 'invalid version {v}'],
+  ['asmFilePartNoGeometry', 'part \'{name}\' has neither a source nor embedded geometry'],
+  ['asmFileOccurrencesArray', 'occurrences must be an array'],
+  ['asmFileDuplicateOccurrence', 'duplicate occurrence id {id:num}'],
+  ['asmFileInsertsRoot', 'occurrence {id:num} inserts the root assembly'],
+  ['asmFileDuplicateDefinition', 'duplicate or root definition id {id:num}'],
+  ['asmFileCycle', 'subassembly cycle through \'{name}\''],
+  ['partFilePropertyString', 'properties: \'{key}\' must be a string'],
+  ['partFilePropertiesObject', 'properties: expected an object'],
+  ['partFilePropertiesPrefix', 'properties: {detail}'],
+  ['partFileCachePrefix', 'cache: {detail:msg}'],
+  ['cannotTraceMerged', 'cannot trace the boundary of merged regions'],
+  ['sketchFrameParallel', 'sketch X direction is parallel to the sketch normal'],
+  ['sketchFrameLeftHanded', 'sketch frame is left-handed'],
+  ['sketchNodeNoData', 'sketch node without sketch data'],
+  ['sketchBridgeContour', 'sketch profile is invalid:\n  open contour [entities {ids}]: curve {id} bounds the same region on both sides (a bridge or a dangling chain)'],
+  ['threadPitchNegative', 'thread pitch must be >= 0'],
+  ['asmConfigUnknownColumn', 'unknown column kind'],
+  ['asmConfigInvalidMate', 'invalid mate value \'{value}\''],
+  ['asmConfigInvalidSuppression', 'invalid suppression value \'{value}\''],
+  ['rigidMateTwoOccurrences', 'a rigid mate needs two different occurrences'],
+  ['patternKindChange', 'pattern {p} is a {kind} pattern; remove it to change the kind'],
+  ['patternSeedFace', 'seed reference of a part pattern must be a face'],
+  ['patternUnknownInstance', '{what} is an instance of an unknown pattern'],
+  ['gearMateAxesCoincide', 'Gear: the axes coincide (no centre line)'],
+  ['rackCoefficients', 'basic rack coefficients must be positive'],
+  ['rackFilletRange', 'basic rack: rho_f* must be in (0, c*/(1 - sin alpha)]'],
+  ['rackFilletTooLarge', 'basic rack: the tip fillet radius rho_f* is too large for the tooth'],
+  ['gearAttributeMissing', 'gear attribute \'{name}\' is missing'],
+  ['gearProfileTolerance', 'gear profile tolerance must be > 0'],
+  ['gearInvoluteAboveTip', 'gear profile: the involute starts above the tip circle (form diameter >= da)'],
+  ['gearAxisVectors', 'gear.axis and gear.xdir must be non-zero, non-parallel vectors'],
+  ['gearHand', 'gear.hand must be right or left'],
+  ['gearPlacementNumbers', 'gear.origin, gear.axis and gear.xdir must be three numbers'],
+  ['gearFileTeethInteger', 'gear.teeth must be an integer'],
+  ['gearFaceNoExtent', 'gear: the face has no extent along its axis'],
+  ['pressureAngleRange', 'pressure angle must be in (0, 45) degrees'],
+  ['rootDiameterPositive', 'root diameter must be > 0'],
+  ['tipBelowBase', 'tip diameter is below the base diameter'],
+  ['gearExternalOnly', 'only external gears are supported'],
+  ['gearSplineDeviation', 'gear profile: B-spline deviation exceeds the tolerance'],
+  ['gearEdgeFailed', 'gear profile: edge construction failed'],
+  ['gearFaceFailed', 'gear profile: face construction failed'],
+  ['gearContourOpen', 'gear profile: the contour is not closed'],
+  ['gearProfileFaceInvalid', 'gear profile: the profile face is not valid'],
+  ['gearFlankSelfIntersects', 'gear profile: the tooth flank intersects itself'],
+  ['gearFlankInterference', 'gear profile: the tooth flank leaves its angular pitch (interference)'],
+  ['gearUndercutNoCross', 'gear profile: the undercut fillet does not cross the involute'],
+  ['gearHelicalFailed', 'gear: helical sweep failed'],
+  ['gearHelicalNoSolid', 'gear: helical sweep gave no solid'],
+  ['gearPrismFailed', 'gear: prism failed'],
+  ['gearRingFailed', 'gear: ring face construction failed'],
+  ['gearRingInvalid', 'gear: ring face is not valid'],
+  ['gearToolInvalid', 'gear: the tool body is not valid'],
+  ['gearFillerRoot', 'gear filler: root diameter is too small'],
+  ['gearFillerPrism', 'gear filler: prism failed'],
+  ['gearFillerRing', 'gear filler: ring face failed'],
+  ['gearFillerPrefix', 'gear filler: {detail:msg}'],
+  ['gearTableCell', 'gear table: \'{what}\' does not fit its cell'],
+  ['gearTableNoRows', 'gear table: no rows'],
+  ['gearShapeUnify', 'conventional gear shape: unify: {detail}'],
+  ['gearShapePrefix', 'conventional gear shape: {detail:msg}'],
+  ['gearTablePrefix', 'sheet \'{sheet}\', gear table: {detail:msg}'],
+  ['hatchSpacingAngle', 'hatch: invalid spacing or angle'],
+  ['sheetSizePositive', 'sheet size must be positive'],
 ];
 
-type FieldType = 'text' | 'id' | 'num' | 'op' | 'kind' | 'msg';
+type FieldType = 'text' | 'id' | 'num' | 'op' | 'kind' | 'msg' | 'ref';
 
 interface Compiled {
   id: string;
@@ -772,6 +874,7 @@ const GROUP: Record<FieldType, string> = {
   num: '(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?)',
   op: '([a-z ]+?)',
   kind: '(face|edge|vertex)',
+  ref: "((?:face|edge|vertex) #\\d+(?: '[^']*')?)",
   msg: '([\\s\\S]+)',
 };
 
@@ -838,7 +941,11 @@ export function matchKernelText(text: string, t: Translate, depth = 0): Template
       if (!ok) return;
       const raw = m[i + 1];
       const type = c.types[i];
-      if (type === 'op' || type === 'kind') {
+      if (type === 'ref') {
+        // A model element of a drawing reference: "face #3 'Extrude:F1'" -> "грань #3 'Extrude:F1'".
+        const [, kind, rest] = /^(face|edge|vertex)(.*)$/.exec(raw) ?? [];
+        params[name] = `${t(`kernel.kind.${kind}` as MessageKey)}${rest}`;
+      } else if (type === 'op' || type === 'kind') {
         const key = `kernel.${type}.${raw}`;
         if (!isMessageKey(key)) ok = false;
         else params[name] = t(key);
