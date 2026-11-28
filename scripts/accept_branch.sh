@@ -74,7 +74,9 @@ if [ "${BENDCORE_ACCEPT_SKIP_E2E:-0}" != "1" ]; then
   export BENDCORE_KERNEL_WASM_DIR=$W/wasm_kernel BENDCORE_MODELING_WASM_DIR=$W/wasm_modeling \
     BENDCORE_ASSEMBLY_WASM_DIR=$W/wasm_assembly BENDCORE_DRAWING_WASM_DIR=$W/wasm_drawing
   for suite in app drawing assembly modeling kernel; do
-    step "e2e $suite" bash -c "npm run -s test:e2e:$suite -- --trace off 2>&1 | grep -E ' passed| failed| flaky'; exit \${PIPESTATUS[0]}"
+    # The full Playwright output goes to test-results/accept-e2e-<suite>.log, so a failure keeps
+    # the test name and the error; the summary line goes to this script's output.
+    step "e2e $suite" bash -c "mkdir -p test-results; npm run -s test:e2e:$suite -- --trace off > test-results/accept-e2e-$suite.log 2>&1; rc=\$?; grep -E ' passed| failed| flaky|✘' test-results/accept-e2e-$suite.log; exit \$rc"
   done
 fi
 
