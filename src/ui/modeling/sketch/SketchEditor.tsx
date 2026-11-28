@@ -155,7 +155,15 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
   const [preview, setPreview] = useState<SketchSolvedCurve[]>([]);
   const [selection, setSelection] = useState<SketchRef[]>([]);
   const [selectedConstraints, setSelectedConstraints] = useState<number[]>([]);
-  const [dimPicks, setDimPicks] = useState<SketchRef[]>([]);
+  const [dimPicks, setDimPicksState] = useState<SketchRef[]>([]);
+  // The picks of the dimension tool are read by the pointer handler: a second click that arrives
+  // before React re-renders must see the first pick, so the handler reads this ref, which every
+  // change updates at once (the state drives the highlight).
+  const dimPicksRef = useRef<SketchRef[]>([]);
+  const setDimPicks = useCallback((next: SketchRef[]) => {
+    dimPicksRef.current = next;
+    setDimPicksState(next);
+  }, []);
   const [pending, setPending] = useState<PendingDimension | null>(null);
   // Text offsets of the dimensions, kept for the page session per document and sketch.
   const offsetKey = `${doc.remoteId}:${featureId}`;
@@ -593,22 +601,22 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
         return;
       }
       case 'dimension': {
-        if (hit && dimPicks.length < 2 && !dimPicks.some((r) => refKey(r) === refKey(hit))) {
-          setDimPicks([...dimPicks, hit]);
+        if (hit && dimPicksRef.current.length < 2 && !dimPicksRef.current.some((r) => refKey(r) === refKey(hit))) {
+          setDimPicks([...dimPicksRef.current, hit]);
           return;
         }
-        if (dimPicks.length === 0) return;
-        const options = applicableConstraints(dataRef.current, dimPicks).filter((p) => DIMENSION_TYPES.has(p.type));
+        if (dimPicksRef.current.length === 0) return;
+        const options = applicableConstraints(dataRef.current, dimPicksRef.current).filter((p) => DIMENSION_TYPES.has(p.type));
         let choice = options[0];
-        const pts = dimPicks.filter((r) => r.kind === 'point');
+        const pts = dimPicksRef.current.filter((r) => r.kind === 'point');
         const sol = solutionRef.current;
-        if (pts.length === 2 && dimPicks.length === 2 && sol) {
+        if (pts.length === 2 && dimPicksRef.current.length === 2 && sol) {
           const [a, b] = pts.map((r) => sol.points[(r as { index: number }).index]);
           const type = twoPointDimension(a, b, e, PICK_PIXELS * e.unitsPerPixel);
           choice = options.find((p) => p.type === type) ?? choice;
         }
         // A circle is dimensioned by its diameter, an arc by its radius (as in SolidWorks / КОМПАС).
-        const only = dimPicks.length === 1 && dimPicks[0].kind === 'entity' ? dataRef.current.geometry[dimPicks[0].id - 1] : null;
+        const only = dimPicksRef.current.length === 1 && dimPicksRef.current[0].kind === 'entity' ? dataRef.current.geometry[dimPicksRef.current[0].id - 1] : null;
         if (only?.type === 'circle') choice = options.find((p) => p.type === 'diameter') ?? choice;
         if (!choice) {
           setMessage(t('sketch.noDimension'));
@@ -663,7 +671,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
     const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
     if (e.key === 'Escape') {
       if (pending) setPending(null);
-      else if (picksRef.current.length > 0 || dimPicks.length > 0) {
+      else if (picksRef.current.length > 0 || dimPicksRef.current.length > 0) {
         setPicks([]);
         setPreview([]);
         setDimPicks([]);
