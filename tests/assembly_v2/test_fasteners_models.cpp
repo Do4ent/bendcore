@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -284,4 +285,118 @@ TEST(FastenerModels, TableLookupErrors) {
     EXPECT_DOUBLE_EQ(coarsePitch(24).value(), 3.0);
     EXPECT_FALSE(counterpart(FastenerStandard::Gost6402).has_value());
     EXPECT_EQ(counterpart(FastenerStandard::Iso4032), FastenerStandard::Gost5915);
+}
+
+// ---- мелкий шаг и классы прочности (docs/assembly/FASTENERS.md, раздел 4.1)
+
+namespace {
+
+Fastener makeSpec(const FastenerSpec& spec) {
+    auto f = makeFastener(spec);
+    EXPECT_TRUE(f.ok()) << (f.ok() ? "" : f.error().message);
+    return f.ok() ? std::move(f).value() : Fastener{};
+}
+
+}  // namespace
+
+TEST(FastenerFinePitch, BoltGeometryAndDesignations) {
+    // ГОСТ 7798-70 М12×1,25×60: головка s = 19, k = 8 (та же таблица), конец стержня — фаска до
+    // d3 = d − 1,226869·P (ISO 68-1) мелкого шага.
+    const double d = 12, l = 60, s = 19, k = 8, P = 1.25;
+    const Fastener f = makeSpec({FastenerStandard::Gost7798, 12, l, P, ""});
+    const double d3 = d - 1.226869 * P;
+    expectRelNear(volume(f), chamferedHexVolume(s, k, false, true) + shankVolume(d / 2, d3 / 2, l), 1e-6, "fine bolt V");
+    // Разность с крупным шагом (P = 1,75) — только фаска конца стержня.
+    const Fastener coarse = make(FastenerStandard::Gost7798, 12, l);
+    const double d3c = d - 1.226869 * 1.75;
+    expectRelNear(volume(f) - volume(coarse), shankVolume(d / 2, d3 / 2, l) - shankVolume(d / 2, d3c / 2, l), 1e-6,
+                  "fine - coarse");
+    EXPECT_TRUE(BRepCheck_Analyzer(f.shape).IsValid());
+    EXPECT_EQ(f.properties.designation, "Болт М12×1,25×60 ГОСТ 7798-70");
+    EXPECT_TRUE(f.thread.fine);
+    EXPECT_DOUBLE_EQ(f.thread.pitch, 1.25);
+    EXPECT_EQ(f.thread.designation, "M12×1,25");
+    EXPECT_NEAR(f.thread.minorDiameter, d3, 1e-12);
+    EXPECT_DOUBLE_EQ(f.dimension("P").value(), 1.25);
+
+    // С классом прочности — поле допуска резьбы и класс без точки после длины (ГОСТ 7798).
+    const Fastener c88 = makeSpec({FastenerStandard::Gost7798, 12, l, P, "8.8"});
+    EXPECT_EQ(c88.properties.designation, "Болт М12×1,25-6g×60.88 ГОСТ 7798-70");
+    EXPECT_EQ(c88.properties.strengthClass, "8.8");
+    EXPECT_EQ(c88.properties.material, "Сталь, класс прочности 8.8 ГОСТ 1759.4-87");
+    EXPECT_EQ(makeSpec({FastenerStandard::Gost7798, 16, 80, 0, "10.9"}).properties.designation,
+              "Болт М16-6g×80.109 ГОСТ 7798-70");
+    // Шаг, равный крупному, — крупный.
+    const Fastener same = makeSpec({FastenerStandard::Gost7798, 12, l, 1.75, ""});
+    EXPECT_FALSE(same.thread.fine);
+    EXPECT_EQ(same.properties.designation, "Болт М12×60 ГОСТ 7798-70");
+
+    // ISO с мелким шагом — обозначение по ISO 8765 (резьба на части стержня) и ISO 8676 (на всю).
+    const Fastener iso = makeSpec({FastenerStandard::Iso4014, 12, 80, 1.5, "8.8"});
+    EXPECT_EQ(iso.properties.designation, "Болт ISO 8765 - M12 x 1,5 x 80 - 8.8");
+    EXPECT_EQ(iso.properties.material, "Сталь, класс прочности 8.8 ISO 898-1");
+    const Fastener full = makeSpec({FastenerStandard::Iso4017, 16, 40, 1.5, ""});
+    EXPECT_EQ(full.properties.designation, "Болт ISO 8676 - M16 x 1,5 x 40");
+    // ГОСТ 7798 М16 и ISO 4017 М16 — одинаковые s и k: соответствие с тем же шагом.
+    EXPECT_EQ(full.properties.equivalentDesignation, "Болт М16×1,5×40 ГОСТ 7798-70");
+    // Класс 12.9 у ISO 4014 нет — соответствия для ГОСТ 7798 М16 кл. 12.9 нет.
+    EXPECT_EQ(makeSpec({FastenerStandard::Gost7798, 16, 40, 1.5, "12.9"}).properties.equivalentDesignation, "");
+}
+
+TEST(FastenerFinePitch, ScrewAndNut) {
+    const Fastener screw = makeSpec({FastenerStandard::Iso4762, 10, 30, 1.25, "12.9"});
+    EXPECT_EQ(screw.properties.designation, "Винт ISO 12474 - M10 x 1,25 x 30 - 12.9");
+    EXPECT_EQ(screw.properties.equivalentDesignation, "Винт М10×1,25-6g×30.129 ГОСТ 11738-84");
+    EXPECT_NEAR(screw.thread.minorDiameter, 10 - 1.226869 * 1.25, 1e-12);
+
+    // Гайка ГОСТ 5915 М12×1,25 кл. 8: размеры — те же s = 19, m = 10; D1 = D − 1,082532·P.
+    const Fastener nut = makeSpec({FastenerStandard::Gost5915, 12, 0, 1.25, "8"});
+    expectRelNear(volume(nut), chamferedHexVolume(19, 10, true, true) - kPi * 36 * 10, 1e-6, "fine nut V");
+    EXPECT_EQ(nut.properties.designation, "Гайка М12×1,25-6Н.8 ГОСТ 5915-70");
+    EXPECT_EQ(nut.properties.material, "Сталь, класс прочности 8 ГОСТ 1759.5-87");
+    EXPECT_NEAR(nut.thread.minorDiameter, 12 - 1.082532 * 1.25, 1e-12);
+    EXPECT_EQ(nut.thread.designation, "M12×1,25");
+    const Fastener isoNut = makeSpec({FastenerStandard::Iso4032, 16, 0, 1.5, "10"});
+    EXPECT_EQ(isoNut.properties.designation, "Гайка ISO 8673 - M16 x 1,5 - 10");
+    EXPECT_EQ(makeSpec({FastenerStandard::Iso4032, 10, 0, 0, "8"}).properties.designation, "Гайка ISO 4032 - M10 - 8");
+    // ГОСТ 5915 М16 и ISO 4032 М16 различаются высотой (13 и 14,8) — соответствия нет.
+    EXPECT_EQ(makeSpec({FastenerStandard::Gost5915, 16, 0, 1.5, "8"}).properties.equivalentDesignation, "");
+
+    // Спецификация: наименование графы — полное обозначение с классом, материал — с классом.
+    const PartProperties p = toPartProperties(nut);
+    EXPECT_EQ(p.name, "Гайка М12×1,25-6Н.8 ГОСТ 5915-70");
+    EXPECT_EQ(p.designation, "");
+    EXPECT_EQ(p.material, "Сталь, класс прочности 8 ГОСТ 1759.5-87");
+}
+
+TEST(FastenerFinePitch, TablesAndErrors) {
+    // Ряд мелких шагов (ISO 261): шаги меньше крупного, крупный в ряд не входит.
+    for (int d : {8, 10, 12, 14, 16, 20, 24}) {
+        const auto row = finePitches(d);
+        ASSERT_FALSE(row.empty()) << d;
+        for (double p : row) EXPECT_LT(p, coarsePitch(d).value()) << d;
+    }
+    EXPECT_TRUE(finePitches(6).empty());
+    EXPECT_EQ(finePitchStandard(FastenerStandard::Gost11371), std::nullopt);
+    // Класс 9.8 — только до М16 (ISO 898-1).
+    const auto c16 = strengthClasses(FastenerStandard::Gost7798, 16);
+    const auto c20 = strengthClasses(FastenerStandard::Gost7798, 20);
+    EXPECT_NE(std::find(c16.begin(), c16.end(), "9.8"), c16.end());
+    EXPECT_EQ(std::find(c20.begin(), c20.end(), "9.8"), c20.end());
+    EXPECT_TRUE(strengthClasses(FastenerStandard::Iso7089, 10).empty());
+
+    auto err = [](const FastenerSpec& s) {
+        auto r = makeFastener(s);
+        EXPECT_FALSE(r.ok());
+        return r.ok() ? std::string() : r.error().message;
+    };
+    EXPECT_NE(err({FastenerStandard::Gost7798, 12, 60, 1.0, ""}).find("pitch 1 mm is neither the coarse 1.75 nor a fine pitch (1.5, 1.25)"),
+              std::string::npos);
+    EXPECT_NE(err({FastenerStandard::Gost7798, 6, 30, 0.75, ""}).find("(none)"), std::string::npos);
+    EXPECT_NE(err({FastenerStandard::Iso4762, 10, 30, 0, "5.6"}).find("strength class '5.6' is not available (8.8, 10.9, 12.9)"),
+              std::string::npos);
+    EXPECT_NE(err({FastenerStandard::Gost7798, 20, 60, 0, "9.8"}).find("'9.8'"), std::string::npos);
+    EXPECT_NE(err({FastenerStandard::Iso7089, 10, 0, 0, "8.8"}).find("has no strength classes"), std::string::npos);
+    EXPECT_NE(err({FastenerStandard::Gost11371, 10, 0, 1.25, ""}).find("has no thread pitch"), std::string::npos);
+    EXPECT_NE(err({FastenerStandard::Gost7798, 12, 60, -1, ""}).find("pitch must be >= 0"), std::string::npos);
 }

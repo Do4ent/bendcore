@@ -55,8 +55,23 @@ struct PartProperties {
     // true — рассекается всегда, false — при продольном разрезе показывается нерассечённой;
     // пусто — правило по умолчанию (docs/drawing/VIEWS.md, «Условности разрезов сборок»).
     std::optional<bool> sectionCut;
+    // Примечание (графа «Примечание» спецификации ГОСТ 2.106), из свойств документа детали;
+    // примечание, заданное в спецификации (SpecificationOptions::notes), его заменяет.
+    std::string note;
 };
 
+
+// Массив операции детали (LinearPattern, CircularPattern, BodyLinearPattern,
+// BodyCircularPattern документа детали): преобразования копий в СК детали без исходного
+// экземпляра и устойчивые ключи копий — «i,j» у линейного (i — по первому направлению),
+// «k» у кругового. По нему строится массив компонентов «по массиву детали» (раздел 5).
+struct PartFeaturePattern {
+    std::string feature;  // id операции в документе детали
+    std::string label;
+    std::string type;     // тип операции
+    std::vector<std::string> keys;
+    std::vector<Transform> transforms;
+};
 
 // Геометрия детали: форма в собственной СК и, если есть, карта имён элементов документа
 // детали (индексы карты совпадают с kernel::TopologyIndex той же формы).
@@ -68,19 +83,31 @@ struct PartData {
     // не задаёт. Непустые поля дополняют свойства определения (addPartFromSource,
     // setOccurrenceConfiguration).
     std::optional<PartProperties> properties;
+    // Массивы операций детали (partDataFromDocument: построенные узлы с копиями).
+    std::vector<PartFeaturePattern> patterns;
 };
 
 // Загрузка детали по пути или ID документа детали.
 using PartResolver = std::function<kernel::Result<PartData>(const std::string& source)>;
 
 // Итоговая форма документа детали с картой элементов. Ошибка InvalidInput — пустая форма.
-// С активным исполнением таблицы параметров — также его свойства (PartData::properties).
+// Свойства (PartData::properties) — свойства документа детали (обозначение, наименование,
+// материал — наименование материала библиотеки, плотность, примечание), с активным
+// исполнением — его полное обозначение, наименование и материал
+// (PartDocument::effectiveProperties); пусто, если документ их не задаёт.
 kernel::Result<PartData> partDataFromDocument(const modeling::PartDocument& document);
 // Исполнение `configuration` документа детали (пусто — базовые значения): делает его активным,
 // перестраивает, возвращает форму и свойства исполнения: полное обозначение, наименование,
 // материал (наименование материала библиотеки) и плотность. Ошибки InvalidInput: нет такого
 // исполнения; исполнение не перестраивается (с причинами checkConfigurations).
 kernel::Result<PartData> partDataFromDocument(modeling::PartDocument& document, const std::string& configuration);
+
+// Документ детали как документ XCAF из одного прототипа-детали для writeStepAssembly
+// (docs/kernel/XCAF_IO.md): форма — finalShape(), PRODUCT id — обозначение
+// (effectiveProperties: с активным исполнением — его полное обозначение), name и description —
+// наименование (пустое — обозначение, затем fallbackName). Пустая форма — shape пуст
+// (writeStepAssembly отвечает InvalidInput).
+kernel::AssemblyDocument partStepDocument(const modeling::PartDocument& document, const std::string& fallbackName = {});
 
 // Источник детали-исполнения: «<путь>#<обозначение исполнения>» (docs/assembly/ASSEMBLY_DOCUMENT.md,
 // раздел «Исполнения»). splitConfigurationSource — {путь, исполнение} (исполнения нет — пусто).
@@ -128,6 +155,7 @@ struct Definition {
     std::shared_ptr<const kernel::TopologyIndex> topology;
     std::string source;     // путь/ID документа детали; пусто — форма задана напрямую
     std::uint32_t revision = 0;  // растёт при каждой замене геометрии
+    std::vector<PartFeaturePattern> partPatterns;  // массивы операций детали (PartData::patterns)
     std::optional<kernel::AssemblyColor> color;
     std::vector<kernel::FaceColor> faceColors;
     // Сборка:
@@ -173,10 +201,22 @@ struct ElementRef {
     static ElementRef named(ElementKind kind, std::string name) { return {kind, std::nullopt, std::move(name)}; }
 };
 
+// Экземпляр массива компонентов по устойчивому ключу (ComponentPattern::keys): ссылка на него
+// переживает изменение числа экземпляров; экземпляр, которого больше нет, — висячая ссылка.
+struct PatternInstanceRef {
+    PatternId pattern = 0;
+    std::string key;
+    bool operator==(const PatternInstanceRef&) const = default;
+};
+
 struct GeometryRef {
     OccurrencePath path;
     ElementRef element;
     EntityUse use = EntityUse::Auto;
+    // Ссылка через экземпляр массива: path[0] — его вхождение, обновляется по ключу при
+    // пересчёте массива. addMate заполняет поле сам, если path[0] — экземпляр; заданное поле
+    // с пустым path даёт path = {вхождение экземпляра}.
+    std::optional<PatternInstanceRef> instance;
 };
 
 struct MateSpec {
@@ -241,6 +281,10 @@ struct DocumentSolveReport {
     int totalDof = 0;
     double residualNorm = 0.0;
     bool success = false;
+    // Сопряжения с экземплярами массивов: экземпляр — неподвижный компонент на позе массива,
+    // решение повторяется, пока позы экземпляров не перестанут меняться (раздел 5).
+    int passes = 1;
+    bool patternsConverged = true;
 };
 
 // ---- замена компонента
@@ -280,14 +324,19 @@ struct CircularPatternSpec {
     int count = 2;           // вместе с исходным
 };
 
-// Массив по отверстиям детали: seedHole — цилиндрическая грань отверстия, к которому
-// сопряжён исходный компонент; экземпляры встают в другие отверстия той же детали с осью,
-// параллельной оси seedHole, и тем же радиусом (radius, если задан).
+// Массив по массиву детали. Без partPattern — по отверстиям: seedHole — цилиндрическая грань
+// отверстия, к которому сопряжён исходный компонент; экземпляры встают в другие отверстия той
+// же детали с осью, параллельной оси seedHole, и тем же радиусом (radius, если задан).
+// С partPattern — по массиву операции детали (PartFeaturePattern::feature детали на пути
+// seedHole; seedHole — любая грань этой детали, обычно грань исходного элемента массива):
+// экземпляры повторяют копии массива операции (L = T·C·T⁻¹, T — положение детали в СК
+// вхождения верхнего уровня, C — преобразование копии в СК детали).
 struct FeaturePatternSpec {
     OccurrenceId seed = 0;
     GeometryRef seedHole;
     std::optional<double> radius;
     double tolerance = 1e-6;  // мм и рад
+    std::string partPattern;
 };
 
 struct ComponentPattern {
@@ -297,6 +346,10 @@ struct ComponentPattern {
     std::optional<OccurrenceId> reference;
     std::variant<LinearPatternSpec, CircularPatternSpec, FeaturePatternSpec> spec;
     std::vector<OccurrenceId> instances;
+    // Устойчивые ключи экземпляров (по одному на instances): линейный «i,j», круговой «k»,
+    // по отверстиям — имя грани отверстия (если оно единственно) или «@dx,dy,dz» смещения
+    // оси, по массиву детали — ключ копии. Экземпляр с тем же ключом сохраняет своё вхождение.
+    std::vector<std::string> keys;
     // Преобразования экземпляров L_i в СК опорного вхождения:
     // поза экземпляра = P_ref · L_i · P_ref⁻¹ · P_seed.
     std::vector<Transform> transforms;
@@ -453,6 +506,13 @@ public:
     bool isReadOnlyAssembly(DefinitionId id) const;
 
     const Occurrence* findOccurrence(OccurrenceId id) const;
+    // Новое описание массива того же вида с тем же исходным вхождением (число, шаг, ось…):
+    // экземпляры с прежними ключами сохраняют вхождения, ссылки сопряжений через исчезнувшие
+    // экземпляры становятся висячими. Ошибки — как у add*Pattern; при ошибке массив не меняется.
+    Status editPattern(PatternId id, std::variant<LinearPatternSpec, CircularPatternSpec, FeaturePatternSpec> spec);
+    // Вхождение экземпляра массива по ключу; ключ экземпляра по вхождению.
+    std::optional<OccurrenceId> patternInstance(PatternId pattern, const std::string& key) const;
+    std::optional<PatternInstanceRef> instanceRefOf(OccurrenceId occurrence) const;
     // Сборка, в которой лежит вхождение.
     std::optional<DefinitionId> parentOf(OccurrenceId id) const;
     const std::vector<Occurrence>& topLevel() const { return definitions_[0].occurrences; }
@@ -614,8 +674,18 @@ private:
     Status bindSide(const GeometryRef& ref, BoundElement& bound, bool requireElement) const;
     // Перепроверяет все сопряжения после изменения определений.
     void revalidateMates(ReplaceReport& report);
-    kernel::Result<std::vector<Transform>> computePatternTransforms(const ComponentPattern& pattern) const;
-    Status syncPatternInstances(ComponentPattern& pattern, std::vector<Transform> transforms);
+    struct PatternMember {
+        std::string key;
+        Transform transform;
+    };
+    kernel::Result<std::vector<PatternMember>> computePatternTransforms(const ComponentPattern& pattern) const;
+    Status syncPatternInstances(ComponentPattern& pattern, std::vector<PatternMember> members);
+    // Ссылки сопряжений через экземпляры массивов: path[0] по ключу; исчезнувший экземпляр —
+    // сопряжение висячее (brokenReason), вернувшийся — привязывается заново.
+    void refreshInstanceRefs();
+    // Привязка ссылки через экземпляр (path[0] по instance); ошибка — экземпляра нет.
+    Status resolveInstanceRef(GeometryRef& ref) const;
+    kernel::Result<DocumentSolveReport> solvePass(const SolverOptions& options);
     kernel::Result<PatternId> addPattern(PatternKind kind, OccurrenceId seed, std::optional<OccurrenceId> reference,
                                          std::variant<LinearPatternSpec, CircularPatternSpec, FeaturePatternSpec> spec);
     void collectPlaced(DefinitionId def, const Transform& world, OccurrencePath& path, const std::string& prefix,

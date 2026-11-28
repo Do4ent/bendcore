@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
+#include <set>
 #include <sstream>
 
 namespace bendcore::assembly_v2 {
@@ -134,6 +136,14 @@ AssemblyDocument::AssemblyDocument(std::string name) {
 
 Result<DefinitionId> AssemblyDocument::addPart(std::string name, PartData data, PartProperties properties) {
     if (auto c = checkPartData(data); !c) return c.error();
+    // Свойства источника (документа детали) дополняют пустые поля заданных свойств.
+    if (const auto& from = data.properties) {
+        if (properties.designation.empty()) properties.designation = from->designation;
+        if (properties.name.empty()) properties.name = from->name;
+        if (properties.material.empty()) properties.material = from->material;
+        if (!properties.density) properties.density = from->density;
+        if (properties.note.empty()) properties.note = from->note;
+    }
     if (properties.density && !(*properties.density >= 0.0))
         return Error{ErrorCode::InvalidInput, "density must be >= 0"};
     auto topo = buildTopology(data.shape);
@@ -141,10 +151,13 @@ Result<DefinitionId> AssemblyDocument::addPart(std::string name, PartData data, 
     Definition d;
     d.id = static_cast<DefinitionId>(definitions_.size());
     d.kind = DefinitionKind::Part;
+    // Без имени — наименование, затем обозначение детали (имена вхождений «<имя>:<n>»).
+    if (name.empty()) name = !properties.name.empty() ? properties.name : properties.designation;
     d.name = name.empty() ? "Part" + std::to_string(d.id) : std::move(name);
     d.properties = std::move(properties);
     d.shape = data.shape;
     d.elementMap = std::move(data.elementMap);
+    d.partPatterns = std::move(data.patterns);
     d.topology = topo.value();
     definitions_.push_back(std::move(d));
     return definitions_.back().id;
@@ -155,12 +168,6 @@ Result<DefinitionId> AssemblyDocument::addPartFromSource(std::string name, std::
     if (!resolver) return Error{ErrorCode::InvalidInput, "part resolver is empty"};
     auto data = resolver(source);
     if (!data) return Error{data.error().code, "cannot load part '" + source + "': " + data.error().message};
-    if (const auto& from = data.value().properties) {
-        if (properties.designation.empty()) properties.designation = from->designation;
-        if (properties.name.empty()) properties.name = from->name;
-        if (properties.material.empty()) properties.material = from->material;
-        if (!properties.density) properties.density = from->density;
-    }
     auto id = addPart(std::move(name), std::move(data).value(), std::move(properties));
     if (!id) return id;
     definitions_[id.value()].source = std::move(source);
@@ -486,15 +493,25 @@ Result<Mate> AssemblyDocument::solverMate(const DocumentMate& mate, ComponentId 
 
 Result<MateId> AssemblyDocument::addMate(MateSpec spec) {
     const bool rigid = spec.type == MateType::Rigid;
-    for (const GeometryRef* r : {&spec.a, &spec.b}) {
+    for (GeometryRef* r : {&spec.a, &spec.b}) {
+        // Ссылка через экземпляр массива — по устойчивому ключу (раздел 5).
+        if (r->instance) {
+            if (auto s = resolveInstanceRef(*r); !s) return s.error();
+        }
         if (r->path.empty()) return Error{ErrorCode::InvalidInput, "mate reference has an empty occurrence path"};
         const auto parent = parentOf(r->path[0]);
         if (!parent || *parent != root())
             return Error{ErrorCode::InvalidInput, occName(r->path[0]) + " is not a top-level occurrence"};
-        if (findOccurrence(r->path[0])->pattern)
-            return Error{ErrorCode::InvalidInput, occName(r->path[0]) +
-                                                      " is a pattern instance; mate the pattern seed instead"};
+        if (findOccurrence(r->path[0])->pattern) {
+            auto key = instanceRefOf(r->path[0]);
+            if (!key) return Error{ErrorCode::InvalidInput, occName(r->path[0]) + " is an instance of an unknown pattern"};
+            r->instance = *key;
+        } else {
+            r->instance.reset();
+        }
     }
+    if (rigid && spec.a.instance && spec.b.instance && spec.a.path[0] == spec.b.path[0])
+        return Error{ErrorCode::InvalidInput, "a rigid mate needs two different occurrences"};
     if (rigid) {
         spec.a.path.resize(1);
         spec.b.path.resize(1);
@@ -544,9 +561,17 @@ const DocumentMate* AssemblyDocument::findMate(MateId id) const {
 Result<AssemblyDocument::SolverModel> AssemblyDocument::buildSolverModel() const {
     SolverModel model;
     std::map<OccurrenceId, ComponentId> comp;
+    // Экземпляры массивов, на которые ссылаются действующие сопряжения: неподвижные компоненты
+    // на позе массива (их положение задаёт массив, не решатель).
+    std::set<OccurrenceId> mated;
+    for (const DocumentMate& m : mates_)
+        if (!m.suppressed && !m.broken())
+            for (const GeometryRef* r : {&m.spec.a, &m.spec.b})
+                if (r->instance && !r->path.empty()) mated.insert(r->path[0]);
     for (const Occurrence& o : topLevel()) {
-        if (o.pattern || o.suppressed) continue;
-        comp[o.id] = model.assembly.addComponent(o.name, o.placement, o.fixed);
+        if (o.suppressed) continue;
+        if (o.pattern && !mated.count(o.id)) continue;
+        comp[o.id] = model.assembly.addComponent(o.name, o.placement, o.fixed || o.pattern.has_value());
         model.occurrenceOf.push_back(o.id);
     }
     for (const DocumentMate& m : mates_) {
@@ -619,17 +644,60 @@ DocumentSolveReport translate(const AssemblyDocument::SolverModel& model, SolveR
 
 }  // namespace
 
-Result<DocumentSolveReport> AssemblyDocument::solve(const SolverOptions& options) {
+Result<DocumentSolveReport> AssemblyDocument::solvePass(const SolverOptions& options) {
     auto model = buildSolverModel();
     if (!model) return model.error();
     for (const auto& [id, reason] : model.value().rejected)
         for (DocumentMate& m : mates_)
             if (m.id == id) m.brokenReason = reason;
     SolveResult r = assembly_v2::solve(model.value().assembly, options);
-    for (std::size_t i = 0; i < model.value().occurrenceOf.size(); ++i)
-        findOccurrenceMutable(model.value().occurrenceOf[i])->placement = r.poses[i];
+    for (std::size_t i = 0; i < model.value().occurrenceOf.size(); ++i) {
+        Occurrence* o = findOccurrenceMutable(model.value().occurrenceOf[i]);
+        if (!o->pattern) o->placement = r.poses[i];
+    }
     if (auto u = updatePatterns(); !u) return u.error();
     return translate(model.value(), std::move(r));
+}
+
+Result<DocumentSolveReport> AssemblyDocument::solve(const SolverOptions& options) {
+    // Сопряжения с экземплярами массивов: экземпляр в решателе неподвижен на позе массива; после
+    // решения массив пересчитывается от нового положения исходного (и опорного) вхождения, и
+    // решение повторяется, пока позы экземпляров не перестанут меняться.
+    constexpr int kMaxPasses = 8;
+    auto instancePoses = [&]() {
+        std::map<OccurrenceId, Transform> poses;
+        for (const DocumentMate& m : mates_)
+            for (const GeometryRef* r : {&m.spec.a, &m.spec.b})
+                if (r->instance && !r->path.empty())
+                    if (const Occurrence* o = findOccurrence(r->path[0])) poses[o->id] = o->placement;
+        return poses;
+    };
+    auto moved = [](const std::map<OccurrenceId, Transform>& a, const std::map<OccurrenceId, Transform>& b) {
+        if (a.size() != b.size()) return true;
+        for (const auto& [id, t] : a) {
+            auto it = b.find(id);
+            if (it == b.end()) return true;
+            if ((t.position - it->second.position).norm() > 1e-9) return true;
+            if (t.rotation.angularDistance(it->second.rotation) > 1e-10) return true;
+        }
+        return false;
+    };
+    std::map<OccurrenceId, Transform> before = instancePoses();
+    auto r = solvePass(options);
+    if (!r) return r;
+    if (before.empty()) return r;
+    for (int pass = 2; pass <= kMaxPasses; ++pass) {
+        std::map<OccurrenceId, Transform> after = instancePoses();
+        if (!moved(before, after)) return r;
+        before = std::move(after);
+        auto next = solvePass(options);
+        if (!next) return next;
+        next.value().passes = pass;
+        r = std::move(next);
+    }
+    r.value().patternsConverged = !moved(before, instancePoses());
+    if (!r.value().patternsConverged) r.value().success = false;
+    return r;
 }
 
 Result<DocumentSolveReport> AssemblyDocument::drag(OccurrenceId occurrence, const Vec3& localPoint,
@@ -641,12 +709,17 @@ Result<DocumentSolveReport> AssemblyDocument::drag(OccurrenceId occurrence, cons
     if (it == occs.end())
         return Error{ErrorCode::InvalidInput, occName(occurrence) + " is not a top-level occurrence that can be dragged"};
     DragGoal goal;
+    if (findOccurrence(occurrence)->pattern)
+        return Error{ErrorCode::InvalidInput, occName(occurrence) + " is placed by its pattern; drag the seed"};
     goal.component = static_cast<ComponentId>(it - occs.begin());
     goal.localPoint = localPoint;
     goal.target = target;
     auto r = assembly_v2::drag(model.value().assembly, goal, options);
     if (!r) return r.error();
-    for (std::size_t i = 0; i < occs.size(); ++i) findOccurrenceMutable(occs[i])->placement = r.value().poses[i];
+    for (std::size_t i = 0; i < occs.size(); ++i) {
+        Occurrence* o = findOccurrenceMutable(occs[i]);
+        if (!o->pattern) o->placement = r.value().poses[i];
+    }
     if (auto u = updatePatterns(); !u) return u.error();
     return translate(model.value(), std::move(r).value());
 }
@@ -837,6 +910,7 @@ Result<ReplaceReport> AssemblyDocument::setOccurrenceConfiguration(OccurrenceId 
             if (!from->name.empty()) props.name = from->name;
             if (!from->material.empty()) props.material = from->material;
             if (from->density) props.density = from->density;
+            if (!from->note.empty()) props.note = from->note;
         }
         std::string name = splitConfigurationSource(old.name).first;
         if (!configuration.empty()) name += "#" + configuration;
@@ -859,6 +933,7 @@ Result<ReplaceReport> AssemblyDocument::replacePartGeometry(DefinitionId id, Par
     Definition& d = definitions_[id];
     d.shape = data.shape;
     d.elementMap = std::move(data.elementMap);
+    d.partPatterns = std::move(data.patterns);
     d.topology = topo.value();
     d.faceColors.clear();
     ++d.revision;

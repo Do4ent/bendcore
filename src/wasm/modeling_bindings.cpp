@@ -720,6 +720,55 @@ val docRemoveVariable(std::uint32_t handle, val name) {
                         [&](m::PartDocument& doc) { return status(doc.removeVariable(requireString(name, "variable name"))); });
 }
 
+// ------------------------------------------------------------------ document properties
+
+// {designation, name, material, density (kg/m^3 or null), developer, organization, note} and the
+// effective values of the active configuration {effective: {designation, name, material, density}}.
+val propertiesToJs(const m::PartDocument& doc) {
+    const m::DocumentProperties& p = doc.properties();
+    val o = val::object();
+    o.set("designation", p.designation);
+    o.set("name", p.name);
+    o.set("material", p.material);
+    o.set("density", p.density ? val(*p.density) : val::null());
+    o.set("developer", p.developer);
+    o.set("organization", p.organization);
+    o.set("note", p.note);
+    const m::ConfigurationProperties e = doc.effectiveProperties();
+    val eff = val::object();
+    eff.set("designation", e.designation);
+    eff.set("name", e.name);
+    eff.set("material", e.material);
+    eff.set("density", e.density ? val(*e.density) : val::null());
+    o.set("effective", eff);
+    return o;
+}
+
+val docDocumentProperties(std::uint32_t handle) {
+    return withDocument(handle, [&](m::PartDocument& doc) { return success(propertiesToJs(doc)); });
+}
+
+// Fields absent from `v` keep their values; density null clears it. One undo entry.
+val docSetDocumentProperties(std::uint32_t handle, val v) {
+    return withDocument(handle, [&](m::PartDocument& doc) {
+        if (v.isNull() || v.isUndefined() || v.typeOf().as<std::string>() != "object" || v.isArray()) throw InputError("properties must be an object");
+        m::DocumentProperties p = doc.properties();
+        const std::pair<const char*, std::string*> fields[] = {{"designation", &p.designation},   {"name", &p.name},
+                                                               {"material", &p.material},         {"developer", &p.developer},
+                                                               {"organization", &p.organization}, {"note", &p.note}};
+        for (const auto& [key, target] : fields)
+            if (present(v[key])) *target = requireString(v[key], std::string("properties.") + key);
+        const val d = v["density"];
+        if (d.isNull()) {
+            p.density.reset();
+        } else if (!d.isUndefined()) {
+            if (d.typeOf().as<std::string>() != "number") throw InputError("properties.density must be a number or null");
+            p.density = d.as<double>();
+        }
+        return status(doc.setProperties(std::move(p)));
+    });
+}
+
 // ------------------------------------------------------------------ configuration table
 
 val configurationsToJs(const m::PartDocument& doc) {
@@ -737,7 +786,7 @@ val configurationsToJs(const m::PartDocument& doc) {
     for (std::size_t r = 0; r < t.rows.size(); ++r) {
         val o = val::object();
         o.set("designation", t.rows[r].designation);
-        o.set("fullDesignation", m::fullDesignation(t, r));
+        o.set("fullDesignation", doc.configurationDesignation(r));
         o.set("name", t.rows[r].name);
         o.set("cells", stringArray(t.rows[r].cells));
         rows.call<void>("push", o);
@@ -1211,8 +1260,18 @@ val docExport(std::uint32_t handle, val target, std::string format, val options)
         const m::NamedShape shape = targetShape(doc, target);
         if (shape.isNull()) throw InputError("the part has no body to export");
         try {
-            const k::AssemblyDocument xcaf =
+            k::AssemblyDocument xcaf =
                 ex::partDocument(k::Shape(shape.shape()), ex::stringOption(options, "name", "Part"), std::nullopt);
+            // PRODUCT id — обозначение, name и description — наименование документа детали
+            // (с активным исполнением — его), docs/kernel/XCAF_IO.md.
+            const m::ConfigurationProperties p = doc.effectiveProperties();
+            if (!p.designation.empty()) xcaf.definitions[0].productId = p.designation;
+            if (!p.name.empty()) {
+                xcaf.definitions[0].name = p.name;
+                xcaf.definitions[0].description = p.name;
+            } else if (!p.designation.empty()) {
+                xcaf.definitions[0].name = p.designation;
+            }
             auto bytes = ex::exportDocument(xcaf, format, options);
             if (!bytes) return failure(bytes.error());
             return success(ex::bytesToJs(bytes.value()));
@@ -1493,6 +1552,8 @@ EMSCRIPTEN_BINDINGS(bendcore_modeling) {
     emscripten::function("docMeshSectionSketch", &docMeshSectionSketch);
     emscripten::function("materialLibrary", &materialLibrary);
     emscripten::function("docConfigurations", &docConfigurations);
+    emscripten::function("docDocumentProperties", &docDocumentProperties);
+    emscripten::function("docSetDocumentProperties", &docSetDocumentProperties);
     emscripten::function("docSetConfigurations", &docSetConfigurations);
     emscripten::function("docSetConfigurationCell", &docSetConfigurationCell);
     emscripten::function("docAddConfigurationColumn", &docAddConfigurationColumn);

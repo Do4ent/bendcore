@@ -221,6 +221,62 @@ std::optional<double> coarsePitch(int nominalDiameter) noexcept {
 
 double externalMinorDiameter(double d, double pitch) noexcept { return d - 1.226869 * pitch; }
 
+// Мелкие шаги крепежа, ISO 261 / ГОСТ 8724 (ряд ограничен размерами болтов ISO 8765 и гаек
+// ISO 8673 из таблиц библиотеки). Требует сверки с официальным изданием.
+std::vector<double> finePitches(int nominalDiameter) {
+    switch (nominalDiameter) {
+        case 8: return {1.0};
+        case 10: return {1.25, 1.0};
+        case 12: return {1.5, 1.25};
+        case 14: return {1.5};
+        case 16: return {1.5};
+        case 20: return {2.0, 1.5};
+        case 24: return {2.0};
+        default: return {};
+    }
+}
+
+std::optional<std::string> finePitchStandard(FastenerStandard standard) {
+    switch (standard) {
+        case FastenerStandard::Iso4014: return std::string("ISO 8765");
+        case FastenerStandard::Iso4017: return std::string("ISO 8676");
+        case FastenerStandard::Iso4762: return std::string("ISO 12474");
+        case FastenerStandard::Iso4032: return std::string("ISO 8673");
+        case FastenerStandard::Gost7798:
+        case FastenerStandard::Gost11738:
+        case FastenerStandard::Gost5915: return std::string(toString(standard));
+        default: return std::nullopt;
+    }
+}
+
+std::vector<std::string> strengthClasses(FastenerStandard standard, int nominalDiameter) {
+    // ISO 898-1: класс 9.8 — только для d ≤ 16 мм.
+    auto withNine = [&](std::vector<std::string> v) {
+        if (nominalDiameter > 16) v.erase(std::remove(v.begin(), v.end(), "9.8"), v.end());
+        return v;
+    };
+    switch (standard) {
+        case FastenerStandard::Gost7798:
+            return withNine({"4.6", "4.8", "5.6", "5.8", "6.8", "8.8", "9.8", "10.9", "12.9"});
+        case FastenerStandard::Iso4014:
+        case FastenerStandard::Iso4017: return withNine({"5.6", "8.8", "9.8", "10.9"});
+        case FastenerStandard::Gost11738:
+        case FastenerStandard::Iso4762: return {"8.8", "10.9", "12.9"};
+        case FastenerStandard::Gost5915: return {"5", "6", "8", "10", "12"};
+        case FastenerStandard::Iso4032: return {"6", "8", "10"};
+        default: return {};
+    }
+}
+
+const char* strengthClassStandard(FastenerStandard standard) noexcept {
+    switch (kindOf(standard)) {
+        case FastenerKind::HexBolt:
+        case FastenerKind::SocketHeadScrew: return isGost(standard) ? "ГОСТ 1759.4-87" : "ISO 898-1";
+        case FastenerKind::HexNut: return isGost(standard) ? "ГОСТ 1759.5-87" : "ISO 898-2";
+        default: return nullptr;
+    }
+}
+
 TableInfo tableInfo(FastenerStandard standard) {
     TableInfo info;
     info.standard = standard;

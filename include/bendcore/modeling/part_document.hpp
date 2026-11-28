@@ -84,6 +84,10 @@ struct FeatureOutput {
     std::optional<FeatureMode> toolMode;
     std::shared_ptr<const SketchResult> sketch;
     std::shared_ptr<const DatumResult> datum;
+    // Patterns (LinearPattern, CircularPattern, BodyLinearPattern, BodyCircularPattern): rigid
+    // transforms of the copies in part coordinates, seed excluded, in the order of the feature
+    // (FeatureResult::copies). Mirrors are not listed (a reflection is no component placement).
+    std::vector<gp_Trsf> copies;
 };
 
 // Result of an earlier node seen through a link.
@@ -210,6 +214,7 @@ struct FeatureInfo {
     std::shared_ptr<const SketchResult> sketchResult;
     std::shared_ptr<const DatumResult> datum;
     TopoDS_Shape tool;
+    std::vector<gp_Trsf> copies;  // FeatureOutput::copies of the last build
 };
 
 // Body of a multibody part (NamedShape::bodyNames).
@@ -295,6 +300,28 @@ struct ReferenceMeshInfo {
     kernel::MeshProperties properties;  // of the placed mesh, mm
 };
 
+// Properties of the part document (docs/modeling/PART_DOCUMENT.md, "Свойства документа"):
+// what the specification, the assembly, STEP and the title block of a drawing show.
+struct DocumentProperties {
+    std::string designation;   // обозначение (ГОСТ 2.201), «РЦ.080.00.010»
+    std::string name;          // наименование, «Брусок»
+    std::string material;      // id материала библиотеки ядра (kernel::builtInMaterials) или свой id ("custom")
+    std::optional<double> density;  // кг/м³; пусто — не задана
+    std::string developer;     // разработчик (графа 11 «Разраб.» ГОСТ 2.104, ISO 7200 «Created by»)
+    std::string organization;  // организация (графа 9 ГОСТ 2.104, ISO 7200 «Legal owner»)
+    std::string note;          // примечание (графа «Примечание» спецификации ГОСТ 2.106)
+    bool empty() const noexcept;
+    bool operator==(const DocumentProperties&) const = default;
+};
+
+// Effective properties of a configuration (DocumentProperties with the row applied).
+struct ConfigurationProperties {
+    std::string designation;  // полное обозначение исполнения
+    std::string name;
+    std::string material;     // id материала (ячейка исполнения, иначе материал документа)
+    std::optional<double> density;
+};
+
 class PartDocument {
 public:
     explicit PartDocument(std::shared_ptr<const FeatureRegistry> registry);
@@ -336,6 +363,20 @@ public:
     // (cell errors, variable errors, failed features with their messages, no solid); then
     // restores the active configuration and rebuilds. Undo history is not touched.
     std::vector<ConfigurationCheck> checkConfigurations();
+
+    // ---- document properties (recorded for undo; no rebuild needed).
+    // InvalidInput: density not a positive finite number; a text field with a line break other
+    // than in `note`.
+    const DocumentProperties& properties() const noexcept;
+    Status setProperties(DocumentProperties properties);
+    // Full designation of configuration `row`: a suffix row («-01») completes the document
+    // designation (if set), else the designation of the first row («РЦ.080.00.010-01», ГОСТ 2.113);
+    // a full designation stays as written. Out of range — empty.
+    std::string configurationDesignation(std::size_t row) const;
+    // Properties as the active configuration shows them: its full designation, its name (empty
+    // name — the document name), its material cell (empty — the document material and density;
+    // a library material brings its density). Without an active configuration — the document's.
+    ConfigurationProperties effectiveProperties() const;
 
     // ---- tree editing; every edit takes effect at the next rebuild()
     // Inserts at `position` (default: at the rollback marker if set, else at the end).
@@ -449,6 +490,7 @@ private:
     std::map<std::string, Result<double>> variableValues_;
     std::optional<std::size_t> rollback_;
     ConfigurationTable table_;
+    DocumentProperties properties_;
     std::vector<MeshEntry> meshes_;
     std::unique_ptr<Transactions> transactions_;
 };

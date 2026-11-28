@@ -151,6 +151,8 @@ Result<Specification> buildSpecification(const assembly_v2::AssemblyDocument& do
         item.quantity = row.quantity;
         item.definition = row.definition;
         if (auto it = o.formats.find(row.definition); it != o.formats.end()) item.format = it->second;
+        // Примечание: заданное в спецификации, иначе — из свойств детали (документа детали).
+        item.note = doc.definition(row.definition).properties.note;
         if (auto it = o.notes.find(row.definition); it != o.notes.end()) item.note = it->second;
         if (item.name.empty()) return invalid("specification: component without a name (definition " + std::to_string(row.definition) + ")");
         buckets[sec].push_back(std::move(item));

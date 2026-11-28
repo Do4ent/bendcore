@@ -5,11 +5,13 @@
 
 #include <bendcore/kernel/brep_io.hpp>
 
+#include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <limits>
@@ -578,6 +580,17 @@ Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
                 entry["values"] = n->values;
                 entry["reports"] = reports;
                 entry["brep"] = base64Encode(bytes.value());
+                if (!n->copies.empty()) {
+                    // Pattern copies (FeatureInfo::copies): rows of the 3×4 matrix of each transform.
+                    json copies = json::array();
+                    for (const gp_Trsf& t : n->copies) {
+                        json m = json::array();
+                        for (int r = 1; r <= 3; ++r)
+                            for (int c = 1; c <= 4; ++c) m.push_back(t.Value(r, c));
+                        copies.push_back(std::move(m));
+                    }
+                    entry["copies"] = std::move(copies);
+                }
                 if (!n->tool.IsNull() && n->toolMode) {
                     auto toolBytes = kernel::writeBrepBinary(kernel::Shape(n->tool));
                     if (!toolBytes) {
@@ -615,6 +628,23 @@ Result<std::string> PartDocument::toJson(const SaveOptions& options) const {
                                       {"data", base64Encode(std::vector<std::uint8_t>(e.data->begin(), e.data->end()))}});
             }
             doc["referenceMeshes"] = meshes;
+        }
+        // Document properties: optional fields, readers of v3-v5 without them ignore them; the
+        // material keeps the shape the page has written since v3 ({"id", "density"}).
+        json props = json::object();
+        const std::pair<const char*, const std::string*> fields[] = {{"designation", &properties_.designation},
+                                                                     {"name", &properties_.name},
+                                                                     {"developer", &properties_.developer},
+                                                                     {"organization", &properties_.organization},
+                                                                     {"note", &properties_.note}};
+        for (const auto& [key, value] : fields)
+            if (!value->empty()) props[key] = *value;
+        if (!props.empty()) doc["properties"] = std::move(props);
+        if (!properties_.material.empty() || properties_.density) {
+            json m = json::object();
+            m["id"] = properties_.material.empty() ? std::string("custom") : properties_.material;
+            if (properties_.density) m["density"] = *properties_.density;
+            doc["material"] = std::move(m);
         }
         if (options.includeCache) doc["cache"] = cache;
         return doc.dump(1);
@@ -696,6 +726,35 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
             auto st = part.setConfigurationTable(std::move(table));
             if (!st) return R::failure(ErrorCode::ParseError, "configurations: " + st.error().message);
         }
+        {
+            DocumentProperties props;
+            if (doc.contains("properties")) {
+                const json& pj = doc.at("properties");
+                if (!pj.is_object()) return R::failure(ErrorCode::ParseError, "properties: expected an object");
+                for (auto [key, target] : {std::pair<const char*, std::string*>{"designation", &props.designation},
+                                           {"name", &props.name},
+                                           {"developer", &props.developer},
+                                           {"organization", &props.organization},
+                                           {"note", &props.note}}) {
+                    if (!pj.contains(key)) continue;
+                    if (!pj.at(key).is_string())
+                        return R::failure(ErrorCode::ParseError, std::string("properties: '") + key + "' must be a string");
+                    *target = pj.at(key).get<std::string>();
+                }
+            }
+            // The material written by the page since v3; a malformed field is ignored as the
+            // page does (docs/ui/PART_MODELING_UI.md, "Материал").
+            if (doc.contains("material") && doc.at("material").is_object()) {
+                const json& mj = doc.at("material");
+                if (mj.contains("id") && mj.at("id").is_string()) props.material = mj.at("id").get<std::string>();
+                if (mj.contains("density") && mj.at("density").is_number()) {
+                    const double rho = mj.at("density").get<double>();
+                    if (std::isfinite(rho) && rho > 0) props.density = rho;
+                }
+            }
+            if (auto st = part.setProperties(std::move(props)); !st)
+                return R::failure(ErrorCode::ParseError, "properties: " + st.error().message);
+        }
         if (doc.contains("referenceMeshes")) {
             for (const auto& m : doc.at("referenceMeshes")) {
                 ReferenceMeshSpec spec;
@@ -736,6 +795,26 @@ Result<PartDocument> PartDocument::fromJson(std::string_view text, std::shared_p
                 c.values = entry.at("values").get<std::map<std::string, double>>();
                 for (const auto& rep : entry.at("reports")) c.reports.push_back(resolutionFromJson(rep));
                 c.output = std::make_shared<const NamedShape>(std::move(named).value());
+                bool copiesOk = true;
+                if (entry.contains("copies")) {
+                    for (const auto& m : entry.at("copies")) {
+                        if (!m.is_array() || m.size() != 12) {
+                            copiesOk = false;
+                            break;
+                        }
+                        gp_Trsf t;
+                        try {
+                          t.SetValues(m[0].get<double>(), m[1].get<double>(), m[2].get<double>(), m[3].get<double>(),
+                                    m[4].get<double>(), m[5].get<double>(), m[6].get<double>(), m[7].get<double>(),
+                                    m[8].get<double>(), m[9].get<double>(), m[10].get<double>(), m[11].get<double>());
+                        } catch (const Standard_Failure&) {
+                            copiesOk = false;
+                            break;
+                        }
+                        c.copies.push_back(t);
+                    }
+                }
+                if (!copiesOk) continue;  // unusable cache entry: the feature is recomputed
                 if (entry.contains("tool")) {
                     auto toolBytes = base64Decode(entry.at("tool").get<std::string>());
                     if (!toolBytes) continue;

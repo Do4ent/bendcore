@@ -309,6 +309,8 @@ annotations::RoughnessSpec roughFrom(const json& j) {
 json linkJson(const ModelLink& m) {
     json p{{"designation", m.properties.designation}, {"name", m.properties.name}, {"material", m.properties.material},
            {"density", m.properties.density ? json(*m.properties.density) : json(nullptr)}};
+    if (!m.properties.developer.empty()) p["developer"] = m.properties.developer;
+    if (!m.properties.organization.empty()) p["organization"] = m.properties.organization;
     return {{"kind", enumName(m.kind, kModelKinds)}, {"path", m.path}, {"resultHash", m.resultHash},
             {"revision", m.revision}, {"properties", p}};
 }
@@ -326,6 +328,8 @@ ModelLink linkFrom(const json& j) {
         m.properties.name = str(p, "name");
         m.properties.material = str(p, "material");
         if (p.contains("density") && !p.at("density").is_null()) m.properties.density = p.at("density").get<double>();
+        m.properties.developer = str(p, "developer");
+        m.properties.organization = str(p, "organization");
     }
     return m;
 }

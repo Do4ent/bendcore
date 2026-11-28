@@ -63,6 +63,26 @@ std::vector<FastenerStandard> allStandards();
 std::optional<double> coarsePitch(int nominalDiameter) noexcept;
 // Внутренний диаметр наружной резьбы d3 = d − 1,226869·P (ISO 68-1 / ГОСТ 9150, H = 0,866025·P).
 double externalMinorDiameter(double d, double pitch) noexcept;
+// Ряд мелких шагов для крепежа с мелкой резьбой по номинальному диаметру, мм (ISO 261 /
+// ГОСТ 8724, ГОСТ 24705; размеры болтов ISO 8765/8676, гаек ISO 8673): М8×1, М10×1,25 и ×1,
+// М12×1,5 и ×1,25, М14×1,5, М16×1,5, М20×2 и ×1,5, М24×2; для других диаметров — пусто.
+// Требует сверки (docs/STANDARDS_VERIFICATION.md).
+std::vector<double> finePitches(int nominalDiameter);
+// Стандарт, по которому записывается обозначение крепежа с мелким шагом: ISO 4014 → ISO 8765,
+// ISO 4017 → ISO 8676, ISO 4762 → ISO 12474, ISO 4032 → ISO 8673; стандарты ГОСТ охватывают
+// оба шага (ГОСТ 7798, 11738, 5915) — тот же стандарт; шайбы и штифты — nullopt.
+std::optional<std::string> finePitchStandard(FastenerStandard standard);
+
+// Классы прочности (docs/assembly/FASTENERS.md, раздел «Классы прочности»):
+// болты и винты — ГОСТ 1759.4 / ISO 898-1 («4.6» … «12.9», «9.8» — только до М16);
+// гайки — ГОСТ 1759.5 / ISO 898-2 («5», «6», «8», «10», «12»). Ряд по стандарту изделия:
+// ГОСТ 7798 — весь ряд ISO 898-1; ISO 4014/4017 — 5.6, 8.8, 9.8, 10.9; винты ГОСТ 11738 и
+// ISO 4762 — 8.8, 10.9, 12.9; ГОСТ 5915 — 5, 6, 8, 10, 12; ISO 4032 — 6, 8, 10. Шайбы и
+// штифты — пусто (классов прочности нет). Требует сверки.
+std::vector<std::string> strengthClasses(FastenerStandard standard, int nominalDiameter);
+// Стандарт класса прочности: «ГОСТ 1759.4-87» / «ISO 898-1» (болты, винты),
+// «ГОСТ 1759.5-87» / «ISO 898-2» (гайки); иначе nullptr.
+const char* strengthClassStandard(FastenerStandard standard) noexcept;
 
 struct HexBoltRow {
     int d = 0;
@@ -134,6 +154,11 @@ struct FastenerSpec {
     FastenerStandard standard = FastenerStandard::Iso4014;
     int size = 0;         // номинальный диаметр резьбы (штифт — диаметр), мм
     double length = 0.0;  // болт, винт: длина стержня l без головки; штифт: длина; иначе не используется
+    // Шаг резьбы болта, винта, гайки, мм: 0 — крупный (coarsePitch); иначе — мелкий из
+    // finePitches(size) (шаг, равный крупному, — тоже крупный).
+    double pitch = 0.0;
+    // Класс прочности: пусто — не указан (в обозначение не входит); иначе — из strengthClasses.
+    std::string strengthClass;
 };
 
 // Условная резьба: геометрия — цилиндр номинального диаметра (наружная) или отверстие
@@ -145,7 +170,8 @@ struct ThreadAttributes {
     double pitch = 0.0;
     double minorDiameter = 0.0;  // наружная: d3; внутренняя: D1 = D − 1,082532·P
     double length = 0.0;         // длина резьбы от торца стержня (гайка — высота)
-    std::string designation;     // «M10» (крупный шаг)
+    std::string designation;     // «M10» (крупный шаг), «M12×1,25» (мелкий)
+    bool fine = false;           // мелкий шаг
 };
 
 inline constexpr const char* kSpecificationSection = "Стандартные изделия";
@@ -158,7 +184,9 @@ struct FastenerProperties {
     // иначе пусто (размеры различаются — изделия не взаимозаменяемы).
     std::string equivalentDesignation;
     std::string section = kSpecificationSection;
+    // «Сталь»; с классом прочности — «Сталь, класс прочности 8.8 ГОСТ 1759.4-87».
     std::string material = "Сталь";
+    std::string strengthClass;  // как в FastenerSpec
     double density = kSteelDensity;
     double volume = 0.0;  // мм³ (BRepGProp)
     double mass = 0.0;    // кг: volume·1e-9·density
@@ -207,7 +235,11 @@ struct Fastener {
 };
 
 // Строит модель. Ошибки: InvalidInput (длина ≤ 0 или меньше допустимой; ISO 4014 при
-// l ≤ b — нужен ISO 4017), Unsupported (размера нет в таблице), OperationFailed (OCCT).
+// l ≤ b — нужен ISO 4017; шаг не из ряда finePitches; класс прочности не из strengthClasses
+// или у изделия без классов), Unsupported (размера нет в таблице), OperationFailed (OCCT).
+// Обозначения с мелким шагом и классом: «Болт М12×1,25-6g×60.88 ГОСТ 7798-70»,
+// «Гайка М12×1,25-6Н.8 ГОСТ 5915-70», «Болт ISO 8765 - M12 x 1,5 x 60 - 8.8»,
+// «Гайка ISO 8673 - M12 x 1,5 - 8» (docs/assembly/FASTENERS.md, раздел 4).
 kernel::Result<Fastener> makeFastener(const FastenerSpec& spec);
 
 // Данные детали и свойства для документа сборки: наименование графы спецификации —

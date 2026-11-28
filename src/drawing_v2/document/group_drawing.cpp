@@ -76,9 +76,9 @@ Result<ModelSnapshot> snapshotPartConfigurations(const modeling::PartDocument& d
         if (!snap) return Error{snap.error().code, prefix + snap.error().message};
         ConfigurationSnapshot cs;
         cs.designation = row.designation;
-        cs.fullDesignation = modeling::fullDesignation(table, r);
+        cs.fullDesignation = copy.configurationDesignation(r);
         cs.name = row.name;
-        cs.material = props.material;
+        cs.material = titleProperties(props, snap.value().documentProperties).material;
         cs.massKg = snap.value().massKg;
         for (const auto& [id, label] : features) {
             auto f = copy.feature(id);

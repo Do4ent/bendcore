@@ -48,7 +48,15 @@ struct ModelProperties {
     std::string name;
     std::string material;
     std::optional<double> density;  // кг/м³; без плотности масса детали не определяется
+    std::string developer;          // графа 11 «Разраб.» (фамилия), ISO 7200 «Created by»
+    std::string organization;       // графа 9, ISO 7200 «Legal owner»
 };
+
+// Свойства для основной надписи детали: непустые поля свойств документа детали (doc) поверх
+// свойств, записанных в чертеже (link — чертежи до свойств документа и детали без них).
+// Графы листа (TitleFields) поверх результата — ручная правка надписи
+// (docs/drawing/DRAWING_DOCUMENT.md, «Свойства детали в основной надписи»).
+ModelProperties titleProperties(const ModelProperties& link, const std::optional<ModelProperties>& doc);
 
 // Ссылка документа чертежа на модель.
 struct ModelLink {
@@ -85,6 +93,9 @@ struct ModelSnapshot {
     std::shared_ptr<const modeling::NamedShape> named;  // карта имён (индексы = TopologyIndex)
     bool historyNames = false;  // имена из истории операций (деталь) или только сигнатуры (сборка)
     ModelProperties properties;
+    // Деталь: свойства документа детали (PartDocument::effectiveProperties, разработчик и
+    // организация; материал — наименование материала библиотеки); nullopt — документ их не задаёт.
+    std::optional<ModelProperties> documentProperties;
     std::optional<double> massKg;
     std::uint64_t contentHash = 0;  // views::shapeContentHash(shape)
     // Сборка:

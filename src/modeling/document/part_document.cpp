@@ -192,6 +192,7 @@ CachedResult PartDocument::Node::snapshot() const {
     r.toolNamed = toolNamed;
     r.sketch = sketchResult;
     r.datum = datum;
+    r.copies = copies;
     return r;
 }
 
@@ -206,6 +207,7 @@ void PartDocument::Node::apply(const CachedResult& r) {
     toolNamed = r.toolNamed;
     sketchResult = r.sketch;
     datum = r.datum;
+    copies = r.copies;
     hash = r.hash;
 }
 
@@ -218,6 +220,7 @@ void PartDocument::Node::clearResults() {
     toolNamed.reset();
     sketchResult.reset();
     datum.reset();
+    copies.clear();
     hash.reset();
 }
 
@@ -639,6 +642,7 @@ Result<FeatureInfo> PartDocument::feature(const std::string& id) const {
     info.sketchResult = n->sketchResult;
     info.datum = n->datum;
     info.tool = n->tool;
+    info.copies = n->copies;
     return info;
 }
 
@@ -1132,6 +1136,7 @@ RebuildReport PartDocument::rebuild() {
                             n.output = std::make_shared<const NamedShape>(std::move(named).value());
                             n.sketchResult = out.value().sketch;
                             n.datum = out.value().datum;
+                            n.copies = out.value().copies;
                             if (!out.value().tool.IsNull()) {
                                 n.tool = out.value().tool;
                                 n.toolMode = out.value().toolMode;

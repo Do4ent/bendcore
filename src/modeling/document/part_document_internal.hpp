@@ -25,6 +25,7 @@ struct CachedResult {
     std::shared_ptr<const NamedShape> toolNamed;
     std::shared_ptr<const SketchResult> sketch;
     std::shared_ptr<const DatumResult> datum;
+    std::vector<gp_Trsf> copies;
 };
 
 // Definition of a node: what the user edits, what undo restores and what the file stores.
@@ -54,6 +55,7 @@ struct PartDocument::Node : NodeDefinition {
     std::shared_ptr<const NamedShape> toolNamed;
     std::shared_ptr<const SketchResult> sketchResult;
     std::shared_ptr<const DatumResult> datum;
+    std::vector<gp_Trsf> copies;
     std::optional<std::uint64_t> hash;  // input hash of the stored result
 
     std::optional<CachedResult> cache;  // from a loaded file, consumed by the first rebuild
@@ -88,6 +90,7 @@ struct PartDocument::State {
     std::optional<std::size_t> rollback;
     std::vector<NodeDefinition> nodes;
     ConfigurationTable table;
+    DocumentProperties properties;
     std::vector<MeshEntry> meshes;
 };
 

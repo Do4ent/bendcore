@@ -86,8 +86,9 @@ TEST(AssemblyDocumentPatterns, BoltsFollowHolePattern) {
     const std::vector<Vec3> expected{{20, 60, 10}, {80, 20, 10}, {80, 60, 10}};
     for (std::size_t i = 0; i < 3; ++i) expectVecNear(got[i], expected[i], 1e-8);
 
-    // Сопряжение к экземпляру запрещено — его положение задаёт массив.
-    EXPECT_EQ(m.doc.addMate(MateSpec::rigid(p.instances[0], m.plateOcc)).error().code, ErrorCode::InvalidInput);
+    // Экземпляр нельзя переставить — его положение задаёт массив (сопряжения к его граням —
+    // test_assembly_document_pattern_mates.cpp).
+    EXPECT_EQ(m.doc.setPlacement(p.instances[0], Transform::identity()).error().code, ErrorCode::InvalidInput);
 
     // Болты в отверстиях с зазором не пересекают плиту, головки касаются верхней грани.
     auto inter = checkInterference(m.doc);

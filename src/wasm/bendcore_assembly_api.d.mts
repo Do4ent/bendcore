@@ -56,6 +56,8 @@ export interface GeometryRef {
   index?: number;
   name?: string;
   use?: EntityUse;
+  /** A side through a pattern instance by its stable key; the path follows the instance. */
+  instance?: { pattern: number; key: string };
 }
 
 export interface MateSpec {
@@ -96,6 +98,8 @@ export interface DefinitionInfo {
   source: string;
   /** Configuration of the part document ("<source>#<configuration>"); '' — as saved. */
   configuration: string;
+  /** Pattern features of the part document (for patterns with kind 'feature' and partPattern). */
+  partPatterns: { feature: string; label: string; type: string; copies: number }[];
   /** Registered part document of the definition (registerPartSource), or null. */
   partSource: string | null;
   /** Registered subassembly document of an assembly definition (registerSource), if any. */
@@ -408,6 +412,10 @@ export interface FastenerSpec {
   size: number;
   /** Bolt, screw: shank length; pin: length. */
   length?: number;
+  /** Bolt, screw, nut: thread pitch, mm; 0 or absent - coarse; else one of finePitches[size]. */
+  pitch?: number;
+  /** Bolt, screw: '8.8' (GOST 1759.4 / ISO 898-1); nut: '8' (GOST 1759.5 / ISO 898-2). */
+  strengthClass?: string;
 }
 
 export interface HoleSite {
@@ -450,6 +458,10 @@ export interface FastenerStandardInfo {
   gost: boolean;
   counterpart: string | null;
   sizes: number[];
+  /** Fine pitches by size ('10' -> [1.25, 1]); empty arrays - none. */
+  finePitches: Record<string, number[]>;
+  /** Strength classes by size; empty arrays for washers and pins. */
+  strengthClasses: Record<string, string[]>;
   verified: boolean;
   source: string;
   verification: string;
@@ -461,10 +473,11 @@ export interface FastenerDescription {
   designation: string;
   equivalentDesignation: string;
   material: string;
+  strengthClass: string;
   density: number;
   volume: number;
   mass: number;
-  thread: { present: boolean; designation: string; pitch: number; length: number };
+  thread: { present: boolean; designation: string; pitch: number; fine: boolean; length: number };
   dimensions: Record<string, number>;
 }
 

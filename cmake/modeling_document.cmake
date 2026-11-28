@@ -39,7 +39,7 @@ if(NOT GTest_FOUND)
   return()
 endif()
 
-foreach(_t naming tree io survival sketch reference_parts advanced multibody gear datum configurations reference_mesh)
+foreach(_t naming tree io survival sketch reference_parts advanced multibody gear datum configurations reference_mesh properties)
   add_executable(test_modeling_document_${_t}
     ${BENDCORE_MODELING_DOC_ROOT}/tests/modeling/test_modeling_document_${_t}.cpp)
   target_include_directories(test_modeling_document_${_t} PRIVATE "${BENDCORE_MODELING_DOC_ROOT}/third_party")

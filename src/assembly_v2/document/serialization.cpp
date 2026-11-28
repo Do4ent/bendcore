@@ -205,6 +205,7 @@ json propertiesJson(const PartProperties& p) {
     json j = {{"designation", p.designation}, {"name", p.name}, {"material", p.material}};
     j["density"] = p.density ? json(*p.density) : json(nullptr);
     if (p.sectionCut) j["sectionCut"] = *p.sectionCut;  // необязательное поле (чертёж, ГОСТ 2.305)
+    if (!p.note.empty()) j["note"] = p.note;             // необязательное поле (спецификация, «Примечание»)
     return j;
 }
 
@@ -222,6 +223,7 @@ PartProperties propertiesFrom(const json& j) {
         if (!j.at("sectionCut").is_boolean()) bad("sectionCut must be a boolean");
         p.sectionCut = j.at("sectionCut").get<bool>();
     }
+    if (j.contains("note") && !j.at("note").is_null()) p.note = text(j, "note");
     return p;
 }
 
@@ -619,6 +621,8 @@ Result<std::string> AssemblyDocument::toJson(const SaveOptions& options) const {
             json j = {{"path", path}, {"kind", modeling::toString(r.element.kind)}, {"use", toString(r.use)}};
             if (r.element.index) j["index"] = *r.element.index;
             if (!r.element.name.empty()) j["name"] = r.element.name;
+            // Ссылка через экземпляр массива — по ключу (path[0] — его вхождение при сохранении).
+            if (r.instance) j["instance"] = {{"pattern", r.instance->pattern}, {"key", r.instance->key}};
             return j;
         };
         auto boundJson = [](const BoundElement& b) {
@@ -652,6 +656,16 @@ Result<std::string> AssemblyDocument::toJson(const SaveOptions& options) const {
             if (!d.source.empty()) j["source"] = d.source;
             if (d.kind == DefinitionKind::Part) {
                 j["revision"] = d.revision;
+                if (!d.partPatterns.empty()) {
+                    json pp = json::array();
+                    for (const PartFeaturePattern& p : d.partPatterns) {
+                        json tr = json::array();
+                        for (const Transform& t : p.transforms) tr.push_back(placementJson(t));
+                        pp.push_back({{"feature", p.feature}, {"label", p.label}, {"type", p.type}, {"keys", p.keys},
+                                      {"transforms", tr}});
+                    }
+                    j["partPatterns"] = std::move(pp);
+                }
                 json fc = json::array();
                 for (const kernel::FaceColor& f : d.faceColors) fc.push_back({{"face", f.faceIndex}, {"color", colorJson(f.color)}});
                 j["faceColors"] = std::move(fc);
@@ -697,7 +711,8 @@ Result<std::string> AssemblyDocument::toJson(const SaveOptions& options) const {
 
         json patterns = json::array();
         for (const ComponentPattern& p : patterns_) {
-            json j = {{"id", p.id}, {"kind", toString(p.kind)}, {"seed", p.seed}, {"instances", p.instances}};
+            json j = {{"id", p.id}, {"kind", toString(p.kind)}, {"seed", p.seed}, {"instances", p.instances},
+                      {"keys", p.keys}};
             j["reference"] = p.reference ? json(*p.reference) : json(nullptr);
             if (const auto* l = std::get_if<LinearPatternSpec>(&p.spec)) {
                 j["spec"] = {{"direction", vec(l->direction)}, {"spacing", l->spacing},     {"count", l->count},
@@ -709,6 +724,7 @@ Result<std::string> AssemblyDocument::toJson(const SaveOptions& options) const {
                 const auto& f = std::get<FeaturePatternSpec>(p.spec);
                 j["spec"] = {{"seedHole", refJson(f.seedHole)}, {"tolerance", f.tolerance}};
                 j["spec"]["radius"] = f.radius ? json(*f.radius) : json(nullptr);
+                if (!f.partPattern.empty()) j["spec"]["partPattern"] = f.partPattern;
                 if (p.holeBound) j["holeBound"] = boundJson(*p.holeBound);
             }
             patterns.push_back(std::move(j));
@@ -825,6 +841,22 @@ private:
 
     void loadPart(const json& d, Definition& def) {
         const std::uint32_t savedRevision = d.contains("revision") ? uid(d.at("revision"), "revision") : 0;
+        // Массивы операций детали (для массивов компонентов «по массиву детали»); источник,
+        // который загрузится, заменяет их своими.
+        if (d.contains("partPatterns")) {
+            for (const json& pj : d.at("partPatterns")) {
+                PartFeaturePattern p;
+                p.feature = text(pj, "feature");
+                p.label = text(pj, "label");
+                p.type = text(pj, "type");
+                for (const json& k : field(pj, "keys")) p.keys.push_back(k.get<std::string>());
+                for (const json& t : field(pj, "transforms")) p.transforms.push_back(placementFrom(t, version_));
+                if (p.keys.size() != p.transforms.size())
+                    bad("part '" + def.name + "': pattern '" + p.feature + "' has " + std::to_string(p.keys.size()) +
+                        " keys for " + std::to_string(p.transforms.size()) + " transforms");
+                def.partPatterns.push_back(std::move(p));
+            }
+        }
         TopoDS_Shape embedded;
         std::shared_ptr<const modeling::NamedShape> embeddedMap;
         if (d.contains("brep")) {
@@ -850,6 +882,7 @@ private:
             if (data && checkShape(data.value())) {
                 def.shape = data.value().shape;
                 def.elementMap = data.value().elementMap;
+                def.partPatterns = data.value().patterns;
                 def.topology = topologyOf(def.shape);
                 const json now = fingerprintJson(def);
                 const std::string diff = d.contains("fingerprint") ? fingerprintDifference(d.at("fingerprint"), now) : "";
@@ -1032,6 +1065,10 @@ private:
         if (r.contains("index") && !r.at("index").is_null()) ref.element.index = uid(r.at("index"), "element index");
         ref.element.name = text(r, "name");
         ref.use = enumFrom(text(r, "use", "Auto"), kUses, "entity use");
+        if (r.contains("instance") && !r.at("instance").is_null()) {
+            const json& i = r.at("instance");
+            ref.instance = PatternInstanceRef{uid(field(i, "pattern"), "instance pattern"), text(i, "key")};
+        }
         return ref;
     }
 
@@ -1132,6 +1169,17 @@ private:
                 cp.seed = uid(field(p, "seed"), "pattern seed");
                 if (p.contains("reference") && !p.at("reference").is_null()) cp.reference = uid(p.at("reference"), "pattern reference");
                 for (const json& i : field(p, "instances")) cp.instances.push_back(uid(i, "pattern instance"));
+                // Ключи экземпляров (с версии 4 без смены номера: необязательное поле); без них —
+                // по порядку экземпляров при первом пересчёте массива.
+                if (p.contains("keys")) {
+                    for (const json& k : p.at("keys")) {
+                        if (!k.is_string()) bad("pattern " + std::to_string(cp.id) + ": keys must be strings");
+                        cp.keys.push_back(k.get<std::string>());
+                    }
+                    if (cp.keys.size() != cp.instances.size())
+                        bad("pattern " + std::to_string(cp.id) + ": " + std::to_string(cp.keys.size()) + " keys for " +
+                            std::to_string(cp.instances.size()) + " instances");
+                }
                 for (OccurrenceId id : cp.instances) {
                     const Occurrence* o = doc_->findOccurrence(id);
                     if (!o || o->pattern != std::optional<PatternId>(cp.id))
@@ -1166,6 +1214,7 @@ private:
                     f.seedHole = readRef(field(s, "seedHole"), pathError);
                     f.tolerance = number(s, "tolerance");
                     if (s.contains("radius") && !s.at("radius").is_null()) f.radius = number(s, "radius");
+                    f.partPattern = text(s, "partPattern");
                     if (!pathError.empty()) report_->warnings.push_back("pattern " + std::to_string(cp.id) + ": " + pathError);
                     std::set<DefinitionId> touched;
                     if (p.contains("holeBound")) cp.holeBound = readBound(p.at("holeBound"), f.seedHole, touched);
