@@ -1524,7 +1524,7 @@ export default function DrawingEditorApp({
 
         <section className="dr-center">
           <div className="dr-tabs">
-            <button className={tab === 'sheet' ? 'dr-active' : ''} onClick={() => setTab('sheet')}>{t('drawing.tab.sheet')}</button>
+            <button className={tab === 'sheet' ? 'dr-active' : ''} onClick={() => setTab('sheet')} data-testid="tab-sheet">{t('drawing.tab.sheet')}</button>
             <button className={tab === 'specification' ? 'dr-active' : ''} onClick={() => setTab('specification')} data-testid="tab-specification">
               {t('drawing.tab.specification')}
             </button>
