@@ -16,7 +16,7 @@
   background: var(--rb-bg);
   color: var(--rb-fg);
   border-bottom: 1px solid var(--rb-border);
-  font: 13px/1.25 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 13px/16px system-ui, -apple-system, 'Segoe UI', sans-serif;
   min-width: 0;
 }
 
@@ -24,11 +24,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Whole-pixel heights: the editors' canvases below map pixels to model units. */
+  box-sizing: border-box;
+  height: 32px;
   padding: 3px 8px 0;
   background: var(--rb-bar);
   border-bottom: 1px solid var(--rb-border);
-  min-height: 30px;
-  flex-wrap: wrap;
+  overflow: hidden;
 }
 .bc-rb-title {
   font-weight: 600;
@@ -100,8 +102,13 @@
 /* Panels of all tabs side by side; the tabs scroll the strip (no scroll bar). */
 .bc-rb-strip {
   display: flex;
+  box-sizing: border-box;
+  height: 99px;
   overflow: hidden;
   background: var(--rb-bg);
+}
+.bc-rb-icons-only .bc-rb-strip {
+  height: 78px;
 }
 .bc-rb-strip[hidden] {
   display: none;
@@ -128,7 +135,6 @@
   flex-direction: column;
   padding: 0 6px;
   border-right: 1px solid var(--rb-border);
-  min-height: 92px;
 }
 .bc-rb-cells {
   flex: 1 1 auto;
@@ -249,9 +255,6 @@
   min-width: 44px;
   min-height: 44px;
   justify-content: center;
-}
-.bc-rb-icons-only .bc-rb-group {
-  min-height: 70px;
 }
 
 .bc-rb-tip {
