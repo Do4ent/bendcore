@@ -205,9 +205,23 @@ const MESSAGE_CALLS = /(?:markError|messages\s*\.\s*(?:push_back|emplace_back)|w
 export function messagesOfSource(src: string, file: string): KernelMessageSource[] {
   const text = stripComments(src);
   const out: KernelMessageSource[] = [];
+  // `const std::string prefix = "configuration '" + name + "': ";` — a local text variable with a literal
+  // is substituted where it is a whole term of a message (`prefix + "unknown material"`).
+  const locals = [...text.matchAll(/\bstd::string\s+(\w+)\s*=\s*([^;]*"[^;]*);/g)].map((d) => ({ name: d[1], value: d[2], at: d.index ?? 0 }));
+  const withLocals = (expr: string, index: number): string => {
+    let e = expr;
+    for (const name of new Set(locals.map((l) => l.name))) {
+      const def = locals.filter((l) => l.name === name && l.at < index && index - l.at < 2500).pop();
+      if (!def) continue;
+      e = splitTop(e, (str, i) => (str[i] === '+' ? 1 : 0))
+        .map((term) => (term.trim() === name ? `(${def.value})` : term))
+        .join('+');
+    }
+    return e;
+  };
   const add = (code: string, index: number, expr: string) => {
     const line = text.slice(0, index).split('\n').length;
-    for (const skeleton of skeletonsOf(expr)) out.push({ code, skeleton, where: `${file}:${line}` });
+    for (const skeleton of skeletonsOf(withLocals(expr, index))) out.push({ code, skeleton, where: `${file}:${line}` });
   };
   const re = /ErrorCode::(\w+)\s*,/g;
   let m: RegExpExecArray | null;
@@ -220,7 +234,70 @@ export function messagesOfSource(src: string, file: string): KernelMessageSource
   while ((m = named.exec(text)) !== null) add(m[1], m.index, expressionAt(text, named.lastIndex));
   const input = /\bInputError\(/g;
   while ((m = input.exec(text)) !== null) add('InvalidInput', m.index, expressionAt(text, input.lastIndex));
+  // Local helpers that build the error from a text: `Error invalid(std::string m) { return
+  // Error{ErrorCode::InvalidInput, ...}; }`, `[[noreturn]] void bad(const std::string& m) { throw
+  // FormatError(m); }`, `Error parseError(size_t line, const std::string& what) { return Error{...,
+  // "DXF line " + to_string(line) + ": " + what}; }` — every call `invalid("...")` is a message of the
+  // helper's code, with the call's argument in place of the helper's text parameter.
+  for (const [name, h] of helpersOf(text)) {
+    const call = new RegExp(`(?<![\\w.>:])${name}\\(`, 'g');
+    while ((m = call.exec(text)) !== null) {
+      if (/(?:Error|void)\s+$/.test(text.slice(Math.max(0, m.index - 12), m.index))) continue; // the definition
+      const args = splitTop(argumentsAt(text, call.lastIndex), (str, i) => (str[i] === ',' ? 1 : 0));
+      // bad(ErrorCode::Fault, "text"): the text is the last argument.
+      const arg = h.index >= 0 && args.length > h.index ? args[h.index] : args[args.length - 1];
+      if (h.body === null) add(h.code, m.index, arg);
+      else add(h.code, m.index, h.body.replace(new RegExp(`(?<![\\w"])${h.param}(?![\\w"])`, 'g'), `(${arg})`));
+    }
+  }
   MESSAGE_CALLS.lastIndex = 0;
   while ((m = MESSAGE_CALLS.exec(text)) !== null) add('message', m.index, expressionAt(text, MESSAGE_CALLS.lastIndex));
+  return out;
+}
+
+/** Text between the parenthesis that opens at `from` (just after it) and its closing one. */
+function argumentsAt(text: string, from: number): string {
+  let depth = 0;
+  let i = from;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '"') {
+      i = skipLiteral(text, i);
+      continue;
+    }
+    if (OPEN.includes(c)) depth++;
+    else if (CLOSE.includes(c)) {
+      if (depth === 0) break;
+      depth--;
+    }
+    i++;
+  }
+  return text.slice(from, i);
+}
+
+interface Helper {
+  code: string;
+  /** index of the text parameter among the arguments (-1: the last argument) */
+  index: number;
+  /** expression of the message in the helper body, with the parameter name; null: the parameter itself */
+  body: string | null;
+  param: string;
+}
+
+/** Error-building helpers defined in a file: name -> code and message expression (a thrown parse failure is ParseError). */
+function helpersOf(text: string): Map<string, Helper> {
+  const out = new Map<string, Helper>();
+  const make = /\bError\s+(\w+)\s*\(([^()]*)\)\s*\{\s*return\s+Error\s*\{\s*ErrorCode::(\w+)\s*,\s*([^;]*?)\s*\}\s*;\s*\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = make.exec(text)) !== null) {
+    const params = m[2].split(',').map((p) => p.trim()).filter((p) => p !== '');
+    const index = params.findIndex((p) => /std::string/.test(p));
+    if (index < 0) continue;
+    const param = /(\w+)\s*$/.exec(params[index])?.[1] ?? '';
+    const moved = new RegExp(`^std::move\\(${param}\\)$|^${param}$`).test(m[4]);
+    out.set(m[1], { code: m[3], index, body: moved ? null : m[4], param });
+  }
+  const thrown = /\bvoid\s+(\w+)\s*\(\s*const\s+std::string&\s*\w*\s*\)\s*\{\s*throw\s+(?:FormatError|ParseFailure)\b/g;
+  while ((m = thrown.exec(text)) !== null) out.set(m[1], { code: 'ParseError', index: -1, body: null, param: '' });
   return out;
 }
