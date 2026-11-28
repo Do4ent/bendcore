@@ -26,6 +26,8 @@ import type { V3 } from './assemblyMath';
 import { massText } from './labels';
 import { caption, useI18n } from '../app/i18n';
 import { MATE_TYPES, allowedMateTypes, mateValueUnit, suggestMateType } from './mateRules';
+import { Icon } from '../icons';
+import { MATE_ICONS } from './assemblyRibbon';
 import type { PickedElement } from './mateRules';
 
 const num = (s: string, fallback = 0) => {
@@ -61,9 +63,11 @@ export interface MatePanelProps {
   slots: [PickedElement | null, PickedElement | null];
   onClearSlot: (slot: 0 | 1) => void;
   onAdd: (spec: MateSpec) => void;
+  /** Type chosen on the ribbon (taken when the picked pair allows it). */
+  requestedType?: { type: MateType; serial: number } | null;
 }
 
-export const MatePanel: React.FC<MatePanelProps> = ({ slots, onClearSlot, onAdd }) => {
+export const MatePanel: React.FC<MatePanelProps> = ({ slots, onClearSlot, onAdd, requestedType = null }) => {
   const { t } = useI18n();
   const [a, b] = slots;
   const allowed = useMemo(() => allowedMateTypes(a, b), [a, b]);
@@ -74,6 +78,10 @@ export const MatePanel: React.FC<MatePanelProps> = ({ slots, onClearSlot, onAdd 
   useEffect(() => {
     setType((t) => (t && allowed.includes(t) ? t : suggestMateType(a, b)));
   }, [a, b, allowed]);
+  useEffect(() => {
+    if (requestedType && (!(a && b) || allowed.includes(requestedType.type))) setType(requestedType.type);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedType]);
   const unit = type ? mateValueUnit(type) : null;
   const add = () => {
     if (!a || !b || !type) return;
@@ -104,6 +112,7 @@ export const MatePanel: React.FC<MatePanelProps> = ({ slots, onClearSlot, onAdd 
               onChange={() => setType(m)}
               data-testid={`mate-type-${m}`}
             />
+            <Icon name={MATE_ICONS[m]} size={16} />
             {caption(t, 'assembly.mateType.', m)}
           </label>
         ))}

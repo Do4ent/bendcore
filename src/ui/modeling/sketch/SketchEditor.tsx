@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { KernelMesh } from '../../../wasm/bendcore_kernel_api.mjs';
 import type {
   DxfSketchImport,
@@ -55,6 +56,11 @@ import {
 } from './sketchModel';
 import { findSnap, nearestEntity, nearestPoint } from './snap';
 import type { Snap } from './snap';
+import Ribbon from '../../app/Ribbon';
+import { Icon } from '../../icons';
+import { sketchRibbon } from './sketchRibbon';
+import { constraintIcon } from './sketchRibbon';
+import type { SketchRibbonTool } from './sketchRibbon';
 import './SketchEditor.css';
 
 export type EditorTool = 'select' | DrawTool | 'dimension' | 'trim' | 'extend' | 'fillet' | 'chamfer' | 'regions' | 'project';
@@ -62,7 +68,6 @@ export type EditorTool = 'select' | DrawTool | 'dimension' | 'trim' | 'extend' |
 const isDrawTool = (t: EditorTool): t is DrawTool => (DRAW_TOOLS as string[]).includes(t);
 
 /** Captions sketch.tool.<tool> and hints sketch.hint.<tool> of the tools other than drawing. */
-const EDIT_TOOLS = ['dimension', 'trim', 'extend', 'fillet', 'chamfer', 'regions', 'project'] as const;
 
 /**
  * Dimension text offsets by "<document handle>:<sketch id>": the part file has no place for
@@ -115,6 +120,8 @@ export interface SketchEditorProps {
   onExit: (data: SketchData) => void;
   /** Leave the sketch dropping the changes. */
   onCancel: () => void;
+  /** Element the sketch ribbon is rendered into (in place of the part ribbon); inline when null. */
+  ribbonHost?: HTMLElement | null;
 }
 
 interface PendingDimension {
@@ -129,7 +136,7 @@ interface PendingDimension {
 }
 
 
-const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, body, onExit, onCancel }) => {
+const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, body, onExit, onCancel, ribbonHost = null }) => {
   const { t } = useI18n();
   /** Kernel errors in the interface language (docs/ui/APP_SHELL.md, "Сообщения ядра"). */
   const errorText = (e: unknown): string => kernelMessageLine(localizeKernelError(t, e));
@@ -780,22 +787,42 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
       <input value={params[key]} data-testid={`sketch-param-${key}`} onChange={(e) => setParams({ ...params, [key]: e.target.value })} />
     </label>
   );
-  const toolButton = (k: EditorTool) => (
-    <button
-      type="button"
-      key={k}
-      className={tool === k ? 'sk-active' : ''}
-      data-testid={`tool-${k}`}
-      aria-pressed={tool === k}
-      onClick={() => setTool(k)}
-    >
-      {t(`sketch.tool.${k}`)}
-    </button>
+  const ribbon = sketchRibbon(
+    t,
+    { tool: tool as SketchRibbonTool, canUndo: history.length > 0, dxfOpen },
+    {
+      setTool: (k) => setTool(k),
+      exit: () => void commitQueue.current.then(() => onExit(dataRef.current)),
+      cancel: onCancel,
+      undo: undoStep,
+      fit: () => canvasRef.current?.fit(),
+      openDxf: () => setDxfOpen(true),
+      modes: () => (
+        <>
+          <label className="sk-check" title={t('ribbon.tip.construction')}>
+            <input type="checkbox" checked={construction} data-testid="sketch-construction" onChange={(e) => setConstruction(e.target.checked)} />
+            {t('sketch.construction')}
+          </label>
+          <label className="sk-check" title={t('ribbon.tip.gridSnap')}>
+            <input type="checkbox" checked={gridSnap} data-testid="sketch-grid-snap" onChange={(e) => setGridSnap(e.target.checked)} />
+            {t('sketch.gridSnap')}
+          </label>
+          <label className="sk-check" title={t('ribbon.tip.reference')}>
+            <input type="checkbox" checked={reference} data-testid="sketch-reference" onChange={(e) => setReference(e.target.checked)} />
+            {t('sketch.referenceNew')}
+          </label>
+        </>
+      ),
+    },
+  );
+  const ribbonElement = (
+    <Ribbon title={t('sketch.title', { id: featureId })} testId="sketch-ribbon" quick={ribbon.quick} tabs={ribbon.tabs} activeTab="sketchEdit" />
   );
   const lastLine = [...selEntities].reverse().find((id) => data.geometry[id - 1]?.type === 'line');
 
   return (
     <>
+      {ribbonHost ? createPortal(ribbonElement, ribbonHost) : ribbonElement}
       <SketchCanvas
         ref={canvasRef}
         solution={solution}
@@ -885,23 +912,6 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
             {message}
           </div>
         )}
-        <div className="pm-panel-buttons">
-          <button type="button" className="pm-primary" data-testid="sketch-exit" onClick={() => void commitQueue.current.then(() => onExit(dataRef.current))}>
-            {t('sketch.exit')}
-          </button>
-          <button type="button" data-testid="sketch-cancel" onClick={onCancel}>
-            {t('sketch.cancel')}
-          </button>
-          <button type="button" data-testid="sketch-undo" disabled={history.length === 0} onClick={undoStep}>
-            {t('sketch.undoStep')}
-          </button>
-          <button type="button" data-testid="sketch-fit" onClick={() => canvasRef.current?.fit()}>
-            {t('sketch.fit')}
-          </button>
-          <button type="button" data-testid="sketch-dxf-open" disabled={dxfOpen} onClick={() => setDxfOpen(true)}>
-            {t('sketch.dxf.open')}
-          </button>
-        </div>
         {dxfInserted && (
           <div className="sk-dxf-line" role="status" data-testid="sketch-dxf-inserted">
             {t('sketch.dxf.inserted', { n: dxfInserted.curves, open: dxfInserted.open })}
@@ -909,27 +919,10 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
         )}
         {dxfOpen && <DxfImportPanel kernel={kernel} current={() => dataRef.current} onInsert={(r) => void insertDxf(r)} onClose={() => setDxfOpen(false)} />}
 
-        <fieldset className="pm-group sk-tools">
-          <legend>{t('sketch.drawing')}</legend>
-          {toolButton('select')}
-          {DRAW_TOOLS.map((k) => toolButton(k))}
-          <label className="sk-check">
-            <input type="checkbox" checked={construction} data-testid="sketch-construction" onChange={(e) => setConstruction(e.target.checked)} />
-            {t('sketch.construction')}
-          </label>
-          <label className="sk-check">
-            <input type="checkbox" checked={gridSnap} data-testid="sketch-grid-snap" onChange={(e) => setGridSnap(e.target.checked)} />
-            {t('sketch.gridSnap')}
-          </label>
-        </fieldset>
 
+        {(tool === 'fillet' || tool === 'chamfer') && (
         <fieldset className="pm-group sk-tools">
           <legend>{t('sketch.editing')}</legend>
-          {EDIT_TOOLS.map((k) => toolButton(k))}
-          <label className="sk-check">
-            <input type="checkbox" checked={reference} data-testid="sketch-reference" onChange={(e) => setReference(e.target.checked)} />
-            {t('sketch.referenceNew')}
-          </label>
           {tool === 'fillet' && paramField('filletRadius', t('sketch.filletRadius'))}
           {tool === 'chamfer' && (
             <>
@@ -938,6 +931,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
             </>
           )}
         </fieldset>
+        )}
 
         {tool === 'select' && selection.length > 0 && (
           <fieldset className="pm-group sk-tools" data-testid="sketch-selection">
@@ -947,15 +941,18 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
             </legend>
             {proposals.map((p) => (
               <button type="button" key={p.type} data-testid={`constraint-${p.type}`} onClick={() => applyConstraint(p)}>
+                <Icon name={constraintIcon(p.type)} size={16} />
                 {constraintCaption(t, p.type)}
               </button>
             ))}
             {selEntities.length > 0 && (
               <button type="button" data-testid="sketch-toggle-construction" onClick={() => void commit(toggleConstruction(data, selEntities))}>
+                <Icon name="sketch-construction" size={16} />
                 {t('sketch.toggleConstruction')}
               </button>
             )}
             <button type="button" data-testid="sketch-delete" onClick={deleteSelection}>
+              <Icon name="delete" size={16} />
               {t('sketch.delete')}
             </button>
             {selEntities.length > 0 && (
@@ -984,6 +981,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
                     if (d !== null) void runTool({ name: 'offset', chain: selEntities, distance: d, bothSides: offsetBoth, corners: offsetCorners });
                   }}
                 >
+                  <Icon name="sketch-offset" size={16} />
                   {t('sketch.offset')}
                 </button>
                 <button
@@ -995,6 +993,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
                     lastLine !== undefined && void runTool({ name: 'mirror', entities: selEntities.filter((id) => id !== lastLine), axis: lastLine })
                   }
                 >
+                  <Icon name="sketch-mirror" size={16} />
                   {t('sketch.mirror')}
                 </button>
                 {paramField('stepX', t('sketch.stepX'))}
@@ -1008,6 +1007,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
                     if (dx !== null && dy !== null && n !== null) void runTool({ name: 'linear-pattern', entities: selEntities, step: [dx, dy], count: n });
                   }}
                 >
+                  <Icon name="sketch-pattern" size={16} />
                   {t('sketch.linearPattern')}
                 </button>
                 {paramField('angle', t('sketch.angleStep'))}
@@ -1021,6 +1021,7 @@ const SketchEditor: React.FC<SketchEditorProps> = ({ doc, kernel, featureId, bod
                     if (n !== null && a !== null) void runTool({ name: 'circular-pattern', entities: selEntities, center: selPoints[0], count: n, angle: a });
                   }}
                 >
+                  <Icon name="pattern-circular" size={16} />
                   {t('sketch.circularPattern')}
                 </button>
               </div>

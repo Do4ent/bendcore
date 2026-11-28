@@ -116,3 +116,14 @@
   .pm-main { flex-direction: column; }
   .pm-left, .pm-right { width: auto; max-height: 35vh; border: none; border-top: 1px solid var(--kv-border); }
 }
+
+/* Ribbon (src/ui/app/Ribbon.tsx): the part ribbon gives way to the sketch ribbon while a sketch is edited. */
+.pm-ribbon-hidden {
+  display: none;
+}
+.pm-sketch-ribbon:empty {
+  display: none;
+}
+.bc-rb-btn.pm-primary .bc-icon {
+  color: var(--app-accent, #1f6feb);
+}

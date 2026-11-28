@@ -16,7 +16,7 @@ import type { SketchPlacementInfo, SketchSolution, SketchSolvedCurve } from '../
 import { packEdgePolylines } from '../../kernel/edgeBuffers';
 import type { DimensionGraphic } from './dimensionLayout';
 import type { DefinitionState } from './sketchModel';
-import { gridStep, nearestPoint } from './snap';
+import { gridStep, nearestPoint, roundScale } from './snap';
 import { caption, useI18n } from '../../app/i18n';
 import type { Snap } from './snap';
 
@@ -134,7 +134,9 @@ const SketchCanvas = React.forwardRef<SketchCanvasHandle, SketchCanvasProps>((pr
     const b = bounds(propsRef.current.solution);
     const s = sizeRef.current;
     if (!b) {
-      setView({ cx: 0, cy: 0, scale: Math.min(s.w, s.h) / 120 });
+      // An empty sketch shows about 120 mm at a round scale (1-2-5 pixels per millimetre): whole
+      // pixels then fall on round millimetres and the grid lines on whole pixels.
+      setView({ cx: 0, cy: 0, scale: roundScale(Math.min(s.w, s.h) / 120) });
       return;
     }
     const w = Math.max(b.maxX - b.minX, 10);

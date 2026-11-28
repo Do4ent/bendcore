@@ -69,7 +69,11 @@ import type { MassResult } from '../exchange/MassSection';
 import { IMPORT_ACCEPT, importFormatOf } from '../exchange/exchange';
 import type { ImportFormat } from '../exchange/exchange';
 import { dofText } from './labels';
-import { nextMateSlots } from './mateRules';
+import { allowedMateTypes, nextMateSlots } from './mateRules';
+import type { MateType } from '../../wasm/bendcore_assembly_api.mjs';
+import Ribbon from '../app/Ribbon';
+import { Icon } from '../icons';
+import { assemblyRibbon } from './assemblyRibbon';
 import type { PickedElement } from './mateRules';
 import '../kernel/KernelViewer.css';
 import '../modeling/PartModeler.css';
@@ -80,8 +84,8 @@ const MESH_PARAMS = { linearDeflection: 0.05, angularDeflection: 0.25 };
 
 type PanelId = 'mate' | 'fasteners' | 'interference' | 'bom' | 'explode' | 'pattern' | 'properties' | 'configurations';
 
-/** Side panels in tab order; captions are messages assembly.panel.<id>. */
-const PANELS: PanelId[] = ['mate', 'fasteners', 'interference', 'bom', 'explode', 'pattern', 'properties', 'configurations'];
+/** Icons of the pick modes in the ribbon's selection group. */
+const PICK_MODE_ICONS = { face: 'pick-face', edge: 'pick-edge', component: 'pick-component', drag: 'drag' } as const;
 
 export interface AssemblyPageState {
   status: 'loading' | 'ready' | 'failed';
@@ -205,6 +209,8 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   const [panel, setPanel] = useState<PanelId>('mate');
   const [pickMode, setPickMode] = useState<AssemblyPickMode>('face');
   const [mateSlots, setMateSlots] = useState<[PickedElement | null, PickedElement | null]>([null, null]);
+  /** Mate type chosen on the ribbon, passed to the mate panel (serial: the same type chosen again). */
+  const [mateRequest, setMateRequest] = useState<{ type: MateType; serial: number } | null>(null);
   const [hole, setHole] = useState<PickedElement | null>(null);
   const [selectedComponent, setSelectedComponent] = useState<number | null>(null);
   const [bomMode, setBomMode] = useState<'flat' | 'structured'>('flat');
@@ -925,110 +931,111 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
   const solve = dragSolve ?? state?.solve ?? null;
   const history = state?.history;
 
-  return (
-    <div className="kv-root pm-root as-root" data-testid="assembly-page">
-      <div className="kv-toolbar pm-toolbar">
-        <span className="kv-title">{t('assembly.title')}</span>
-        <button type="button" onClick={() => void onNew()} disabled={status !== 'ready'}>
-          {t('assembly.new')}
-        </button>
-        <label className="kv-file">
-          {t('assembly.open')}
-          <input ref={openInputRef} type="file" accept=".json" multiple onChange={onOpen} data-testid="open-input" />
-        </label>
-        <button type="button" onClick={() => void onSave()} disabled={status !== 'ready'} data-testid="save" title="Ctrl+S">
-          {t('assembly.save')}
-        </button>
-        <label className="kv-file">
-          {t('exchange.import')}
-          <input type="file" accept={IMPORT_ACCEPT} onChange={onImportStep} data-testid="import-step-input" />
-        </label>
-        <button type="button" onClick={() => setExporting(true)} disabled={status !== 'ready' || parts.length === 0} data-testid="export-open">
-          {t('exchange.export')}
-        </button>
-        <span className="pm-sep" />
-        <label className="kv-file">
-          {t('assembly.insertPart')}
-          <input type="file" accept={`.json,${IMPORT_ACCEPT}`} multiple onChange={onInsertParts} data-testid="insert-part-input" />
-        </label>
-        {partLibrary && partLibrary.length > 0 && (
-          <span className="as-library">
-            <select value={libraryChoice} onChange={(e) => setLibraryChoice(e.target.value)} data-testid="library-part">
-              <option value="">{t('assembly.libraryPart')}</option>
-              {partLibrary.map((p, i) => (
-                <option key={`${p.name}:${i}`} value={String(i)}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={status !== 'ready' || libraryChoice === ''}
-              data-testid="library-insert"
-              onClick={() => {
-                const p = partLibrary[Number(libraryChoice)];
-                if (p) void insertPart(p.name, p.text).then(() => setFrameKey((k) => k + 1));
-              }}
-            >
-              {t('assembly.insert')}
-            </button>
-          </span>
-        )}
-        {onOpenPart && (
-          <button type="button" disabled={status !== 'ready'} onClick={openComponentPart} data-testid="open-component-part">
-            {t('action.openComponentPart')}
-          </button>
-        )}
-        <label className="kv-file">
-          {t('assembly.insertSubassembly')}
-          <input type="file" accept=".json" onChange={onInsertSubassembly} data-testid="insert-subassembly-input" />
-        </label>
-        <span className="pm-sep" />
-        <button
-          type="button"
-          disabled={!history?.canUndo}
-          title={history?.undoLabel ? t('assembly.undoNamed', { name: history.undoLabel }) : t('assembly.undo')}
-          onClick={() => void run((d) => d.undo())}
-          data-testid="undo"
-        >
-          {t('assembly.undo')}
-        </button>
-        <button
-          type="button"
-          disabled={!history?.canRedo}
-          title={history?.redoLabel ? t('assembly.redoNamed', { name: history.redoLabel }) : t('assembly.redo')}
-          onClick={() => void run((d) => d.redo())}
-          data-testid="redo"
-        >
-          {t('assembly.redo')}
-        </button>
-        <button type="button" onClick={() => void run((d) => d.solve())} disabled={status !== 'ready'} data-testid="solve">
-          {t('assembly.solve')}
-        </button>
-        <span className="pm-sep" />
-        <span className="as-modes" role="radiogroup">
+  const ribbon = assemblyRibbon(
+    t,
+    {
+      ready: status === 'ready',
+      hasParts: parts.length > 0,
+      canUndo: Boolean(history?.canUndo),
+      canRedo: Boolean(history?.canRedo),
+      undoLabel: history?.undoLabel ?? null,
+      redoLabel: history?.redoLabel ?? null,
+      panel,
+      canOpenComponentPart: selectedComponent !== null,
+      allowedMates: mateSlots[0] && mateSlots[1] ? allowedMateTypes(mateSlots[0], mateSlots[1]) : null,
+      measuring: tools.measurePanel.active,
+      section: tools.sectionPanel && !tools.sectionPanel.disabled ? tools.sectionPanel.state.enabled : null,
+    },
+    {
+      newDocument: () => void onNew(),
+      open: (e) => void onOpen(e),
+      openInputRef,
+      save: () => void onSave(),
+      importModel: (e) => void onImportStep(e),
+      exportModel: () => setExporting(true),
+      insertParts: (e) => void onInsertParts(e),
+      insertSubassembly: (e) => void onInsertSubassembly(e),
+      openComponentPart: onOpenPart ? openComponentPart : undefined,
+      library:
+        partLibrary && partLibrary.length > 0
+          ? () => (
+              <span className="as-library" title={t('ribbon.tip.library')}>
+                <select value={libraryChoice} onChange={(e) => setLibraryChoice(e.target.value)} data-testid="library-part">
+                  <option value="">{t('assembly.libraryPart')}</option>
+                  {partLibrary.map((p, i) => (
+                    <option key={`${p.name}:${i}`} value={String(i)}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={status !== 'ready' || libraryChoice === ''}
+                  data-testid="library-insert"
+                  onClick={() => {
+                    const p = partLibrary[Number(libraryChoice)];
+                    if (p) void insertPart(p.name, p.text).then(() => setFrameKey((k) => k + 1));
+                  }}
+                >
+                  {t('assembly.insert')}
+                </button>
+              </span>
+            )
+          : undefined,
+      pickModes: () => (
+        <span className="as-modes" role="radiogroup" title={t('ribbon.tip.pickMode')}>
           {(['face', 'edge', 'component', 'drag'] as const).map((m) => (
             <label key={m}>
               <input type="radio" name="pick-mode" checked={pickMode === m} onChange={() => setPickMode(m)} data-testid={`mode-${m}`} />
+              <Icon name={PICK_MODE_ICONS[m]} size={16} />
               {t(`assembly.mode.${m}`)}
             </label>
           ))}
         </span>
-        <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
-        <span className="kv-status" data-testid="status">
-          {status === 'loading' && t('assembly.loading')}
-          {status === 'failed' && t('assembly.failed')}
-          {status === 'ready' && solve && (
-            <>
-              <span data-testid="total-dof">{dofText(solve.totalDof, t, lang)}</span>
-              {' · '}
-              <span className={solve.success ? 'as-ok' : 'as-bad'} data-testid="solve-status">
-                {solve.success ? t('assembly.solved') : t('assembly.conflicts')}
-              </span>
-            </>
-          )}
-        </span>
-      </div>
+      ),
+      undo: () => void run((d) => d.undo()),
+      redo: () => void run((d) => d.redo()),
+      solve: () => void run((d) => d.solve()),
+      showPanel: switchPanel,
+      mateType: (m) => {
+        switchPanel('mate');
+        setMateRequest({ type: m, serial: Date.now() });
+      },
+      toggleMeasure: () => tools.measurePanel.onActive(!tools.measurePanel.active),
+      toggleSection: () => {
+        const sp = tools.sectionPanel;
+        if (sp) sp.onChange({ ...sp.state, enabled: !sp.state.enabled });
+      },
+    },
+    { importAccept: IMPORT_ACCEPT, partAccept: `.json,${IMPORT_ACCEPT}` },
+  );
+
+  return (
+    <div className="kv-root pm-root as-root" data-testid="assembly-page">
+      <Ribbon
+        title={t('assembly.title')}
+        testId="assembly-ribbon"
+        quick={ribbon.quick}
+        tabs={ribbon.tabs}
+        status={
+          <>
+            <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
+            <span className="kv-status" data-testid="status">
+              {status === 'loading' && t('assembly.loading')}
+              {status === 'failed' && t('assembly.failed')}
+              {status === 'ready' && solve && (
+                <>
+                  <span data-testid="total-dof">{dofText(solve.totalDof, t, lang)}</span>
+                  {' · '}
+                  <span className={solve.success ? 'as-ok' : 'as-bad'} data-testid="solve-status">
+                    {solve.success ? t('assembly.solved') : t('assembly.conflicts')}
+                  </span>
+                </>
+              )}
+            </span>
+          </>
+        }
+      />
       {error && (
         <div className="kv-error" role="alert" data-testid="error">
           <KernelMessageText code={error.code} message={error.message} />
@@ -1137,22 +1144,10 @@ const AssemblyApp: React.FC<AssemblyAppProps> = ({
           frameKey={frameKey}
         />
         <aside className={`kv-panel pm-right as-right ${panel === 'bom' || panel === 'configurations' ? 'as-right-wide' : ''}`}>
-          <nav className="as-tabs">
-            {PANELS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                className={panel === p ? 'as-tab-active' : ''}
-                onClick={() => switchPanel(p)}
-                data-testid={`tab-${p}`}
-              >
-                {t(`assembly.panel.${p}`)}
-              </button>
-            ))}
-          </nav>
           {panel === 'mate' && (
             <MatePanel
               slots={mateSlots}
+              requestedType={mateRequest}
               onClearSlot={(i) => setMateSlots((s) => (i === 0 ? [s[1], null] : [s[0], null]))}
               onAdd={(spec: MateSpec) => {
                 void run((d) => d.addMate(spec)).then((ok) => ok && setMateSlots([null, null]));

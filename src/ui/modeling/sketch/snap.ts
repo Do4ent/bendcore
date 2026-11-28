@@ -173,3 +173,16 @@ export function gridStep(scale: number, minPixels = 12): number {
   }
   return 10 * pow;
 }
+
+/**
+ * Largest scale of the 1-2-5 series (1, 2, 5, 10, 20… pixels per millimetre) not above `scale`:
+ * the starting view of an empty sketch, where whole pixels fall on round millimetres.
+ */
+export function roundScale(scale: number): number {
+  if (!(scale > 0) || !Number.isFinite(scale)) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(scale)));
+  for (const m of [5, 2, 1]) {
+    if (m * pow <= scale) return m * pow;
+  }
+  return pow;
+}
