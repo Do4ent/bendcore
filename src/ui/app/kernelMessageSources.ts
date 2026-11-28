@@ -205,9 +205,23 @@ const MESSAGE_CALLS = /(?:markError|messages\s*\.\s*(?:push_back|emplace_back)|w
 export function messagesOfSource(src: string, file: string): KernelMessageSource[] {
   const text = stripComments(src);
   const out: KernelMessageSource[] = [];
+  // `const std::string prefix = "configuration '" + name + "': ";` — a local text variable with a literal
+  // is substituted where it is a whole term of a message (`prefix + "unknown material"`).
+  const locals = [...text.matchAll(/\bstd::string\s+(\w+)\s*=\s*([^;]*"[^;]*);/g)].map((d) => ({ name: d[1], value: d[2], at: d.index ?? 0 }));
+  const withLocals = (expr: string, index: number): string => {
+    let e = expr;
+    for (const name of new Set(locals.map((l) => l.name))) {
+      const def = locals.filter((l) => l.name === name && l.at < index && index - l.at < 2500).pop();
+      if (!def) continue;
+      e = splitTop(e, (str, i) => (str[i] === '+' ? 1 : 0))
+        .map((term) => (term.trim() === name ? `(${def.value})` : term))
+        .join('+');
+    }
+    return e;
+  };
   const add = (code: string, index: number, expr: string) => {
     const line = text.slice(0, index).split('\n').length;
-    for (const skeleton of skeletonsOf(expr)) out.push({ code, skeleton, where: `${file}:${line}` });
+    for (const skeleton of skeletonsOf(withLocals(expr, index))) out.push({ code, skeleton, where: `${file}:${line}` });
   };
   const re = /ErrorCode::(\w+)\s*,/g;
   let m: RegExpExecArray | null;
