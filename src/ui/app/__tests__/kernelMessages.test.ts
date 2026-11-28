@@ -3,14 +3,16 @@
  */
 // Kernel messages in Russian (docs/ui/APP_SHELL.md, "Сообщения ядра").
 //
-// Coverage: every message the C++ sources of src/modeling, src/assembly_v2 and src/drawing_v2
-// generate (ErrorCode::X with a text, markError, messages/warnings of feature nodes, resolution
-// details — kernelMessageSources.ts) matches a template of KERNEL_TEMPLATES or is listed in
-// kernelMessagesOther.json ("other": the localized title of its code and the original text in the
-// details). The list is exact: a new kernel message fails the test until it gets a template or an
-// entry; an entry that a template covers or that no source generates any more fails it too.
+// Coverage: every message the C++ sources of src/modeling, src/assembly_v2, src/drawing_v2, src/kernel
+// and src/dxf_reader.cpp generate (ErrorCode::X with a text, markError, messages/warnings of feature
+// nodes, resolution details, messages built by local helpers such as invalid("..."), bad("...") —
+// kernelMessageSources.ts) matches a template of KERNEL_TEMPLATES (a message the user can meet) or is
+// listed in kernelMessagesOther.json with the reason why the user never meets it (an internal message:
+// the localized title of its code and the original text in the details). The list is exact: a new kernel
+// message fails the test until it gets a template or an entry with a reason; an entry that a template
+// covers or that no source generates any more fails it too.
 //   BENDCORE_UPDATE_KERNEL_MESSAGES=1 npx jest src/ui/app/__tests__/kernelMessages.test.ts
-// rewrites the list (review the diff: it is the set of messages shown untranslated).
+// rewrites the list (new entries get the reason TODO that the test refuses until it is replaced).
 
 import fs from 'fs';
 import path from 'path';
@@ -22,6 +24,11 @@ import type { KernelMessageSource } from '../kernelMessageSources';
 
 const repo = path.resolve(__dirname, '../../../..');
 const OTHER_FILE = path.resolve(__dirname, '../kernelMessagesOther.json');
+
+/** Internal messages: "Code\tskeleton" -> key of the reason why the user never meets it. */
+function readInternal(): { reasons: Record<string, string>; entries: Record<string, string> } {
+  return JSON.parse(fs.readFileSync(OTHER_FILE, 'utf8'));
+}
 
 const tRu: Translate = (key: MessageKey, params) => translate('ru', key, params);
 const tEn: Translate = (key: MessageKey, params) => translate('en', key, params);
@@ -110,27 +117,43 @@ describe('coverage of the kernel messages', () => {
     expect(new Set(covered.map(entryOf)).size).toBeGreaterThan(500);
   });
 
-  test('every message has a template or is listed as other', () => {
+  test('every message has a template or is listed as internal with a reason', () => {
     const uncovered = [...new Set(covered.filter((m) => templateOf(m.skeleton) === null).map(entryOf))].sort();
     if (process.env.BENDCORE_UPDATE_KERNEL_MESSAGES) {
-      fs.writeFileSync(OTHER_FILE, JSON.stringify(uncovered, null, 1) + '\n');
+      // Keeps the reasons of the entries that stay; a new entry gets the reason TODO that the test below refuses.
+      const old = readInternal();
+      const entries: Record<string, string> = {};
+      for (const e of uncovered) entries[e] = old.entries[e] ?? 'TODO';
+      fs.writeFileSync(OTHER_FILE, JSON.stringify({ reasons: old.reasons, entries }, null, 1) + '\n');
     }
-    const listed: string[] = JSON.parse(fs.readFileSync(OTHER_FILE, 'utf8'));
+    const { reasons, entries } = readInternal();
+    const listed = Object.keys(entries);
     const where = new Map(covered.map((m) => [entryOf(m), m.where]));
-    // New messages without a template: add a template or an entry.
+    // New messages without a template: add a template (visible to the user) or an entry with a reason (internal).
     expect(uncovered.filter((e) => !listed.includes(e)).map((e) => `${e}  (${where.get(e)})`)).toEqual([]);
     // Entries no source generates any more, or that a template covers now.
     expect(listed.filter((e) => !uncovered.includes(e))).toEqual([]);
-    // Every message the user meets (operations, files, mates, views, dimensions) is a template;
-    // "other" keeps messages of programming errors of the API (null shapes, registries, internal
-    // drawing primitives, line type tables): at least 80 % of the messages are templates.
-    const share = 1 - uncovered.length / new Set(covered.map(entryOf)).size;
-    expect(share).toBeGreaterThanOrEqual(0.6);
+    // Every entry names a reason; every reason is explained and used.
+    expect(Object.entries(entries).filter(([, r]) => !(r in reasons)).map(([e, r]) => `${e}: ${r}`)).toEqual([]);
+    expect(Object.keys(reasons).filter((r) => !Object.values(entries).includes(r))).toEqual([]);
+    for (const [key, text] of Object.entries(reasons)) expect([key, text.length >= 60]).toEqual([key, true]);
+  });
+
+  test('all messages the user can meet have a template: 100 % of the visible ones', () => {
+    const all = new Set(covered.map(entryOf));
+    const internal = new Set(Object.keys(readInternal().entries));
+    const visible = [...all].filter((e) => !internal.has(e));
+    const withTemplate = visible.filter((e) => templateOf(e.split('\t')[1]) !== null);
+    expect(withTemplate.length).toBe(visible.length);
+    // The visible messages are the large majority: the internal list stays the exception.
+    expect(visible.length / all.size).toBeGreaterThan(0.8);
   });
 
   test('every template matches a message of the kernel sources', () => {
     const all = [...covered, ...extra];
-    const samples = [...new Set(all.map((m) => sample(m.skeleton)))];
+    // A message is also met as the nested part of a prefix message ("configuration 'A': <message>").
+    const tails = (skeleton: string) => skeleton.split(': ').map((_, i, parts) => parts.slice(i).join(': '));
+    const samples = [...new Set(all.flatMap((m) => tails(m.skeleton).map(sample)))];
     const dead = KERNEL_TEMPLATES.filter(([id]) => !samples.some((s) => loose.find((l) => l.id === id)!.re.test(s)));
     expect(dead.map(([id, p]) => `${id}: ${p}`)).toEqual([]);
   });
@@ -139,7 +162,7 @@ describe('coverage of the kernel messages', () => {
     const latin = /[A-Za-z]{3,}/g;
     const allowed = new Set(['OCCT', 'DXF', 'INSUNITS', 'ASCII', 'bendcore', 'json', 'step', 'stp', 'brep', 'sketch', 'JSON', 'WebAssembly', 'ISO',
       // Names of file formats and fonts, as the user sees them in the interface.
-      'true', 'false', 'sin', 'gost', 'truetype', 'FFFD', 'EOF', 'STEP', 'IGES', 'ZIP', 'BRep', 'LWPOLYLINE', 'POLYLINE', 'SECTION', 'ENDSEC', 'SEQEND', 'LAYER', 'solid', 'CRC', 'RRGGBB', 'Rmax', 'PDF', 'CSV', 'STL', 'TrueType', 'DejaVu', 'Sans', 'Liberation', 'BENDCORE', 'DRAWING', 'FONT', 'base', 'R2000']);
+      'true', 'false', 'sin', 'gost', 'truetype', 'FFFD', 'EOF', 'zlib', 'STEP', 'IGES', 'ZIP', 'BRep', 'LWPOLYLINE', 'POLYLINE', 'SECTION', 'ENDSEC', 'SEQEND', 'LAYER', 'solid', 'CRC', 'RRGGBB', 'Rmax', 'PDF', 'CSV', 'STL', 'TrueType', 'DejaVu', 'Sans', 'Liberation', 'BENDCORE', 'DRAWING', 'FONT', 'base', 'R2000']);
     for (const [id, pattern] of KERNEL_TEMPLATES) {
       const key = `kernel.msg.${id}` as MessageKey;
       expect([id, key in ru, key in en]).toEqual([id, true, true]);
@@ -148,6 +171,28 @@ describe('coverage of the kernel messages', () => {
       expect([id, (text.match(latin) ?? []).filter((w) => !allowed.has(w))]).toEqual([id, []]);
       expect([id, /\{\w+\}/.test(text)]).toEqual([id, false]);
     }
+  });
+});
+
+describe('template parameters', () => {
+  const names = (text: string) => [...new Set([...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].sort();
+
+  test('the Russian and the English text of a template use the same parameters, all taken from the pattern', () => {
+    const bad: string[] = [];
+    for (const [id, pattern] of KERNEL_TEMPLATES) {
+      const key = `kernel.msg.${id}` as MessageKey;
+      const fields = names(pattern.replace(/\{(\w+):\w+\}/g, '{$1}'));
+      const inRu = names(ru[key as keyof typeof ru] as string);
+      const inEn = names(en[key as keyof typeof en] as string);
+      if (inRu.join() !== inEn.join()) bad.push(`${id}: ru {${inRu}} en {${inEn}}`);
+      for (const n of [...inRu, ...inEn]) if (!fields.includes(n)) bad.push(`${id}: {${n}} is not a field of the pattern`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  test('template ids and patterns are unique', () => {
+    expect(new Set(KERNEL_TEMPLATES.map(([id]) => id)).size).toBe(KERNEL_TEMPLATES.length);
+    expect(new Set(KERNEL_TEMPLATES.map(([, p]) => p)).size).toBe(KERNEL_TEMPLATES.length);
   });
 });
 
@@ -189,6 +234,18 @@ describe('localization', () => {
       ['InvalidInput', "hole #2: hole point is outside the face", /^Отверстие #2: /],
       ['OperationFailed', 'thin wall: BRepOffsetAPI_MakeThickSolid failed', /^Тонкая стенка не построена/],
       ['message', "face 'Extrude:F3' was split into 2 parts", /^Элемент типа «грань» «Extrude:F3» разделён на 2 частей$/],
+      // Messages built by local helpers, files, drawing dimensions, imports.
+      ['ParseError', "missing field 'sheets'", /^В файле нет обязательного поля «sheets»$/],
+      ['ParseError', "'scale' must be an integer in [1, 100]", /^Поле «scale» должно быть целым числом от 1 до 100$/],
+      ['InvalidInput', "tolerance class 'Hh7': mixed letter case", /^Поле допуска «Hh7»: буквы разного регистра$/],
+      ['InvalidInput', "fit 'H7': expected hole/shaft, e.g. H7/s6", /^Посадка «H7»: ожидается запись «отверстие\/вал»/],
+      ['OperationFailed', "face #3 'Extrude:F1' does not exist in the model (2 faces)", /^Элемента «грань #3 'Extrude:F1'» нет в модели: всего элементов типа «грань» — 2$/],
+      ['InvalidInput', 'dimension is dangling: edge #4 is not shown in the view', /^Размер потерял привязку: элемент «ребро #4» не показан на виде$/],
+      ['InvalidInput', 'technical requirements, item 2: GOST 2.316: column width must be 0..185 mm', /^Технические требования, пункт 2: ГОСТ 2\.316: ширина столбца/],
+      ['ParseError', "DXF line 12: group 10: expected a number, got 'x'", /^DXF, строка 12: группа 10: ожидалось число, получено «x»$/],
+      ['ParseError', 'zip: CRC-32 mismatch in 3D/3dmodel.model', /^Архив ZIP: контрольная сумма CRC-32 записи «3D\/3dmodel\.model» не совпадает$/],
+      ['InvalidInput', "configuration 'A': unknown material 'M9'", /^[Ии]сполнение «A»: неизвестный материал «M9»$/],
+      ['InvalidInput', 'gear.hand must be right or left', /^Направление зубьев должно быть правым или левым$/],
     ];
     for (const [code, original, expected] of cases) {
       const m = localizeKernelMessage(tRu, code, original);
@@ -226,6 +283,9 @@ describe('localization', () => {
     for (const original of ['the bodies do not intersect', "sketch 'S' has no closed profile", 'fillet needs an existing body']) {
       expect(localizeKernelMessage(tEn, 'InvalidInput', original).text).toBe(original);
     }
+    // A model element of a drawing reference keeps its English kind in English.
+    const ref = localizeKernelMessage(tEn, 'OperationFailed', "edge #4 'E1' is not shown in the view");
+    expect(ref.text).toBe("edge #4 'E1' is not shown in the view");
     // A template that leaves out a value (the OCCT reason) has its own English text; the original is in the details.
     const f = localizeKernelMessage(tEn, 'OperationFailed', 'fillet radius 2.500000 failed: x');
     expect(f.text).toBe('fillet radius 2.5 failed: the radius is probably too large for the edges or their faces');

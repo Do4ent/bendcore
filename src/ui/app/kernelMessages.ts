@@ -783,7 +783,6 @@ export const KERNEL_TEMPLATES: readonly (readonly [string, string])[] = [
   ['asmFileElementKind', 'unknown element kind \'{kind}\''],
   ['asmFileAlignment', 'unknown alignment \'{value}\''],
   ['asmFileNameOrigin', 'unknown name origin \'{value}\''],
-  ['fileUnknownValue', 'unknown {what} \'{value}\''],
   ['asmFileAttributePair', 'element attribute must be a pair of strings'],
   ['asmFileIndexPart', 'cannot index part shape: {detail}'],
   ['asmFileVersionInteger', 'version must be an integer'],
@@ -953,7 +952,7 @@ export const KERNEL_TEMPLATES: readonly (readonly [string, string])[] = [
   ['groupNoColumns', 'group table: no columns'],
   ['groupRowCells', 'group table: row {n:num} has {c:num} cells, the table has {m:num} columns'],
   ['groupNoConfigurations', 'group table: no configurations'],
-  ['groupUnknownMaterial', 'configuration \'{c}\': unknown material \'{m}\''],
+  ['unknownMaterial', 'unknown material \'{m}\''],
   ['drawNotUpdated', 'drawing render: the document is not updated'],
   ['shelfNoSheet', 'move position shelf: no sheet \'{s}\''],
   ['shelfNoView', 'move position shelf: no view \'{v}\' on sheet \'{s}\''],
@@ -1176,6 +1175,15 @@ export const KERNEL_TEMPLATES: readonly (readonly [string, string])[] = [
   ['massSolidVolume', 'solid #{n:num} has non-positive volume (inside out or open shell)'],
   ['massJacobi', 'math_Jacobi did not converge'],
   ['tessNoTriangulation', '{a:num} of {b:num} faces have no triangulation (face indices: {list})'],
+  // Fully localized: boolean fuzzy retry, shape healing steps, DXF line prefix (kernel message coverage, step 5)
+  ['booleanFuzzyFailed', '{what} failed for every fuzzy value:{rest}'],
+  ['healNullShape', '{what}: produced a null shape, step rolled back'],
+  ['healMadeInvalid', '{what}: made a valid shape invalid, step rolled back'],
+  ['healAnalyticRolledBack', 'convertToAnalytic: {what}, step rolled back'],
+  ['healAnalytic', 'convertToAnalytic: {what}'],
+  ['healNoGeometry', 'shape contains no edges or faces'],
+  ['dxfLinePrefix', 'DXF line {n:num}: {what}'],
+  ['fileUnknownValue', 'unknown {what} \'{value}\''],
 ];
 
 type FieldType = 'text' | 'id' | 'num' | 'op' | 'kind' | 'msg' | 'ref';
