@@ -12,7 +12,7 @@
 // message fails the test until it gets a template or an entry with a reason; an entry that a template
 // covers or that no source generates any more fails it too.
 //   BENDCORE_UPDATE_KERNEL_MESSAGES=1 npx jest src/ui/app/__tests__/kernelMessages.test.ts
-// rewrites the list (new entries get the reason TODO that the test refuses until it is replaced).
+// rewrites the list (new entries get the reason UNASSIGNED that the test refuses until it is replaced).
 
 import fs from 'fs';
 import path from 'path';
@@ -120,10 +120,10 @@ describe('coverage of the kernel messages', () => {
   test('every message has a template or is listed as internal with a reason', () => {
     const uncovered = [...new Set(covered.filter((m) => templateOf(m.skeleton) === null).map(entryOf))].sort();
     if (process.env.BENDCORE_UPDATE_KERNEL_MESSAGES) {
-      // Keeps the reasons of the entries that stay; a new entry gets the reason TODO that the test below refuses.
+      // Keeps the reasons of the entries that stay; a new entry gets the reason UNASSIGNED that the test below refuses.
       const old = readInternal();
       const entries: Record<string, string> = {};
-      for (const e of uncovered) entries[e] = old.entries[e] ?? 'TODO';
+      for (const e of uncovered) entries[e] = old.entries[e] ?? 'UNASSIGNED';
       fs.writeFileSync(OTHER_FILE, JSON.stringify({ reasons: old.reasons, entries }, null, 1) + '\n');
     }
     const { reasons, entries } = readInternal();

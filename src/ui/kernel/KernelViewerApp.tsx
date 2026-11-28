@@ -43,6 +43,7 @@ import { IMPORT_ACCEPT, importFormatOf, parseDensity } from '../exchange/exchang
 import type { ImportFormat } from '../exchange/exchange';
 import './KernelViewer.css';
 import { KernelMessageText } from '../app/KernelMessageText';
+import { localizeKernelMessage } from '../app/kernelMessages';
 
 interface ModelSummary {
   fileName: string;
@@ -276,7 +277,7 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
           setModel(summary);
           setMesh(tessellated);
           setSelection(null);
-          if (structure.warnings.length) setNotice(t('exchange.importWarnings', { list: structure.warnings.join('; ') }));
+          if (structure.warnings.length) setNotice(t('exchange.importWarnings', { list: structure.warnings.map((w) => localizeKernelMessage(t, 'message', w).text ?? w).join('; ') }));
           if (structure.assembly && onAssemblyRef.current) {
             onAssemblyRef.current({ name: fileName, format, text: new TextDecoder().decode(bytes), parts: structure.parts });
           }
