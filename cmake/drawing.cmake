@@ -25,6 +25,7 @@ if(GTest_FOUND)
   add_executable(test_drawing_v2
     tests/drawing_v2/test_support.cpp
     tests/drawing_v2/test_sheet_linetypes.cpp
+    tests/drawing_v2/test_sheet_multiples_zones.cpp
     tests/drawing_v2/test_model.cpp
     tests/drawing_v2/test_font.cpp
     tests/drawing_v2/test_stroke_font.cpp

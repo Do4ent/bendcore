@@ -483,18 +483,16 @@ Result<TitleBlockLayout> addIsoFrameAndTitleBlock(Drawing& drawing, const Iso720
 
 namespace {
 
-// Границы полей длиной L от оси a в обе стороны до [lo, hi]; крайнее поле короче L/5 —
-// присоединяется к соседнему.
-std::vector<double> zoneBounds(double lo, double hi, double a, double L) {
-    std::vector<double> left, right;
-    for (double x = a; x > lo + 1e-9; x -= L) left.push_back(x);
-    for (double x = a + L; x < hi - 1e-9; x += L) right.push_back(x);
+// Границы полей длиной L от оси a до [lo, hi]: по n полей с каждой стороны оси (последнее —
+// до рамки, какой бы длины оно ни было).
+std::vector<double> zoneBounds(double lo, double hi, double a, double L, int nLeft, int nRight) {
     std::vector<double> out{lo};
-    for (auto it = left.rbegin(); it != left.rend(); ++it) out.push_back(*it);
-    for (double x : right) out.push_back(x);
+    for (int k = nLeft - 1; k >= 1; --k)
+        if (a - k * L > lo + 1e-9) out.push_back(a - k * L);
+    out.push_back(a);
+    for (int k = 1; k < nRight; ++k)
+        if (a + k * L < hi - 1e-9) out.push_back(a + k * L);
     out.push_back(hi);
-    if (out.size() > 3 && out[1] - out[0] < L / 5.0) out.erase(out.begin() + 1);
-    if (out.size() > 3 && out[out.size() - 1] - out[out.size() - 2] < L / 5.0) out.erase(out.end() - 2);
     return out;
 }
 
@@ -508,7 +506,7 @@ std::vector<std::string> zoneLetterSet(ZoneLetters letters) {
 
 }  // namespace
 
-Result<ZoneGrid> zoneGrid(const Rect& frame, Point2 axis, ZoneLetters letters, double fieldLength) {
+Result<ZoneGrid> zoneGrid(const Rect& sheet, const Rect& frame, Point2 axis, ZoneLetters letters, double fieldLength) {
     if (!(fieldLength >= 25.0 - 1e-9 && fieldLength <= 75.0 + 1e-9))
         return Error{ErrorCode::InvalidInput, "zones: the field length must be 25..75 mm"};
     if (!(frame.width() > 0 && frame.height() > 0)) return Error{ErrorCode::InvalidInput, "zones: the frame is empty"};
@@ -516,8 +514,11 @@ Result<ZoneGrid> zoneGrid(const Rect& frame, Point2 axis, ZoneLetters letters, d
         return Error{ErrorCode::InvalidInput, "zones: the axes of symmetry lie outside the frame"};
     ZoneGrid g;
     g.frame = frame;
-    g.columns = zoneBounds(frame.x0, frame.x1, axis.x, fieldLength);
-    std::vector<double> up = zoneBounds(frame.y0, frame.y1, axis.y, fieldLength);
+    // Число полей с каждой стороны оси — по половине листа: round(половина / L), не меньше одного
+    // (ISO 5457: A0 — 24 × 16, A1 — 16 × 12, A2 — 12 × 8, A3 — 8 × 6, A4 — 6 × 4 при L = 50).
+    auto count = [&](double half) { return std::max(1, int(std::lround(half / fieldLength))); };
+    g.columns = zoneBounds(frame.x0, frame.x1, axis.x, fieldLength, count(axis.x - sheet.x0), count(sheet.x1 - axis.x));
+    std::vector<double> up = zoneBounds(frame.y0, frame.y1, axis.y, fieldLength, count(axis.y - sheet.y0), count(sheet.y1 - axis.y));
     g.rows.assign(up.rbegin(), up.rend());
     for (std::size_t i = 0; i + 1 < g.columns.size(); ++i) g.columnLabels.push_back(std::to_string(i + 1));
     const std::vector<std::string> set = zoneLetterSet(letters);

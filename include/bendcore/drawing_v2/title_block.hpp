@@ -167,9 +167,10 @@ Result<TitleBlockLayout> addIsoFrameAndTitleBlock(Drawing& drawing, const Iso720
 // Разбивка поля чертежа на зоны (ГОСТ 2.104-2006 — обозначение зон на полях вне рамки; ISO 5457,
 // п. 3.5 — система координатной сетки). Колонки нумеруются цифрами слева направо, строки —
 // буквами сверху вниз (от угла, противоположного основной надписи); зона — «буква + цифра»
-// («B3», «Б3»). Деление — от осей симметрии axis полями длиной fieldLength в обе стороны до
-// рамки (число полей по каждой стороне чётное); крайнее поле короче fieldLength/5 присоединяется к
-// соседнему. Буквы: Latin — заглавные латинские без I и O (ISO 5457), Cyrillic — заглавные
+// («B3», «Б3»). Деление — от осей симметрии axis полями длиной fieldLength в обе стороны; число
+// полей с каждой стороны оси — round(половина листа / fieldLength), не меньше одного, последнее
+// поле — до рамки (ISO 5457 при 50 мм: A0 — 24 × 16, A1 — 16 × 12, A2 — 12 × 8, A3 — 8 × 6,
+// A4 — 6 × 4). Буквы: Latin — заглавные латинские без I и O (ISO 5457), Cyrillic — заглавные
 // русские без Ё, З, Й, О, Х, Ъ, Ы, Ь (как у обозначений ГОСТ 2.316); больше букв, чем в наборе, —
 // удвоенные («AA», «BB», ISO 5457). Сверка правил ЕСКД — docs/STANDARDS_VERIFICATION.md.
 enum class ZoneLetters { Latin, Cyrillic };
@@ -184,8 +185,9 @@ struct ZoneGrid {
 
 inline constexpr double kZoneFieldLength = 50.0;  // ISO 5457, п. 3.5
 
-// Сетка зон рамки frame. Ошибки InvalidInput: fieldLength вне 25…75 мм; ось вне рамки; пустая рамка.
-Result<ZoneGrid> zoneGrid(const Rect& frame, Point2 axis, ZoneLetters letters,
+// Сетка зон рамки frame листа sheet. Ошибки InvalidInput: fieldLength вне 25…75 мм; ось вне рамки;
+// пустая рамка.
+Result<ZoneGrid> zoneGrid(const Rect& sheet, const Rect& frame, Point2 axis, ZoneLetters letters,
                           double fieldLength = kZoneFieldLength);
 
 // Зона точки p («B3»): точка вне рамки относится к ближайшей зоне.

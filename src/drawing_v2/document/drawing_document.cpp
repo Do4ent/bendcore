@@ -796,7 +796,7 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                                    : Rect{20.0, 5.0, sh.widthMm - 5.0, sh.heightMm - 5.0};
             const Point2 axis = iso ? Point2{sh.widthMm / 2.0, sh.heightMm / 2.0}
                                     : Point2{(frame.x0 + frame.x1) / 2.0, (frame.y0 + frame.y1) / 2.0};
-            auto grid = zoneGrid(frame, axis, iso ? ZoneLetters::Latin : ZoneLetters::Cyrillic, settings_.zones.fieldLength);
+            auto grid = zoneGrid(Rect{0, 0, sh.widthMm, sh.heightMm}, frame, axis, iso ? ZoneLetters::Latin : ZoneLetters::Cyrillic, settings_.zones.fieldLength);
             if (!grid) return Error{grid.error().code, "sheet '" + sd.id + "': " + grid.error().message};
             cs.zones = std::move(grid).value();
         }
