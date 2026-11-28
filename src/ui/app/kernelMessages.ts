@@ -1262,6 +1262,13 @@ export const KERNEL_TEMPLATES: readonly (readonly [string, string])[] = [
   ['wasmAtRange', 'at must be within 0..1'],
   ['wasmNoExplodedView', 'options.view: no exploded view {n:num}'],
   ['wasmNeedsConfigurationTable', 'part.configuration needs a part document with a configuration table'],
+  // Drawing: sheet formats ISO 5457 and zones (GOST 2.104, ISO 5457)
+  ['isoNoElongated', 'ISO 5457 has no elongated size A{n:num}x{m:num}'],
+  ['isoSheetIndex', 'ISO 5457 sheet: the A-series index must be 0..4'],
+  ['zonesObject', 'zones must be an object {enabled, fieldLength}'],
+  ['zonesFieldNumber', 'zones: fieldLength must be a number'],
+  ['zonesFieldRange', 'zones: the field length must be 25..75 mm'],
+  ['zonesFileObject', '\'zones\' must be an object'],
 ];
 
 type FieldType = 'text' | 'id' | 'num' | 'op' | 'kind' | 'msg' | 'ref';

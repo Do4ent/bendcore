@@ -1271,6 +1271,12 @@ export const kernelRu = {
   'kernel.msg.wasmAtRange': 'Положение на линии должно быть в пределах от 0 до 1',
   'kernel.msg.wasmNoExplodedView': 'Нет разнесённого вида {n}',
   'kernel.msg.wasmNeedsConfigurationTable': 'Для исполнения детали нужен документ детали с таблицей исполнений',
+  'kernel.msg.isoNoElongated': 'В ISO 5457 нет удлинённого формата A{n}×{m}',
+  'kernel.msg.isoSheetIndex': 'Формат ISO 5457: номер формата ряда A должен быть от 0 до 4',
+  'kernel.msg.zonesObject': 'Зоны: ожидается объект с признаком включения и длиной зоны',
+  'kernel.msg.zonesFieldNumber': 'Зоны: длина зоны должна быть числом',
+  'kernel.msg.zonesFieldRange': 'Зоны: длина зоны должна быть от 25 до 75 мм',
+  'kernel.msg.zonesFileObject': 'Файл чертежа: настройка зон должна быть объектом',
 } as const;
 
 export const kernelEn: Record<keyof typeof kernelRu, string> = {
@@ -2540,4 +2546,10 @@ export const kernelEn: Record<keyof typeof kernelRu, string> = {
   'kernel.msg.wasmAtRange': 'at must be within 0..1',
   'kernel.msg.wasmNoExplodedView': 'options.view: no exploded view {n}',
   'kernel.msg.wasmNeedsConfigurationTable': 'part.configuration needs a part document with a configuration table',
+  'kernel.msg.isoNoElongated': 'ISO 5457 has no elongated size A{n}x{m}',
+  'kernel.msg.isoSheetIndex': 'ISO 5457 sheet: the A-series index must be 0..4',
+  'kernel.msg.zonesObject': 'zones must be an object {enabled, fieldLength}',
+  'kernel.msg.zonesFieldNumber': 'zones: fieldLength must be a number',
+  'kernel.msg.zonesFieldRange': 'zones: the field length must be 25..75 mm',
+  'kernel.msg.zonesFileObject': '\'zones\' must be an object',
 };
