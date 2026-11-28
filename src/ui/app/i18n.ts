@@ -20,15 +20,16 @@ import { viewerEn, viewerRu } from './messages/viewer';
 import { exchangeEn, exchangeRu } from './messages/exchange';
 import { kernelEn, kernelRu } from './messages/kernel';
 import { toolsEn, toolsRu } from './messages/tools';
+import { ribbonEn, ribbonRu } from './messages/ribbon';
 
 export type Lang = 'ru' | 'en';
 export const LANGS: Lang[] = ['ru', 'en'];
 
-export const ru = { ...shellRu, ...partRu, ...sketchRu, ...assemblyRu, ...drawingRu, ...viewerRu, ...exchangeRu, ...kernelRu, ...toolsRu } as const;
+export const ru = { ...shellRu, ...partRu, ...sketchRu, ...assemblyRu, ...drawingRu, ...viewerRu, ...exchangeRu, ...kernelRu, ...toolsRu, ...ribbonRu } as const;
 
 export type MessageKey = keyof typeof ru;
 
-export const en: Record<MessageKey, string> = { ...shellEn, ...partEn, ...sketchEn, ...assemblyEn, ...drawingEn, ...viewerEn, ...exchangeEn, ...kernelEn, ...toolsEn };
+export const en: Record<MessageKey, string> = { ...shellEn, ...partEn, ...sketchEn, ...assemblyEn, ...drawingEn, ...viewerEn, ...exchangeEn, ...kernelEn, ...toolsEn, ...ribbonEn };
 
 /** The per-area dictionaries, for the test that no key is defined twice. */
 export const AREAS: Record<string, { ru: Record<string, string>; en: Record<string, string> }> = {
@@ -41,6 +42,7 @@ export const AREAS: Record<string, { ru: Record<string, string>; en: Record<stri
   exchange: { ru: exchangeRu, en: exchangeEn },
   kernel: { ru: kernelRu, en: kernelEn },
   tools: { ru: toolsRu, en: toolsEn },
+  ribbon: { ru: ribbonRu, en: ribbonEn },
 };
 
 export const DICTIONARIES: Record<Lang, Record<MessageKey, string>> = { ru, en };

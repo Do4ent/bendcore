@@ -57,7 +57,8 @@ import {
   toFeatureSpec,
   togglePick,
 } from './featureForm';
-import { toolbarTypes } from './labels';
+import { partRibbon } from './partRibbon';
+import Ribbon from '../app/Ribbon';
 import { datumGlyphs } from './datumGlyphs';
 import { defaultModelingBaseUrl, loadModelingFrom } from './modelingLoader';
 import type { Remote, WasmClient } from '../worker/wasmClient';
@@ -236,6 +237,8 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const hostRef = useRef({ onChange, onFile, onCreateDrawing });
   hostRef.current = { onChange, onFile, onCreateDrawing };
   const openInputRef = useRef<HTMLInputElement | null>(null);
+  /** Place of the sketch editor's ribbon (the part ribbon is hidden while a sketch is edited). */
+  const [sketchRibbonHost, setSketchRibbonHost] = useState<HTMLDivElement | null>(null);
   const panelRef = useRef<PanelState | null>(null);
   const viewRef = useRef<KernelViewportHandle | null>(null);
   const densityRef = useRef(density);
@@ -456,12 +459,14 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
 
   const specOf = (type: string) => catalog.find((c) => c.type === type);
 
-  const openAdd = (type: string) => {
+  /** Opens the panel of a new feature; `options` presets option values (Extrude in cut mode). */
+  const openAdd = (type: string, options?: Record<string, string>) => {
     const spec = specOf(type);
     const doc = docRef.current;
     if (!spec || !doc || panelRef.current) return;
     const position = snapshot.doc?.rollback ?? snapshot.features.length;
-    const form = newFeatureForm(spec, snapshot.features, position);
+    const base = newFeatureForm(spec, snapshot.features, position);
+    const form = options ? { ...base, options: { ...base.options, ...options } } : base;
     const firstSlot = spec.references.find((r) => !r.optional);
     const p: PanelState = { mode: 'add', type, featureId: null, position, form, activeSlot: firstSlot?.name ?? null };
     void run((d) => d.beginTransaction(t('part.tx.add', { feature: caption(t, 'part.feature.', type) })), p).then((ok) => ok && setPanel(p));
@@ -1039,60 +1044,44 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
   const panelSpec = panel ? specOf(panel.type) : undefined;
   const panelView = panel?.featureId ? snapshot.features.find((f) => f.id === panel.featureId) ?? null : null;
 
-  return (
-    <div className="kv-root pm-root">
-      <header className="kv-toolbar pm-toolbar">
-        <span className="kv-title">{t('part.title')}</span>
-        <button type="button" onClick={() => void newDocument()} disabled={status !== 'ready' || busyPanel} data-testid="doc-new">
-          {t('part.new')}
-        </button>
-        <label className="kv-file">
-          <input
-            ref={openInputRef}
-            type="file"
-            accept=".json,application/json"
-            data-testid="doc-open"
-            disabled={status !== 'ready' || busyPanel}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void openFile(file);
-              e.target.value = '';
-            }}
-          />
-          {t('part.open')}
-        </label>
-        <button type="button" onClick={() => void saveFile()} disabled={status !== 'ready'} data-testid="doc-save" title="Ctrl+S">
-          {t('part.save')}
-        </button>
-        {onCreateDrawing && (
-          <button type="button" onClick={() => void createDrawing()} disabled={status !== 'ready' || busyPanel} data-testid="doc-create-drawing">
-            {t('action.createDrawing')}
-          </button>
-        )}
-        <span className="pm-sep" />
-        <button
-          type="button"
-          onClick={undo}
-          disabled={busyPanel || !docState?.canUndo}
-          data-testid="undo"
-          title={docState?.undoHistory.at(-1)?.name ? t('part.undoNamed', { name: docState.undoHistory.at(-1)!.name }) : 'Ctrl+Z'}
-        >
-          {t('part.undo')}
-        </button>
-        <button
-          type="button"
-          onClick={redo}
-          disabled={busyPanel || !docState?.canRedo}
-          data-testid="redo"
-          title={docState?.redoHistory.at(-1)?.name ? t('part.redoNamed', { name: docState.redoHistory.at(-1)!.name }) : 'Ctrl+Y'}
-        >
-          {t('part.redo')}
-        </button>
-        <span className="pm-sep" />
+  const checkConfigurations = () =>
+    void run(async (d) => {
+      setConfigChecks(await d.checkConfigurations());
+    });
+  const ribbon = partRibbon(
+    t,
+    {
+      ready: status === 'ready',
+      busy: busyPanel,
+      catalog,
+      canUndo: Boolean(docState?.canUndo),
+      canRedo: Boolean(docState?.canRedo),
+      undoName: docState?.undoHistory.at(-1)?.name ?? null,
+      redoName: docState?.redoHistory.at(-1)?.name ?? null,
+      canCreateDrawing: Boolean(onCreateDrawing),
+      measuring: tools.measurePanel.active,
+      section: tools.sectionPanel && !tools.sectionPanel.disabled && !busyPanel ? tools.sectionPanel.state.enabled : null,
+      configurationRows: snapshot.configurations?.rows.length ?? 0,
+    },
+    {
+      newDocument: () => void newDocument(),
+      openFile: (input) => {
+        const file = input.files?.[0];
+        if (file) void openFile(file);
+        input.value = '';
+      },
+      openInputRef,
+      save: () => void saveFile(),
+      undo,
+      redo,
+      createDrawing: onCreateDrawing ? () => void createDrawing() : undefined,
+      drawSketch: () => void newSketch(),
+      plane: () => (
         <select
           value={sketchPlane}
           data-testid="sketch-plane"
           title={t('part.sketchPlane')}
+          aria-label={t('part.sketchPlane')}
           disabled={status !== 'ready' || busyPanel}
           onChange={(e) => setSketchPlane(e.target.value)}
         >
@@ -1101,28 +1090,42 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
           <option value="YZ">YZ</option>
           <option value="face">{t('part.selectedFace')}</option>
         </select>
-        <button type="button" data-testid="sketch-draw" disabled={status !== 'ready' || busyPanel} onClick={() => void newSketch()}>
-          {t('part.drawSketch')}
-        </button>
-        <span className="pm-sep" />
-        {toolbarTypes(catalog.map((c) => c.type)).map((type) => (
-          <button
-            type="button"
-            key={type}
-            data-testid={`add-${type}`}
-            disabled={status !== 'ready' || busyPanel}
-            onClick={() => openAdd(type)}
-          >
-            {caption(t, 'part.feature.', type)}
-          </button>
-        ))}
-        <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
-        <span className="kv-status" data-testid="modeling-status">
-          {status === 'loading' && t('part.loading')}
-          {status === 'ready' && t('part.ready')}
-          {status === 'failed' && t('part.failed')}
-        </span>
-      </header>
+      ),
+      addFeature: (type, options) => openAdd(type, options),
+      toggleMeasure: () => tools.measurePanel.onActive(!tools.measurePanel.active),
+      toggleSection: () => {
+        const sp = tools.sectionPanel;
+        if (sp) sp.onChange({ ...sp.state, enabled: !sp.state.enabled });
+      },
+      insertMesh: (input) => {
+        const file = input.files?.[0];
+        if (file) void insertMesh(file);
+        input.value = '';
+      },
+      checkConfigurations,
+    },
+  );
+
+  return (
+    <div className="kv-root pm-root">
+      <Ribbon
+        title={t('part.title')}
+        testId="part-ribbon"
+        className={sketchMode ? 'pm-ribbon-hidden' : undefined}
+        quick={ribbon.quick}
+        tabs={ribbon.tabs}
+        status={
+          <>
+            <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
+            <span className="kv-status" data-testid="modeling-status">
+              {status === 'loading' && t('part.loading')}
+              {status === 'ready' && t('part.ready')}
+              {status === 'failed' && t('part.failed')}
+            </span>
+          </>
+        }
+      />
+      <div className="pm-sketch-ribbon" ref={setSketchRibbonHost} />
       {error && (
         <div className="kv-error" role="alert" data-testid="modeling-error">
           <KernelMessageText code={error.code} message={error.message} />
@@ -1198,11 +1201,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
                 }
               })
             }
-            onCheck={() =>
-              void run(async (d) => {
-                setConfigChecks(await d.checkConfigurations());
-              })
-            }
+            onCheck={checkConfigurations}
             onImportCsv={(text) => {
               setConfigChecks(null);
               void run(async (d) => {
@@ -1307,6 +1306,7 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
             body={sketchMode.body}
             onExit={exitSketch}
             onCancel={cancelSketch}
+            ribbonHost={sketchRibbonHost}
           />
         ) : (
           <>

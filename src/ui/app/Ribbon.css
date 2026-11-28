@@ -1,0 +1,294 @@
+/* Ribbon of the editors (src/ui/app/Ribbon.tsx, docs/ui/APP_SHELL.md "Лента"). Colours come from
+   the palette of the shell (AppShell.css) with the same values as fallbacks for the standalone
+   editor pages. */
+
+.bc-ribbon {
+  --rb-bg: var(--app-panel, #ffffff);
+  --rb-bar: var(--app-bg, #f4f6f8);
+  --rb-fg: var(--app-fg, #1d2733);
+  --rb-muted: var(--app-muted, #5b6878);
+  --rb-border: var(--app-border, #d5dbe3);
+  --rb-accent: var(--app-accent, #1f6feb);
+  --rb-hover: #e8eef7;
+  --rb-pressed: #d6e4fb;
+  position: relative;
+  flex: 0 0 auto;
+  background: var(--rb-bg);
+  color: var(--rb-fg);
+  border-bottom: 1px solid var(--rb-border);
+  font: 13px/1.25 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  min-width: 0;
+}
+
+.bc-rb-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 0;
+  background: var(--rb-bar);
+  border-bottom: 1px solid var(--rb-border);
+  min-height: 30px;
+  flex-wrap: wrap;
+}
+.bc-rb-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bc-rb-quick {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding-right: 8px;
+  border-right: 1px solid var(--rb-border);
+}
+.bc-rb-tabs {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  align-self: flex-end;
+}
+.bc-rb-tab {
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  color: var(--rb-fg);
+  padding: 5px 12px 6px;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  font: inherit;
+  margin-bottom: -1px;
+}
+.bc-rb-tab:hover {
+  background: var(--rb-hover);
+}
+.bc-rb-tab-active {
+  background: var(--rb-bg);
+  border-color: var(--rb-border);
+  color: var(--rb-accent);
+  font-weight: 600;
+}
+.bc-rb-status {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  color: var(--rb-muted);
+}
+.bc-rb-prefs {
+  display: inline-flex;
+  gap: 2px;
+}
+.bc-rb-pref {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--rb-muted);
+  cursor: pointer;
+}
+.bc-rb-pref:hover {
+  background: var(--rb-hover);
+  color: var(--rb-fg);
+}
+
+/* Panels of all tabs side by side; the tabs scroll the strip (no scroll bar). */
+.bc-rb-strip {
+  display: flex;
+  overflow: hidden;
+  background: var(--rb-bg);
+}
+.bc-rb-strip[hidden] {
+  display: none;
+}
+.bc-rb-strip.bc-rb-peek {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+  border-bottom: 1px solid var(--rb-border);
+  box-shadow: 0 6px 16px rgba(16, 24, 40, 0.18);
+}
+.bc-rb-panel {
+  flex: 0 0 auto;
+  min-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: stretch;
+  padding: 4px 4px 0;
+}
+.bc-rb-group {
+  display: flex;
+  flex-direction: column;
+  padding: 0 6px;
+  border-right: 1px solid var(--rb-border);
+  min-height: 92px;
+}
+.bc-rb-cells {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+}
+.bc-rb-group-label {
+  text-align: center;
+  color: var(--rb-muted);
+  font-size: 11px;
+  padding: 2px 0 3px;
+  white-space: nowrap;
+}
+.bc-rb-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.bc-rb-custom {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  align-self: center;
+  padding: 0 4px;
+}
+.bc-rb-cmd {
+  display: inline-flex;
+}
+
+.bc-rb-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--rb-fg);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bc-rb-btn:hover {
+  background: var(--rb-hover);
+  border-color: var(--rb-border);
+}
+.bc-rb-btn:focus-visible,
+.bc-rb-btn:focus-within {
+  outline: 2px solid var(--rb-accent);
+  outline-offset: -1px;
+}
+.bc-rb-btn .bc-icon {
+  flex: 0 0 auto;
+  color: #3a4a5e;
+}
+.bc-rb-small {
+  height: 24px;
+  padding: 0 6px 0 4px;
+}
+.bc-rb-large {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 3px;
+  min-width: 56px;
+  max-width: 86px;
+  min-height: 70px;
+  padding: 4px 4px 2px;
+  white-space: normal;
+  text-align: center;
+}
+.bc-rb-large .bc-rb-caption {
+  font-size: 12px;
+  line-height: 1.15;
+}
+.bc-rb-active,
+.bc-rb-btn[aria-pressed='true'] {
+  background: var(--rb-pressed);
+  border-color: #9dbcf0;
+}
+.bc-rb-active .bc-icon,
+.bc-rb-btn[aria-pressed='true'] .bc-icon {
+  color: var(--rb-accent);
+}
+.bc-rb-btn:disabled,
+.bc-rb-btn.bc-rb-disabled {
+  color: #a3adba;
+  cursor: default;
+  background: transparent;
+  border-color: transparent;
+  /* Hover reaches the wrapper, which shows the tooltip with the reason. */
+  pointer-events: none;
+}
+.bc-rb-btn:disabled .bc-icon,
+.bc-rb-btn.bc-rb-disabled .bc-icon {
+  color: #b7c0cc;
+}
+.bc-rb-file {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.bc-rb-file:disabled {
+  cursor: default;
+}
+
+/* Icons only: small buttons are squares, large ones keep the 32 px icon. */
+.bc-rb-icons-only .bc-rb-small {
+  width: 26px;
+  justify-content: center;
+  padding: 0;
+}
+.bc-rb-icons-only .bc-rb-large {
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: center;
+}
+.bc-rb-icons-only .bc-rb-group {
+  min-height: 70px;
+}
+
+.bc-rb-tip {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 320px;
+  padding: 6px 9px;
+  border: 1px solid var(--rb-border);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--rb-fg);
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.16);
+  font-size: 12px;
+  pointer-events: none;
+}
+.bc-rb-tip[hidden] {
+  display: none;
+}
+.bc-rb-tip-keys {
+  color: var(--rb-muted);
+}
+.bc-rb-tip-reason {
+  color: #b54708;
+}
+.bc-rb-custom select,
+.bc-rb-custom input[type='number'],
+.bc-rb-custom input[type='text'] {
+  font: inherit;
+  padding: 2px 4px;
+  max-width: 150px;
+}
+.bc-rb-custom label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}

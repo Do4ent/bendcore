@@ -49,6 +49,7 @@ export const CAD_ICONS: Record<string, CadIcon> = {
   'sketch-chamfer': { section: 'sketch', body: p('M4 21v-9l8 -8h9') },
   'sketch-construction': { section: 'sketch', body: p('M3 21l2 -2', 'M8 16l2 -2', 'M13 11l2 -2', 'M18 6l2 -2') },
   'sketch-dimension': { section: 'sketch', body: p('M3 7v10', 'M21 7v10', 'M3 12h4', 'M17 12h4', 'M6 10l-3 2l3 2', 'M18 10l3 2l-3 2', 'M9 9h6v6h-6z') },
+  'sketch-finish': { section: 'sketch', body: p('M4 20h7', 'M4 20v-7', 'M9 13l3 3l8 -9') },
   'sketch-dxf': { section: 'sketch', body: p('M14 3v4a1 1 0 0 0 1 1h4', 'M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2', 'M8 17l3 -4l3 2l2 -3') },
   // constraints
   'constraint': { section: 'sketch', body: p('M7 20l10 -16', 'M4 14h16') + c(10.6, 14, 1.5) },
