@@ -35,6 +35,7 @@ if(GTest_FOUND)
     tests/drawing_v2/test_drawing_views_sections.cpp
     tests/drawing_v2/test_drawing_views_local_sections.cpp
     tests/drawing_v2/test_drawing_views_sheet.cpp
+    tests/drawing_v2/test_drawing_views_centers_hatch.cpp
     tests/drawing_v2/test_drawing_views_export.cpp
   )
   target_include_directories(test_drawing_views PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawing_v2)
