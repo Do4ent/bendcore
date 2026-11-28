@@ -22,6 +22,8 @@ import type {
 } from '../../wasm/bendcore_kernel_api.mjs';
 import KernelViewport from './KernelViewport';
 import { MeasurePanel, SectionPanel } from './ViewToolsPanel';
+import Ribbon from '../app/Ribbon';
+import { viewerRibbon } from './viewerRibbon';
 import { SelectionPanel } from './SelectionPanel';
 import { useElementSelection } from './useElementSelection';
 import { selectOp } from './selection';
@@ -364,44 +366,59 @@ const KernelViewerApp: React.FC<KernelViewerProps> = ({ onFault, importFile = nu
     viewRef.current = handle;
   }, []);
 
+  const ribbon = viewerRibbon(
+    t,
+    {
+      ready: kernelStatus === 'ready',
+      busy,
+      hasModel: Boolean(model),
+      measuring: tools.measurePanel.active,
+      section: model && tools.sectionPanel && !tools.sectionPanel.disabled ? tools.sectionPanel.state.enabled : null,
+    },
+    {
+      open: (e) => {
+        const file = e.target.files?.[0];
+        if (file) void openFile(file);
+        e.target.value = '';
+      },
+      exportModel: () => setExporting(true),
+      tolerances: () => (
+        <>
+          <label className="kv-param">
+            {t('viewer.deflection')}
+            <input type="number" min="0" step="0.01" value={linearDeflection} onChange={(e) => setLinearDeflection(e.target.value)} />
+          </label>
+          <label className="kv-param">
+            {t('viewer.angle')}
+            <input type="number" min="0" step="0.05" value={angularDeflection} onChange={(e) => setAngularDeflection(e.target.value)} />
+          </label>
+        </>
+      ),
+      retessellate: () => void retessellate(),
+      toggleMeasure: () => tools.measurePanel.onActive(!tools.measurePanel.active),
+      toggleSection: () => {
+        const sp = tools.sectionPanel;
+        if (sp) sp.onChange({ ...sp.state, enabled: !sp.state.enabled });
+      },
+    },
+    IMPORT_ACCEPT,
+  );
+
   return (
     <div className="kv-root">
-      <header className="kv-toolbar">
-        <span className="kv-title">{t('viewer.title')}</span>
-        <label className="kv-file">
-          <input
-            type="file"
-            accept={IMPORT_ACCEPT}
-            data-testid="step-input"
-            disabled={kernelStatus !== 'ready' || busy}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void openFile(file);
-              e.target.value = '';
-            }}
-          />
-          {t('viewer.open')}
-        </label>
-        <label className="kv-param">
-          {t('viewer.deflection')}
-          <input type="number" min="0" step="0.01" value={linearDeflection} onChange={(e) => setLinearDeflection(e.target.value)} />
-        </label>
-        <label className="kv-param">
-          {t('viewer.angle')}
-          <input type="number" min="0" step="0.05" value={angularDeflection} onChange={(e) => setAngularDeflection(e.target.value)} />
-        </label>
-        <button type="button" onClick={retessellate} disabled={!model || busy}>
-          {t('viewer.retessellate')}
-        </button>
-        <button type="button" onClick={() => setExporting(true)} disabled={!model || busy} data-testid="viewer-export">
-          {t('exchange.export')}
-        </button>
-        <span className="kv-status" data-testid="kernel-status">
-          {kernelStatus === 'loading' && t('viewer.loading')}
-          {kernelStatus === 'ready' && (busy ? t('viewer.reading') : t('viewer.ready'))}
-          {kernelStatus === 'failed' && t('viewer.failed')}
-        </span>
-      </header>
+      <Ribbon
+        title={t('viewer.title')}
+        testId="viewer-ribbon"
+        quick={ribbon.quick}
+        tabs={ribbon.tabs}
+        status={
+          <span className="kv-status" data-testid="kernel-status">
+            {kernelStatus === 'loading' && t('viewer.loading')}
+            {kernelStatus === 'ready' && (busy ? t('viewer.reading') : t('viewer.ready'))}
+            {kernelStatus === 'failed' && t('viewer.failed')}
+          </span>
+        }
+      />
       {error && (
         <div className="kv-error" role="alert" data-testid="kernel-error">
           <KernelMessageText code={error.code} message={error.message} />
