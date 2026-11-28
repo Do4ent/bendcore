@@ -15,7 +15,6 @@ import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef,
 import { Icon } from '../icons';
 import { useI18n } from './i18n';
 import {
-  clampToPanel,
   commandIcon,
   groupLayout,
   iconPixels,
@@ -179,11 +178,10 @@ const Ribbon: React.FC<RibbonProps> = ({ title, quick = [], tabs, activeTab, sta
       const next = delta > 0.5 ? all[cur + 1] : delta < -0.5 ? all[cur - 1] : undefined;
       if (next && next.width > 0) id = next.id;
     }
-    const box = all.find((b) => b.id === id);
-    if (!box) return;
-    const clamped = clampToPanel(box, strip.scrollLeft, strip.clientWidth);
-    if (Math.abs(clamped - strip.scrollLeft) > 0.5) strip.scrollLeft = clamped;
-    setCurrent(id);
+    // The scroll handler only names the tab: it never moves the strip itself. Moving it here, while
+    // a command that was just scrolled into view is being clicked, moved the command out from
+    // under the pointer. The strip is aligned to a tab by a tab click and by a change of width.
+    if (id && all.some((b) => b.id === id)) setCurrent(id);
   }, [boxes, current]);
 
   // The tab the strip shows right now, read from its scroll position. A command of another tab
@@ -196,6 +194,9 @@ const Ribbon: React.FC<RibbonProps> = ({ title, quick = [], tabs, activeTab, sta
     if (!strip || strip.clientWidth <= 0) return current;
     const all = boxes();
     if (!all.some((b) => b.width > 0)) return current;
+    // The current tab while any of its panel is in view, else the tab under the middle.
+    const box = all.find((b) => b.id === current);
+    if (box && box.left < strip.scrollLeft + strip.clientWidth && box.left + box.width > strip.scrollLeft) return current;
     return panelAt(all, strip.scrollLeft, strip.clientWidth) ?? current;
   }, [boxes, current]);
 
@@ -213,7 +214,12 @@ const Ribbon: React.FC<RibbonProps> = ({ title, quick = [], tabs, activeTab, sta
   useEffect(() => {
     const strip = stripRef.current;
     if (!strip || typeof ResizeObserver === 'undefined') return undefined;
+    // Only a real change of width re-aligns (the observer also reports on observe and on height
+    // changes, which would move the strip under a pointer for nothing).
+    let width = strip.clientWidth;
     const ro = new ResizeObserver(() => {
+      if (Math.abs(strip.clientWidth - width) < 0.5) return;
+      width = strip.clientWidth;
       const id = shownNow();
       if (id) scrollTo(id);
     });
