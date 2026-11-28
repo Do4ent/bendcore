@@ -4,7 +4,7 @@
 // place in FEATURE_PLACES, a type the kernel adds later to "Операции / Другие операции" with the
 // general feature icon and its caption or kernel name. Tested by src/ui/modeling/__tests__/partRibbon.test.ts.
 
-import type { ReactNode, Ref } from 'react';
+import type { ChangeEvent, ReactNode, Ref } from 'react';
 import { caption, isMessageKey } from '../app/i18n';
 import type { MessageKey, Translate } from '../app/i18n';
 import type { RibbonCommand, RibbonGroup, RibbonItem, RibbonTab } from '../app/ribbonModel';
@@ -85,7 +85,7 @@ export interface PartRibbonState {
 
 export interface PartRibbonActions {
   newDocument(): void;
-  openFile(input: HTMLInputElement): void;
+  openFile(e: ChangeEvent<HTMLInputElement>): void;
   openInputRef?: Ref<HTMLInputElement>;
   save(): void;
   undo(): void;
@@ -97,7 +97,7 @@ export interface PartRibbonActions {
   addFeature(type: string, options?: Record<string, string>): void;
   toggleMeasure(): void;
   toggleSection(): void;
-  insertMesh(input: HTMLInputElement): void;
+  insertMesh(e: ChangeEvent<HTMLInputElement>): void;
   checkConfigurations(): void;
 }
 

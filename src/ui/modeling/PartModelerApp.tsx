@@ -1065,10 +1065,10 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
     },
     {
       newDocument: () => void newDocument(),
-      openFile: (input) => {
-        const file = input.files?.[0];
+      openFile: (e) => {
+        const file = e.target.files?.[0];
         if (file) void openFile(file);
-        input.value = '';
+        e.target.value = '';
       },
       openInputRef,
       save: () => void saveFile(),
@@ -1097,10 +1097,10 @@ const PartModelerApp: React.FC<EditorHostProps> = ({ active = true, initial = nu
         const sp = tools.sectionPanel;
         if (sp) sp.onChange({ ...sp.state, enabled: !sp.state.enabled });
       },
-      insertMesh: (input) => {
-        const file = input.files?.[0];
+      insertMesh: (e) => {
+        const file = e.target.files?.[0];
         if (file) void insertMesh(file);
-        input.value = '';
+        e.target.value = '';
       },
       checkConfigurations,
     },

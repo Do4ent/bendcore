@@ -92,7 +92,7 @@ const RibbonButton: React.FC<{
             aria-label={cmd.label}
             onFocus={show}
             onBlur={hide}
-            onChange={(e) => cmd.onFiles?.(e.target)}
+            onChange={(e) => cmd.onFiles?.(e)}
           />
         </label>
       ) : (

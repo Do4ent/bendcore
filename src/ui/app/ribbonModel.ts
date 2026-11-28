@@ -2,7 +2,7 @@
 // the layout of a group, tooltips, the display mode kept in localStorage, the active tab of the
 // scrolled strip. No React here: the logic is tested by Jest (src/ui/app/__tests__/ribbon.test.tsx).
 
-import type { ReactNode, Ref } from 'react';
+import type { ChangeEvent, ReactNode, Ref } from 'react';
 import { FALLBACK_ICON, hasIcon } from '../icons';
 import type { Translate } from './i18n';
 
@@ -45,7 +45,7 @@ export interface RibbonCommand {
   accept?: string;
   multiple?: boolean;
   inputRef?: Ref<HTMLInputElement>;
-  onFiles?: (input: HTMLInputElement) => void;
+  onFiles?: (e: ChangeEvent<HTMLInputElement>) => void;
 }
 
 /** Control that is not a command (plane choice, fields, mode radios) placed in a group. */
