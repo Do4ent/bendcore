@@ -2,6 +2,7 @@
 
 #include <bendcore/drawing_v2/title_block.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -476,6 +477,106 @@ Result<TitleBlockLayout> addIsoFrameAndTitleBlock(Drawing& drawing, const Iso720
         L.projectionSymbol = g.value().bounds;
     }
     return L;
+}
+
+// ---------------------------------------------------------------- зоны
+
+namespace {
+
+// Границы полей длиной L от оси a до [lo, hi]: по n полей с каждой стороны оси (последнее —
+// до рамки, какой бы длины оно ни было).
+std::vector<double> zoneBounds(double lo, double hi, double a, double L, int nLeft, int nRight) {
+    std::vector<double> out{lo};
+    for (int k = nLeft - 1; k >= 1; --k)
+        if (a - k * L > lo + 1e-9) out.push_back(a - k * L);
+    out.push_back(a);
+    for (int k = 1; k < nRight; ++k)
+        if (a + k * L < hi - 1e-9) out.push_back(a + k * L);
+    out.push_back(hi);
+    return out;
+}
+
+std::vector<std::string> zoneLetterSet(ZoneLetters letters) {
+    if (letters == ZoneLetters::Latin)
+        return {"A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M",
+                "N", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
+    return {"А", "Б", "В", "Г", "Д", "Е", "Ж", "И", "К", "Л", "М", "Н", "П",
+            "Р", "С", "Т", "У", "Ф", "Ц", "Ч", "Ш", "Щ", "Э", "Ю", "Я"};
+}
+
+}  // namespace
+
+Result<ZoneGrid> zoneGrid(const Rect& sheet, const Rect& frame, Point2 axis, ZoneLetters letters, double fieldLength) {
+    if (!(fieldLength >= 25.0 - 1e-9 && fieldLength <= 75.0 + 1e-9))
+        return Error{ErrorCode::InvalidInput, "zones: the field length must be 25..75 mm"};
+    if (!(frame.width() > 0 && frame.height() > 0)) return Error{ErrorCode::InvalidInput, "zones: the frame is empty"};
+    if (axis.x <= frame.x0 || axis.x >= frame.x1 || axis.y <= frame.y0 || axis.y >= frame.y1)
+        return Error{ErrorCode::InvalidInput, "zones: the axes of symmetry lie outside the frame"};
+    ZoneGrid g;
+    g.frame = frame;
+    // Число полей с каждой стороны оси — по половине листа: round(половина / L), не меньше одного
+    // (ISO 5457: A0 — 24 × 16, A1 — 16 × 12, A2 — 12 × 8, A3 — 8 × 6, A4 — 6 × 4 при L = 50).
+    auto count = [&](double half) { return std::max(1, int(std::lround(half / fieldLength))); };
+    g.columns = zoneBounds(frame.x0, frame.x1, axis.x, fieldLength, count(axis.x - sheet.x0), count(sheet.x1 - axis.x));
+    std::vector<double> up = zoneBounds(frame.y0, frame.y1, axis.y, fieldLength, count(axis.y - sheet.y0), count(sheet.y1 - axis.y));
+    g.rows.assign(up.rbegin(), up.rend());
+    for (std::size_t i = 0; i + 1 < g.columns.size(); ++i) g.columnLabels.push_back(std::to_string(i + 1));
+    const std::vector<std::string> set = zoneLetterSet(letters);
+    for (std::size_t i = 0; i + 1 < g.rows.size(); ++i) {
+        std::string l;
+        for (std::size_t k = 0; k <= i / set.size(); ++k) l += set[i % set.size()];
+        g.rowLabels.push_back(l);
+    }
+    return g;
+}
+
+std::string zoneOf(const ZoneGrid& g, Point2 p) {
+    if (g.columnLabels.empty() || g.rowLabels.empty()) return {};
+    std::size_t c = 0, r = 0;
+    while (c + 1 < g.columnLabels.size() && p.x >= g.columns[c + 1]) ++c;
+    while (r + 1 < g.rowLabels.size() && p.y <= g.rows[r + 1]) ++r;
+    return g.rowLabels[r] + g.columnLabels[c];
+}
+
+Result<ZoneMarkingGeometry> zoneMarkingGeometry(const ZoneGrid& g, const Rect& sheet, double band,
+                                                std::optional<Point2> skipAxes) {
+    const double room = std::min({g.frame.x0 - sheet.x0, sheet.x1 - g.frame.x1, g.frame.y0 - sheet.y0, sheet.y1 - g.frame.y1});
+    if (!(band > 0) || band > room + 1e-9)
+        return Error{ErrorCode::InvalidInput, "zones: the marking band must be positive and fit between the sheet edge and the frame"};
+    ZoneMarkingGeometry m;
+    auto skip = [&](double v, bool vertical) {
+        if (!skipAxes) return false;
+        return std::abs(v - (vertical ? skipAxes->x : skipAxes->y)) < 1e-6;
+    };
+    // Цифры: полосы у верхнего и нижнего края листа.
+    for (std::size_t i = 0; i + 1 < g.columns.size(); ++i) {
+        const double a = g.columns[i], b = g.columns[i + 1];
+        m.labels.push_back({Rect{a, sheet.y1 - band, b, sheet.y1}, g.columnLabels[i]});
+        m.labels.push_back({Rect{a, sheet.y0, b, sheet.y0 + band}, g.columnLabels[i]});
+        if (i > 0 && !skip(a, true)) {
+            m.ticks.push_back({{a, sheet.y1 - band}, {a, sheet.y1}});
+            m.ticks.push_back({{a, sheet.y0}, {a, sheet.y0 + band}});
+        }
+    }
+    // Буквы: полосы у левого и правого края листа.
+    for (std::size_t i = 0; i + 1 < g.rows.size(); ++i) {
+        const double top = g.rows[i], bottom = g.rows[i + 1];
+        m.labels.push_back({Rect{sheet.x0, bottom, sheet.x0 + band, top}, g.rowLabels[i]});
+        m.labels.push_back({Rect{sheet.x1 - band, bottom, sheet.x1, top}, g.rowLabels[i]});
+        if (i > 0 && !skip(top, false)) {
+            m.ticks.push_back({{sheet.x0, top}, {sheet.x0 + band, top}});
+            m.ticks.push_back({{sheet.x1 - band, top}, {sheet.x1, top}});
+        }
+    }
+    return m;
+}
+
+Status addZoneMarking(Drawing& drawing, const ZoneMarkingGeometry& m, const TextMetrics* font, const std::string& layer) {
+    if (!drawing.findLayer(layer)) BC_TRY(drawing.addLayer(Layer{layer, 7}));
+    Builder b(drawing, font, layer, layer);
+    for (const LineSeg& t : m.ticks) BC_TRY(b.line(t.a.x, t.a.y, t.b.x, t.b.y, false));
+    for (const auto& l : m.labels) BC_TRY(b.text(l.cell, l.text, 3.5, HAlign::Center, false, "zone"));
+    return okStatus();
 }
 
 }  // namespace bendcore::drawing_v2

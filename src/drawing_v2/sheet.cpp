@@ -94,6 +94,33 @@ Result<Sheet> gostSheet(GostFormat base, int multiplier, Orientation orientation
                      std::to_string(multiplier)};
 }
 
+std::vector<int> sheetMultipliers(GostFormat base) {
+    std::vector<int> out{1};
+    for (const auto& m : kGostMultiples)
+        if (m.base == base) out.push_back(m.n);
+    return out;
+}
+
+Result<Sheet> iso5457Sheet(int n, int multiplier, Orientation orientation) {
+    if (n < 0 || n > 4) return Error{ErrorCode::InvalidInput, "ISO 5457 sheet: the A-series index must be 0..4"};
+    if (multiplier == 1) return iso216Sheet(n, orientation);
+    // Удлинённые форматы ISO 5457, табл. 2 и 3, — те же размеры, что в табл. 2 ГОСТ 2.301.
+    for (const auto& m : kGostMultiples) {
+        if (int(m.base) == n && m.n == multiplier) {
+            Sheet s;
+            s.standard = SheetStandard::Iso216;
+            s.isoIndex = n;
+            s.gostBase = m.base;
+            s.multiplier = multiplier;
+            s.name = "ISO A" + std::to_string(n) + "x" + std::to_string(multiplier);
+            orient(s, m.size, orientation);
+            return s;
+        }
+    }
+    return Error{ErrorCode::InvalidInput, "ISO 5457 has no elongated size A" + std::to_string(n) + "x" +
+                                              std::to_string(multiplier)};
+}
+
 Result<Sheet> iso216Sheet(int n, Orientation orientation) {
     if (n < 0 || n > 10) {
         return Error{ErrorCode::InvalidInput, "ISO 216 A-series index must be 0..10"};
@@ -101,6 +128,7 @@ Result<Sheet> iso216Sheet(int n, Orientation orientation) {
     Sheet s;
     s.standard = SheetStandard::Iso216;
     s.isoIndex = n;
+    if (n <= 4) s.gostBase = GostFormat(n);
     s.name = "ISO A" + std::to_string(n);
     orient(s, kIsoA[std::size_t(n)], orientation);
     return s;

@@ -42,6 +42,24 @@ std::string hashHex(std::uint64_t hash) {
     return buf;
 }
 
+views::HatchMaterial hatchMaterialOf(std::string_view material) {
+    for (const kernel::Material& m : kernel::builtInMaterials()) {
+        if (m.id != material && m.name != material) continue;
+        // PMMA — органическое стекло: «стекло и другие светопрозрачные материалы» (ГОСТ 2.306, п. 7).
+        if (m.id == "plastic_pmma") return views::HatchMaterial::Glass;
+        switch (m.category) {
+            case kernel::MaterialCategory::Steel:
+            case kernel::MaterialCategory::StainlessSteel:
+            case kernel::MaterialCategory::Aluminum:
+            case kernel::MaterialCategory::Titanium: return views::HatchMaterial::Metal;
+            case kernel::MaterialCategory::Plastic: return views::HatchMaterial::NonMetal;
+            case kernel::MaterialCategory::Other: break;
+        }
+        break;
+    }
+    return views::hatchMaterialByName(material);
+}
+
 ModelProperties titleProperties(const ModelProperties& link, const std::optional<ModelProperties>& doc) {
     ModelProperties p = link;
     if (!doc) return p;
