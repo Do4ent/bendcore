@@ -23,8 +23,8 @@ static Tube sample_tube(const std::string& mode = "адаптивна") {
     return t;
 }
 
-// Заглушка решателя для тестов: возвращает точки без изменений (проверяем только вызов и аргументы).
-static PointSolver stub_solver(bool& called) {
+// Тестовый двойник решателя: запоминает вызов, проверяет аргументы и возвращает точки без изменений.
+static PointSolver recording_solver(bool& called) {
     return [&called](const std::vector<Vec3>& start, const std::vector<Coincide>& cons, const std::vector<int>& fixed) {
         called = true;
         check(cons.size() == 1 && cons[0].vertex == 2, "solver: совпадение для вершины ссылки");
@@ -54,7 +54,7 @@ static void test_states() {
 static void test_moved_calls_solver() {
     Tube t = sample_tube();
     bool called = false;
-    auto r = update_component(t, {{"R1", {200, 5, 0}}}, stub_solver(called));
+    auto r = update_component(t, {{"R1", {200, 5, 0}}}, recording_solver(called));
     check(called, "сдвиг — вызывается решатель");
     check(r.status == "вершины сдвинулись" && r.moved.size() == 1, "сдвиг — статус");
     check(t.refs[0].state == kValid && t.refs[0].cached[1] == 5.0, "после пересчёта кэш обновлён");

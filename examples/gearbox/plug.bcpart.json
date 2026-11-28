@@ -1,0 +1,293 @@
+{
+ "features": [
+  {
+   "id": "Hex",
+   "label": "Hex",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XY"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 4,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 5,
+      "projection": -1,
+      "radius": "1",
+      "start": 4,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 5,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "R * cos(0)",
+      "y": "R * sin(0)"
+     },
+     {
+      "fixed": true,
+      "x": "R * cos(60)",
+      "y": "R * sin(60)"
+     },
+     {
+      "fixed": true,
+      "x": "R * cos(120)",
+      "y": "R * sin(120)"
+     },
+     {
+      "fixed": true,
+      "x": "R * cos(180)",
+      "y": "R * sin(180)"
+     },
+     {
+      "fixed": true,
+      "x": "R * cos(240)",
+      "y": "R * sin(240)"
+     },
+     {
+      "fixed": true,
+      "x": "R * cos(300)",
+      "y": "R * sin(300)"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Head",
+   "label": "Head",
+   "links": {
+    "sketch": "Hex"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "k",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "ShankSketch",
+   "label": "ShankSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XY"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [
+     {
+      "a": 1,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "d / 2"
+     }
+    ],
+    "geometry": [
+     {
+      "center": 0,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "0"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Shank",
+   "label": "Shank",
+   "links": {
+    "sketch": "ShankSketch"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "true",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "l",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "TipChamfer",
+   "label": "TipChamfer",
+   "links": {},
+   "options": {
+    "type": "equal"
+   },
+   "parameters": {
+    "angle": "45",
+    "distance": "c",
+    "distance2": "1"
+   },
+   "references": {
+    "edges": [
+     {
+      "kind": "edge",
+      "name": "G[Shank](ShankSketch:E1)",
+      "signature": {
+       "center": [
+        3.774758283725532e-14,
+        2.220446049250313e-16,
+        -14.0
+       ],
+       "direction": [
+        0.0,
+        -0.0,
+        1.0
+       ],
+       "geometry": "Circle",
+       "radius": 8.0,
+       "size": 50.26548245743669
+      }
+     }
+    ],
+    "face": []
+   },
+   "suppressed": false,
+   "type": "Chamfer"
+  }
+ ],
+ "format": "bendcore-part",
+ "rollback": null,
+ "variables": [
+  {
+   "expression": "22",
+   "name": "s"
+  },
+  {
+   "expression": "10",
+   "name": "k"
+  },
+  {
+   "expression": "16",
+   "name": "d"
+  },
+  {
+   "expression": "14",
+   "name": "l"
+  },
+  {
+   "expression": "1",
+   "name": "c"
+  },
+  {
+   "expression": "s / sqrt(3)",
+   "name": "R"
+  }
+ ],
+ "version": 3
+}

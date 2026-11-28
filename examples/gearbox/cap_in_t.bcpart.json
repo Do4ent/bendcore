@@ -1,0 +1,289 @@
+{
+ "features": [
+  {
+   "id": "Profile",
+   "label": "Profile",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XZ"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 4,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 5,
+      "projection": -1,
+      "radius": "1",
+      "start": 4,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 5,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "-s",
+      "y": "dh / 2"
+     },
+     {
+      "fixed": true,
+      "x": "-s",
+      "y": "D / 2"
+     },
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "D / 2"
+     },
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "Dc / 2"
+     },
+     {
+      "fixed": true,
+      "x": "tc",
+      "y": "Dc / 2"
+     },
+     {
+      "fixed": true,
+      "x": "tc",
+      "y": "dh / 2"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Body",
+   "label": "Body",
+   "links": {
+    "sketch": "Profile"
+   },
+   "options": {
+    "axis": "X",
+    "extent": "full",
+    "mode": "boss",
+    "reversed": "false"
+   },
+   "parameters": {
+    "angle": "360",
+    "angle2": "0",
+    "axisEntity": "0"
+   },
+   "references": {
+    "axisEdge": []
+   },
+   "suppressed": false,
+   "type": "Revolve"
+  },
+  {
+   "id": "ScrewHole",
+   "label": "ScrewHole",
+   "links": {},
+   "options": {
+    "drillPoint": "true",
+    "end": "through",
+    "type": "simple"
+   },
+   "parameters": {
+    "cbDepth": "3",
+    "cbDiameter": "10",
+    "csAngle": "90",
+    "csDiameter": "10",
+    "depth": "10",
+    "diameter": "dk",
+    "drillAngle": "118",
+    "x": "tc",
+    "y": "rb * cos(45)",
+    "z": "rb * sin(45)"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "F(G[Body](Profile:V4_5)|G[Body](Profile:V5_6))",
+      "signature": {
+       "center": [
+        8.0,
+        7.308439567818174e-16,
+        -1.4210854715202004e-14
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Plane",
+       "size": 3848.451000647496
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "Hole"
+  },
+  {
+   "id": "ScrewHoles",
+   "label": "ScrewHoles",
+   "links": {
+    "feature": "ScrewHole"
+   },
+   "options": {
+    "axis": "X",
+    "spacing": "equal"
+   },
+   "parameters": {
+    "angle": "360",
+    "count": "4"
+   },
+   "references": {
+    "axisEdge": [],
+    "axisFace": []
+   },
+   "suppressed": false,
+   "type": "CircularPattern"
+  },
+  {
+   "id": "RimChamfer",
+   "label": "RimChamfer",
+   "links": {},
+   "options": {
+    "type": "equal"
+   },
+   "parameters": {
+    "angle": "45",
+    "distance": "c",
+    "distance2": "1"
+   },
+   "references": {
+    "edges": [
+     {
+      "kind": "edge",
+      "name": "G[Body](Profile:V4_5)",
+      "signature": {
+       "center": [
+        8.0,
+        -1.536308617859676e-15,
+        1.7513918243600305e-13
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        -0.0
+       ],
+       "geometry": "Circle",
+       "radius": 37.0,
+       "size": 232.4778563656447
+      }
+     }
+    ],
+    "face": []
+   },
+   "suppressed": false,
+   "type": "Chamfer"
+  }
+ ],
+ "format": "bendcore-part",
+ "rollback": null,
+ "variables": [
+  {
+   "expression": "52",
+   "name": "D"
+  },
+  {
+   "expression": "74",
+   "name": "Dc"
+  },
+  {
+   "expression": "8",
+   "name": "tc"
+  },
+  {
+   "expression": "4",
+   "name": "s"
+  },
+  {
+   "expression": "32",
+   "name": "rb"
+  },
+  {
+   "expression": "7",
+   "name": "dk"
+  },
+  {
+   "expression": "1",
+   "name": "c"
+  },
+  {
+   "expression": "24",
+   "name": "dh"
+  }
+ ],
+ "version": 3
+}

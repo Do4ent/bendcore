@@ -4,6 +4,10 @@
 
 #include <cassert>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <string>
 
 using namespace bendcore;
 using namespace bendcore::reporting_ui;
@@ -101,17 +105,37 @@ int main() {
         std::string reportId;
         reportingUI.releaseForProduction(request, reportId);
 
+        const std::filesystem::path base =
+            std::filesystem::temp_directory_path() / "bendcore_test_reporting_ui";
+        std::filesystem::remove_all(base);
+
         ReportingUIManager::ExportRequest exportRequest;
         exportRequest.reportId = reportId;
-        exportRequest.formats = {"gcode", "pdf", "dwg"};
-        exportRequest.outputPath = "/tmp";
+        exportRequest.formats = {"json", "csv"};
+        exportRequest.outputPath = base.string();
 
         std::string outputFolder;
         bool exported = reportingUI.exportReport(exportRequest, outputFolder);
 
         assert(exported);
-        assert(!outputFolder.empty());
         assert(outputFolder.find(reportId) != std::string::npos);
+        // Файлы действительно записаны и содержат идентификатор отчёта.
+        for (const char* ext : {".json", ".csv"}) {
+            std::ifstream in(std::filesystem::path(outputFolder) / (reportId + ext));
+            assert(in.good());
+            std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            assert(text.find(reportId) != std::string::npos);
+        }
+        assert(!std::filesystem::exists(std::filesystem::path(outputFolder) / (reportId + ".html")));
+
+        // Форматы, которые отчёт не умеет (G-code, PDF, DWG), отклоняются целиком.
+        ReportingUIManager::ExportRequest unsupported = exportRequest;
+        unsupported.formats = {"json", "pdf"};
+        unsupported.outputPath = (base / "unsupported").string();
+        std::string unsupportedFolder;
+        assert(!reportingUI.exportReport(unsupported, unsupportedFolder));
+        assert(!std::filesystem::exists(std::filesystem::path(unsupportedFolder) / (reportId + ".json")));
+        std::filesystem::remove_all(base);
 
         printf("PASSED\n");
         testsPassed++;
@@ -199,24 +223,6 @@ int main() {
         testsPassed++;
     }
 
-    // Test 10: CollaborationUIStubs - Stubs return empty
-    {
-        printf("Test 10: Collaboration stubs... ");
-        CollaborationUIStubs collab;
-
-        auto comments = collab.getComments("TUBE-001");
-        assert(comments.empty());
-
-        auto versions = collab.getVersions("TUBE-001");
-        assert(versions.empty());
-
-        auto changes = collab.getChanges("TUBE-001");
-        assert(changes.empty());
-
-        printf("PASSED\n");
-        testsPassed++;
-    }
-
     // Test 11: ProductionUIManager - Release workflow (success)
     {
         printf("Test 11: Release workflow success... ");
@@ -263,11 +269,12 @@ int main() {
         std::string reportId;
         std::vector<std::string> blockers;
 
-        productionUI.executeReleaseWorkflow(workflow, reportId, blockers);
+        bool released = productionUI.executeReleaseWorkflow(workflow, reportId, blockers);
 
-        // Should have blockers or empty report
-        // Just verify execution doesn't crash
-        assert(true);
+        // Стенка 0,1 мм при наружном диаметре 100 мм не проходит нормы: выпуск заблокирован.
+        assert(!released);
+        assert(!blockers.empty());
+        assert(reportId.empty());
 
         printf("PASSED\n");
         testsPassed++;

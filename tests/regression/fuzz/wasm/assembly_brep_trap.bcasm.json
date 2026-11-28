@@ -1,0 +1,1141 @@
+{
+ "color": null,
+ "definitions": [
+  {
+   "brep": "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",
+   "color": null,
+   "elementMap": {
+    "deletions": {},
+    "edge": [
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V1_4)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        0,
+        0,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 20,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V1_2)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        80,
+        0,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 20,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:E1",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        40,
+        0,
+        0
+       ],
+       "direction": [
+        1,
+        0,
+        0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 80,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E1)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        40,
+        0,
+        20
+       ],
+       "direction": [
+        1,
+        0,
+        0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 80,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V2_3)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        80,
+        60,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 20,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:E2",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        80,
+        30,
+        0
+       ],
+       "direction": [
+        0,
+        1,
+        0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 60,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E2)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        80,
+        30,
+        20
+       ],
+       "direction": [
+        0,
+        1,
+        0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 60,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V3_4)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        0,
+        60,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 20,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:E3",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        40,
+        60,
+        0
+       ],
+       "direction": [
+        1,
+        0,
+        0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 80,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E3)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        40,
+        60,
+        20
+       ],
+       "direction": [
+        1,
+        0,
+        0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 80,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:E4",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        0,
+        30,
+        0
+       ],
+       "direction": [
+        0,
+        1,
+        0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 60,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E4)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        0,
+        30,
+        20
+       ],
+       "direction": [
+        0,
+        1,
+        0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 60,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V5)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        50,
+        30,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 20,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:E5",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        40.00000000000005,
+        30,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 10,
+       "size": 62.83185307179586,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E5)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        40.00000000000005,
+        30,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 10,
+       "size": 62.83185307179586,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V6)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        20.5,
+        30,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 20,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:E6",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        15.000000000000027,
+        30,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 5.5,
+       "size": 34.55751918948772,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E6)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        15.000000000000027,
+        30,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 5.5,
+       "size": 34.55751918948772,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V7)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        70.5,
+        30,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 0,
+       "size": 20,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:E7",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        65.00000000000004,
+        30,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 5.5,
+       "size": 34.55751918948772,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E7)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        65.00000000000004,
+        30,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Circle",
+       "hasDirection": true,
+       "kind": "edge",
+       "radius": 5.5,
+       "size": 34.55751918948772,
+       "valid": true
+      }
+     }
+    ],
+    "face": [
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E1)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        40,
+        0,
+        10
+       ],
+       "direction": [
+        0,
+        -1,
+        0
+       ],
+       "geometry": "Plane",
+       "hasDirection": true,
+       "kind": "face",
+       "radius": 0,
+       "size": 1599.9999999999998,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E2)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        80,
+        30,
+        10
+       ],
+       "direction": [
+        1,
+        0,
+        0
+       ],
+       "geometry": "Plane",
+       "hasDirection": true,
+       "kind": "face",
+       "radius": 0,
+       "size": 1200,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E3)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        40,
+        60,
+        10
+       ],
+       "direction": [
+        0,
+        1,
+        0
+       ],
+       "geometry": "Plane",
+       "hasDirection": true,
+       "kind": "face",
+       "radius": 0,
+       "size": 1599.9999999999998,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E4)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        0,
+        30,
+        10
+       ],
+       "direction": [
+        -1,
+        0,
+        0
+       ],
+       "geometry": "Plane",
+       "hasDirection": true,
+       "kind": "face",
+       "radius": 0,
+       "size": 1200,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E5)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        40,
+        29.999999999999996,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Cylinder",
+       "hasDirection": true,
+       "kind": "face",
+       "radius": 10,
+       "size": 1256.6370614359173,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E6)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        15,
+        30,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Cylinder",
+       "hasDirection": true,
+       "kind": "face",
+       "radius": 5.5,
+       "size": 691.1503837897544,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:E7)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        65,
+        30,
+        10
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Cylinder",
+       "hasDirection": true,
+       "kind": "face",
+       "radius": 5.5,
+       "size": 691.1503837897544,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:R1",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        40,
+        29.999999999999996,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        -1
+       ],
+       "geometry": "Plane",
+       "hasDirection": true,
+       "kind": "face",
+       "radius": 0,
+       "size": 4295.774379098837,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:R1)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        40,
+        29.999999999999996,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        1
+       ],
+       "geometry": "Plane",
+       "hasDirection": true,
+       "kind": "face",
+       "radius": 0,
+       "size": 4295.774379098837,
+       "valid": true
+      }
+     }
+    ],
+    "vertex": [
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:V1_4",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        0,
+        0,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V1_4)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        0,
+        0,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:V1_2",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        80,
+        0,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V1_2)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        80,
+        0,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:V2_3",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        80,
+        60,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V2_3)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        80,
+        60,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:V3_4",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        0,
+        60,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V3_4)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        0,
+        60,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:V5",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        50,
+        30,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V5)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        50,
+        30,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:V6",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        20.5,
+        30,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V6)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        20.5,
+        30,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Profile",
+      "name": "Profile:V7",
+      "origin": "modified",
+      "signature": {
+       "center": [
+        70.5,
+        30,
+        0
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     },
+     {
+      "aliases": [],
+      "feature": "Body",
+      "name": "G[Body](Profile:V7)",
+      "origin": "generated",
+      "signature": {
+       "center": [
+        70.5,
+        30,
+        20
+       ],
+       "direction": [
+        0,
+        0,
+        0
+       ],
+       "geometry": "Point",
+       "hasDirection": false,
+       "kind": "vertex",
+       "radius": 0,
+       "size": 0,
+       "valid": true
+      }
+     }
+    ]
+   },
+   "faceColors": [],
+   "fingerprint": {
+    "area": 16830.4865872131,
+    "box": [
+     0,
+     0,
+     0,
+     80,
+     60,
+     20
+    ],
+    "edges": 21,
+    "faces": 9,
+    "vertices": 14,
+    "volume": 85915.48758197675
+   },
+   "id": 1,
+   "kind": "part",
+   "name": "Block",
+   "properties": {
+    "density": null,
+    "designation": "",
+    "material": "",
+    "name": ""
+   },
+   "revision": 0
+  }
+ ],
+ "explodedViews": [],
+ "format": "bendcore-assembly",
+ "mates": [],
+ "name": "Fault probe",
+ "next": {
+  "mate": 1,
+  "occurrence": 2,
+  "pattern": 1
+ },
+ "occurrences": [
+  {
+   "color": null,
+   "definition": 1,
+   "designation": "",
+   "fixed": true,
+   "id": 1,
+   "name": "Block",
+   "placement": {
+    "position": [
+     0,
+     0,
+     0
+    ],
+    "rotation": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   "suppressed": false
+  }
+ ],
+ "patterns": [],
+ "properties": {
+  "density": null,
+  "designation": "",
+  "material": "",
+  "name": ""
+ },
+ "version": 2
+}

@@ -1,0 +1,491 @@
+{
+ "features": [
+  {
+   "id": "Profile",
+   "label": "Profile",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XY"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [
+     {
+      "a": 9,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "db / 2"
+     },
+     {
+      "a": 10,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "db / 2"
+     },
+     {
+      "a": 11,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "db / 2"
+     },
+     {
+      "a": 12,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "db / 2"
+     },
+     {
+      "a": 13,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "dp / 2"
+     },
+     {
+      "a": 14,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "dp / 2"
+     }
+    ],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 5,
+      "projection": -1,
+      "radius": "1",
+      "start": 4,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 6,
+      "projection": -1,
+      "radius": "1",
+      "start": 5,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 7,
+      "projection": -1,
+      "radius": "1",
+      "start": 6,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 4,
+      "projection": -1,
+      "radius": "1",
+      "start": 7,
+      "type": "line"
+     },
+     {
+      "center": 8,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 9,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 10,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 11,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 12,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 13,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "-Xf",
+      "y": "y0"
+     },
+     {
+      "fixed": true,
+      "x": "Xf",
+      "y": "y0"
+     },
+     {
+      "fixed": true,
+      "x": "Xf",
+      "y": "y1"
+     },
+     {
+      "fixed": true,
+      "x": "-Xf",
+      "y": "y1"
+     },
+     {
+      "fixed": true,
+      "x": "-xi",
+      "y": "yi0"
+     },
+     {
+      "fixed": true,
+      "x": "xi",
+      "y": "yi0"
+     },
+     {
+      "fixed": true,
+      "x": "xi",
+      "y": "yi1"
+     },
+     {
+      "fixed": true,
+      "x": "-xi",
+      "y": "yi1"
+     },
+     {
+      "fixed": true,
+      "x": "-bx",
+      "y": "by0"
+     },
+     {
+      "fixed": true,
+      "x": "bx",
+      "y": "by0"
+     },
+     {
+      "fixed": true,
+      "x": "bx",
+      "y": "by1"
+     },
+     {
+      "fixed": true,
+      "x": "-bx",
+      "y": "by1"
+     },
+     {
+      "fixed": true,
+      "x": "-px",
+      "y": "by0"
+     },
+     {
+      "fixed": true,
+      "x": "px",
+      "y": "by1"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Plate",
+   "label": "Plate",
+   "links": {
+    "sketch": "Profile"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "tg",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "Rounds",
+   "label": "Rounds",
+   "links": {},
+   "options": {},
+   "parameters": {
+    "radius": "rf"
+   },
+   "references": {
+    "edges": [
+     {
+      "kind": "edge",
+      "name": "G[Plate](Profile:V1_4)",
+      "signature": {
+       "center": [
+        -62.0,
+        -83.0,
+        0.5
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "size": 1.0
+      }
+     },
+     {
+      "kind": "edge",
+      "name": "G[Plate](Profile:V1_2)",
+      "signature": {
+       "center": [
+        62.0,
+        -83.0,
+        0.5
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "size": 1.0
+      }
+     },
+     {
+      "kind": "edge",
+      "name": "G[Plate](Profile:V2_3)",
+      "signature": {
+       "center": [
+        62.0,
+        190.0,
+        0.5
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "size": 1.0
+      }
+     },
+     {
+      "kind": "edge",
+      "name": "G[Plate](Profile:V3_4)",
+      "signature": {
+       "center": [
+        -62.0,
+        190.0,
+        0.5
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "size": 1.0
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "Fillet"
+  }
+ ],
+ "format": "bendcore-part",
+ "rollback": null,
+ "variables": [
+  {
+   "expression": "96",
+   "name": "Wo"
+  },
+  {
+   "expression": "-53",
+   "name": "yA"
+  },
+  {
+   "expression": "213",
+   "name": "Lo"
+  },
+  {
+   "expression": "125",
+   "name": "H"
+  },
+  {
+   "expression": "1",
+   "name": "al"
+  },
+  {
+   "expression": "8",
+   "name": "t"
+  },
+  {
+   "expression": "30",
+   "name": "ef"
+  },
+  {
+   "expression": "14",
+   "name": "efx"
+  },
+  {
+   "expression": "Wo / 2 + efx",
+   "name": "Xf"
+  },
+  {
+   "expression": "yA - ef",
+   "name": "y0"
+  },
+  {
+   "expression": "yA + Lo + ef",
+   "name": "y1"
+  },
+  {
+   "expression": "Wo / 2 - t + H * tan(al) + 1.5",
+   "name": "xi"
+  },
+  {
+   "expression": "yA + t - H * tan(al) - 1.5",
+   "name": "yi0"
+  },
+  {
+   "expression": "yA + Lo - t + H * tan(al) + 1.5",
+   "name": "yi1"
+  },
+  {
+   "expression": "40",
+   "name": "bx"
+  },
+  {
+   "expression": "y0 + 15",
+   "name": "by0"
+  },
+  {
+   "expression": "y1 - 15",
+   "name": "by1"
+  },
+  {
+   "expression": "15",
+   "name": "px"
+  },
+  {
+   "expression": "11",
+   "name": "db"
+  },
+  {
+   "expression": "8",
+   "name": "dp"
+  },
+  {
+   "expression": "10",
+   "name": "rf"
+  },
+  {
+   "expression": "1",
+   "name": "tg"
+  }
+ ],
+ "version": 3
+}

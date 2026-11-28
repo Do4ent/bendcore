@@ -1,0 +1,1049 @@
+{
+ "format": "bendcore-drawing",
+ "model": {
+  "kind": "part",
+  "path": "shaft_out.bcpart.json",
+  "properties": {
+   "density": 7850.0,
+   "designation": "РЦ.080.00.004",
+   "material": "Сталь 45 ГОСТ 1050-2013",
+   "name": "Вал"
+  },
+  "resultHash": "bcaadfada06ea196",
+  "revision": 1
+ },
+ "settings": {
+  "lineThickness": 0.5,
+  "margin": 15.0,
+  "maxScale": [
+   5,
+   1
+  ],
+  "projection": "firstAngle",
+  "reducedAxonometry": true,
+  "textFont": "gost2304",
+  "viewGap": 30.0
+ },
+ "sheets": [
+  {
+   "datums": [
+    {
+     "at": 0.5,
+     "edge": {
+      "kind": "edge",
+      "name": "Profile:E2",
+      "signature": {
+       "center": [
+        7.5,
+        0.0,
+        15.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 13.0
+      }
+     },
+     "id": "DA",
+     "letter": "А",
+     "view": "F"
+    }
+   ],
+   "dimensions": [
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "V(F(G[Body](Profile:V1_2))|G[EndChamfers](G[Body](Profile:V1_2)))",
+        "signature": {
+         "center": [
+          0.0,
+          0.0,
+          14.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "V(F(G[Body](Profile:V14_15))|G[EndChamfers](G[Body](Profile:V14_15)))",
+        "signature": {
+         "center": [
+          172.0,
+          0.0,
+          11.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "L",
+     "lastValue": 172.0,
+     "leaderAngleDeg": 45.0,
+     "offset": -32.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "horizontal",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "Profile:V13_14",
+        "signature": {
+         "center": [
+          132.0,
+          0.0,
+          12.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "V(F(G[Body](Profile:V14_15))|G[EndChamfers](G[Body](Profile:V14_15)))",
+        "signature": {
+         "center": [
+          172.0,
+          0.0,
+          11.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "Lend",
+     "lastValue": 40.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 20.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "horizontal",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "V(F(G[Body](Profile:V1_2))|G[EndChamfers](G[Body](Profile:V1_2)))",
+        "signature": {
+         "center": [
+          0.0,
+          0.0,
+          14.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "Profile:V3_4",
+        "signature": {
+         "center": [
+          16.0,
+          0.0,
+          17.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "Lseat",
+     "lastValue": 16.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 16.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "horizontal",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "Profile:V5_6",
+        "signature": {
+         "center": [
+          80.0,
+          0.0,
+          21.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "Profile:V6_7",
+        "signature": {
+         "center": [
+          90.0,
+          0.0,
+          21.0
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "Lcol",
+     "lastValue": 10.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 10.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "horizontal",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "face",
+        "name": "G[Body](Profile:E2)",
+        "signature": {
+         "center": [
+          7.499999999999999,
+          -8.419191270074105e-17,
+          1.7763568394002505e-15
+         ],
+         "direction": [
+          1.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Cylinder",
+         "hasDirection": true,
+         "radius": 15.0,
+         "size": 1225.2211349000195
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "D1",
+     "lastValue": 30.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 8.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": "k6",
+     "toleranceDisplay": "classOnly",
+     "type": "diameter",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "face",
+        "name": "G[Body](Profile:E4)",
+        "signature": {
+         "center": [
+          47.461052980935484,
+          1.6030773363427854e-18,
+          -0.7757514923410654
+         ],
+         "direction": [
+          1.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Cylinder",
+         "hasDirection": true,
+         "radius": 17.5,
+         "size": 6734.6955245192075
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "D2",
+     "lastValue": 35.0,
+     "leaderAngleDeg": 45.0,
+     "offset": -8.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": "p6",
+     "toleranceDisplay": "classOnly",
+     "type": "diameter",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "face",
+        "name": "G[Body](Profile:E6)",
+        "signature": {
+         "center": [
+          85.0,
+          5.577549004664477e-16,
+          0.0
+         ],
+         "direction": [
+          1.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Cylinder",
+         "hasDirection": true,
+         "radius": 21.0,
+         "size": 1319.4689145077132
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "D3",
+     "lastValue": 42.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 8.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": null,
+     "toleranceDisplay": "classOnly",
+     "type": "diameter",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "face",
+        "name": "G[Body](Profile:E10)",
+        "signature": {
+         "center": [
+          113.0,
+          -8.419191270074105e-17,
+          0.0
+         ],
+         "direction": [
+          1.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Cylinder",
+         "hasDirection": true,
+         "radius": 15.0,
+         "size": 1319.4689145077132
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "D4",
+     "lastValue": 30.0,
+     "leaderAngleDeg": 45.0,
+     "offset": -8.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": "k6",
+     "toleranceDisplay": "classOnly",
+     "type": "diameter",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "center",
+       "ref": {
+        "kind": "face",
+        "name": "G[Body](Profile:E14)",
+        "signature": {
+         "center": [
+          151.45627063945284,
+          -1.5605285899277999e-15,
+          -1.0751372565827388
+         ],
+         "direction": [
+          1.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Cylinder",
+         "hasDirection": true,
+         "radius": 12.5,
+         "size": 2816.683379317385
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "D5",
+     "lastValue": 25.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 8.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": "h6",
+     "toleranceDisplay": "classOnly",
+     "type": "diameter",
+     "view": "F"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "G[KeywayWheel](KeywayWheelSketch:V1_4);G1",
+        "signature": {
+         "center": [
+          49.0,
+          -5.0,
+          12.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "G[KeywayWheel](KeywayWheelSketch:V3_4);G1",
+        "signature": {
+         "center": [
+          49.0,
+          5.0,
+          12.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "bw",
+     "lastValue": 10.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 12.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": "N9",
+     "toleranceDisplay": "classOnly",
+     "type": "vertical",
+     "view": "T"
+    },
+    {
+     "anchors": [
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "G[KeywayEnd](KeywayEndSketch:V1_4);G1",
+        "signature": {
+         "center": [
+          140.0,
+          -4.0,
+          8.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      },
+      {
+       "anchor": "point",
+       "ref": {
+        "kind": "vertex",
+        "name": "G[KeywayEnd](KeywayEndSketch:V3_4);G1",
+        "signature": {
+         "center": [
+          140.0,
+          4.0,
+          8.5
+         ],
+         "direction": [
+          0.0,
+          0.0,
+          0.0
+         ],
+         "geometry": "Point",
+         "hasDirection": false,
+         "radius": 0.0,
+         "size": 0.0
+        }
+       }
+      }
+     ],
+     "decimals": 2,
+     "id": "bo",
+     "lastValue": 8.0,
+     "leaderAngleDeg": 45.0,
+     "offset": 12.0,
+     "offsetFrom": [],
+     "prefix": "",
+     "suffix": "",
+     "textOverride": null,
+     "textShift": 0.0,
+     "tolerance": "N9",
+     "toleranceDisplay": "classOnly",
+     "type": "vertical",
+     "view": "T"
+    }
+   ],
+   "format": {
+    "base": "A3",
+    "multiplier": 1,
+    "orientation": "landscape"
+   },
+   "id": "S1",
+   "partsList": false,
+   "roughness": [
+    {
+     "at": 0.5,
+     "edge": {
+      "kind": "edge",
+      "name": "Profile:E2",
+      "signature": {
+       "center": [
+        7.5,
+        0.0,
+        15.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 13.0
+      }
+     },
+     "id": "Ra1",
+     "spec": {
+      "heightFactor": 2.5,
+      "method": "materialRemoval",
+      "parameter": "Ra",
+      "process": "",
+      "value": "0,8"
+     },
+     "view": "F"
+    },
+    {
+     "at": 0.5,
+     "edge": {
+      "kind": "edge",
+      "name": "Profile:E10",
+      "signature": {
+       "center": [
+        113.0,
+        0.0,
+        15.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 14.0
+      }
+     },
+     "id": "Ra2",
+     "spec": {
+      "heightFactor": 2.5,
+      "method": "materialRemoval",
+      "parameter": "Ra",
+      "process": "",
+      "value": "0,8"
+     },
+     "view": "F"
+    },
+    {
+     "at": 0.4,
+     "edge": {
+      "kind": "edge",
+      "name": "Profile:E4;S1",
+      "signature": {
+       "center": [
+        30.0,
+        0.0,
+        17.5
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 28.0
+      }
+     },
+     "id": "Ra3",
+     "spec": {
+      "heightFactor": 2.5,
+      "method": "materialRemoval",
+      "parameter": "Ra",
+      "process": "",
+      "value": "1,6"
+     },
+     "view": "F"
+    }
+   ],
+   "roughnessRemainder": {
+    "heightFactor": 2.5,
+    "method": "materialRemoval",
+    "parameter": "Ra",
+    "process": "",
+    "value": "6,3"
+   },
+   "scale": null,
+   "technicalRequirements": [
+    "235...262 HB.",
+    "Неуказанные предельные отклонения размеров: валов h14, остальных ±IT14/2.",
+    "Неуказанные радиусы скруглений 0,5 мм; фаски 1×45°.",
+    "Шпоночные пазы: глубина t1 = 5 (⌀35) и 4 (⌀25), длина 32 — по ГОСТ 23360-78."
+   ],
+   "title": {
+    "approver": {
+     "date": "",
+     "surname": ""
+    },
+    "checker": {
+     "date": "",
+     "surname": ""
+    },
+    "designation": "",
+    "developer": {
+     "date": "11.26",
+     "surname": "bendcore"
+    },
+    "litera": "",
+    "mass": "",
+    "material": "",
+    "name": "",
+    "normControl": {
+     "date": "",
+     "surname": ""
+    },
+    "organization": "bendcore",
+    "techControl": {
+     "date": "",
+     "surname": ""
+    }
+   },
+   "tolerances": [
+    {
+     "at": 0.5,
+     "characteristic": "circularRunout",
+     "datums": [
+      "А"
+     ],
+     "diameterZone": false,
+     "edge": {
+      "kind": "edge",
+      "name": "Profile:E10",
+      "signature": {
+       "center": [
+        113.0,
+        0.0,
+        15.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 14.0
+      }
+     },
+     "id": "T1",
+     "tolerance": "0,016",
+     "view": "F"
+    },
+    {
+     "at": 0.7,
+     "characteristic": "circularRunout",
+     "datums": [
+      "А"
+     ],
+     "diameterZone": false,
+     "edge": {
+      "kind": "edge",
+      "name": "Profile:E4;S1",
+      "signature": {
+       "center": [
+        30.0,
+        0.0,
+        17.5
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 28.0
+      }
+     },
+     "id": "T2",
+     "tolerance": "0,025",
+     "view": "F"
+    },
+    {
+     "at": 0.2,
+     "characteristic": "cylindricity",
+     "datums": [],
+     "diameterZone": false,
+     "edge": {
+      "kind": "edge",
+      "name": "Profile:E2",
+      "signature": {
+       "center": [
+        7.5,
+        0.0,
+        15.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Line",
+       "hasDirection": true,
+       "radius": 0.0,
+       "size": 13.0
+      }
+     },
+     "id": "T3",
+     "tolerance": "0,005",
+     "view": "F"
+    }
+   ],
+   "views": [
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "gears": true,
+     "hidden": true,
+     "id": "F",
+     "kind": "base",
+     "letter": "",
+     "markView": "",
+     "method": "exact",
+     "parent": "",
+     "planePoint": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": null,
+     "sectionKind": "cut",
+     "side": null,
+     "threads": true,
+     "toward": [
+      0.0,
+      -1.0,
+      0.0
+     ]
+    },
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "gears": true,
+     "hidden": true,
+     "id": "T",
+     "kind": "projected",
+     "letter": "",
+     "markView": "",
+     "method": "exact",
+     "parent": "F",
+     "planePoint": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "scale": null,
+     "sectionKind": "cut",
+     "side": "below",
+     "threads": true,
+     "toward": [
+      0.0,
+      -1.0,
+      0.0
+     ]
+    },
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "gears": true,
+     "hidden": false,
+     "id": "A",
+     "kind": "section",
+     "letter": "",
+     "markView": "F",
+     "method": "exact",
+     "parent": "",
+     "planePoint": [
+      60.0,
+      0.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      0.0,
+      -1.0,
+      0.0
+     ],
+     "scale": null,
+     "sectionKind": "slice",
+     "side": null,
+     "threads": true,
+     "toward": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "autoBalloons": false,
+     "autoMethod": false,
+     "axonometry": "isometric",
+     "centerLines": true,
+     "detailCenter": [
+      0.0,
+      0.0
+     ],
+     "detailRadius": 0.0,
+     "gears": true,
+     "hidden": false,
+     "id": "B",
+     "kind": "section",
+     "letter": "",
+     "markView": "F",
+     "method": "exact",
+     "parent": "",
+     "planePoint": [
+      152.0,
+      0.0,
+      0.0
+     ],
+     "position": null,
+     "right": [
+      0.0,
+      -1.0,
+      0.0
+     ],
+     "scale": null,
+     "sectionKind": "slice",
+     "side": null,
+     "threads": true,
+     "toward": [
+      -1.0,
+      0.0,
+      0.0
+     ]
+    }
+   ]
+  }
+ ],
+ "version": 2
+}

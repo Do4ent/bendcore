@@ -7,6 +7,9 @@
 #include <numbers>
 
 using namespace bendcore::drawing;
+using bendcore::Bend;
+using bendcore::Path;
+using bendcore::Straight;
 
 static int failures = 0;
 static void check(bool ok, const char* what) {

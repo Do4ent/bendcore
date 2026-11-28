@@ -1,0 +1,617 @@
+// Types of bendcore_assembly_api.mjs (docs/ui/ASSEMBLY_UI.md).
+
+import { KernelError, faceOfTriangle } from './bendcore_kernel_api.mjs';
+import type { Measurement, MeshPointElement, MeshGeometry, MeshProperties, MeshReadReport, MeshSectionResult, MeshUnit, SectionPlane } from './bendcore_kernel_api.mjs';
+import type { ExportFormat, ExportOptions, KernelMesh, MassProperties, Vec3 } from './bendcore_kernel_api.mjs';
+
+export { KernelError, faceOfTriangle };
+export type { ExportFormat, ExportOptions, KernelMesh, MassProperties, Vec3 };
+export type { MeshPointElement, MeshGeometry, MeshProperties, MeshReadReport, MeshSectionResult, MeshUnit };
+
+export interface AssemblyMassProperties {
+  /** mm³ and mm² of all part occurrences. */
+  volume: number;
+  area: number;
+  parts: number;
+  /** Paths of occurrences whose part has no density (left out of the mass). */
+  partsWithoutDensity: string[];
+  /** Over the parts with a density; null when none has one. */
+  mass: MassProperties | null;
+}
+
+export type ElementKind = 'face' | 'edge' | 'vertex';
+export type EntityUse = 'auto' | 'axis' | 'point';
+export type MateType =
+  | 'coincident'
+  | 'concentric'
+  | 'distance'
+  | 'angle'
+  | 'parallel'
+  | 'perpendicular'
+  | 'tangent'
+  | 'rigid';
+export type Alignment = 'closest' | 'aligned' | 'anti-aligned';
+export type MateStatus = 'solved' | 'redundant' | 'conflicting' | 'unsolved' | 'broken' | 'suppressed';
+
+/** Rigid placement; rotation is a unit quaternion [x, y, z, w]. matrix: column-major 4×4. */
+export interface Placement {
+  position: Vec3;
+  rotation: [number, number, number, number];
+  matrix: number[];
+}
+
+/** Input placement: { position, rotation } or { position, axis, angle (degrees) }. */
+export interface PlacementInput {
+  position?: Vec3;
+  rotation?: [number, number, number, number];
+  axis?: Vec3;
+  angle?: number;
+}
+
+export interface GeometryRef {
+  /** Occurrence ids from the top level down to the part. */
+  path: number[];
+  kind?: ElementKind;
+  /** TopologyIndex index of the part shape (= faceIndex / edgeIndex of its mesh). */
+  index?: number;
+  name?: string;
+  use?: EntityUse;
+  /** A side through a pattern instance by its stable key; the path follows the instance. */
+  instance?: { pattern: number; key: string };
+}
+
+export interface MateSpec {
+  type: MateType;
+  a: GeometryRef;
+  b: GeometryRef;
+  /** Distance in mm; angle in degrees. */
+  value?: number;
+  alignment?: Alignment;
+  internal?: boolean;
+  name?: string;
+}
+
+export interface PartProperties {
+  designation: string;
+  name: string;
+  material: string;
+  /** kg/m^3; null — no mass in the BOM. */
+  density: number | null;
+  /** Drawing sections (GOST 2.305 §9): true — always cut, false — kept whole in a longitudinal
+   *  section, null — default rule (fasteners, shafts, axles, balls are not cut). */
+  sectionCut?: boolean | null;
+}
+
+export type Color = [number, number, number, number];
+
+export interface PartConfigurationInfo {
+  designation: string;
+  fullDesignation: string;
+  name: string;
+}
+
+export interface DefinitionInfo {
+  id: number;
+  kind: 'part' | 'assembly';
+  name: string;
+  properties: PartProperties;
+  source: string;
+  /** Configuration of the part document ("<source>#<configuration>"); '' — as saved. */
+  configuration: string;
+  /** Pattern features of the part document (for patterns with kind 'feature' and partPattern). */
+  partPatterns: { feature: string; label: string; type: string; copies: number }[];
+  /** Registered part document of the definition (registerPartSource), or null. */
+  partSource: string | null;
+  /** Registered subassembly document of an assembly definition (registerSource), if any. */
+  assemblySource?: string;
+  /** Configurations of that part or subassembly document (empty without one). */
+  configurations: PartConfigurationInfo[];
+  external: boolean;
+  readOnly: boolean;
+  loadError: string;
+  color: Color | null;
+  faces?: number;
+  edges?: number;
+}
+
+export interface OccurrenceInfo {
+  id: number;
+  name: string;
+  definition: number;
+  kind: 'part' | 'assembly';
+  placement: Placement;
+  fixed: boolean;
+  suppressed: boolean;
+  designation: string;
+  color: Color | null;
+  pattern: number | null;
+  /** Top level only: degrees of freedom of the subsystem holding the occurrence (0 when fixed). */
+  dof?: number;
+  /** The DOF belong to a subsystem of several occurrences. */
+  dofShared?: boolean;
+  children?: OccurrenceInfo[];
+}
+
+export interface MateInfo {
+  id: number;
+  type: MateType;
+  name: string;
+  a: GeometryRef;
+  b: GeometryRef;
+  value: number;
+  alignment: Alignment;
+  internal: boolean;
+  suppressed: boolean;
+  broken: string;
+  status: MateStatus;
+}
+
+export interface SubsystemInfo {
+  occurrences: number[];
+  mates: number[];
+  status: 'Solved' | 'Conflicting' | 'NotConverged';
+  dof: number;
+  rank: number;
+  redundantMates: number[];
+  conflictingMates: number[];
+}
+
+export interface SolveReport {
+  success: boolean;
+  totalDof: number;
+  residualNorm: number;
+  subsystems: SubsystemInfo[];
+  brokenMates: number[];
+  suppressedMates: number[];
+}
+
+export interface PatternInfo {
+  id: number;
+  kind: 'Linear' | 'Circular' | 'Feature';
+  seed: number;
+  instances: number[];
+}
+
+export interface ExplodeStep {
+  occurrences: number[];
+  direction: Vec3;
+  /** mm */
+  distance: number;
+}
+
+export interface ExplodedView {
+  name: string;
+  steps: ExplodeStep[];
+}
+
+export interface AssemblyState {
+  name: string;
+  definitions: DefinitionInfo[];
+  occurrences: OccurrenceInfo[];
+  mates: MateInfo[];
+  patterns: PatternInfo[];
+  explodedViews: ExplodedView[];
+  solve: SolveReport;
+  history: { canUndo: boolean; canRedo: boolean; undoLabel: string; redoLabel: string; depth: number };
+  /** Occurrence being dragged, or null. */
+  dragging: number | null;
+  /** Assembly configuration: active designation ('' — base values), its full designation, rows. */
+  configuration: { active: string; designation: string; count: number };
+  /** Reference meshes (docs/assembly/ASSEMBLY_DOCUMENT.md, section 14): not parts, not in BOM. */
+  referenceMeshes: ReferenceMeshInfo[];
+}
+
+export interface ReferenceMeshInfo {
+  id: number;
+  name: string;
+  fileName: string;
+  format: 'stl' | '3mf';
+  bytes: number;
+  unit: MeshUnit;
+  /** world placement of the mesh (file units scaled to mm first) */
+  placement: Placement;
+  visible: boolean;
+  opacity: number;
+  report: MeshReadReport;
+  /** of the world mesh */
+  properties: MeshProperties | null;
+}
+
+export interface ReferenceMeshSpec {
+  fileName: string;
+  data: Uint8Array;
+  format?: 'stl' | '3mf';
+  name?: string;
+  unit?: MeshUnit;
+  placement?: PlacementInput;
+}
+
+export interface ReferenceMeshChanges {
+  name?: string;
+  unit?: MeshUnit;
+  placement?: PlacementInput;
+  visible?: boolean;
+  opacity?: number;
+}
+
+export type AssemblyColumnKind = 'suppression' | 'configuration' | 'mateValue';
+
+export interface AssemblyConfigurationColumn {
+  kind: AssemblyColumnKind;
+  /** Occurrence id (suppression, configuration) or mate id (mateValue). */
+  target: number;
+}
+
+/** Column of configurationTable(): with its CSV title, component/mate label, unit and choices. */
+export interface AssemblyConfigurationColumnInfo extends AssemblyConfigurationColumn {
+  title: string;
+  label: string;
+  /** mateValue: 'mm' | 'deg' | 'ratio'. */
+  unit: string;
+  /** configuration: configurations of the component's document. */
+  options: PartConfigurationInfo[];
+}
+
+export interface AssemblyConfigurationRow {
+  designation: string;
+  name: string;
+  /** One per column: suppression '1'/'0', configuration designation or '#' (as saved),
+   *  mate value (mm, degrees, ratio); '' — base value. */
+  cells: string[];
+}
+
+export interface AssemblyConfigurationTable {
+  columns: AssemblyConfigurationColumn[];
+  rows: AssemblyConfigurationRow[];
+  /** '' — base values. */
+  active?: string;
+}
+
+export interface AssemblyConfigurationTableInfo {
+  columns: AssemblyConfigurationColumnInfo[];
+  rows: (AssemblyConfigurationRow & { fullDesignation: string })[];
+  active: string;
+  /** Base values of the columns. */
+  base: string[];
+  /** Designation of the assembly in the active configuration. */
+  designation: string;
+}
+
+export interface ConfigurationActivation {
+  designation: string;
+  fullDesignation: string;
+  excluded: number[];
+  /** Mates switched off because a component is excluded (not an error). */
+  disabledMates: { mate: number; occurrence: number }[];
+  /** Mates that lost a reference when a component changed configuration. */
+  brokenMates: { mate: number; occurrence: number; reason: string }[];
+  solve: SolveReport | null;
+}
+
+export interface ConfigurationBomRow {
+  definition: number;
+  kind: 'part' | 'assembly';
+  designation: string;
+  name: string;
+  material: string;
+  /** Per configuration (index of ConfigurationBom.configurations); 0 — absent. */
+  quantities: number[];
+  unitVolume: number;
+  unitMass: number | null;
+}
+
+export interface ConfigurationBom {
+  configurations: {
+    designation: string;
+    fullDesignation: string;
+    name: string;
+    totalMass: number | null;
+    totalVolume: number;
+    totalParts: number;
+  }[];
+  /** First level of the composition (specification lines). */
+  rows: ConfigurationBomRow[];
+  /** All parts of the product. */
+  parts: ConfigurationBomRow[];
+}
+
+export interface PlacedPart {
+  path: number[];
+  pathName: string;
+  definition: number;
+  /** Key of the definition mesh (part coordinates); null for a part without geometry. */
+  mesh: string | null;
+  world: Placement;
+  color: Color | null;
+}
+
+export interface AssemblySectionResult {
+  area: number;
+  polylines: Float32Array[];
+  parts: number;
+}
+
+export interface AssemblyTessellation {
+  meshes: Record<string, KernelMesh>;
+  occurrences: PlacedPart[];
+}
+
+export interface ExplodeOptions {
+  /** Index of the exploded view. */
+  view?: number;
+  /** Step s runs on clamp(progress − s, 0, 1). */
+  progress?: number;
+}
+
+export interface TessellateOptions extends ExplodeOptions {
+  params?: { linearDeflection?: number; angularDeflection?: number; relative?: boolean };
+  /** Mesh keys the caller already holds: not sent again. */
+  skip?: string[];
+}
+
+export type AssemblyMeasureElement = { path: number[]; kind: ElementKind; index: number };
+export type AssemblyMeasureSpec =
+  | { type: 'distance'; a: AssemblyMeasureElement | MeshPointElement; b: AssemblyMeasureElement | MeshPointElement }
+  | { type: 'distance' | 'angle'; a: AssemblyMeasureElement; b: AssemblyMeasureElement }
+  | { type: 'length' | 'area' | 'radius'; a: AssemblyMeasureElement };
+
+export interface EntityInfo {
+  type: 'point' | 'axis' | 'plane' | 'cylinder' | 'sphere';
+  point: Vec3;
+  direction?: Vec3;
+  radius?: number;
+}
+
+export interface ElementInfo {
+  path: number[];
+  kind: ElementKind;
+  index: number;
+  geometry: string;
+  name: string | null;
+  /** World coordinates; null when the element has no mate entity (entityError says why). */
+  entity: EntityInfo | null;
+  entityError?: string;
+}
+
+export interface InterferenceReport {
+  parts: { path: number[]; pathName: string; definition: number }[];
+  pairs: { a: number; b: number; kind: 'interference' | 'touching'; volume: number; distance: number }[];
+  totalPairs: number;
+  candidatePairs: number;
+  totalVolume: number;
+}
+
+export interface BomRow {
+  position: number;
+  positionPath: string;
+  level: number;
+  definition: number;
+  kind: 'part' | 'assembly';
+  designation: string;
+  name: string;
+  material: string;
+  quantity: number;
+  /** mm^3 */
+  unitVolume: number;
+  /** kg */
+  unitMass: number | null;
+  totalMass: number | null;
+  children: BomRow[];
+}
+
+export interface Bom {
+  rows: BomRow[];
+  totalMass: number | null;
+  totalVolume: number;
+  totalParts: number;
+}
+
+export interface FastenerSpec {
+  /** Standard id from fastenerCatalog(), e.g. 'iso-4017'. */
+  standard: string;
+  size: number;
+  /** Bolt, screw: shank length; pin: length. */
+  length?: number;
+  /** Bolt, screw, nut: thread pitch, mm; 0 or absent - coarse; else one of finePitches[size]. */
+  pitch?: number;
+  /** Bolt, screw: '8.8' (GOST 1759.4 / ISO 898-1); nut: '8' (GOST 1759.5 / ISO 898-2). */
+  strengthClass?: string;
+}
+
+export interface HoleSite {
+  hole: GeometryRef;
+  entryFace: GeometryRef;
+  exitFace: GeometryRef | null;
+  radius: number;
+  depth: number;
+}
+
+export interface FastenerInsertSpec {
+  part: number[];
+  /** World direction from the head to the tip. */
+  insertion: Vec3;
+  radius: number;
+  tolerance?: number;
+  /** Hole face indices to use (default: every hole of this radius along the direction). */
+  holes?: number[];
+  screw: FastenerSpec;
+  headWashers?: FastenerSpec[];
+  nutWashers?: FastenerSpec[];
+  nut?: FastenerSpec | null;
+}
+
+export interface StackPlacement {
+  site: HoleSite;
+  screw: number;
+  headWashers: number[];
+  nutWashers: number[];
+  nut: number | null;
+  mates: number[];
+  grip: number;
+  protrusion: number;
+}
+
+export interface FastenerStandardInfo {
+  id: string;
+  designation: string;
+  kind: 'hex-bolt' | 'socket-head-screw' | 'hex-nut' | 'plain-washer' | 'spring-washer' | 'parallel-pin';
+  gost: boolean;
+  counterpart: string | null;
+  sizes: number[];
+  /** Fine pitches by size ('10' -> [1.25, 1]); empty arrays - none. */
+  finePitches: Record<string, number[]>;
+  /** Strength classes by size; empty arrays for washers and pins. */
+  strengthClasses: Record<string, string[]>;
+  verified: boolean;
+  source: string;
+  verification: string;
+}
+
+export interface FastenerDescription {
+  kind: FastenerStandardInfo['kind'];
+  name: string;
+  designation: string;
+  equivalentDesignation: string;
+  material: string;
+  strengthClass: string;
+  density: number;
+  volume: number;
+  mass: number;
+  thread: { present: boolean; designation: string; pitch: number; fine: boolean; length: number };
+  dimensions: Record<string, number>;
+}
+
+export interface LoadReport {
+  fileVersion: number;
+  migrated: boolean;
+  sources: { definition: number; name: string; source: string; status: string; message: string }[];
+  mates: { mate: number; name: string; outcome: string; message: string }[];
+  warnings: string[];
+}
+
+export interface InsertPartSpec {
+  name?: string;
+  format?: 'part-json' | 'step' | 'iges';
+  data: string;
+  placement?: PlacementInput;
+  properties?: Partial<PartProperties>;
+  fixed?: boolean;
+  parent?: number;
+  /** Top level: move the new component next to the assembly along +X (20 mm gap). */
+  beside?: boolean;
+  /** Part source name of a part document (default "<name>.part.json" when it has a configuration table). */
+  source?: string;
+  /** Configuration of the part document to insert ('' — as saved). */
+  configuration?: string;
+}
+
+export class AssemblyDocumentHandle {
+  readonly handle: number;
+  readonly disposed: boolean;
+  dispose(): void;
+  state(): AssemblyState;
+  save(options?: { embedGeometry?: boolean; indent?: number }): string;
+  exportStep(options?: { schema?: 'AP214' | 'AP242' }): string;
+  exportFile(format: ExportFormat, options?: ExportOptions): Uint8Array;
+  massProperties(): AssemblyMassProperties;
+  insertPart(spec: InsertPartSpec): { definition: number; occurrence: number };
+  insertOccurrence(spec: {
+    definition: number;
+    placement?: PlacementInput;
+    name?: string;
+    parent?: number;
+    fixed?: boolean;
+    beside?: boolean;
+  }): number;
+  insertSubassembly(spec: { source: string; name?: string; placement?: PlacementInput; fixed?: boolean; beside?: boolean }): {
+    definition: number;
+    occurrence: number;
+  };
+  removeOccurrence(id: number): void;
+  setOccurrence(
+    id: number,
+    changes: {
+      fixed?: boolean;
+      suppressed?: boolean;
+      name?: string;
+      designation?: string;
+      placement?: PlacementInput;
+      color?: number[] | null;
+      /** Configuration of the component's part document ('' — as saved). */
+      configuration?: string;
+    },
+  ): void;
+  setProperties(definition: number, properties: Partial<PartProperties>): void;
+  addMate(spec: MateSpec): number;
+  editMate(id: number, spec: MateSpec): void;
+  removeMate(id: number): void;
+  setMateSuppressed(id: number, suppressed: boolean): void;
+  solve(): SolveReport;
+  undo(): void;
+  redo(): void;
+  dragBegin(occurrence: number, point: Vec3): { localPoint: Vec3 };
+  dragMove(target: Vec3): { solve: SolveReport; placement: Placement; grabbed: Vec3; placements: PlacedPart[] };
+  dragEnd(): void;
+  dragCancel(): void;
+  addPattern(spec: Record<string, unknown> & { kind: 'linear' | 'circular' | 'feature'; seed: number }): number;
+  removePattern(id: number): void;
+  addExplodedView(view: ExplodedView): number;
+  removeExplodedView(index: number): void;
+  tessellate(options?: TessellateOptions): AssemblyTessellation;
+  placements(options?: ExplodeOptions): PlacedPart[];
+  element(ref: GeometryRef): ElementInfo;
+  /** Measurement between elements of placed parts, world coordinates; mm and degrees. */
+  measure(spec: AssemblyMeasureSpec): Measurement;
+  /** Section of all placed parts by a plane: summed area (mm^2), contour polylines, cut parts. */
+  section(plane: SectionPlane, deflection?: number, options?: ExplodeOptions): AssemblySectionResult;
+  insertMesh(spec: ReferenceMeshSpec): number;
+  setMesh(id: number, changes: ReferenceMeshChanges): void;
+  removeMesh(id: number): void;
+  meshGeometry(id: number): MeshGeometry;
+  meshSection(id: number, plane: SectionPlane): MeshSectionResult;
+  interference(options?: {
+    reportTouching?: boolean;
+    includeSameTopLevel?: boolean;
+    volumeTolerance?: number;
+    contactTolerance?: number;
+  }): InterferenceReport;
+  bom(mode?: 'flat' | 'structured'): Bom;
+  /** Assembly configuration table with current values (docs/assembly/ASSEMBLY_DOCUMENT.md, 8.2). */
+  configurationTable(): AssemblyConfigurationTableInfo;
+  /** Whole table, one undo step; table.active is applied and solved. */
+  setConfigurationTable(table: AssemblyConfigurationTable): void;
+  /** One undo step: composition of the configuration, then solve ('' — base values). */
+  activateConfiguration(designation: string): ConfigurationActivation;
+  configurationsToCsv(options?: { decimal?: '.' | ','; bom?: boolean }): string;
+  /** Parses CSV against the document; apply the result with setConfigurationTable. */
+  configurationsFromCsv(csv: string): AssemblyConfigurationTableInfo;
+  /** Composition of every configuration (GOST 2.113 group specification). */
+  configurationBom(): ConfigurationBom;
+  findHoles(spec: { part: number[]; insertion: Vec3; radius: number; tolerance?: number }): HoleSite[];
+  insertFasteners(spec: FastenerInsertSpec): StackPlacement[];
+}
+
+export interface AssemblyInfo {
+  occtVersion: string;
+  liveDocuments: number;
+  cachedMeshes: number;
+  sources: string[];
+  formatVersion: number;
+}
+
+export class AssemblyKernel {
+  info(): AssemblyInfo;
+  fastenerCatalog(): FastenerStandardInfo[];
+  describeFastener(spec: FastenerSpec): FastenerDescription;
+  registerSource(name: string, text: string): void;
+  /** Part document whose configurations components may use. */
+  registerPartSource(name: string, text: string): { configurations: PartConfigurationInfo[] };
+  createDocument(name?: string): AssemblyDocumentHandle;
+  loadDocument(json: string): { document: AssemblyDocumentHandle; report: LoadReport };
+  importStep(text: string): AssemblyDocumentHandle;
+  importIges(text: string): AssemblyDocumentHandle;
+}
+
+export type AssemblyModuleFactory = (options?: Record<string, unknown>) => Promise<unknown>;
+
+export function loadAssembly(factory: AssemblyModuleFactory, moduleOptions?: Record<string, unknown>): Promise<AssemblyKernel>;

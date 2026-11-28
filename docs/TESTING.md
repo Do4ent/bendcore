@@ -10,7 +10,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-`test_performance` собирается, только если найден GoogleTest.
+Тесты на GoogleTest собираются, только если он найден; тесты производительности и нагрузки
+(`performance`, `offset_performance`, `stress_*`) запускайте последовательно: `ctest -j1 -R 'performance|stress'`.
 
 ## Ядро для интерфейса
 

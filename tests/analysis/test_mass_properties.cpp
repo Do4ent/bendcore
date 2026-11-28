@@ -514,6 +514,39 @@ void test_assembly_mass_properties_complex() {
     assertCondition(props.material_composition.size() == 3, "Complex assembly has 3 materials");
 }
 
+void test_principal_moments_off_diagonal() {
+    MaterialLibrary lib = MaterialLibrary::getDefaultLibrary();
+    MassPropertiesCalculator calc(lib);
+
+    // [[2,1,0],[1,2,0],[0,0,5]]: собственные значения 1, 3, 5 (аналитически: 2 -+ 1 и 5).
+    Matrix3x3 t;
+    t.set(0, 0, 2.0); t.set(1, 1, 2.0); t.set(2, 2, 5.0);
+    t.set(0, 1, 1.0); t.set(1, 0, 1.0);
+    auto m = calc.calculatePrincipalMoments(t);
+    assertEquals(m[0], 1.0, 1e-12, "Principal moment 1 of off-diagonal tensor");
+    assertEquals(m[1], 3.0, 1e-12, "Principal moment 2 of off-diagonal tensor");
+    assertEquals(m[2], 5.0, 1e-12, "Principal moment 3 of off-diagonal tensor");
+
+    // Две равные точечные массы m в (1,1,0) и (-1,-1,0): стержень вдоль (1,1,0)/sqrt(2).
+    // Относительно центра масс I = m*[[2,-2,0],[-2,2,0],[0,0,4]] -> моменты 0, 4m, 4m,
+    // ось наименьшего момента — направление стержня.
+    std::vector<ComponentMassData> components;
+    components.push_back(calc.calculateComponentMass(
+        EntityId::generate(), "A", 0.001, "Steel", Vector3D(1, 1, 0)));
+    components.push_back(calc.calculateComponentMass(
+        EntityId::generate(), "B", 0.001, "Steel", Vector3D(-1, -1, 0)));
+    const double mass = components[0].mass;
+    MassProperties props = calc.calculateAssemblyMassProperties(components);
+    assertEquals(props.principal_moments[0], 0.0, 1e-9, "Rod: zero moment about its axis");
+    assertEquals(props.principal_moments[1], 4.0 * mass, 1e-9, "Rod: second moment 4m");
+    assertEquals(props.principal_moments[2], 4.0 * mass, 1e-9, "Rod: third moment 4m");
+    const Vector3D& axis = props.principal_axes[0];
+    assertEquals(std::abs(axis.x), 1.0 / std::sqrt(2.0), 1e-9, "Rod axis x component");
+    assertEquals(std::abs(axis.y), 1.0 / std::sqrt(2.0), 1e-9, "Rod axis y component");
+    assertEquals(axis.z, 0.0, 1e-9, "Rod axis z component");
+    assertCondition(axis.x * axis.y > 0.0, "Rod axis along (1,1,0), not (1,-1,0)");
+}
+
 // ==================== Reporter Tests ====================
 
 void test_reporter_generate_report() {
@@ -683,6 +716,7 @@ int main() {
     test_assembly_mass_properties_single();
     test_assembly_mass_properties_empty();
     test_assembly_mass_properties_complex();
+    test_principal_moments_off_diagonal();
 
     // Reporter Tests
     test_reporter_generate_report();
@@ -697,5 +731,6 @@ int main() {
     std::cout << "Tests Failed: " << testsFailed << "\n";
     std::cout << "========================================\n\n";
 
-    return testsFailed > 0 ? 1 : 0;
+    if (testsFailed > 0) return 1;
+    return 0;
 }

@@ -1,0 +1,21 @@
+# Известные дефекты fuzz-проверки загрузчиков, которые нельзя исправить в коде bendcore
+# (docs/qa/QA.md, раздел 7). Формат: <конфигурация> <цель> <номер мутации> <вид>  # причина
+# Конфигурации: native — build-occt (gcc 13, без санитайзеров); asan — build-fuzz (clang 18,
+# ASan/UBSan). Зерно 20261111, 300 мутаций на цель (test_fuzz_loaders). Тест требует точного
+# совпадения: новый дефект или исчезнувший (исправленный) — падение; вход воспроизводится
+# fuzz_replay <цель> <файл из BENDCORE_FUZZ_ARTIFACTS>.
+#
+# История: с OCCT 8.0.1, собранным с No_Exception (C++17), — 229 падений в каждой конфигурации
+# (brep_binary 103, brep_text 69, step 47, assembly_json 10). После перехода на OCCT с проверками
+# в Release и C++20 (OCCT_RELEASE_CHECKS=1, OCCT_CXX_STANDARD=C++20, docs/kernel/OCCT_BUILD.md,
+# раздел 6), защиты от аппаратных сбоев и предварительной проверки STEP в ядре
+# (docs/kernel/KERNEL_CORE.md, «Повреждённые файлы») native — 0, asan — 1:
+#
+# asan brep_binary 98 — 4,8 КБ двоичного BRep, в котором число полюсов 2D B-сплайна испорчено
+#   (~2^28). BinTools_Curve2dSet (operator>> для Geom2d_BSplineCurve) выделяет
+#   NCollection_Array1<gp_Pnt2d>(1, nbpoles) по числу из файла до чтения полюсов. Без ASan память
+#   только резервируется (страницы не трогаются, поток кончается после первых полюсов → исключение →
+#   ParseError; в WASM выделение > 4 ГиБ даёт Standard_OutOfMemory → ParseError); ASan же
+#   превышает hard_rss_limit_mb=4096 и завершает процесс. Исправимо только в OCCT (проверка числа
+#   против оставшейся длины потока) или полным разбором формата BinTools до OCCT.
+asan brep_binary 98 crash  # exit code 1: ASan hard_rss_limit (OCCT выделяет массив по испорченному числу из файла)

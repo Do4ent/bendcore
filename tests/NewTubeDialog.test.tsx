@@ -206,7 +206,7 @@ describe("NewTubeDialog", () => {
         HALF_INCH_DIAMETER
       ) as HTMLSelectElement;
       const options = diameterSelect.querySelectorAll("option");
-      expect(options.length).toBeGreaterThan(2); // More than just placeholder + 0.5
+      expect(options.length).toBeGreaterThan(2); // more than the empty prompt option and 0.5
     });
   });
 

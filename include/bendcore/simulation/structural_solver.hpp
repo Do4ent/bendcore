@@ -33,8 +33,8 @@ enum class ConstraintType {
     FIXED_X,       // X displacement fixed
     FIXED_Y,       // Y displacement fixed
     FIXED_Z,       // Z displacement fixed
-    PINNED,        // XY fixed, Z free (simplified)
-    ROLLER,        // Normal direction fixed
+    PINNED,        // X and Y fixed, Z free
+    ROLLER,        // Normal direction fixed: needs a normal, solve() rejects it
 };
 
 /**
@@ -54,13 +54,14 @@ enum class LoadType {
 struct Constraint {
     ConstraintType type;
     size_t node_id;
-    Vector3D displacement = Vector3D(0, 0, 0);  // For displacement constraints
+    Vector3D displacement = Vector3D(0, 0, 0);  // Prescribed value of the fixed components
 };
 
 /**
  * @brief Load definition
  */
 struct Load {
+    // StructuralSolver supports FORCE only; other types make solve() return false.
     LoadType type;
     size_t node_id;
     Vector3D force = Vector3D(0, 0, 0);
@@ -90,6 +91,8 @@ public:
     [[nodiscard]] double principalStress1() const noexcept;
     [[nodiscard]] double principalStress2() const noexcept;
     [[nodiscard]] double principalStress3() const noexcept;
+    // Eigenvalues of the tensor, sigma1 >= sigma2 >= sigma3.
+    [[nodiscard]] std::array<double, 3> principalStresses() const noexcept;
 };
 
 /**
@@ -124,7 +127,15 @@ struct StructuralResults {
 };
 
 /**
- * @brief Structural FEA Solver
+ * @brief Linear elastic static FEA on 4-node tetrahedra (docs/simulation/SIMULATION.md)
+ *
+ * Small strains, isotropic linear elasticity (E, nu), constant-strain tetrahedra
+ * (K_e = V B^T D B), sparse LU solve of K u = F. Elements must have exactly 4 nodes;
+ * loads are nodal forces; constraints prescribe displacement components
+ * (Constraint::displacement). solve() returns false for other element types or load
+ * types, ROLLER constraints, degenerate elements or an unrestrained mechanism.
+ * Results per element: strain, stress (constant), von Mises, safety factor
+ * yield_strength / von Mises (infinite for an unstressed element).
  */
 class StructuralSolver {
 public:
@@ -180,13 +191,6 @@ private:
     double max_displacement_ = 0.0;
     double min_safety_factor_ = 0.0;
 
-    // Internal solver methods
-    void initializeDisplacements();
-    void assembleStiffnessMatrix();
-    void applyBoundaryConditions();
-    void solveLinearSystem();
-    void computeElementStress();
-    void computeSafetyFactors();
 };
 
 }  // namespace BendCore::CadCore::Simulation

@@ -1,19 +1,17 @@
 /**
- * История версий чертежа: список всех версий с возможностью восстановления
- * и сравнения (панель справа от основного чертежа).
+ * История версий чертежа: список версий ассоциативного чертежа (drawing.make_associative)
+ * и состояние ассоциативности. Отката и сравнения версий ядро не предоставляет
+ * (команд нет в src/core_api.cpp), поэтому панель их не предлагает.
  */
-import React, { useState } from 'react';
+import React from 'react';
 import { t } from './core/i18n';
 import type { AssociativityStatus, DrawingVersion } from './core/types';
 import './panels.css';
 
 export interface DrawingVersionPanelProps {
-  tubeId: string;
   currentRevision: number;
   versions: DrawingVersion[];
   status: AssociativityStatus;
-  onRestore: (revision: number) => Promise<void>;
-  onCompare: (rev1: number, rev2: number) => Promise<void>;
 }
 
 const statusDisplay = {
@@ -24,41 +22,10 @@ const statusDisplay = {
 };
 
 export const DrawingVersionPanel: React.FC<DrawingVersionPanelProps> = ({
-  tubeId,
   currentRevision,
   versions,
   status,
-  onRestore,
-  onCompare,
 }) => {
-  const [restoring, setRestoring] = useState<number | null>(null);
-  const [comparing, setComparing] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleRestore = async (revision: number) => {
-    try {
-      setRestoring(revision);
-      setError(null);
-      await onRestore(revision);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setRestoring(null);
-    }
-  };
-
-  const handleCompare = async (rev: number) => {
-    try {
-      setComparing(rev);
-      setError(null);
-      await onCompare(currentRevision, rev);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setComparing(null);
-    }
-  };
-
   const disp = statusDisplay[status];
 
   return (
@@ -83,8 +50,6 @@ export const DrawingVersionPanel: React.FC<DrawingVersionPanelProps> = ({
         </div>
       </div>
 
-      {error && <div className="bc-banner error" style={{ margin: '8px 0' }}>{error}</div>}
-
       <div className="bc-body" style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
         <div style={{ fontSize: '11px', color: 'var(--bc-text-secondary)', marginBottom: '8px' }}>
           Всего версий: <strong>{versions.length}</strong>
@@ -97,7 +62,6 @@ export const DrawingVersionPanel: React.FC<DrawingVersionPanelProps> = ({
               <th style={{ width: '100px' }}>Дата</th>
               <th style={{ width: '80px' }}>Автор</th>
               <th style={{ flex: 1 }}>Комментарий</th>
-              <th style={{ width: '80px' }}></th>
             </tr>
           </thead>
           <tbody>
@@ -127,28 +91,6 @@ export const DrawingVersionPanel: React.FC<DrawingVersionPanelProps> = ({
                   </td>
                   <td style={{ fontSize: '11px' }}>{v.author}</td>
                   <td style={{ fontSize: '11px', color: 'var(--bc-text-secondary)' }}>{v.comment}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button
-                      className="bc-btn small"
-                      onClick={() => handleRestore(v.revision)}
-                      disabled={isCurrent || restoring === v.revision}
-                      style={{ padding: '2px 6px', fontSize: '11px' }}
-                      title={isCurrent ? 'Текущая версия' : 'Восстановить эту версию'}
-                    >
-                      {restoring === v.revision ? '...' : 'Откат'}
-                    </button>
-                    {!isCurrent && (
-                      <button
-                        className="bc-btn small"
-                        onClick={() => handleCompare(v.revision)}
-                        disabled={comparing === v.revision}
-                        style={{ padding: '2px 6px', fontSize: '11px', marginLeft: '4px' }}
-                        title="Сравнить с текущей версией"
-                      >
-                        {comparing === v.revision ? '...' : 'Сравнить'}
-                      </button>
-                    )}
-                  </td>
                 </tr>
               );
             })}

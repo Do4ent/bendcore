@@ -5,6 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { applyLegacyOutput, lightIntensity } from './legacyLook';
 import { OrbitCamera, CameraState } from './OrbitCamera';
 import { MouseGestures, GestureEvent } from './MouseGestures';
 import { SnapConstraints, SnapMode, SnapPoint } from './SnapConstraints';
@@ -86,6 +87,7 @@ const Viewport3D: React.FC<Viewport3DProps> = ({
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
+    applyLegacyOutput(renderer);
     renderer.shadowMap.enabled = true;
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
@@ -95,10 +97,10 @@ const Viewport3D: React.FC<Viewport3DProps> = ({
     cameraRef.current = camera;
 
     // Create lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, lightIntensity(0.6));
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, lightIntensity(0.8));
     directionalLight.position.set(10, 20, 10);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;

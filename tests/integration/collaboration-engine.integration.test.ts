@@ -2,8 +2,8 @@
  * @jest-environment node
  *
  * CollaborationEngine integration tests: a real `ws` server with real
- * WebSocket clients. Runs in the node environment because `ws` resolves to
- * its browser stub under jsdom.
+ * WebSocket clients. Runs in the node environment because under jsdom `ws`
+ * resolves to its browser entry point, which only throws.
  */
 
 import WebSocket from 'ws';

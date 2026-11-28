@@ -1,0 +1,8 @@
+# Large local build trees; OCCT reaches docker/Dockerfile via --build-context occt=...
+third_party/occt-*
+build
+build-*
+node_modules
+backend/node_modules
+dist
+.git

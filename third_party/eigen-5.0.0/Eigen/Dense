@@ -1,6 +1,0 @@
-#ifndef EIGEN_DENSE_H
-#define EIGEN_DENSE_H
-
-#include "Core"
-
-#endif // EIGEN_DENSE_H

@@ -68,17 +68,24 @@ echo ""
 echo "[3/4] Setting up Emscripten..."
 
 EMSDK_DIR="${HOME}/emsdk"
+# Same version as CI (.github/workflows/wasm.yml, setup-emsdk "version").
+EMSDK_VERSION="${EMSDK_VERSION:-6.0.12}"
+EMSDK_LOG="${TMPDIR:-/tmp}/bendcore-emsdk-install.log"
 if [[ -d "$EMSDK_DIR" ]]; then
-  echo "  emsdk already exists at $EMSDK_DIR"
+  echo "  emsdk already exists at $EMSDK_DIR (updating tool list)"
+  git -C "$EMSDK_DIR" pull -q --ff-only || echo "  WARNING: could not update $EMSDK_DIR" >&2
 else
   echo "  Cloning emsdk..."
-  git clone https://github.com/emscripten-core/emsdk.git "$EMSDK_DIR" 2>/dev/null || true
+  git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$EMSDK_DIR"
 fi
 
 cd "$EMSDK_DIR"
-echo "  Installing latest emscripten..."
-./emsdk install latest >/dev/null 2>&1
-./emsdk activate latest >/dev/null 2>&1
+echo "  Installing emscripten $EMSDK_VERSION (log: $EMSDK_LOG)..."
+if ! { ./emsdk install "$EMSDK_VERSION" && ./emsdk activate "$EMSDK_VERSION"; } >"$EMSDK_LOG" 2>&1; then
+  echo "  ERROR: emsdk install/activate $EMSDK_VERSION failed" >&2
+  tail -n 30 "$EMSDK_LOG" >&2
+  exit 1
+fi
 
 # Step 4: Setup environment
 echo ""

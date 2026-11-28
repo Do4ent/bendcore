@@ -1,6 +1,6 @@
 /**
  * TubeDialog Tests
- * Validates tube configuration dialog with 7 tabs
+ * Validates tube configuration dialog with 6 tabs
  */
 
 import React from 'react';
@@ -45,9 +45,9 @@ describe('TubeDialog', () => {
   });
 
   describe('Tab Navigation', () => {
-    test('should have 7 tabs available', () => {
+    test('should have 6 tabs available', () => {
       render(<TubeDialog {...defaultProps} />);
-      expect(screen.getAllByRole('tab')).toHaveLength(7);
+      expect(screen.getAllByRole('tab')).toHaveLength(6);
     });
 
     test('should switch to Geometry tab', () => {
@@ -355,7 +355,7 @@ describe('TubeDialog', () => {
   describe('Accessibility', () => {
     test('should have tab roles', () => {
       render(<TubeDialog {...defaultProps} />);
-      expect(screen.getAllByRole('tab')).toHaveLength(7);
+      expect(screen.getAllByRole('tab')).toHaveLength(6);
     });
 
     test('should have dialog role', () => {

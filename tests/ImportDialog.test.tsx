@@ -97,7 +97,7 @@ describe("ImportDialog", () => {
 
     // The geometry kernel cannot read IGES yet (see handleFileSelected), so the
     // dialog must not offer it and must explain why an IGES file is refused.
-    it("should explain that IGES files are not supported yet", () => {
+    it("should refuse IGES files and explain why", () => {
       const { container } = render(
         <ImportDialog onImport={jest.fn()} />
       );
@@ -110,6 +110,21 @@ describe("ImportDialog", () => {
       expect(mockedAnalyzeStep).not.toHaveBeenCalled();
       expect(container.querySelector(".import-error")).toHaveTextContent(/IGES/);
       expect(container.querySelector(".file-drop-zone")).toBeInTheDocument();
+    });
+  });
+
+  describe("File rejection", () => {
+    it("should reject files that are not CAD files", () => {
+      const alertSpy = jest.spyOn(window, "alert").mockImplementation(() => undefined);
+      const { container } = render(<ImportDialog onImport={jest.fn()} />);
+
+      selectFile(container, "notes.txt");
+
+      expect(alertSpy).toHaveBeenCalledTimes(1);
+      expect(mockedAnalyzeStep).not.toHaveBeenCalled();
+      expect(container.querySelector(".file-drop-zone")).toBeInTheDocument();
+      expect(container.querySelector(".import-tube-reviewer")).not.toBeInTheDocument();
+      alertSpy.mockRestore();
     });
   });
 

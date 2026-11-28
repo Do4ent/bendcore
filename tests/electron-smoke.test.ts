@@ -1,7 +1,9 @@
 /**
  * Smoke test for Electron main process
  * Verifies that the main process can be instantiated without critical errors
- * Skipped on CI - requires display server
+ * Skipped on CI - requires display server.
+ * Not part of the default Jest run (jest.config.js): needs dist/ and the Electron binary.
+ * Run with: npm run test:electron-smoke
  */
 
 import { spawn } from 'child_process';
@@ -33,7 +35,11 @@ describeFn('Electron Smoke Test', () => {
         console.log('[Electron stderr]', data.toString());
 
         // Look for critical errors (not just warnings)
-        if (data.toString().includes('FATAL') || data.toString().includes('Cannot find module')) {
+        if (
+          data.toString().includes('FATAL') ||
+          data.toString().includes('Cannot find module') ||
+          data.toString().includes('Electron failed to install')
+        ) {
           hasError = true;
         }
       });

@@ -8,11 +8,6 @@
 #include <memory>
 #include <optional>
 
-#if defined(_WIN32) || defined(_WIN64)
-  #include <TopoDS_Shape.hxx>
-  #include <TDocStd_Document.hxx>
-  #include <STEPCAFControl_Reader.hxx>
-#endif
 
 namespace bendcore::step {
 
@@ -36,8 +31,8 @@ public:
     // Returns ImportResult with success status and extracted shapes
     ImportResult read(const std::string& file_path);
 
-    // Get extracted shape by ID (for geometry analysis)
-    // Returns empty string if shape not found
+    // Get extracted shape by ID: OCCT B-Rep text (BRepTools::Write format),
+    // readable with BRepTools::Read. Returns empty string if not found.
     std::string get_shape_data(const std::string& shape_id) const;
 
     // Get all property keys
@@ -50,26 +45,12 @@ public:
     static bool is_supported_format(const std::string& file_path);
 
 private:
-    #if defined(_WIN32) || defined(_WIN64)
-      Handle(TDocStd_Document) doc_;
-      STEPCAFControl_Reader reader_;
-      std::map<std::string, std::string> shapes_;  // shape_id -> serialized shape data
-    #endif
-
+    std::map<std::string, std::string> shapes_;  // shape_id -> B-Rep text
     std::map<std::string, std::string> properties_;
     int warning_count_ = 0;
 
-    // Extract all shapes from document
-    void extract_shapes(const std::string& file_path);
-
-    // Extract metadata from document
-    void extract_metadata(const std::string& file_path);
-
-    // Get file extension
+    // Get file extension (lower case, without the dot)
     static std::string get_file_extension(const std::string& file_path);
-
-    // Convert UTF-8 path to Windows wide char
-    static std::wstring utf8_to_wide(const std::string& utf8_str);
 };
 
 }  // namespace bendcore::step

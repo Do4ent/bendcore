@@ -4,6 +4,7 @@
  * selection, editing, dark mode, and localStorage persistence.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { arcFromEndpoints, hitTestArc } from './sketchArc';
 import type { SketchElement, SketchDimension } from './core/types';
 import { t } from './core/i18n';
 import './panels.css';
@@ -136,10 +137,9 @@ export const SketchEditor: React.FC<SketchEditorProps> = ({
       const d2 = distance(x, y, element.p1_x, element.p1_y);
       return d1 + d2 - d < tolerance;
     } else if (element.type === 'arc') {
-      // Simplified arc hit test
-      const arcDist = distance(x, y, element.p0_x, element.p0_y);
-      const radius = element.radius ?? 0;
-      return Math.abs(arcDist - radius) < tolerance;
+      const arc = arcFromEndpoints(element.p0_x, element.p0_y, element.p1_x, element.p1_y,
+        element.radius ?? 0, element.arc_large ?? false, element.arc_sweep ?? false);
+      return arc !== null && hitTestArc(x, y, arc, tolerance);
     } else if (element.type === 'text') {
       return pointInBox(x, y, element.p0_x - 50, element.p0_y - 10, element.p0_x + 50, element.p0_y + 10);
     }
@@ -192,12 +192,14 @@ export const SketchEditor: React.FC<SketchEditorProps> = ({
         break;
       case 'arc':
         {
-          const radius = elem.radius ?? 50;
-          const startAngle = Math.atan2(elem.p0_y - elem.p1_y, elem.p0_x - elem.p1_x);
-          const endAngle = startAngle + Math.PI;
-          ctx.beginPath();
-          ctx.arc(elem.p1_x, elem.p1_y, radius, startAngle, endAngle);
-          ctx.stroke();
+          // Endpoints p0, p1 with radius and flags, as in drawing.add_sketch (src/drawing.cpp).
+          const arc = arcFromEndpoints(elem.p0_x, elem.p0_y, elem.p1_x, elem.p1_y,
+            elem.radius ?? 0, elem.arc_large ?? false, elem.arc_sweep ?? false);
+          if (arc) {
+            ctx.beginPath();
+            ctx.arc(arc.cx, arc.cy, arc.r, arc.start, arc.start + arc.delta, arc.delta < 0);
+            ctx.stroke();
+          }
         }
         break;
       case 'text':

@@ -2,6 +2,11 @@
 #include <cmath>
 #include <algorithm>
 #include <numeric>
+#include <limits>
+#include <utility>
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
+#include <Eigen/SparseLU>
 
 namespace BendCore::CadCore::Simulation {
 
@@ -64,33 +69,167 @@ void ThermalSolver::addHeatSource(const HeatSource& source) {
     heat_sources_.push_back(source);
 }
 
+namespace {
+
+// Conduction neighbours of node i: nodes within kNeighbourFactor times the
+// distance from i to its nearest node (union over both ends). On a regular
+// grid with spacing h this keeps exactly the face neighbours, so the graph
+// operator sum_j k (T_j - T_i) / d_ij^2 is the standard 3/5/7-point Laplacian.
+constexpr double kNeighbourFactor = 1.2;
+constexpr double kStefanBoltzmann = 5.67e-8;  // W/(m^2*K^4)
+
+}  // namespace
+
+void ThermalSolver::buildNeighbours() {
+    const size_t n = num_nodes_;
+    std::vector<std::vector<size_t>> adj(n);
+    for (size_t i = 0; i < n; ++i) {
+        double h = std::numeric_limits<double>::max();
+        for (size_t j = 0; j < n; ++j) {
+            if (j == i) continue;
+            const double d = (node_coordinates_[j] - node_coordinates_[i]).magnitude();
+            if (d > 1e-12) h = std::min(h, d);
+        }
+        for (size_t j = 0; j < n; ++j) {
+            if (j == i) continue;
+            const double d = (node_coordinates_[j] - node_coordinates_[i]).magnitude();
+            if (d > 1e-12 && d <= kNeighbourFactor * h) {
+                adj[i].push_back(j);
+                adj[j].push_back(i);
+            }
+        }
+    }
+    neighbours_.assign(n, {});
+    for (size_t i = 0; i < n; ++i) {
+        std::sort(adj[i].begin(), adj[i].end());
+        adj[i].erase(std::unique(adj[i].begin(), adj[i].end()), adj[i].end());
+        for (size_t j : adj[i]) {
+            const double d = (node_coordinates_[j] - node_coordinates_[i]).magnitude();
+            neighbours_[i].push_back({j, d});
+        }
+    }
+}
+
+bool ThermalSolver::solveLinearStep(double capacity_over_dt, const std::vector<double>& t_old) {
+    // Per unit volume, for every node without a fixed temperature:
+    //   C/dt (T_i - T_i_old) = sum_j k (T_j - T_i) / d_ij^2
+    //                          + q_flux + q_source - h (T_i - T_a) - h_r (T_i - T_a)
+    // C/dt = 0 gives the steady equation. Radiation is linearised around the
+    // current iterate: h_r = e*s*(T^2 + T_a^2)(T + T_a).
+    const size_t n = num_nodes_;
+    const double k = material_.thermal_conductivity;
+
+    std::vector<bool> fixed(n, false);
+    std::vector<double> fixed_value(n, 0.0);
+    for (const auto& bc : boundary_conditions_) {
+        if (bc.type != ThermalBCType::TEMPERATURE) continue;
+        for (size_t idx : bc.face_indices) {
+            if (idx < n) { fixed[idx] = true; fixed_value[idx] = bc.temperature; }
+        }
+    }
+
+    std::vector<Eigen::Triplet<double>> triplets;
+    Eigen::VectorXd rhs = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(n));
+    std::vector<double> diag(n, 0.0);
+    for (size_t i = 0; i < n; ++i) {
+        if (fixed[i]) continue;
+        diag[i] += capacity_over_dt;
+        rhs[static_cast<Eigen::Index>(i)] += capacity_over_dt * t_old[i];
+        for (const auto& [j, dist] : neighbours_[i]) {
+            const double g = k / (dist * dist);
+            diag[i] += g;
+            if (fixed[j]) {
+                rhs[static_cast<Eigen::Index>(i)] += g * fixed_value[j];
+            } else {
+                triplets.emplace_back(i, j, -g);
+            }
+        }
+    }
+    for (const auto& bc : boundary_conditions_) {
+        for (size_t idx : bc.face_indices) {
+            if (idx >= n || fixed[idx]) continue;
+            const auto r = static_cast<Eigen::Index>(idx);
+            switch (bc.type) {
+                case ThermalBCType::HEAT_FLUX:
+                    rhs[r] += bc.heat_flux;
+                    break;
+                case ThermalBCType::CONVECTION:
+                    diag[idx] += bc.convection_coefficient;
+                    rhs[r] += bc.convection_coefficient * bc.ambient_temperature;
+                    break;
+                case ThermalBCType::RADIATION: {
+                    const double T = temperature_field_[idx];
+                    const double Ta = bc.ambient_temperature;
+                    const double h_r = material_.emissivity * kStefanBoltzmann *
+                                       (T * T + Ta * Ta) * (T + Ta);
+                    diag[idx] += h_r;
+                    rhs[r] += h_r * Ta;
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+    }
+    for (const auto& source : heat_sources_) {
+        if (source.element_id < n && !fixed[source.element_id]) {
+            rhs[static_cast<Eigen::Index>(source.element_id)] += source.heat_generation;
+        }
+    }
+    for (size_t i = 0; i < n; ++i) {
+        if (fixed[i]) {
+            triplets.emplace_back(i, i, 1.0);
+            rhs[static_cast<Eigen::Index>(i)] = fixed_value[i];
+        } else {
+            triplets.emplace_back(i, i, diag[i]);
+        }
+    }
+
+    Eigen::SparseMatrix<double> K(static_cast<Eigen::Index>(n), static_cast<Eigen::Index>(n));
+    K.setFromTriplets(triplets.begin(), triplets.end());
+    Eigen::SparseLU<Eigen::SparseMatrix<double>> lu;
+    lu.compute(K);
+    if (lu.info() != Eigen::Success) {
+        return false;  // singular: nothing anchors the temperature level
+    }
+    Eigen::VectorXd T = lu.solve(rhs);
+    if (lu.info() != Eigen::Success || !T.allFinite()) {
+        return false;
+    }
+    for (size_t i = 0; i < n; ++i) temperature_field_[i] = T[static_cast<Eigen::Index>(i)];
+    return true;
+}
+
 bool ThermalSolver::solve() {
     if (transient_mode_) {
         return solveTransient();
     }
 
+    converged_ = false;
     if (num_nodes_ == 0) {
         return false;
     }
-
     initializeTemperatureField();
+    buildNeighbours();
 
+    bool has_radiation = false;
+    for (const auto& bc : boundary_conditions_) {
+        has_radiation = has_radiation || bc.type == ThermalBCType::RADIATION;
+    }
+    // Radiation makes the problem non-linear: Picard iterations on h_r.
+    const int max_picard = has_radiation ? 100 : 1;
     iteration_count_ = 0;
-    while (iteration_count_ < 100) {
+    for (int picard = 0; picard < max_picard; ++picard) {
         temperature_field_previous_ = temperature_field_;
-
-        assembleConductivityMatrix();
-        applyBoundaryConditions();
-        solveLinearSystem();
-
-        double residual = computeResidual();
-
-        if (residual < convergence_tolerance_) {
+        if (!solveLinearStep(0.0, temperature_field_previous_)) {
+            updateResults();
+            return false;
+        }
+        ++iteration_count_;
+        if (!has_radiation || computeResidual() < convergence_tolerance_) {
             converged_ = true;
             break;
         }
-
-        iteration_count_++;
     }
 
     updateResults();
@@ -98,23 +237,31 @@ bool ThermalSolver::solve() {
 }
 
 bool ThermalSolver::solveTransient() {
-    if (num_nodes_ == 0) {
+    converged_ = false;
+    elapsed_time_ = 0.0;
+    iteration_count_ = 0;
+    if (num_nodes_ == 0 || !(time_step_ > 0.0) || total_time_ < 0.0) {
         return false;
     }
-
     initializeTemperatureField();
+    buildNeighbours();
 
-    while (elapsed_time_ < total_time_) {
+    // Backward (implicit) Euler: unconditionally stable, first order in dt.
+    // Radiation is linearised at the start of each step (no inner iterations).
+    const double capacity = material_.density * material_.specific_heat_capacity;
+    if (!(capacity > 0.0)) {
+        return false;
+    }
+    const auto steps = static_cast<size_t>(std::ceil(total_time_ / time_step_ - 1e-9));
+    for (size_t step = 0; step < steps; ++step) {
+        const double dt = std::min(time_step_, total_time_ - elapsed_time_);
         temperature_field_previous_ = temperature_field_;
-
-        // Implicit Euler time stepping
-        assembleConductivityMatrix();
-        assembleHeatCapacityMatrix();
-        applyBoundaryConditions();
-        solveLinearSystem();
-
-        elapsed_time_ += time_step_;
-        iteration_count_++;
+        if (!solveLinearStep(capacity / dt, temperature_field_previous_)) {
+            updateResults();
+            return false;
+        }
+        elapsed_time_ += dt;
+        ++iteration_count_;
     }
 
     converged_ = true;
@@ -123,10 +270,10 @@ bool ThermalSolver::solveTransient() {
 }
 
 void ThermalSolver::initializeTemperatureField() {
-    std::fill(temperature_field_.begin(), temperature_field_.end(), initial_temperature_);
-    std::fill(temperature_field_previous_.begin(), temperature_field_previous_.end(), initial_temperature_);
+    temperature_field_.assign(num_nodes_, initial_temperature_);
+    temperature_field_previous_.assign(num_nodes_, initial_temperature_);
 
-    // Apply Dirichlet boundary conditions
+    // Dirichlet boundary conditions
     for (const auto& bc : boundary_conditions_) {
         if (bc.type == ThermalBCType::TEMPERATURE) {
             for (size_t idx : bc.face_indices) {
@@ -139,152 +286,40 @@ void ThermalSolver::initializeTemperatureField() {
     }
 }
 
-void ThermalSolver::assembleConductivityMatrix() {
-    // Simplified: use finite difference method
-    // ∇²T = ∂²T/∂x² + ∂²T/∂y² + ∂²T/∂z²
-
-    for (size_t i = 0; i < num_nodes_; i++) {
-        if (i < temperature_field_.size()) {
-            // Laplacian approximation (simplified)
-            double laplacian = 0.0;
-
-            // Find neighboring nodes (simplified: just use distance-based approximation)
-            for (size_t j = 0; j < num_nodes_; j++) {
-                if (i == j) continue;
-
-                Vector3D diff = node_coordinates_[j] - node_coordinates_[i];
-                double dist = diff.magnitude();
-
-                if (dist < 2.0 && dist > 1e-10) {
-                    double temp_diff = temperature_field_[j] - temperature_field_[i];
-                    laplacian += temp_diff / (dist * dist);
-                }
-            }
-
-            // Apply thermal diffusivity: ∂T/∂t = α∇²T
-            // where α = k / (ρ*c)
-            double thermal_diffusivity = material_.thermal_conductivity /
-                (material_.density * material_.specific_heat_capacity);
-
-            temperature_field_[i] += thermal_diffusivity * laplacian * 0.01;
-        }
-    }
-}
-
-void ThermalSolver::assembleHeatCapacityMatrix() {
-    // For implicit time stepping
-    // (ρ*c/Δt)*T_new + k*∇²T_new = (ρ*c/Δt)*T_old
-}
-
-void ThermalSolver::applyBoundaryConditions() {
-    for (const auto& bc : boundary_conditions_) {
-        switch (bc.type) {
-            case ThermalBCType::TEMPERATURE:
-                // Dirichlet BC
-                for (size_t idx : bc.face_indices) {
-                    if (idx < temperature_field_.size()) {
-                        temperature_field_[idx] = bc.temperature;
-                    }
-                }
-                break;
-
-            case ThermalBCType::HEAT_FLUX:
-                // Neumann BC: -k * ∂T/∂n = q
-                // Simplified: add heat to boundary nodes
-                for (size_t idx : bc.face_indices) {
-                    if (idx < temperature_field_.size()) {
-                        double heat_input = bc.heat_flux / (material_.density * material_.specific_heat_capacity);
-                        temperature_field_[idx] += heat_input * 0.01;
-                    }
-                }
-                break;
-
-            case ThermalBCType::CONVECTION:
-                // h*(T_boundary - T_ambient) = -k * ∂T/∂n
-                for (size_t idx : bc.face_indices) {
-                    if (idx < temperature_field_.size()) {
-                        double heat_transfer = bc.convection_coefficient *
-                            (temperature_field_[idx] - bc.ambient_temperature);
-                        temperature_field_[idx] -= (heat_transfer / (material_.density * material_.specific_heat_capacity)) * 0.01;
-                    }
-                }
-                break;
-
-            case ThermalBCType::RADIATION:
-                // q = ε*σ*(T⁴ - T_ambient⁴)
-                for (size_t idx : bc.face_indices) {
-                    if (idx < temperature_field_.size()) {
-                        const double stefan_boltzmann = 5.67e-8;  // W/(m²·K⁴)
-                        double T = temperature_field_[idx];
-                        double T_amb = bc.ambient_temperature;
-                        double heat_transfer = material_.emissivity * stefan_boltzmann *
-                            (T * T * T * T - T_amb * T_amb * T_amb * T_amb);
-                        temperature_field_[idx] -= (heat_transfer / (material_.density * material_.specific_heat_capacity)) * 0.01;
-                    }
-                }
-                break;
-
-            case ThermalBCType::ADIABATIC:
-                // Do nothing (no heat flow)
-                break;
-        }
-    }
-
-    // Apply heat sources
-    for (const auto& source : heat_sources_) {
-        if (source.element_id < temperature_field_.size()) {
-            double heat_input = source.heat_generation / (material_.density * material_.specific_heat_capacity);
-            temperature_field_[source.element_id] += heat_input * 0.01;
-        }
-    }
-}
-
-void ThermalSolver::solveLinearSystem() {
-    // Already done in assembleConductivityMatrix with forward Euler
-    // In a real solver, this would solve the system K*T = F
-}
-
 void ThermalSolver::updateResults() {
     results_.clear();
 
     max_temperature_ = 0.0;
     min_temperature_ = std::numeric_limits<double>::max();
 
-    for (size_t i = 0; i < num_nodes_; i++) {
-        if (i < temperature_field_.size()) {
-            ThermalResults result;
-            result.node_id = i;
-            result.position = node_coordinates_[i];
-            result.temperature = temperature_field_[i];
+    for (size_t i = 0; i < num_nodes_ && i < temperature_field_.size(); i++) {
+        ThermalResults result;
+        result.node_id = i;
+        result.position = node_coordinates_[i];
+        result.temperature = temperature_field_[i];
 
-            // Simplified heat flux computation: q = -k*∇T
-            Vector3D grad_T = Vector3D(0, 0, 0);
-            int neighbor_count = 0;
-
-            for (size_t j = 0; j < num_nodes_; j++) {
-                if (i == j) continue;
-
-                Vector3D diff = node_coordinates_[j] - node_coordinates_[i];
-                double dist = diff.magnitude();
-
-                if (dist < 2.0 && dist > 1e-10) {
-                    double temp_diff = temperature_field_[j] - temperature_field_[i];
-                    Vector3D normalized_diff = diff * (1.0 / dist);
-                    grad_T = grad_T + normalized_diff * (temp_diff / dist);
-                    neighbor_count++;
-                }
+        // Fourier's law q = -k grad T with a weighted least-squares nodal gradient
+        // (weights 1/d^2); rank-deficient neighbourhoods (1-D / 2-D clouds) are
+        // handled by a complete orthogonal decomposition.
+        if (i < neighbours_.size() && !neighbours_[i].empty()) {
+            Eigen::Matrix3d A = Eigen::Matrix3d::Zero();
+            Eigen::Vector3d b = Eigen::Vector3d::Zero();
+            for (const auto& [j, dist] : neighbours_[i]) {
+                const Vector3D d = node_coordinates_[j] - node_coordinates_[i];
+                const Eigen::Vector3d dx(d.x, d.y, d.z);
+                const double w = 1.0 / (dist * dist);
+                A += w * dx * dx.transpose();
+                b += w * dx * (temperature_field_[j] - temperature_field_[i]);
             }
-
-            if (neighbor_count > 0) {
-                grad_T = grad_T * (1.0 / neighbor_count);
-                result.heat_flux = grad_T * (-material_.thermal_conductivity);
-            }
-
-            results_.push_back(result);
-
-            max_temperature_ = std::max(max_temperature_, result.temperature);
-            min_temperature_ = std::min(min_temperature_, result.temperature);
+            const Eigen::Vector3d g = A.completeOrthogonalDecomposition().solve(b);
+            const double k = material_.thermal_conductivity;
+            result.heat_flux = Vector3D(-k * g.x(), -k * g.y(), -k * g.z());
         }
+
+        results_.push_back(result);
+
+        max_temperature_ = std::max(max_temperature_, result.temperature);
+        min_temperature_ = std::min(min_temperature_, result.temperature);
     }
 
     if (min_temperature_ > 1e9) {

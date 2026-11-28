@@ -193,25 +193,9 @@ Matrix3x3 MassPropertiesCalculator::calculateInertiaTensor(
 std::array<double, 3> MassPropertiesCalculator::calculatePrincipalMoments(
     const Matrix3x3& inertia_tensor
 ) {
-    // Simplified eigenvalue computation for 3x3 symmetric matrix
-    // Using power iteration method or analytical solution for 3x3 case
-
-    double a = inertia_tensor.get(0, 0);
-    double b = inertia_tensor.get(0, 1);
-    double c = inertia_tensor.get(0, 2);
-    double d = inertia_tensor.get(1, 1);
-    double e = inertia_tensor.get(1, 2);
-    double f = inertia_tensor.get(2, 2);
-
-    // Characteristic polynomial coefficients for 3x3 matrix
-    double trace = a + d + f;
-    double sum_diagonal_minors = a * d + a * f + d * f - b * b - c * c - e * e;
-    double det = a * (d * f - e * e) - b * (b * f - c * e) + c * (b * e - c * d);
-
-    // Use Newton's method to find roots (simplified)
-    std::array<double, 3> eigenvalues = {a, d, f};
-    std::sort(eigenvalues.begin(), eigenvalues.end());
-
+    std::array<double, 3> eigenvalues;
+    std::array<Vector3D, 3> axes;
+    diagonalizeInertia(inertia_tensor, eigenvalues, axes);
     return eigenvalues;
 }
 
@@ -287,8 +271,8 @@ MassProperties MassPropertiesCalculator::calculateAssemblyMassProperties(
     // Calculate inertia tensor about COG
     props.inertia_tensor = calculateInertiaTensor(components, props.center_of_gravity);
 
-    // Calculate principal moments
-    props.principal_moments = calculatePrincipalMoments(props.inertia_tensor);
+    // Principal moments and axes (eigen-decomposition of the inertia tensor)
+    diagonalizeInertia(props.inertia_tensor, props.principal_moments, props.principal_axes);
 
     // Calculate radius of gyration
     props.radius_of_gyration = calculateRadiusOfGyration(
@@ -312,14 +296,55 @@ void MassPropertiesCalculator::diagonalizeInertia(
     std::array<double, 3>& eigenvalues,
     std::array<Vector3D, 3>& eigenvectors
 ) {
-    // Simplified eigenvalue/eigenvector computation
-    // For a full implementation, use proper numerical methods
-    eigenvalues = calculatePrincipalMoments(I);
-
-    // Set default orthonormal eigenvectors
-    eigenvectors[0] = Vector3D(1, 0, 0);
-    eigenvectors[1] = Vector3D(0, 1, 0);
-    eigenvectors[2] = Vector3D(0, 0, 1);
+    // Циклический метод Якоби для симметричной матрицы 3x3 (Golub, Van Loan,
+    // «Matrix Computations», 4-е изд., п. 8.5): вращения обнуляют внедиагональные
+    // элементы, столбцы накопленной матрицы вращений V — главные оси.
+    double a[3][3];
+    double v[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    for (int r = 0; r < 3; ++r) {
+        for (int c = 0; c < 3; ++c) {
+            a[r][c] = 0.5 * (I.get(r, c) + I.get(c, r));
+        }
+    }
+    double scale = 0.0;
+    for (int r = 0; r < 3; ++r) scale = std::max(scale, std::abs(a[r][r]));
+    for (int sweep = 0; sweep < 50; ++sweep) {
+        double off = std::abs(a[0][1]) + std::abs(a[0][2]) + std::abs(a[1][2]);
+        if (off <= 1e-15 * std::max(scale, 1e-300)) break;
+        for (int p = 0; p < 2; ++p) {
+            for (int q = p + 1; q < 3; ++q) {
+                if (std::abs(a[p][q]) < 1e-300) continue;
+                const double theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+                const double t = (theta >= 0 ? 1.0 : -1.0) /
+                                 (std::abs(theta) + std::sqrt(theta * theta + 1.0));
+                const double cs = 1.0 / std::sqrt(t * t + 1.0);
+                const double sn = t * cs;
+                for (int k = 0; k < 3; ++k) {  // A <- A J
+                    const double akp = a[k][p], akq = a[k][q];
+                    a[k][p] = cs * akp - sn * akq;
+                    a[k][q] = sn * akp + cs * akq;
+                }
+                for (int k = 0; k < 3; ++k) {  // A <- J^T A
+                    const double apk = a[p][k], aqk = a[q][k];
+                    a[p][k] = cs * apk - sn * aqk;
+                    a[q][k] = sn * apk + cs * aqk;
+                }
+                for (int k = 0; k < 3; ++k) {  // V <- V J
+                    const double vkp = v[k][p], vkq = v[k][q];
+                    v[k][p] = cs * vkp - sn * vkq;
+                    v[k][q] = sn * vkp + cs * vkq;
+                }
+            }
+        }
+    }
+    // По возрастанию главного момента; оси — соответствующие столбцы V.
+    std::array<int, 3> order = {0, 1, 2};
+    std::sort(order.begin(), order.end(), [&](int x, int y) { return a[x][x] < a[y][y]; });
+    for (int i = 0; i < 3; ++i) {
+        const int k = order[i];
+        eigenvalues[i] = a[k][k];
+        eigenvectors[i] = Vector3D(v[0][k], v[1][k], v[2][k]);
+    }
 }
 
 // ==================== MassPropertiesReporter ====================

@@ -246,5 +246,6 @@ int main() {
     std::printf("Failed: %d\n", fail_count);
     std::printf("=======================================\n");
 
-    return fail_count > 0 ? 1 : 0;
+    if (fail_count > 0) return 1;
+    return 0;
 }

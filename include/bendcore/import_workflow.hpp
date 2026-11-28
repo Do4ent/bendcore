@@ -54,7 +54,6 @@ public:
 
 private:
     bendcore::step::STEPReader step_reader_;
-    bendcore::dxf::DXFReader dxf_reader_;
     bendcore::geometry::GeometryAnalyzer analyzer_;
     bendcore::cache::GeometryCache cache_;
     bendcore::parametric::ParametricDimensionBuilder builder_;

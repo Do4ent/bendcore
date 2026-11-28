@@ -157,6 +157,7 @@ public:
         JSON      // JSON для обработки
     };
 
+    // Поддерживаются JSON, HTML и CSV; для остальных форматов — std::invalid_argument.
     std::string exportReport(
         const ProductionReport& report,
         ExportFormat format

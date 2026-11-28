@@ -52,7 +52,7 @@ public:
     // Export functionality
     struct ExportRequest {
         std::string reportId;
-        std::vector<std::string> formats; // "gcode", "pdf", "dwg", "svg", "json", "csv"
+        std::vector<std::string> formats; // "json", "html", "csv"; иное — exportReport вернёт false
         std::string outputPath;
         bool createSubfolder = true;
     };
@@ -142,50 +142,6 @@ private:
     std::map<std::string, standards::Standard> tubeStandardMap;
 };
 
-// ========== Collaboration UI (Stubs) ==========
-
-class CollaborationUIStubs {
-public:
-    explicit CollaborationUIStubs();
-    ~CollaborationUIStubs();
-
-    // Stub: Comments
-    struct CommentSummary {
-        std::string commentId;
-        std::string author;
-        std::string text;
-        int64_t timestamp = 0;
-        int replyCount = 0;
-        bool resolved = false;
-    };
-
-    std::vector<CommentSummary> getComments(const std::string& tubeId) const;
-
-    // Stub: Versions
-    struct VersionSummary {
-        std::string versionNumber; // e.g., "1.0"
-        std::string tag;           // "stable", "release"
-        int64_t timestamp = 0;
-        std::string author;
-    };
-
-    std::vector<VersionSummary> getVersions(const std::string& tubeId) const;
-
-    // Stub: Changes
-    struct ChangeSummary {
-        std::string changeType;    // "geometry", "material", "machine", etc.
-        std::string description;
-        int64_t timestamp = 0;
-        std::string author;
-    };
-
-    std::vector<ChangeSummary> getChanges(const std::string& tubeId) const;
-
-private:
-    // Stubs return empty for now
-    // Full implementation: Phase 26B/C
-};
-
 // ========== Integrated UI Manager ==========
 
 class ProductionUIManager {
@@ -196,7 +152,6 @@ public:
     // Main components
     ReportingUIManager reportingUI;
     StandardsUIManager standardsUI;
-    CollaborationUIStubs collaborationUI;
 
     // Unified workflow: Release with all checks
     struct ReleaseWorkflow {

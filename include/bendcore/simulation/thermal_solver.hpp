@@ -1,5 +1,6 @@
 #pragma once
 
+#include <utility>
 #include <vector>
 #include <array>
 #include <memory>
@@ -63,7 +64,21 @@ struct ThermalResults {
 };
 
 /**
- * @brief Thermal Solver for heat conduction
+ * @brief Heat conduction on a node cloud (finite differences on the node graph)
+ *
+ * Model (docs/simulation/SIMULATION.md):
+ *  - rho c dT/dt = k lap(T) + q per unit volume, constant material properties;
+ *    lap(T)_i = sum_j (T_j - T_i) / d_ij^2 over conduction neighbours (nodes within
+ *    1.2x the distance to the nearest node). Exact 3/5/7-point Laplacian on regular
+ *    grids; on irregular clouds the operator is not consistent (first-order at best).
+ *  - Steady state: one sparse LU solve (Picard iterations when RADIATION is present).
+ *    Transient: backward Euler, dt = setTimeStep, until setTotalTime.
+ *  - BCs act on nodes (face_indices are node indices): TEMPERATURE fixes T;
+ *    HEAT_FLUX and HeatSource add W/m^3 to the node; CONVECTION adds h (T - T_a);
+ *    RADIATION adds e*s*(T^4 - T_a^4) linearised; ADIABATIC does nothing.
+ *  - Heat flux in the results: q = -k grad T, least-squares nodal gradient.
+ *  - Without any TEMPERATURE/CONVECTION/RADIATION anchor the steady problem is
+ *    singular and solve() returns false.
  */
 class ThermalSolver {
 public:
@@ -134,12 +149,14 @@ private:
     double min_temperature_ = 0.0;
     double convergence_tolerance_ = 1e-6;
 
+    // Conduction neighbours: (node, distance) per node, see buildNeighbours()
+    std::vector<std::vector<std::pair<size_t, double>>> neighbours_;
+
     // Internal solver methods
     void initializeTemperatureField();
-    void assembleConductivityMatrix();
-    void assembleHeatCapacityMatrix();
-    void applyBoundaryConditions();
-    void solveLinearSystem();
+    void buildNeighbours();
+    // One linear solve: steady (capacity_over_dt = 0) or one backward-Euler step from t_old.
+    bool solveLinearStep(double capacity_over_dt, const std::vector<double>& t_old);
     void updateResults();
     [[nodiscard]] double computeResidual();
 };

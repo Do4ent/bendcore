@@ -30,7 +30,7 @@ int main() {
     // Тест 1: Создание анализатора
     {
         Analyzer analyzer;
-        assert(tc, true, "Analyzer создан успешно");
+        (void)analyzer;
     }
 
     // Тест 2: Анализ простого пути
@@ -234,6 +234,36 @@ int main() {
         assert(tc, !result.suggestedMachine.empty(), "Выбран оптимальный станок");
         assert(tc, result.complexityScore > 0.0, "Вычислена сложность");
         assert(tc, result.manufacturingRisk >= 0.0, "Вычислен риск производства");
+    }
+
+    // Зазоры между гибами: длина прямого участка между соседними гибами.
+    // Путь S100 B S3 B S7 B B S40 B, minimumGap = 5:
+    //   гибы 1-2: 3 мм < 2,5? нет; < 5 -> предупреждение (значение 3)
+    //   гибы 2-3: 7 мм -> норма
+    //   гибы 3-4: 0 мм -> ошибка (значение 0)
+    //   гибы 4-5: 40 мм -> норма; S100 до первого гиба не учитывается.
+    {
+        Analyzer analyzer;
+        TubeModel model;
+        model.path = Path{Straight{100.0}, Bend{50.0, 90.0, 0.0}, Straight{3.0},
+                          Bend{50.0, 90.0, 0.0}, Straight{7.0}, Bend{50.0, 45.0, 0.0},
+                          Bend{50.0, 45.0, 90.0}, Straight{40.0}, Bend{50.0, 30.0, 0.0}};
+        auto issues = analyzer.checkGaps(model, 5.0);
+        assert(tc, issues.size() == 2, "Два нарушения зазора");
+        if (issues.size() == 2) {
+            assert(tc, issues[0].level == IssueLevel::Warning, "Зазор 3 мм — предупреждение");
+            assert(tc, issues[0].bendIndex == 1, "Предупреждение между гибами 1 и 2");
+            assert(tc, issues[0].actualValue && std::abs(*issues[0].actualValue - 3.0) < 1e-12,
+                   "Фактический зазор 3 мм");
+            assert(tc, issues[1].level == IssueLevel::Error, "Зазор 0 мм — ошибка");
+            assert(tc, issues[1].bendIndex == 3, "Ошибка между гибами 3 и 4");
+            assert(tc, issues[1].actualValue && *issues[1].actualValue == 0.0,
+                   "Фактический зазор 0 мм");
+        }
+        TubeModel wide;
+        wide.path = Path{Bend{50.0, 90.0, 0.0}, Straight{20.0}, Bend{50.0, 90.0, 0.0}};
+        assert(tc, analyzer.checkGaps(wide, 5.0).empty(), "Зазор 20 мм нарушений не даёт");
+        assert(tc, analyzer.checkGaps(TubeModel{}, 5.0).empty(), "Модель без пути — без нарушений");
     }
 
     // Результаты

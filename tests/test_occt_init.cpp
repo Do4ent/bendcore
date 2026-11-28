@@ -1,6 +1,7 @@
 // OCCT Initialization Tests (Q3 2027, Task 1, Subtask 1)
 #include <bendcore/occt_config.hpp>
 
+#include <Standard_Version.hxx>
 #include <cassert>
 #include <iostream>
 #include <string>
@@ -30,17 +31,21 @@ int test_occt_version_detected() {
 }
 
 int test_platform_validation() {
-    std::cout << "Test 2: Platform validation (Windows x64)... ";
+    std::cout << "Test 2: Platform validation (64-bit, OCCT >= "
+              << OCCT_VERSION_MAJOR << "." << OCCT_VERSION_MINOR << ")... ";
 
-    // This test passes if compilation succeeded (_WIN32 and _WIN64 are checked)
-    // The code doesn't compile on non-Windows platforms
-    #if defined(_WIN64)
-        std::cout << "PASS (Windows x64 detected)" << std::endl;
-        return 0;
-    #else
-        std::cout << "FAIL (not Windows x64)" << std::endl;
+    // Supported: Linux, macOS, Windows - all 64-bit (static OCCT build)
+    if (sizeof(void*) != 8) {
+        std::cout << "FAIL (not a 64-bit build)" << std::endl;
         return 1;
-    #endif
+    }
+    if (OCC_VERSION_MAJOR < OCCT_VERSION_MAJOR ||
+        (OCC_VERSION_MAJOR == OCCT_VERSION_MAJOR && OCC_VERSION_MINOR < OCCT_VERSION_MINOR)) {
+        std::cout << "FAIL (OCCT " << OCC_VERSION_COMPLETE << " too old)" << std::endl;
+        return 1;
+    }
+    std::cout << "PASS (OCCT " << OCC_VERSION_COMPLETE << ")" << std::endl;
+    return 0;
 }
 
 int test_initialization_succeeds() {

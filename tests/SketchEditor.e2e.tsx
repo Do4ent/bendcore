@@ -550,46 +550,6 @@ describe('SketchEditor E2E - Scenario 5: Complete workflow', () => {
     expect(elements.length).toBeGreaterThanOrEqual(2);
     expect(dimensions.length).toBeGreaterThan(0);
   });
-
-  test('should handle sketch versioning and rollback', async () => {
-    const mockClient = {
-      addSketch: jest.fn().mockResolvedValue({ valid: true }),
-      getDrawingVersions: jest.fn().mockResolvedValue([
-        { revision: 2, created_at: '2026-10-23T12:00:00Z', created_by: 'user' },
-        { revision: 1, created_at: '2026-10-23T11:00:00Z', created_by: 'user' },
-      ]),
-      restoreVersion: jest.fn().mockResolvedValue({ ok: true }),
-    } as unknown as CoreClient;
-
-    // Add sketch
-    const result = await mockClient.addSketch({
-      sheet_number: 1,
-      name: 'Versioned_Sketch',
-      elements: [
-        {
-          id: 'line_1',
-          type: 'line',
-          p0_x: 10,
-          p0_y: 10,
-          p1_x: 100,
-          p1_y: 100,
-          is_construction: false,
-        },
-      ],
-      dimensions: [],
-    });
-
-    expect(result.valid).toBe(true);
-
-    // Get versions
-    const versions = await mockClient.getDrawingVersions('tube_1');
-    expect(versions.length).toBeGreaterThan(0);
-    expect(versions[0].revision).toBeGreaterThan(versions[1].revision);
-
-    // Restore version
-    const restored = await mockClient.restoreVersion('tube_1', 1);
-    expect(restored.ok).toBe(true);
-  });
 });
 
 /**

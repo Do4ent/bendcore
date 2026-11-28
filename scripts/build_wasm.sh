@@ -101,7 +101,7 @@ for f in bendcore.js bendcore.wasm bendcore.mjs index.html; do
     echo "  ✓ $f ($SIZE bytes)"
   else
     echo "  ✗ $f MISSING"
-    ((MISSING++))
+    MISSING=$((MISSING + 1))  # ((MISSING++)) returns 1 at 0 and aborts under set -e
   fi
 done
 

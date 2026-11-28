@@ -1,4 +1,5 @@
 // Import Workflow Manager Tests (Q3 2027, Task 1, Subtask 7)
+#include <algorithm>
 #include <bendcore/import_workflow.hpp>
 
 #include <cassert>
@@ -36,7 +37,9 @@ std::string create_test_dxf_file() {
     file << "  0\nENDSEC\n";
     file << "  0\nSECTION\n";
     file << "  2\nENTITIES\n";
-    file << "  0\nLINE\n";
+    file << "  0\nLINE\n 10\n0\n 20\n0\n 11\n25\n 21\n0\n";
+    file << "  0\nCIRCLE\n 10\n5\n 20\n5\n 40\n2.5\n";
+    file << "  0\nSPLINE\n";
     file << "  0\nENDSEC\n";
     file << "  0\nEOF\n";
 
@@ -84,6 +87,11 @@ int test_dxf_import_workflow_succeeds() {
     // Cleanup
     std::remove(filename.c_str());
 
+    assert(result.success);
+    assert(result.shape_count == 2);  // LINE + CIRCLE; SPLINE не читается
+    assert(std::find_if(result.warnings.begin(), result.warnings.end(), [](const std::string& w) {
+               return w.find("SPLINE") != std::string::npos;
+           }) != result.warnings.end());
     assert(result.execution_time_ms >= 0);
 
     std::cout << "PASS" << std::endl;

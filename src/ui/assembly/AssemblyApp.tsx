@@ -1,0 +1,1286 @@
+/**
+ * Assembly page (docs/ui/ASSEMBLY_UI.md): the assembly document of bendcore_assembly_wasm with
+ * a component/mate tree, mates picked in the viewport, dragging with re-solving, degrees of
+ * freedom, interference report with highlighting, BOM, exploded views, fastener library,
+ * patterns, undo/redo (Ctrl+Z / Ctrl+Y), JSON and STEP files.
+ *
+ * Every action is an assembly document call, executed in the WASM worker (docs/ui/APP_SHELL.md):
+ * a long one (solve, interference) shows the progress indicator and can be cancelled, then the
+ * document is reloaded from the snapshot taken after the last completed change. The geometry shown is the kernel's tessellation of
+ * the part definitions placed by the document. window.bendcoreAssembly exposes the page state
+ * (read-only) and view helpers for end-to-end tests.
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  AssemblyDocumentHandle,
+  AssemblyKernel,
+  AssemblyConfigurationTableInfo,
+  AssemblyState,
+  Bom,
+  ConfigurationActivation,
+  ElementInfo,
+  InterferenceReport,
+  KernelMesh,
+  MateInfo,
+  MateSpec,
+  OccurrenceInfo,
+  PlacedPart,
+  SolveReport,
+} from '../../wasm/bendcore_assembly_api.mjs';
+import { BomPanel, ExplodePanel, FastenerPanel, InterferencePanel, MatePanel, PatternPanel, PropertiesPanel } from './AssemblyPanels';
+import AssemblyTree, { refLabel } from './AssemblyTree';
+import AssemblyConfigurationPanel from './AssemblyConfigurationPanel';
+import { assemblyTableInput } from './configurationTable';
+import AssemblyViewport, { pathKey } from './AssemblyViewport';
+import { MeasurePanel, SectionPanel } from '../kernel/ViewToolsPanel';
+import { SelectionPanel } from '../kernel/SelectionPanel';
+import { combineSelection, defaultFilter } from '../kernel/selection';
+import type { SelectOp, SelectionFilter } from '../kernel/selection';
+import { combineRefs, placedBox, topLevelIds } from './selectionSet';
+import type { ElementRef } from './selectionSet';
+import { ReferenceMeshPanel } from '../kernel/ReferenceMeshPanel';
+import type { ReferenceMeshEdits } from '../kernel/ReferenceMeshPanel';
+import type { MeshPick, ReferenceMeshDisplay } from '../kernel/referenceMeshObject';
+import { meshSnap } from '../kernel/viewTools';
+import type { MeshGeometry } from '../../wasm/bendcore_kernel_api.mjs';
+import { useViewTools } from '../kernel/useViewTools';
+import type { ViewTools } from '../kernel/useViewTools';
+import type { MeasureResult } from '../kernel/viewTools';
+import type { AssemblyBoxResult, AssemblyPick, AssemblyPickMode, AssemblyViewportHandle, PartHighlight } from './AssemblyViewport';
+import { clampProgress, eulerToQuaternion, insertionDirection, quaternionToEuler } from './assemblyMath';
+import type { V3 } from './assemblyMath';
+import { defaultAssemblyBaseUrl, loadAssemblyFrom } from './assemblyLoader';
+import type { DragStart } from './AssemblyViewport';
+import type { Remote, WasmClient } from '../worker/wasmClient';
+import { isCancelled } from '../worker/wasmClient';
+import { waitIdle } from '../worker/idle';
+import { LatestRunner } from '../worker/latestRunner';
+import BusyIndicator from '../app/BusyIndicator';
+import { useHotkeys } from '../app/hotkeys';
+import { useI18n } from '../app/i18n';
+import type { DocumentFile, EditorHostProps, PartSource } from '../app/editorHost';
+import { defaultComponentProperties } from '../app/templates';
+import { downloadText } from '../app/editorHost';
+import { useFaultReport } from '../app/faultReport';
+import ExportDialog from '../exchange/ExportDialog';
+import MassSection from '../exchange/MassSection';
+import type { MassResult } from '../exchange/MassSection';
+import { IMPORT_ACCEPT, importFormatOf } from '../exchange/exchange';
+import type { ImportFormat } from '../exchange/exchange';
+import { dofText } from './labels';
+import { allowedMateTypes, nextMateSlots } from './mateRules';
+import type { MateType } from '../../wasm/bendcore_assembly_api.mjs';
+import Ribbon from '../app/Ribbon';
+import { Icon } from '../icons';
+import { assemblyRibbon } from './assemblyRibbon';
+import type { PickedElement } from './mateRules';
+import '../kernel/KernelViewer.css';
+import '../modeling/PartModeler.css';
+import './Assembly.css';
+import { KernelMessageText } from '../app/KernelMessageText';
+
+const MESH_PARAMS = { linearDeflection: 0.05, angularDeflection: 0.25 };
+
+type PanelId = 'mate' | 'fasteners' | 'interference' | 'bom' | 'explode' | 'pattern' | 'properties' | 'configurations';
+
+/** Icons of the pick modes in the ribbon's selection group. */
+const PICK_MODE_ICONS = { face: 'pick-face', edge: 'pick-edge', component: 'pick-component', drag: 'drag' } as const;
+
+export interface AssemblyPageState {
+  status: 'loading' | 'ready' | 'failed';
+  error: { code: string; message: string } | null;
+  state: AssemblyState | null;
+  panel: PanelId;
+  pickMode: AssemblyPickMode;
+  mateSlots: (PickedElement | null)[];
+  hole: PickedElement | null;
+  selectedComponent: number | null;
+  /** Measurement tool (docs/ui/KERNEL_VIEWPORT.md). */
+  tools: ViewTools['state'];
+  /** Type filters, box switch and the selected elements and components (docs/ui/ASSEMBLY_UI.md). */
+  elements: {
+    faceTypes: readonly string[];
+    edgeTypes: readonly string[];
+    boxSelect: boolean;
+    faces: ElementRef[];
+    edges: ElementRef[];
+    components: number[];
+    total: number | null;
+  };
+  bom: Bom | null;
+  interference: InterferenceReport | null;
+  explode: { view: number | null; progress: number };
+  /** Solve report of the last drag step while dragging. */
+  dragSolve: SolveReport | null;
+  parts: PlacedPart[];
+}
+
+declare global {
+  interface Window {
+    bendcoreAssembly?: {
+      getState(): AssemblyPageState;
+      worldToClient(x: number, y: number, z: number): { x: number; y: number } | null;
+      faceClientPoint(path: number[], faceIndex: number): { x: number; y: number } | null;
+      /** Element records of every face of the part at `path` (kernel element() calls). */
+      faces(path: number[]): Promise<ElementInfo[]>;
+      /** Resolves when no kernel call is in flight and the page has rendered the last result. */
+      idle(): Promise<void>;
+    };
+  }
+}
+
+type AssemblyDoc = Remote<AssemblyDocumentHandle>;
+
+function download(name: string, text: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const baseName = (file: string) => file.replace(/\.[^.]+$/, '');
+
+function findOccurrence(list: OccurrenceInfo[], id: number): OccurrenceInfo | null {
+  for (const o of list) {
+    if (o.id === id) return o;
+  }
+  return null;
+}
+
+export interface AssemblyAppProps extends EditorHostProps {
+  /** Parts the shell can insert without a file dialog (open part tabs, recent part files). */
+  partLibrary?: PartSource[];
+  /** Assembly template: material and density of inserted parts that have none of their own. */
+  defaultMaterial?: { name: string; density: number } | null;
+  /** STEP/IGES assembly opened at start ("Import STEP/IGES" of the shell) instead of `initial`. */
+  importFile?: { name: string; format: ImportFormat; text: string } | null;
+}
+
+/** Imports a STEP or IGES text as a new assembly document (structure, names, colours). */
+const importAssembly = (kernel: Remote<AssemblyKernel>, format: ImportFormat, text: string) =>
+  format === 'iges' ? kernel.importIges(text) : kernel.importStep(text);
+
+const AssemblyApp: React.FC<AssemblyAppProps> = ({
+  active = true,
+  initial = null,
+  initialDirty = false,
+  onChange,
+  onFile,
+  onOpenPart,
+  onFault,
+  partLibrary,
+  defaultMaterial = null,
+  importFile = null,
+  exportRequest,
+}) => {
+  const { t, lang } = useI18n();
+  const [kernel, setKernel] = useState<WasmClient<AssemblyKernel> | null>(null);
+  useFaultReport(kernel as WasmClient<unknown> | null, onFault);
+  const kernelRef = useRef(kernel);
+  kernelRef.current = kernel;
+  const docRef = useRef<AssemblyDoc | null>(null);
+  /** Serialises document bodies: one runs at a time, in click order. */
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+  /** Document JSON after the last completed change (cancel restores it). */
+  const snapshotRef = useRef<string | null>(null);
+  const savedRef = useRef<string | null>(null);
+  /** Part JSON of definitions inserted from bendcore parts ("open component part"). */
+  const partsRef = useRef<PartSource[]>(initial?.parts ?? []);
+  const defaultMaterialRef = useRef(defaultMaterial);
+  defaultMaterialRef.current = defaultMaterial;
+  const hostRef = useRef({ onChange, onFile, onOpenPart });
+  hostRef.current = { onChange, onFile, onOpenPart };
+  const openInputRef = useRef<HTMLInputElement | null>(null);
+  const dragRunner = useRef(new LatestRunner()).current;
+  const [notice, setNotice] = useState<string | null>(null);
+  const [libraryChoice, setLibraryChoice] = useState('');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  const [state, setState] = useState<AssemblyState | null>(null);
+  const [meshes, setMeshes] = useState<Record<string, KernelMesh>>({});
+  const meshesRef = useRef(meshes);
+  meshesRef.current = meshes;
+  const [parts, setParts] = useState<PlacedPart[]>([]);
+  const [panel, setPanel] = useState<PanelId>('mate');
+  const [pickMode, setPickMode] = useState<AssemblyPickMode>('face');
+  const [mateSlots, setMateSlots] = useState<[PickedElement | null, PickedElement | null]>([null, null]);
+  /** Mate type chosen on the ribbon, passed to the mate panel (serial: the same type chosen again). */
+  const [mateRequest, setMateRequest] = useState<{ type: MateType; serial: number } | null>(null);
+  const [hole, setHole] = useState<PickedElement | null>(null);
+  const [selectedComponent, setSelectedComponent] = useState<number | null>(null);
+  const [bomMode, setBomMode] = useState<'flat' | 'structured'>('flat');
+  const [bom, setBom] = useState<Bom | null>(null);
+  const [configTable, setConfigTable] = useState<AssemblyConfigurationTableInfo | null>(null);
+  const [activation, setActivation] = useState<ConfigurationActivation | null>(null);
+  const [interference, setInterference] = useState<InterferenceReport | null>(null);
+  const [showTouching, setShowTouching] = useState(false);
+  const [selectedPair, setSelectedPair] = useState<number | null>(null);
+  const [explode, setExplode] = useState<{ view: number | null; progress: number }>({ view: null, progress: 0 });
+  const [dragSolve, setDragSolve] = useState<SolveReport | null>(null);
+  const [frameKey, setFrameKey] = useState(0);
+  const viewportRef = useRef<AssemblyViewportHandle | null>(null);
+  const [refGeoms, setRefGeoms] = useState<ReadonlyMap<number, MeshGeometry>>(new Map());
+  /** World meshes of the reference meshes by id with the placement they were fetched for. */
+  const refCacheRef = useRef(new Map<number, { placement: string; geometry: MeshGeometry }>());
+  const refMeshList = state?.referenceMeshes ?? [];
+  const toolsModelKey = useMemo(
+    () => [parts, refMeshList.map((m) => [m.id, m.unit, m.placement.matrix, m.visible])],
+    // parts and the mesh list stand for the model.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [parts, JSON.stringify(refMeshList.map((m) => [m.id, m.unit, m.placement.matrix, m.visible]))],
+  );
+  const explodeRef = useRef(explode);
+  explodeRef.current = explode;
+  // The section slider ranges over the placed parts (world coordinates).
+  const sectionBox = useMemo(
+    () =>
+      placedBox(
+        parts.flatMap((p) => {
+          const m = p.mesh ? meshes[p.mesh] : undefined;
+          return m ? [{ positions: m.positions, matrix: p.world.matrix }] : [];
+        }),
+      ),
+    [parts, meshes],
+  );
+  const tools = useViewTools({
+    measure: async (spec) => {
+      const doc = docRef.current;
+      if (!doc) throw new Error('no document');
+      return (await doc.measure(spec as Parameters<typeof doc.measure>[0])) as MeasureResult;
+    },
+    // The kernel cuts every placed part (in the view shown) by the plane.
+    section: async (plane) => {
+      const doc = docRef.current;
+      if (!doc) throw new Error('no document');
+      const ex = explodeRef.current;
+      const r = await doc.section(plane, 0.05, ex.view !== null ? { view: ex.view, progress: ex.progress } : {});
+      return { area: r.area, polylines: r.polylines };
+    },
+    withPath: true,
+    box: sectionBox,
+    modelKey: toolsModelKey,
+  });
+  // Selection: type filters, box, faces and edges (Shift/Ctrl/box) and components.
+  const [selFilter, setSelFilter] = useState<SelectionFilter>(defaultFilter());
+  const [boxSelect, setBoxSelect] = useState(false);
+  const [selFaces, setSelFaces] = useState<ElementRef[]>([]);
+  const [selEdges, setSelEdges] = useState<ElementRef[]>([]);
+  const [selComponents, setSelComponents] = useState<number[]>([]);
+  const [selTotal, setSelTotal] = useState<number | null>(null);
+  const toolsRef = useRef(tools);
+  toolsRef.current = tools;
+
+  const fail = (e: unknown) => {
+    const err = e as { code?: string; detail?: string; message?: string };
+    setError({ code: err.code ?? 'Error', message: err.detail ?? err.message ?? String(e) });
+  };
+
+  /** Re-reads the document: state, placements, new meshes; BOM when its panel is open. */
+  const refresh = useCallback(
+    async (opts: { explode?: { view: number | null; progress: number }; panel?: PanelId; bomMode?: 'flat' | 'structured' } = {}) => {
+      const doc = docRef.current;
+      if (!doc) return;
+      const st = await doc.state();
+      if (docRef.current !== doc) return;
+      // World meshes of the reference meshes, fetched again when the placement changed.
+      const cache = refCacheRef.current;
+      const geoms = new Map<number, MeshGeometry>();
+      for (const m of st.referenceMeshes) {
+        const placement = JSON.stringify([m.unit, m.placement.matrix]);
+        let entry = cache.get(m.id);
+        if (!entry || entry.placement !== placement) {
+          entry = { placement, geometry: await doc.meshGeometry(m.id) };
+          cache.set(m.id, entry);
+        }
+        geoms.set(m.id, entry.geometry);
+      }
+      for (const id of [...cache.keys()]) if (!geoms.has(id)) cache.delete(id);
+      if (docRef.current !== doc) return;
+      setRefGeoms(geoms);
+      setState(st);
+      const ex = opts.explode ?? explode;
+      const view = ex.view !== null && ex.view < st.explodedViews.length ? ex.view : null;
+      const tess = await doc.tessellate({
+        params: MESH_PARAMS,
+        skip: Object.keys(meshesRef.current),
+        ...(view !== null ? { view, progress: ex.progress } : {}),
+      });
+      const used = new Set(tess.occurrences.map((o) => o.mesh).filter((k): k is string => !!k));
+      const next: Record<string, KernelMesh> = {};
+      for (const k of used) next[k] = tess.meshes[k] ?? meshesRef.current[k];
+      meshesRef.current = next;
+      setMeshes(next);
+      setParts(tess.occurrences);
+      if ((opts.panel ?? panel) === 'bom') setBom(await doc.bom(opts.bomMode ?? bomMode));
+      if ((opts.panel ?? panel) === 'configurations') setConfigTable(await doc.configurationTable());
+    },
+    [explode, panel, bomMode],
+  );
+
+  const takeSnapshot = useCallback(async (doc: AssemblyDoc) => {
+    const text = await doc.save();
+    if (docRef.current !== doc) return;
+    snapshotRef.current = text;
+    const st = await doc.state();
+    hostRef.current.onChange?.(
+      { kind: 'assembly', name: `${st.name || 'assembly'}.bcasm.json`, text, parts: partsRef.current },
+      text !== savedRef.current,
+    );
+  }, []);
+
+  /** Runs a document edit and refreshes; edits invalidate the interference report. */
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
+  const run = useCallback(
+    (action: (doc: AssemblyDoc) => Promise<unknown> | unknown, opts?: Parameters<typeof refresh>[0]): Promise<boolean> => {
+      const task = queueRef.current.then(async () => {
+        const doc = docRef.current;
+        if (!doc) return false;
+        try {
+          await action(doc);
+          setError(null);
+          setInterference(null);
+          setSelectedPair(null);
+          await refreshRef.current(opts);
+          await takeSnapshot(doc).catch(() => undefined);
+          return true;
+        } catch (e) {
+          if (isCancelled(e) || docRef.current !== doc) return false;
+          fail(e);
+          try {
+            await refreshRef.current(opts);
+          } catch {
+            /* the state read failed too: keep the error of the action */
+          }
+          return false;
+        }
+      });
+      queueRef.current = task.catch(() => undefined);
+      return task;
+    },
+    [takeSnapshot],
+  );
+
+  const replaceDocument = useCallback((doc: AssemblyDoc, saved: string | null, disposeOld = true) => {
+    const old = docRef.current;
+    if (old && disposeOld) void old.dispose().catch(() => undefined);
+    docRef.current = doc;
+    savedRef.current = saved;
+    snapshotRef.current = saved;
+    meshesRef.current = {};
+    setMeshes({});
+    setMateSlots([null, null]);
+    setHole(null);
+    setSelectedComponent(null);
+    setInterference(null);
+    setExplode({ view: null, progress: 0 });
+    setFrameKey((k) => k + 1);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let client: WasmClient<AssemblyKernel> | null = null;
+    (async () => {
+      client = await loadAssemblyFrom(defaultAssemblyBaseUrl());
+      if (cancelled) {
+        client.dispose();
+        return;
+      }
+      let doc: AssemblyDoc;
+      if (importFile) {
+        doc = await importAssembly(client.root, importFile.format, importFile.text);
+      } else if (initial) {
+        doc = (await client.root.loadDocument(initial.text)).document;
+        hostRef.current.onFile?.(initial);
+      } else {
+        doc = await client.root.createDocument(t('assembly.defaultName'));
+      }
+      if (cancelled) return;
+      setKernel(client);
+      docRef.current = doc;
+      savedRef.current = initial && !initialDirty ? initial.text : null;
+      snapshotRef.current = initial?.text ?? (await doc.save());
+      setStatus('ready');
+    })().catch((e) => {
+      if (cancelled) return;
+      setStatus('failed');
+      fail(e);
+    });
+    return () => {
+      cancelled = true;
+      docRef.current = null;
+      client?.dispose();
+    };
+    // The module loads once per editor; `initial` is a mount-time choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (status === 'ready') void run(() => undefined);
+    // First state after the module loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  /**
+   * Cancels the running kernel call: the worker is terminated, a new one is started and the
+   * document is loaded from the last snapshot (the cancelled change and the undo history are lost).
+   */
+  const cancelOperation = async () => {
+    const old = kernelRef.current;
+    if (!old) return;
+    old.cancel(t('assembly.cancelledByUser'));
+    dragRunner.clear();
+    setKernel(null);
+    setStatus('loading');
+    queueRef.current = Promise.resolve();
+    const snapshot = snapshotRef.current;
+    const saved = savedRef.current;
+    try {
+      const client = await loadAssemblyFrom(defaultAssemblyBaseUrl());
+      for (const p of partsRef.current) await client.root.registerSource(p.name, p.text);
+      const doc = snapshot ? (await client.root.loadDocument(snapshot)).document : await client.root.createDocument(t('assembly.defaultName'));
+      setKernel(client);
+      replaceDocument(doc, saved, false);
+      snapshotRef.current = snapshot;
+      setStatus('ready');
+      setNotice(t('busy.cancelled'));
+    } catch (e) {
+      setStatus('failed');
+      setError({ code: 'Cancelled', message: t('busy.restoreFailed', { reason: (e as Error).message }) });
+    }
+  };
+
+  // ---------------------------------------------------------------- files
+
+  const readFiles = async (list: FileList | null) => {
+    const files = list ? [...list] : [];
+    return Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() })));
+  };
+
+  const onInsertParts = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = await readFiles(e.target.files);
+    e.target.value = '';
+    for (const f of files) await insertPart(f.name, f.text);
+    setFrameKey((k) => k + 1);
+  };
+
+  /** Inserts a part file (bendcore part JSON or STEP); the first part is fixed. */
+  const insertPart = (fileName: string, text: string) =>
+    run(async (doc) => {
+      const exchange = importFormatOf(fileName);
+      const first = (await doc.state()).occurrences.length === 0;
+      const name = baseName(fileName.replace(/\.bcpart\.json$/i, '.json'));
+      const properties = defaultComponentProperties(text, defaultMaterialRef.current ?? null);
+      const r = await doc.insertPart({ name, format: exchange ?? 'part-json', data: text, fixed: first, beside: !first, ...(properties ? { properties } : {}) });
+      if (!exchange) partsRef.current = [...partsRef.current.filter((p) => p.definition !== r.definition), { definition: r.definition, name: fileName, text }];
+    });
+
+  /** "Open component part": the part JSON the selected component was inserted from. */
+  const openComponentPart = () => {
+    const occ = state && selectedComponent !== null ? findOccurrence(state.occurrences, selectedComponent) : null;
+    if (!occ) {
+      setNotice(t('notify.selectComponent'));
+      return;
+    }
+    const source = partsRef.current.find((p) => p.definition === occ.definition);
+    if (!source) {
+      setNotice(t('notify.componentNotPart', { name: occ.name, format: occ.kind === 'assembly' ? 'assembly' : 'STEP / BRep' }));
+      return;
+    }
+    hostRef.current.onOpenPart?.({ kind: 'part', name: source.name, text: source.text });
+  };
+
+  const onInsertSubassembly = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = await readFiles(e.target.files);
+    e.target.value = '';
+    if (!kernel) return;
+    for (const f of files) {
+      await run(async (doc) => {
+        await kernel.root.registerSource(f.name, f.text);
+        const first = (await doc.state()).occurrences.length === 0;
+        await doc.insertSubassembly({ source: f.name, name: baseName(f.name), fixed: first, beside: !first });
+      });
+    }
+    setFrameKey((k) => k + 1);
+  };
+
+  const onOpen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = await readFiles(e.target.files);
+    e.target.value = '';
+    if (!kernel || files.length === 0) return;
+    try {
+      // Every chosen file is available as a subassembly source; the first one is opened.
+      for (const f of files) await kernel.root.registerSource(f.name, f.text);
+      const { document: doc, report } = await kernel.root.loadDocument(files[0].text);
+      partsRef.current = [];
+      replaceDocument(doc, files[0].text);
+      await run(() => undefined, { explode: { view: null, progress: 0 } });
+      const missing = report.sources.filter((s) => s.status === 'Missing' || s.status === 'AssemblyMissing');
+      if (missing.length) setError({ code: t('assembly.sourceError'), message: missing.map((s) => `${s.source}: ${s.message}`).join('; ') });
+      else setError(null);
+      hostRef.current.onFile?.({ kind: 'assembly', name: files[0].name, text: files[0].text });
+    } catch (err) {
+      fail(err);
+    }
+  };
+
+  const onImportStep = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = await readFiles(e.target.files);
+    e.target.value = '';
+    if (!kernel || files.length === 0) return;
+    const format = importFormatOf(files[0].name);
+    if (!format) {
+      setError({ code: 'InvalidInput', message: t('exchange.unknownFormat', { name: files[0].name }) });
+      return;
+    }
+    try {
+      partsRef.current = [];
+      replaceDocument(await importAssembly(kernel.root, format, files[0].text), null);
+      setError(null);
+      await run(() => undefined, { explode: { view: null, progress: 0 } });
+    } catch (err) {
+      fail(err);
+    }
+  };
+
+  const onNew = async () => {
+    if (!kernel) return;
+    try {
+      partsRef.current = [];
+      replaceDocument(await kernel.root.createDocument(t('assembly.defaultName')), null);
+      setError(null);
+      await run(() => undefined, { explode: { view: null, progress: 0 } });
+    } catch (e) {
+      if (!isCancelled(e)) fail(e);
+    }
+  };
+
+  const onSave = async () => {
+    const doc = docRef.current;
+    if (!doc) return;
+    try {
+      const text = await doc.save();
+      const name = `${(await doc.state()).name || 'assembly'}.json`;
+      download(name, text, 'application/json');
+      savedRef.current = text;
+      snapshotRef.current = text;
+      const file: DocumentFile = { kind: 'assembly', name, text, parts: partsRef.current };
+      hostRef.current.onFile?.(file);
+      hostRef.current.onChange?.(file, false);
+    } catch (e) {
+      if (!isCancelled(e)) fail(e);
+    }
+  };
+
+  // Export dialog (docs/ui/DATA_EXCHANGE.md); "Export…" of the shell opens it too.
+  const [exporting, setExporting] = useState(false);
+  const exportSeen = useRef(exportRequest ?? 0);
+  useEffect(() => {
+    if (exportRequest === undefined || exportRequest === exportSeen.current) return;
+    exportSeen.current = exportRequest;
+    setExporting(true);
+  }, [exportRequest]);
+
+  const loadMass = async (): Promise<MassResult> => {
+    const doc = docRef.current;
+    if (!doc) return { kind: 'empty', reason: 'noBody' };
+    await queueRef.current;
+    const r = await doc.massProperties();
+    if (r.parts === 0) return { kind: 'empty', reason: 'noBody' };
+    if (!r.mass) return { kind: 'empty', reason: 'none', volume: r.volume, missing: r.partsWithoutDensity };
+    return { kind: 'ok', props: r.mass, volume: r.volume, missing: r.partsWithoutDensity };
+  };
+
+  // ---------------------------------------------------------------- picking and drag
+
+  const pickedElement = useCallback(
+    async (pick: AssemblyPick): Promise<PickedElement | null> => {
+      const doc = docRef.current;
+      if (!doc || !state) return null;
+      try {
+        const info = await doc.element({ path: pick.path, kind: pick.kind, index: pick.index });
+        return {
+          ref: { path: pick.path, kind: pick.kind, index: pick.index },
+          geometry: info.geometry,
+          entity: info.entity,
+          label: refLabel(state, { path: pick.path, kind: pick.kind, index: pick.index }, t),
+        };
+      } catch (e) {
+        if (!isCancelled(e)) fail(e);
+        return null;
+      }
+    },
+    [state],
+  );
+
+  const onPick = async (pick: AssemblyPick | null) => {
+    if (toolsRef.current.capturing) {
+      // A measurement is being collected: the click picks its element.
+      if (pick && pick.kind === 'face') toolsRef.current.onPickFace(pick.index, pick.path);
+      else if (pick) toolsRef.current.onPickEdge(pick.index, pick.path);
+      return;
+    }
+    if (!pick) {
+      setSelectedComponent(null);
+      setSelFaces([]);
+      setSelEdges([]);
+      return;
+    }
+    if (pick.op && pick.op !== 'replace') {
+      // Shift adds, Ctrl removes: the click edits the selection set, mate slots stay.
+      const found = [{ path: pick.path, index: pick.index }];
+      if (pick.kind === 'face') setSelFaces((c) => combineRefs(c, found, pick.op as SelectOp));
+      else setSelEdges((c) => combineRefs(c, found, pick.op as SelectOp));
+      return;
+    }
+    setSelFaces([]);
+    setSelEdges([]);
+    setSelectedComponent(pick.path[0]);
+    const element = await pickedElement(pick);
+    if (!element) return;
+    if (panel === 'fasteners' || panel === 'pattern') setHole(element);
+    else if (panel === 'mate') setMateSlots((s) => nextMateSlots(s, element));
+  };
+
+  const onPickComponent = (path: number[] | null, op: SelectOp) => {
+    if (path === null) {
+      if (op === 'replace') {
+        setSelComponents([]);
+        setSelectedComponent(null);
+      }
+      return;
+    }
+    setSelComponents((c) => combineSelection(c, [path[0]], op));
+    if (op === 'replace') setSelectedComponent(path[0]);
+  };
+
+  const onBoxSelect = (result: AssemblyBoxResult, op: SelectOp) => {
+    if (pickMode === 'component') setSelComponents((c) => combineSelection(c, topLevelIds(result.components), op));
+    else if (pickMode === 'edge') setSelEdges((c) => combineRefs(c, result.edges, op));
+    else setSelFaces((c) => combineRefs(c, result.faces, op));
+  };
+
+  const clearSelection = () => {
+    setSelFaces([]);
+    setSelEdges([]);
+    setSelComponents([]);
+    setSelectedComponent(null);
+  };
+
+  // The kernel's total area of the selected faces / length of the selected edges.
+  useEffect(() => {
+    setSelTotal(null);
+    const doc = docRef.current;
+    const list = pickMode === 'edge' ? selEdges : pickMode === 'face' ? selFaces : [];
+    if (!doc || list.length === 0) return undefined;
+    let stale = false;
+    const kind = pickMode === 'edge' ? 'edge' : 'face';
+    Promise.all(
+      list.map(
+        async (r) =>
+          (
+            (await doc.measure({ type: kind === 'face' ? 'area' : 'length', a: { path: r.path, kind, index: r.index } } as Parameters<typeof doc.measure>[0])) as MeasureResult
+          ).value,
+      ),
+    ).then(
+      (v) => {
+        if (!stale) setSelTotal(v.reduce((a, b) => a + b, 0));
+      },
+      () => undefined,
+    );
+    return () => {
+      stale = true;
+    };
+  }, [pickMode, selFaces, selEdges]);
+
+  // The model changed (parts replaced): selected elements refer to old geometry.
+  useEffect(() => {
+    setSelFaces([]);
+    setSelEdges([]);
+  }, [toolsModelKey]);
+
+  const onDragStart = async (path: number[], face: number, point: V3): Promise<DragStart> => {
+    const doc = docRef.current;
+    if (!doc) return false;
+    try {
+      await queueRef.current;
+      const entity = (await doc.element({ path, kind: 'face', index: face })).entity;
+      await doc.dragBegin(path[0], point);
+      setSelectedComponent(path[0]);
+      setError(null);
+      return { planeNormal: entity?.type === 'plane' && entity.direction ? (entity.direction as V3) : null };
+    } catch (e) {
+      if (!isCancelled(e)) fail(e);
+      return false;
+    }
+  };
+  /** Drag steps are solved at the rate the worker answers; the newest target wins. */
+  const onDragMove = (target: V3) => {
+    const doc = docRef.current;
+    if (!doc) return;
+    dragRunner.schedule(async () => {
+      try {
+        const r = await doc.dragMove(target);
+        setParts(r.placements);
+        setDragSolve(r.solve);
+      } catch (e) {
+        if (!isCancelled(e)) fail(e);
+      }
+    });
+  };
+  const onDragEnd = () => {
+    void dragRunner.settled().then(() => {
+      setDragSolve(null);
+      return run((doc) => doc.dragEnd());
+    });
+  };
+
+  // ---------------------------------------------------------------- keyboard
+
+  useHotkeys(active, {
+    undo: () =>
+      void run(async (d) => {
+        if ((await d.state()).history.canUndo) await d.undo();
+      }),
+    redo: () =>
+      void run(async (d) => {
+        if ((await d.state()).history.canRedo) await d.redo();
+      }),
+    save: () => void onSave(),
+    open: () => openInputRef.current?.click(),
+    escape: () => {
+      setMateSlots([null, null]);
+      setHole(null);
+      setSelectedComponent(null);
+    },
+    delete: () => {
+      const id = selectedComponent;
+      if (id === null) return;
+      setSelectedComponent(null);
+      setMateSlots([null, null]);
+      void run((d) => d.removeOccurrence(id));
+    },
+    fit: () => setFrameKey((k) => k + 1),
+  });
+
+  // ---------------------------------------------------------------- panels
+
+  const switchPanel = (p: PanelId) => {
+    setPanel(p);
+    if (p === 'bom') {
+      docRef.current?.bom(bomMode).then(setBom, (e: unknown) => !isCancelled(e) && fail(e));
+    }
+    if (p === 'configurations') {
+      docRef.current?.configurationTable().then(setConfigTable, (e: unknown) => !isCancelled(e) && fail(e));
+    }
+    if (explode.view !== null && p !== 'explode') {
+      const ex = { view: null, progress: 0 };
+      setExplode(ex);
+      refresh({ explode: ex, panel: p }).catch((e: unknown) => !isCancelled(e) && fail(e));
+    }
+  };
+
+  const onExplode = (view: number | null, progress: number) => {
+    const ex = { view, progress: view === null ? 0 : clampProgress(progress, state?.explodedViews[view]?.steps.length ?? 0) };
+    setExplode(ex);
+    refresh({ explode: ex }).catch((e: unknown) => !isCancelled(e) && fail(e));
+  };
+
+  const highlights = useMemo(() => {
+    const h: Record<string, PartHighlight> = {};
+    if (selectedComponent !== null) {
+      for (const p of parts) if (p.path[0] === selectedComponent) h[pathKey(p.path)] = 'selected';
+    }
+    for (const id of selComponents) {
+      for (const p of parts) if (p.path[0] === id) h[pathKey(p.path)] = 'selected';
+    }
+    if (interference) {
+      interference.pairs.forEach((pair, i) => {
+        if (selectedPair !== null && selectedPair !== i) return;
+        if (pair.kind === 'touching' && !showTouching && selectedPair === null) return;
+        const mark: PartHighlight = pair.kind === 'interference' ? 'interference' : 'touching';
+        for (const idx of [pair.a, pair.b]) {
+          const k = pathKey(interference.parts[idx].path);
+          if (h[k] !== 'interference') h[k] = mark;
+        }
+      });
+    }
+    return h;
+  }, [selectedComponent, selComponents, parts, interference, selectedPair, showTouching]);
+
+  // ---------------------------------------------------------------- reference meshes
+
+  const referenceMeshes = useMemo<ReferenceMeshDisplay[]>(
+    () =>
+      refMeshList.flatMap((m) => {
+        const g = refGeoms.get(m.id);
+        return m.visible && g ? [{ key: m.id, positions: g.positions, indices: g.indices, opacity: m.opacity }] : [];
+      }),
+    // refGeoms changes with every refresh that touches the meshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [refGeoms, state],
+  );
+
+  const insertMesh = async (file: File) => {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const ok = await run((d) => d.insertMesh({ fileName: file.name, data }));
+    if (ok && parts.length === 0) setFrameKey((k) => k + 1);
+  };
+
+  const editMesh = (key: string | number, edits: ReferenceMeshEdits) => {
+    const m = refMeshList.find((x) => x.id === key);
+    if (!m) return;
+    const changes: Parameters<AssemblyDoc['setMesh']>[1] = {};
+    if (edits.name !== undefined) changes.name = edits.name;
+    if (edits.unit !== undefined) changes.unit = edits.unit;
+    if (edits.visible !== undefined) changes.visible = edits.visible;
+    if (edits.opacity !== undefined) changes.opacity = edits.opacity;
+    if (edits.translation || edits.rotation) {
+      changes.placement = {
+        position: edits.translation ?? m.placement.position,
+        rotation: edits.rotation ? eulerToQuaternion(edits.rotation) : m.placement.rotation,
+      };
+    }
+    void run((d) => d.setMesh(m.id, changes));
+  };
+
+  const onPickMesh = (pick: MeshPick) => {
+    const m = refMeshList.find((x) => x.id === pick.key);
+    toolsRef.current.onPickMesh(pick.key, pick.triangle, pick.point, m?.properties ? meshSnap(m.properties.size) : 0);
+  };
+
+  const selectedRefs = useMemo(
+    () =>
+      tools.capturing
+        ? tools.picks.flatMap((p) => (p.kind === 'mesh' ? [] : [{ path: p.path ?? [], kind: p.kind, index: p.index }]))
+        : [
+            mateSlots[0]?.ref,
+            mateSlots[1]?.ref,
+            panel === 'fasteners' || panel === 'pattern' ? hole?.ref : undefined,
+            ...selFaces.map((r) => ({ path: r.path, kind: 'face' as const, index: r.index })),
+            ...selEdges.map((r) => ({ path: r.path, kind: 'edge' as const, index: r.index })),
+          ].filter((r): r is NonNullable<typeof r> => !!r),
+    [mateSlots, hole, panel, tools.capturing, tools.picks, selFaces, selEdges],
+  );
+
+  const selectedOccurrence = state && selectedComponent !== null ? findOccurrence(state.occurrences, selectedComponent) : null;
+  const selectedDefinition =
+    state && selectedOccurrence ? state.definitions.find((d) => d.id === selectedOccurrence.definition) ?? null : null;
+
+  // ---------------------------------------------------------------- test hook
+
+  const pageState = useRef<AssemblyPageState | null>(null);
+  pageState.current = {
+    status,
+    error,
+    state,
+    panel,
+    pickMode,
+    mateSlots,
+    hole,
+    selectedComponent,
+    tools: tools.state,
+    elements: {
+      faceTypes: selFilter.faceTypes,
+      edgeTypes: selFilter.edgeTypes,
+      boxSelect,
+      faces: selFaces,
+      edges: selEdges,
+      components: selComponents,
+      total: selTotal,
+    },
+    bom,
+    interference,
+    explode,
+    dragSolve,
+    parts,
+  };
+  useEffect(() => {
+    window.bendcoreAssembly = {
+      getState: () => pageState.current!,
+      worldToClient: (x, y, z) => viewportRef.current?.worldToClient(x, y, z) ?? null,
+      faceClientPoint: (path, face) => viewportRef.current?.faceClientPoint(path, face) ?? null,
+      idle: () => waitIdle(() => [kernelRef.current]),
+      faces: async (path) => {
+        const doc = docRef.current;
+        if (!doc) return [];
+        const st = await doc.state();
+        let list = st.occurrences;
+        let occ: OccurrenceInfo | undefined;
+        for (const id of path) {
+          occ = list.find((o) => o.id === id);
+          list = occ?.children ?? [];
+        }
+        const def = occ ? st.definitions.find((d) => d.id === occ!.definition) : undefined;
+        const out: ElementInfo[] = [];
+        for (let i = 0; i < (def?.faces ?? 0); ++i) out.push(await doc.element({ path, kind: 'face', index: i }));
+        return out;
+      },
+    };
+    return () => {
+      delete window.bendcoreAssembly;
+    };
+  }, []);
+
+  const solve = dragSolve ?? state?.solve ?? null;
+  const history = state?.history;
+
+  const ribbon = assemblyRibbon(
+    t,
+    {
+      ready: status === 'ready',
+      hasParts: parts.length > 0,
+      canUndo: Boolean(history?.canUndo),
+      canRedo: Boolean(history?.canRedo),
+      undoLabel: history?.undoLabel ?? null,
+      redoLabel: history?.redoLabel ?? null,
+      panel,
+      canOpenComponentPart: selectedComponent !== null,
+      allowedMates: mateSlots[0] && mateSlots[1] ? allowedMateTypes(mateSlots[0], mateSlots[1]) : null,
+      measuring: tools.measurePanel.active,
+      section: tools.sectionPanel && !tools.sectionPanel.disabled ? tools.sectionPanel.state.enabled : null,
+    },
+    {
+      newDocument: () => void onNew(),
+      open: (e) => void onOpen(e),
+      openInputRef,
+      save: () => void onSave(),
+      importModel: (e) => void onImportStep(e),
+      exportModel: () => setExporting(true),
+      insertParts: (e) => void onInsertParts(e),
+      insertSubassembly: (e) => void onInsertSubassembly(e),
+      openComponentPart: onOpenPart ? openComponentPart : undefined,
+      library:
+        partLibrary && partLibrary.length > 0
+          ? () => (
+              <span className="as-library" title={t('ribbon.tip.library')}>
+                <select value={libraryChoice} onChange={(e) => setLibraryChoice(e.target.value)} data-testid="library-part">
+                  <option value="">{t('assembly.libraryPart')}</option>
+                  {partLibrary.map((p, i) => (
+                    <option key={`${p.name}:${i}`} value={String(i)}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={status !== 'ready' || libraryChoice === ''}
+                  data-testid="library-insert"
+                  onClick={() => {
+                    const p = partLibrary[Number(libraryChoice)];
+                    if (p) void insertPart(p.name, p.text).then(() => setFrameKey((k) => k + 1));
+                  }}
+                >
+                  {t('assembly.insert')}
+                </button>
+              </span>
+            )
+          : undefined,
+      pickModes: () => (
+        <span className="as-modes" role="radiogroup" title={t('ribbon.tip.pickMode')}>
+          {(['face', 'edge', 'component', 'drag'] as const).map((m) => (
+            <label key={m}>
+              <input type="radio" name="pick-mode" checked={pickMode === m} onChange={() => setPickMode(m)} data-testid={`mode-${m}`} />
+              <Icon name={PICK_MODE_ICONS[m]} size={16} />
+              {t(`assembly.mode.${m}`)}
+            </label>
+          ))}
+        </span>
+      ),
+      undo: () => void run((d) => d.undo()),
+      redo: () => void run((d) => d.redo()),
+      solve: () => void run((d) => d.solve()),
+      showPanel: switchPanel,
+      mateType: (m) => {
+        switchPanel('mate');
+        setMateRequest({ type: m, serial: Date.now() });
+      },
+      toggleMeasure: () => tools.measurePanel.onActive(!tools.measurePanel.active),
+      toggleSection: () => {
+        const sp = tools.sectionPanel;
+        if (sp) sp.onChange({ ...sp.state, enabled: !sp.state.enabled });
+      },
+    },
+    { importAccept: IMPORT_ACCEPT, partAccept: `.json,${IMPORT_ACCEPT}` },
+  );
+
+  return (
+    <div className="kv-root pm-root as-root" data-testid="assembly-page">
+      <Ribbon
+        title={t('assembly.title')}
+        testId="assembly-ribbon"
+        quick={ribbon.quick}
+        tabs={ribbon.tabs}
+        status={
+          <>
+            <BusyIndicator client={kernel} onCancel={() => void cancelOperation()} />
+            <span className="kv-status" data-testid="status">
+              {status === 'loading' && t('assembly.loading')}
+              {status === 'failed' && t('assembly.failed')}
+              {status === 'ready' && solve && (
+                <>
+                  <span data-testid="total-dof">{dofText(solve.totalDof, t, lang)}</span>
+                  {' · '}
+                  <span className={solve.success ? 'as-ok' : 'as-bad'} data-testid="solve-status">
+                    {solve.success ? t('assembly.solved') : t('assembly.conflicts')}
+                  </span>
+                </>
+              )}
+            </span>
+          </>
+        }
+      />
+      {error && (
+        <div className="kv-error" role="alert" data-testid="error">
+          <KernelMessageText code={error.code} message={error.message} />
+        </div>
+      )}
+      {exporting && docRef.current && (
+        <ExportDialog
+          name={state?.name || t('assembly.defaultName')}
+          onExport={(format, options) => docRef.current!.exportFile(format, options)}
+          onSaved={(name, size) => setNotice(t('exchange.saved', { name, size }))}
+          onClose={() => setExporting(false)}
+        />
+      )}
+      {notice && (
+        <div className="app-notice" role="status" data-testid="assembly-notice">
+          {notice}
+          <button type="button" onClick={() => setNotice(null)} aria-label={t('notify.dismiss')}>
+            ×
+          </button>
+        </div>
+      )}
+      <div className="kv-main">
+        <aside className="pm-left">
+          {state && (
+            <AssemblyTree
+              state={state}
+              selectedComponent={selectedComponent}
+              onSelectComponent={setSelectedComponent}
+              onSetFixed={(id, fixed) => void run((d) => d.setOccurrence(id, { fixed }))}
+              onSetSuppressed={(id, suppressed) => void run((d) => d.setOccurrence(id, { suppressed }))}
+              onRemoveComponent={(id) => {
+                if (selectedComponent === id) setSelectedComponent(null);
+                setMateSlots([null, null]);
+                void run((d) => d.removeOccurrence(id));
+              }}
+              onSelectMate={async (m: MateInfo) => {
+                const el = (r: MateInfo['a']) =>
+                  r.index !== undefined && r.kind && r.kind !== 'vertex'
+                    ? pickedElement({ path: r.path, kind: r.kind, index: r.index, point: [0, 0, 0] })
+                    : Promise.resolve(null);
+                setPanel('mate');
+                setMateSlots(await Promise.all([el(m.a), el(m.b)]));
+              }}
+              onSuppressMate={(id, s) => void run((d) => d.setMateSuppressed(id, s))}
+              onRemoveMate={(id) => void run((d) => d.removeMate(id))}
+              onRemovePattern={(id) => void run((d) => d.removePattern(id))}
+            />
+          )}
+          {!tools.capturing && (
+            <SelectionPanel
+              filter={selFilter}
+              onFilter={setSelFilter}
+              boxSelect={boxSelect}
+              onBoxSelect={setBoxSelect}
+              modes={[]}
+              activeMode={pickMode === 'component' ? 'body' : pickMode === 'edge' ? 'edge' : 'face'}
+              bodyLabel="component"
+              count={pickMode === 'component' ? selComponents.length : pickMode === 'edge' ? selEdges.length : selFaces.length}
+              total={selTotal === null ? null : { kind: pickMode === 'edge' ? 'length' : 'area', value: selTotal }}
+              onClear={clearSelection}
+            />
+          )}
+          <MeasurePanel {...tools.measurePanel} meshHint={refMeshList.some((m) => m.visible)} />
+          {tools.sectionPanel && <SectionPanel {...tools.sectionPanel} />}
+          <ReferenceMeshPanel
+            items={refMeshList.map((m) => ({
+              key: m.id,
+              name: m.name,
+              fileName: m.fileName,
+              unit: m.unit,
+              translation: m.placement.position,
+              rotation: quaternionToEuler(m.placement.rotation),
+              visible: m.visible,
+              opacity: m.opacity,
+              report: m.report,
+              properties: m.properties,
+            }))}
+            disabled={status !== 'ready'}
+            onInsert={(file) => void insertMesh(file)}
+            onEdit={editMesh}
+            onRemove={(key) => void run((d) => d.removeMesh(Number(key)))}
+          />
+        </aside>
+        <AssemblyViewport
+          referenceMeshes={referenceMeshes}
+          onPickMesh={tools.capturing && tools.meshPickable ? onPickMesh : null}
+          meshes={meshes}
+          parts={parts}
+          pickMode={tools.capturing ? tools.pickMode : pickMode}
+          selected={selectedRefs}
+          measure={tools.viewport.measure}
+          highlights={highlights}
+          onPick={(pick) => void onPick(pick)}
+          filter={selFilter}
+          onPickComponent={onPickComponent}
+          boxSelect={!tools.capturing && boxSelect && pickMode !== 'drag'}
+          onBoxSelect={onBoxSelect}
+          clip={tools.viewport.clip}
+          sectionLines={tools.viewport.sectionLines}
+          onDragStart={onDragStart}
+          onDragMove={onDragMove}
+          onDragEnd={onDragEnd}
+          onReady={(h) => {
+            viewportRef.current = h;
+          }}
+          frameKey={frameKey}
+        />
+        <aside className={`kv-panel pm-right as-right ${panel === 'bom' || panel === 'configurations' ? 'as-right-wide' : ''}`}>
+          {panel === 'mate' && (
+            <MatePanel
+              slots={mateSlots}
+              requestedType={mateRequest}
+              onClearSlot={(i) => setMateSlots((s) => (i === 0 ? [s[1], null] : [s[0], null]))}
+              onAdd={(spec: MateSpec) => {
+                void run((d) => d.addMate(spec)).then((ok) => ok && setMateSlots([null, null]));
+              }}
+            />
+          )}
+          {panel === 'fasteners' && kernel && (
+            <FastenerPanel
+              kernel={kernel.root}
+              hole={hole}
+              onClearHole={() => setHole(null)}
+              onInsert={(spec) => {
+                if (!hole?.entity?.direction || hole.entity.radius === undefined) return;
+                const view = viewportRef.current?.viewDirection() ?? [0, 0, -1];
+                const insertion = insertionDirection(hole.entity.direction as V3, view);
+                void run((d) =>
+                    d.insertFasteners({
+                      part: hole.ref.path,
+                      insertion,
+                      radius: hole.entity!.radius!,
+                      tolerance: 1e-6,
+                      holes: spec.allHoles ? undefined : [hole.ref.index!],
+                      screw: spec.screw,
+                      headWashers: spec.headWashers,
+                      nutWashers: spec.nutWashers,
+                      nut: spec.nut,
+                    }),
+                  ).then((ok) => ok && setHole(null));
+              }}
+            />
+          )}
+          {panel === 'interference' && (
+            <InterferencePanel
+              report={interference}
+              showTouching={showTouching}
+              selectedPair={selectedPair}
+              onCheck={async () => {
+                try {
+                  await queueRef.current;
+                  setInterference((await docRef.current?.interference()) ?? null);
+                  setSelectedPair(null);
+                  setError(null);
+                } catch (e) {
+                  if (!isCancelled(e)) fail(e);
+                }
+              }}
+              onShowTouching={setShowTouching}
+              onSelectPair={setSelectedPair}
+            />
+          )}
+          {panel === 'bom' && (
+            <BomPanel
+              bom={bom}
+              mode={bomMode}
+              onMode={(m) => {
+                setBomMode(m);
+                docRef.current?.bom(m).then(setBom, (e: unknown) => !isCancelled(e) && fail(e));
+              }}
+            />
+          )}
+          {panel === 'explode' && state && (
+            <ExplodePanel
+              state={state}
+              view={explode.view}
+              progress={explode.progress}
+              selectedComponent={selectedComponent}
+              onSelectView={(v) => onExplode(v, 0)}
+              onProgress={(p) => onExplode(explode.view, p)}
+              onAddView={(view) => {
+                let index = -1;
+                void run(async (d) => {
+                  index = await d.addExplodedView(view);
+                }).then((ok) => ok && onExplode(index, 0));
+              }}
+              onRemoveView={(i) => {
+                const ex = { view: null, progress: 0 };
+                setExplode(ex);
+                void run((d) => d.removeExplodedView(i));
+              }}
+            />
+          )}
+          {panel === 'pattern' && (
+            <PatternPanel seed={selectedOccurrence} hole={hole} onAdd={(spec) => void run((d) => d.addPattern(spec))} />
+          )}
+          {panel === 'properties' && (
+            <PropertiesPanel
+              occurrence={selectedOccurrence}
+              definition={selectedDefinition}
+              onRename={(name) => selectedOccurrence && void run((d) => d.setOccurrence(selectedOccurrence.id, { name }))}
+              onProperties={(p) => selectedDefinition && void run((d) => d.setProperties(selectedDefinition.id, p))}
+              onConfiguration={(configuration) =>
+                selectedOccurrence && void run((d) => d.setOccurrence(selectedOccurrence.id, { configuration }))
+              }
+            />
+          )}
+          {panel === 'properties' && state && <MassSection load={loadMass} version={state} />}
+          {panel === 'configurations' && state && (
+            <AssemblyConfigurationPanel
+              table={configTable}
+              state={state}
+              activation={activation}
+              disabled={state.dragging !== null}
+              onSetTable={(table) => {
+                setActivation(null);
+                void run((d) => d.setConfigurationTable(table));
+              }}
+              onActivate={(designation) =>
+                void run(async (d) => {
+                  setActivation(await d.activateConfiguration(designation));
+                })
+              }
+              onUndo={() => {
+                setActivation(null);
+                void run((d) => d.undo());
+              }}
+              onImportCsv={(text) => {
+                setActivation(null);
+                void run(async (d) => {
+                  await d.setConfigurationTable(assemblyTableInput(await d.configurationsFromCsv(text)));
+                });
+              }}
+              onExportCsv={(decimal) =>
+                void run(async (d) => {
+                  const csv = await d.configurationsToCsv({ decimal });
+                  downloadText(`${state.name || 'assembly'}.configurations.csv`, csv, 'text/csv');
+                })
+              }
+            />
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+};
+
+export default AssemblyApp;

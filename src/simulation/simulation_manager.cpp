@@ -97,8 +97,8 @@ bool SimulationManager::runSimulation() {
         }
 
         case SimulationType::MULTI_PHYSICS: {
-            updateProgress(5.0, "Setting up multi-physics coupling...");
-            setupCoupling();
+            // The solvers share no mesh, so no fields are mapped between them: each
+            // configured solver runs on its own input (docs/simulation/SIMULATION.md).
 
             if (cfd_solver_) {
                 updateProgress(15.0, "Running CFD solver...");
@@ -130,7 +130,6 @@ bool SimulationManager::runSimulation() {
     }
 
     postProcessResults();
-    aggregateResults();
 
     progress_.is_running = false;
     return true;
@@ -165,31 +164,10 @@ const PostProcessingResult& SimulationManager::getPostProcessedResult(const std:
 }
 
 bool SimulationManager::exportResults(const std::string& filename, const std::string& format) {
-    if (format == "vtk" || format == "VTK") {
-        return exportToVTK(filename);
-    } else if (format == "csv" || format == "CSV") {
+    if (format == "csv" || format == "CSV") {
         return exportToCSV(filename);
     }
     return false;
-}
-
-bool SimulationManager::exportToVTK(const std::string& filename) {
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    file << "# VTK 3.0\n";
-    file << "ASCII\n";
-    file << "DATASET UNSTRUCTURED_GRID\n";
-
-    // Write points
-    file << "POINTS 0 float\n";
-    file << "CELLS 0 0\n";
-    file << "CELL_TYPES 0\n";
-
-    file.close();
-    return true;
 }
 
 bool SimulationManager::exportToCSV(const std::string& filename) {
@@ -207,59 +185,6 @@ bool SimulationManager::exportToCSV(const std::string& filename) {
     }
 
     file.close();
-    return true;
-}
-
-bool SimulationManager::applyCFDToStructural() {
-    if (!cfd_solver_ || !structural_solver_) {
-        return false;
-    }
-
-    // Map CFD pressure field to structural loads
-    // Simplified: apply average pressure as distributed load
-    double avg_pressure = 0.0;
-    if (!cfd_solver_->getPressureField().empty()) {
-        for (double p : cfd_solver_->getPressureField()) {
-            avg_pressure += p;
-        }
-        avg_pressure /= cfd_solver_->getPressureField().size();
-    }
-
-    Load pressure_load;
-    pressure_load.type = LoadType::PRESSURE;
-    pressure_load.pressure = avg_pressure;
-
-    structural_solver_->addLoad(pressure_load);
-    return true;
-}
-
-bool SimulationManager::applyThermalToStructural() {
-    if (!thermal_solver_ || !structural_solver_) {
-        return false;
-    }
-
-    // Map thermal field to structural loads
-    // Thermal expansion causes internal stresses
-    // Simplified implementation
-    return true;
-}
-
-bool SimulationManager::applyCFDToThermal() {
-    if (!cfd_solver_ || !thermal_solver_) {
-        return false;
-    }
-
-    // Map CFD temperature field to thermal initial conditions
-    // Simplified: use average temperature
-    double avg_temp = 0.0;
-    if (!cfd_solver_->getTemperatureField().empty()) {
-        for (const auto& field : cfd_solver_->getVelocityField()) {
-            avg_temp += field.temperature;
-        }
-        avg_temp /= cfd_solver_->getVelocityField().size();
-    }
-
-    thermal_solver_->setInitialTemperature(avg_temp);
     return true;
 }
 
@@ -305,7 +230,8 @@ void SimulationManager::postProcessResults() {
 
         cfd_result.quantity_name = "CFD_MaxPressure";
         cfd_result.max_value = cfd_solver_->getMaxPressure();
-        cfd_result.min_value = 100000.0;  // Approximately 1 atm
+        const auto& pressure = cfd_solver_->getPressureField();
+        cfd_result.min_value = pressure.empty() ? 0.0 : *std::min_element(pressure.begin(), pressure.end());
         results_.push_back(cfd_result);
 
         cfd_result.quantity_name = "CFD_MaxTemperature";
@@ -340,43 +266,6 @@ void SimulationManager::postProcessResults() {
         thermal_result.max_value = thermal_solver_->getMaxTemperature();
         thermal_result.min_value = thermal_solver_->getMinTemperature();
         results_.push_back(thermal_result);
-    }
-}
-
-void SimulationManager::aggregateResults() {
-    // Aggregate results for visualization
-    // This would typically prepare data for the visualization system
-}
-
-void SimulationManager::setupCoupling() {
-    switch (config_.coupling) {
-        case CouplingMethod::LOOSE:
-            // Sequential coupling: CFD -> Thermal -> Structural
-            if (cfd_solver_) {
-                applyCFDToThermal();
-                applyCFDToStructural();
-            }
-            if (thermal_solver_) {
-                applyThermalToStructural();
-            }
-            break;
-
-        case CouplingMethod::TIGHT:
-            // Iterative coupling with multiple iterations
-            for (size_t iter = 0; iter < config_.max_iterations; iter++) {
-                if (cfd_solver_) {
-                    applyCFDToThermal();
-                    applyCFDToStructural();
-                }
-                if (thermal_solver_) {
-                    applyThermalToStructural();
-                }
-            }
-            break;
-
-        case CouplingMethod::MONOLITHIC:
-            // Fully coupled (not implemented in simplified version)
-            break;
     }
 }
 

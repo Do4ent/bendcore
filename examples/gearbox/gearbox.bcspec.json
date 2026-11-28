@@ -1,0 +1,69 @@
+{
+ "format": "bendcore-specification",
+ "model": {
+  "kind": "assembly",
+  "path": "gearbox.bcasm.json",
+  "properties": {
+   "density": null,
+   "designation": "",
+   "material": "",
+   "name": ""
+  },
+  "resultHash": "cb57cfaec065a17a",
+  "revision": 1
+ },
+ "settings": {
+  "addAssemblyDrawing": true,
+  "assemblyDrawingFormat": "А1",
+  "dissolvedAssemblies": [],
+  "documents": [],
+  "formats": {
+   "РЦ.080.00.001": "А1",
+   "РЦ.080.00.002": "А2",
+   "РЦ.080.00.003": "А3",
+   "РЦ.080.00.004": "А3",
+   "РЦ.080.00.005": "А3",
+   "РЦ.080.00.006": "А3",
+   "РЦ.080.00.007": "А3",
+   "РЦ.080.00.008": "А3",
+   "РЦ.080.00.009": "А3",
+   "РЦ.080.00.010": "А3",
+   "РЦ.080.00.011": "А3",
+   "РЦ.080.00.012": "А3",
+   "РЦ.080.00.013": "А3"
+  },
+  "notes": {},
+  "reservePositions": 0,
+  "sections": {},
+  "textFont": "gost2304"
+ },
+ "title": {
+  "approver": {
+   "date": "",
+   "surname": ""
+  },
+  "checker": {
+   "date": "",
+   "surname": ""
+  },
+  "designation": "",
+  "developer": {
+   "date": "11.26",
+   "surname": "bendcore"
+  },
+  "litera": "",
+  "mass": "",
+  "material": "",
+  "name": "",
+  "normControl": {
+   "date": "",
+   "surname": ""
+  },
+  "organization": "bendcore",
+  "techControl": {
+   "date": "",
+   "surname": ""
+  }
+ },
+ "version": 1
+}

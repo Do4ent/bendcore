@@ -132,18 +132,6 @@ export class CoreClient {
       args
     );
   }
-  getDrawingVersions(tubeId: string) {
-    return this.call<DrawingVersion[]>('drawing.get_versions', { tube_id: tubeId });
-  }
-  compareVersions(tubeId: string, rev1: number, rev2: number) {
-    return this.call<{ changed_sheets: string[]; changed_views: string[]; changed_tables: string[] }>(
-      'drawing.compare_versions',
-      { tube_id: tubeId, rev1, rev2 }
-    );
-  }
-  restoreVersion(tubeId: string, revision: number) {
-    return this.call<DrawingResult>('drawing.restore', { tube_id: tubeId, revision });
-  }
 
   // Пакетный вывод (сборочный чертёж)
   assemblyDrawing(args: Record<string, unknown>) {

@@ -1,5 +1,8 @@
+// Общая конфигурация веб-страниц интерфейса: web/<страница>/webpack.config.js берёт её
+// за основу и задаёт свои entry, output.path, devServer.static и HtmlWebpackPlugin
+// (docs/ui/KERNEL_VIEWPORT.md, PART_MODELING_UI.md, ASSEMBLY_UI.md, DRAWING_UI.md).
+// Самостоятельной точки входа у неё нет.
 const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -7,9 +10,6 @@ const isProduction = process.env.NODE_ENV === 'production';
 module.exports = {
   mode: isProduction ? 'production' : 'development',
   devtool: isProduction ? 'source-map' : 'cheap-module-source-map',
-  entry: {
-    app: './src/ui/AdapterWeb.tsx',
-  },
   output: {
     path: path.resolve(__dirname, 'dist/web'),
     filename: isProduction ? '[name].[contenthash].js' : '[name].js',
@@ -24,9 +24,6 @@ module.exports = {
     hot: true,
     compress: true,
     historyApiFallback: true,
-    static: {
-      directory: path.join(__dirname, 'public'),
-    },
     headers: {
       'Access-Control-Allow-Origin': '*',
     },
@@ -98,15 +95,6 @@ module.exports = {
   },
 
   plugins: [
-    new HtmlWebpackPlugin({
-      template: path.resolve(__dirname, 'public/app.html'),
-      filename: 'index.html',
-      minify: isProduction && {
-        removeComments: true,
-        collapseWhitespace: true,
-        removeAttributeQuotes: true,
-      },
-    }),
     new MiniCssExtractPlugin({
       filename: isProduction ? '[name].[contenthash].css' : '[name].css',
       chunkFilename: isProduction ? '[id].[contenthash].css' : '[id].css',

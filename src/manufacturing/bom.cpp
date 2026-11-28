@@ -214,10 +214,16 @@ std::shared_ptr<BOM> BOMGenerator::generateFromTubes(
 
     // Generate tube items
     int itemNum = 1;
-    std::map<std::string, int> aggregatedQuantities;
+    // Aggregate equal specs, numbering items in order of first appearance
+    std::vector<std::pair<std::string, int>> aggregatedQuantities;
+    std::map<std::string, size_t> specIndex;
 
     for (const auto& spec : tubeSpecs) {
-        aggregatedQuantities[spec.first] += spec.second;
+        auto [it, inserted] = specIndex.try_emplace(spec.first, aggregatedQuantities.size());
+        if (inserted) {
+            aggregatedQuantities.emplace_back(spec.first, 0);
+        }
+        aggregatedQuantities[it->second].second += spec.second;
     }
 
     for (const auto& [spec, totalQty] : aggregatedQuantities) {
@@ -263,23 +269,6 @@ std::shared_ptr<BOM> BOMGenerator::generateFromTubes(
 
         bom->addItem(item);
     }
-
-    return bom;
-}
-
-std::shared_ptr<BOM> BOMGenerator::generateFromAssembly(
-    const std::string& projectName,
-    const std::string& assemblyData) {
-
-    // This is a simplified implementation
-    // In a full implementation, this would parse the assemblyData
-    // and traverse the assembly tree from bendcore::assembly::Registry
-
-    auto bom = std::make_shared<BOM>();
-    bom->projectName = projectName;
-    bom->revision = "1.0";
-    bom->createdDate = getCurrentDate();
-    bom->createdBy = "BendCore CAD System";
 
     return bom;
 }

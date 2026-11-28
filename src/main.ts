@@ -41,37 +41,20 @@ function createWindow() {
   });
 }
 
-// IPC Handler: bendcore:command
+// IPC Handler: bendcore:command. Команды ядра имеют вид «раздел.действие» (src/core_api.cpp);
+// остальные идентификаторы кнопок ленты ядру неизвестны и возвращаются как ошибка.
 ipcMain.handle('bendcore:command', async (event: any, { command, args }: any) => {
-  console.log(`IPC Command: ${command}`, args);
-
   try {
-    const result = command.includes('.')
-      ? await core.call(command, args ?? {})
-      : await handleCommand(command, args);
+    if (typeof command !== 'string' || !command.includes('.')) {
+      throw new Error(`Команда не поддерживается ядром: ${String(command)}`);
+    }
+    const result = await core.call(command, args ?? {});
     return { status: 'ok', data: result };
   } catch (error) {
     console.error(`Command error: ${command}`, error);
     return { status: 'error', message: error instanceof Error ? error.message : String(error) };
   }
 });
-
-// Команды оболочки, ещё не перенесённые в ядро (заглушки документа).
-async function handleCommand(command: string, args: unknown) {
-  console.log(`Handling: ${command}`, args);
-
-  switch (command) {
-    case 'new-document':
-      return { document: 'new_doc_001' };
-    case 'new-sketch':
-      return { sketch: 'sketch_001' };
-    case 'new-tube':
-      return { tube: 'tube_001' };
-    // ... more commands
-    default:
-      throw new Error(`Unknown command: ${command}`);
-  }
-}
 
 // App events
 app.on('ready', createWindow);

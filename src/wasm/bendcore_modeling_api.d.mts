@@ -1,0 +1,592 @@
+// Types of bendcore_modeling_api.mjs (docs/ui/PART_MODELING_UI.md).
+
+import { KernelError, KernelMesh, TessellationParams, Vec3, faceOfTriangle } from './bendcore_kernel_api.mjs';
+import type { ExportFormat, ExportOptions, MassProperties, LibraryMaterial, MeasureSpecWithMesh, Measurement, SectionPlane, SectionResult, MeshGeometry, MeshProperties, MeshReadReport, MeshSectionResult, MeshUnit, Vec3 } from './bendcore_kernel_api.mjs';
+
+export type { ExportFormat, ExportOptions, MassProperties };
+
+export { KernelError, faceOfTriangle };
+
+export type ElementKind = 'face' | 'edge' | 'vertex';
+export type FeatureState = 'ok' | 'warning' | 'error' | 'suppressed' | 'rolled-back';
+/** "final" | "before:<id>" | "after:<id>" | "sketch:<id>" */
+export type ShapeTarget = string;
+
+export interface ParameterSpec {
+  name: string;
+  defaultExpression: string;
+}
+export interface ReferenceSlotSpec {
+  name: string;
+  kind: ElementKind;
+  multiple: boolean;
+  optional: boolean;
+}
+export interface OptionSpec {
+  name: string;
+  /** First value is the default. */
+  allowed: string[];
+}
+export interface LinkSlotSpec {
+  name: string;
+  /** Accepted feature types; empty = any. */
+  types: string[];
+  optional: boolean;
+}
+export interface FeatureTypeSpec {
+  type: string;
+  parameters: ParameterSpec[];
+  references: ReferenceSlotSpec[];
+  options: OptionSpec[];
+  links: LinkSlotSpec[];
+  hasSketch: boolean;
+}
+
+export interface SketchPointDef {
+  x: string;
+  y: string;
+  fixed: boolean;
+}
+export interface SketchGeometryDef {
+  type: 'line' | 'circle' | 'arc' | 'ellipse' | 'elliptical-arc' | 'bspline';
+  start: number;
+  end: number;
+  center: number;
+  radius: string;
+  counterClockwise: boolean;
+  construction: boolean;
+  projection: number;
+  /** ellipse, elliptical-arc: focus point (major axis direction); radius is the minor radius */
+  focus?: number;
+  /** bspline: pole point indices, degree, distinct knots, multiplicities, weights, periodic */
+  poles?: number[];
+  degree?: number;
+  knots?: number[];
+  multiplicities?: number[];
+  weights?: number[];
+  periodic?: boolean;
+}
+export interface SketchConstraintDef {
+  type: string;
+  a: number;
+  b: number;
+  c: number;
+  value: string;
+  /** reference (driven) dimension: measured, does not drive the sketch */
+  driven?: boolean;
+}
+export interface SketchData {
+  points: SketchPointDef[];
+  geometry: SketchGeometryDef[];
+  constraints: SketchConstraintDef[];
+  regions: number[];
+}
+
+export type Expr = string | number;
+export type SketchProfileTemplate =
+  | { kind: 'rectangle'; x: Expr; y: Expr; width: Expr; height: Expr }
+  | { kind: 'circle'; cx: Expr; cy: Expr; radius: Expr }
+  | { kind: 'polygon'; points: [Expr, Expr][] }
+  | { kind: 'point'; x: Expr; y: Expr };
+
+export interface GeometricSignature {
+  valid: boolean;
+  kind: ElementKind;
+  geometry: string;
+  center: Vec3;
+  hasDirection: boolean;
+  direction: Vec3;
+  radius: number;
+  size: number;
+}
+export interface TopoReference {
+  name: string;
+  kind: ElementKind;
+  signature: GeometricSignature;
+}
+
+export interface ElementRecord {
+  index: number;
+  kind: ElementKind;
+  name: string;
+  origin: string;
+  feature: string;
+  aliases: string[];
+  signature: GeometricSignature;
+}
+
+export interface ReferenceReport {
+  slot: string;
+  name: string;
+  kind: ElementKind;
+  method: 'exact' | 'history' | 'signature' | 'broken' | string;
+  names: string[];
+  detail: string;
+}
+
+export interface SketchResultInfo {
+  dof: number;
+  solverStatus: string;
+  curves: number;
+  regions: number;
+  standalonePoints: number;
+  hasFaces: boolean;
+  /** 'fully-defined' | 'under-defined' | 'over-defined' */
+  definition: string;
+  /** redundant constraint numbers (1-based) */
+  redundant: number[];
+  /** per point index / per entity (id - 1): fully determined by the constraints */
+  pointDefined: boolean[];
+  entityDefined: boolean[];
+  /** per constraint: dimension value (driven ones: measured) */
+  constraintValues: number[];
+  /** sketch frame in model space */
+  placement: SketchPlacementInfo;
+}
+
+export interface SketchPlacementInfo {
+  origin: Vec3;
+  xDirection: Vec3;
+  yDirection: Vec3;
+  normal: Vec3;
+}
+
+/** Curve of a sketch entity at the solution (docs/ui/SKETCH_EDITOR.md). */
+export interface SketchSolvedCurve {
+  /** entity id (1-based) */
+  entity: number;
+  type: SketchGeometryDef['type'];
+  construction: boolean;
+  projection: number;
+  defined: boolean;
+  /** x0, y0, x1, y1, ... in sketch coordinates, sampled from the OCCT curve */
+  polyline: Float64Array;
+  /** middle of an open curve (parameter midpoint), null for closed ones */
+  midpoint: [number, number] | null;
+  center?: [number, number];
+  radius?: number;
+}
+
+export interface SketchProfileIssue {
+  kind: string;
+  entities: number[];
+  location: [number, number];
+  detail: string;
+}
+
+export interface SketchSolvedRegion {
+  index: number;
+  /** entities of the outer loop, in traversal order */
+  entities: number[];
+  holes: number[][];
+  area: number;
+  depth: number;
+  material: boolean;
+  selected: boolean;
+  /** entity id that selects exactly this region in SketchData.regions, or null */
+  selector: number | null;
+  /** triangulated face in sketch coordinates (x, y, 0) */
+  positions: Float32Array;
+  indices: Uint32Array;
+}
+
+export interface SketchSolution {
+  converged: boolean;
+  status: string;
+  dof: number;
+  /** 'fully-defined' | 'under-defined' | 'over-defined' */
+  definition: string;
+  /** constraint numbers (1-based, sketch data order) */
+  conflicting: number[];
+  redundant: number[];
+  partiallyRedundant: number[];
+  placement: SketchPlacementInfo;
+  points: { x: number; y: number; fixed: boolean; defined: boolean }[];
+  /** per constraint: dimension value (reference ones measured), other constraints their value */
+  constraintValues: number[];
+  /** per constraint: residual at the solution (0 for reference dimensions) */
+  residuals: number[];
+  curves: SketchSolvedCurve[];
+  intersections: { x: number; y: number; a: number; b: number }[];
+  /** null when the sketch did not solve exactly (conflict, no convergence) or with options.lite */
+  profile: {
+    hasProfile: boolean;
+    issues: SketchProfileIssue[];
+    regions: SketchSolvedRegion[];
+    error: string | null;
+  } | null;
+  /** the input data with free points and initial radii at the solution */
+  sketch: SketchData;
+}
+
+export type SketchTool =
+  | { name: 'trim' | 'extend'; entity: number; pick: [number, number] }
+  | {
+      name: 'offset';
+      chain: number[];
+      /** > 0: left of the chain direction, < 0: right */
+      distance: number;
+      /** also the offset on the other side (driven by the same dimension) */
+      bothSides?: boolean;
+      /** convex corners: extended to the intersection (default) or rounded around the corner */
+      corners?: 'extend' | 'round';
+      constrain?: boolean;
+    }
+  | { name: 'mirror'; entities: number[]; axis: number; constrain?: boolean }
+  | { name: 'linear-pattern'; entities: number[]; step: [number, number]; count: number; constrain?: boolean }
+  | { name: 'circular-pattern'; entities: number[]; center: number; count: number; angle: number; constrain?: boolean }
+  | { name: 'fillet'; a: number; b: number; radius: number }
+  | { name: 'chamfer'; a: number; b: number; d1: number; d2: number };
+
+export interface SketchEditOutcome {
+  sketch: SketchData;
+  /** entity ids in the new data */
+  created: number[];
+  modified: number[];
+  /** entity ids of the input data */
+  removed: number[];
+  /** new point indices and constraint numbers in the new data */
+  points: number[];
+  constraints: number[];
+  /** offset: number of the offset dimension ('offset-distance' constraint) */
+  dimension?: number;
+}
+
+export interface SketchProjectOutcome {
+  sketch: SketchData;
+  /** entity ids of the projected curves */
+  created: number[];
+  /** edge indices that project to a point (skipped) */
+  skipped: number[];
+  /** number of references in the node's 'projected' slot */
+  references: number;
+}
+
+export interface FeatureView {
+  index: number;
+  id: string;
+  type: string;
+  label: string;
+  suppressed: boolean;
+  state: FeatureState;
+  messages: string[];
+  parameters: Record<string, string>;
+  values: Record<string, number>;
+  options: Record<string, string>;
+  links: Record<string, string>;
+  references: Record<string, TopoReference[]>;
+  referenceReports: ReferenceReport[];
+  hasBody: boolean;
+  sketch?: SketchData;
+  sketchResult?: SketchResultInfo;
+  datum?: DatumView;
+}
+
+/** Result of a datum node; a coordinate system also reports its XY plane, Z axis and origin. */
+export interface DatumView {
+  planeOrigin?: Vec3;
+  planeNormal?: Vec3;
+  axisOrigin?: Vec3;
+  axisDirection?: Vec3;
+  point?: Vec3;
+  csys?: { origin: Vec3; x: Vec3; y: Vec3; z: Vec3 };
+}
+
+/** Mesh of a part target: the kernel mesh plus vertex positions (xyz triples, index = element index). */
+export interface PartMesh extends KernelMesh {
+  vertices: Float32Array;
+}
+
+export interface FeatureSpecInput {
+  type: string;
+  id?: string;
+  label?: string;
+  parameters?: Record<string, Expr>;
+  options?: Record<string, string>;
+  links?: Record<string, string>;
+  references?: Record<string, TopoReference[]>;
+  sketch?: SketchData;
+  suppressed?: boolean;
+}
+
+export interface FeatureEdits {
+  label?: string;
+  parameters?: Record<string, Expr>;
+  options?: Record<string, string>;
+  links?: Record<string, string>;
+  references?: Record<string, TopoReference[]>;
+  sketch?: SketchData;
+  suppressed?: boolean;
+}
+
+export interface RebuildReport {
+  recomputed: string[];
+  reused: string[];
+  fromCache: string[];
+  failed: string[];
+}
+
+export interface TransactionInfo {
+  name: string;
+  edits: number;
+}
+
+export interface DocumentState {
+  size: number;
+  rollback: number | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  inTransaction: boolean;
+  undoHistory: TransactionInfo[];
+  redoHistory: TransactionInfo[];
+}
+
+export interface VariableView {
+  name: string;
+  expression: string;
+  value: number | null;
+  error: string | null;
+}
+
+export interface PartProperties {
+  counts: { solids: number; faces: number; edges: number; vertices: number };
+  volume: number | null;
+  centerOfMass: Vec3 | null;
+  /** kg, when a density was given and the target has solids. */
+  mass: number | null;
+  area: number | null;
+  boundingBox: { min: Vec3; max: Vec3 } | null;
+}
+
+export type ConfigurationColumnKind = 'variable' | 'suppression' | 'material';
+
+export interface ConfigurationColumn {
+  kind: ConfigurationColumnKind;
+  /** Variable name or feature id; '' for the material column. */
+  target: string;
+  /** CSV header: "W", "suppress:Hole", "material". */
+  title?: string;
+}
+
+export interface ConfigurationRow {
+  designation: string;
+  /** Designation with the first row's designation for a suffix "-01". */
+  fullDesignation?: string;
+  name: string;
+  /** One per column; '' — base value of the document. */
+  cells: string[];
+}
+
+export interface ConfigurationTable {
+  columns: ConfigurationColumn[];
+  rows: ConfigurationRow[];
+  /** Designation of the active configuration; '' — base values. */
+  active: string;
+  /** Material id of the active configuration ('' — none). */
+  material?: string;
+}
+
+export interface ConfigurationCheck {
+  designation: string;
+  fullDesignation: string;
+  ok: boolean;
+  problems: string[];
+  volume: number | null;
+}
+
+export interface PartMaterial {
+  /** Id of a kernel library material (ModelingKernel.materials()) or any id for a custom density. */
+  id: string;
+  /** kg/m^3 */
+  density: number;
+}
+
+export type { LibraryMaterial, MeasureSpec, MeasureSpecWithMesh, MeshPointElement, Measurement, SectionPlane, SectionResult, MeshGeometry, MeshProperties, MeshReadReport, MeshSectionResult, MeshUnit } from './bendcore_kernel_api.mjs';
+
+/** Reference mesh of a part (docs/modeling/PART_DOCUMENT.md, "Справочная сетка"). */
+export interface PartMeshInfo {
+  id: string;
+  label: string;
+  fileName: string;
+  format: 'stl' | '3mf';
+  /** size of the embedded file */
+  bytes: number;
+  unit: MeshUnit;
+  /** degrees about X, then Y, then Z */
+  rotation: Vec3;
+  /** mm */
+  translation: Vec3;
+  visible: boolean;
+  opacity: number;
+  report: MeshReadReport;
+  /** of the placed mesh, part mm */
+  properties: MeshProperties;
+}
+export interface PartMeshSpec {
+  fileName: string;
+  data: Uint8Array;
+  format?: 'stl' | '3mf';
+  label?: string;
+  unit?: MeshUnit;
+  rotation?: Vec3;
+  translation?: Vec3;
+  visible?: boolean;
+  opacity?: number;
+}
+export interface PartMeshEdits {
+  label?: string;
+  unit?: MeshUnit;
+  rotation?: Vec3;
+  translation?: Vec3;
+  visible?: boolean;
+  opacity?: number;
+}
+
+export class PartDocumentHandle {
+  readonly handle: number;
+  readonly disposed: boolean;
+  dispose(): void;
+  /** material: written as the top-level field "material" of the file (kg/m^3). */
+  save(options?: { includeCache?: boolean; material?: PartMaterial }): string;
+  configurations(): ConfigurationTable;
+  /** Document properties (designation, name, material, developer, organization, note). */
+  documentProperties(): PartDocumentProperties;
+  setDocumentProperties(properties: Partial<Omit<PartDocumentProperties, 'effective'>>): void;
+  setConfigurations(table: { columns: ConfigurationColumn[]; rows: ConfigurationRow[]; active?: string }): void;
+  setConfigurationCell(row: number, column: number, value: Expr): void;
+  addConfigurationColumn(column: ConfigurationColumn): void;
+  activateConfiguration(designation: string): void;
+  checkConfigurations(): ConfigurationCheck[];
+  exportConfigurationsCsv(options?: { decimal?: '.' | ','; bom?: boolean }): string;
+  importConfigurationsCsv(text: string): void;
+  variables(): VariableView[];
+  setVariable(name: string, expression: Expr): void;
+  removeVariable(name: string): void;
+  features(): FeatureView[];
+  feature(id: string): FeatureView;
+  state(): DocumentState;
+  addFeature(spec: FeatureSpecInput, position?: number | null): string;
+  editFeature(id: string, edits: FeatureEdits): void;
+  removeFeature(id: string): void;
+  moveFeature(id: string, index: number): void;
+  setSuppressed(id: string, suppressed: boolean): void;
+  setRollback(position: number | null): void;
+  beginTransaction(name: string): void;
+  commitTransaction(): void;
+  abortTransaction(): void;
+  undo(): RebuildReport;
+  redo(): RebuildReport;
+  rebuild(): RebuildReport;
+  makeReference(target: ShapeTarget, kind: ElementKind, index: number): TopoReference;
+  element(target: ShapeTarget, kind: ElementKind, index: number): ElementRecord;
+  tessellate(target?: ShapeTarget, params?: TessellationParams): PartMesh;
+  properties(target?: ShapeTarget, density?: number | null): PartProperties;
+  exportFile(format: ExportFormat, options?: ExportOptions, target?: ShapeTarget): Uint8Array;
+  massProperties(density: number, target?: ShapeTarget): MassProperties;
+  /** Measurement between elements of the target (kernel indices); mm and degrees. */
+  measure(spec: MeasureSpecWithMesh, target?: ShapeTarget): Measurement;
+  /** Section of the target by a plane: area (mm^2) and contour polylines (xyz triples). */
+  section(plane: SectionPlane, target?: ShapeTarget, deflection?: number): SectionResult;
+  meshes(): PartMeshInfo[];
+  addMesh(spec: PartMeshSpec): string;
+  removeMesh(id: string): void;
+  editMesh(id: string, edits: PartMeshEdits): void;
+  meshGeometry(id: string): MeshGeometry;
+  meshSection(id: string, plane: SectionPlane): MeshSectionResult;
+  meshSectionSketch(id: string, plane: 'XY' | 'XZ' | 'YZ', offset: number): string;
+  solveSketch(featureId: string, sketch: SketchData, options?: { drag?: { point: number; x: number; y: number }; lite?: boolean }): SketchSolution;
+  editSketch(featureId: string, sketch: SketchData, tool: SketchTool): SketchEditOutcome;
+  projectToSketch(
+    featureId: string,
+    sketch: SketchData,
+    elements: { kind: 'edge' | 'face'; index: number }[],
+    options?: { construction?: boolean },
+  ): SketchProjectOutcome;
+}
+
+export interface DxfSketchOptions {
+  /** layer names to import (case-insensitive); default: every layer that is neither frozen nor off */
+  layers?: string[];
+  /** $INSUNITS code to use instead of the file's (required when the file has none) */
+  units?: number;
+  /** $INSUNITS code used only when the file has none */
+  defaultUnits?: number;
+  /** mm; end points closer than this become one sketch point (default 0.001) */
+  tolerance?: number;
+  /** imported points are fixed */
+  fixed?: boolean;
+  /** also import paper-space entities */
+  paperSpace?: boolean;
+  /** sketch data the imported geometry is appended to */
+  into?: SketchData;
+}
+
+export interface DxfLayerInfo {
+  name: string;
+  color: number;
+  frozen: boolean;
+  off: boolean;
+  /** supported curves of the layer (model space unless paperSpace) */
+  curves: number;
+  selected: boolean;
+}
+
+export interface DxfSketchImport {
+  sketch: SketchData;
+  layers: DxfLayerInfo[];
+  version: string;
+  /** $INSUNITS of the file (0: none) */
+  fileUnits: number;
+  /** units used */
+  units: number;
+  mmPerUnit: number;
+  tolerance: number;
+  imported: { lines: number; arcs: number; circles: number; polylines: number; polylineSegments: number; degenerate: number };
+  /** ids of the imported entities in sketch */
+  entities: Int32Array;
+  /** new points, and end points merged into an existing point */
+  points: number;
+  merged: number;
+  /** points that end exactly one imported line or arc */
+  openEnds: Int32Array;
+  ignored: { texts: number; paperSpace: number; otherLayers: number };
+  /** entity types the DXF reader does not read (SPLINE, ELLIPSE, INSERT, ...) -> count */
+  skipped: Record<string, number>;
+  warnings: string[];
+  bounds: { min: [number, number]; max: [number, number] } | null;
+}
+
+export interface ModelingInfo {
+  occtVersion: string;
+  liveDocuments: number;
+  formatVersion: number;
+}
+
+export class ModelingKernel {
+  info(): ModelingInfo;
+  catalog(): FeatureTypeSpec[];
+  sketchTemplate(spec: { profiles: SketchProfileTemplate[] }): SketchData;
+  dxfSketch(bytes: Uint8Array | string, options?: DxfSketchOptions): DxfSketchImport;
+  createDocument(): PartDocumentHandle;
+  materials(): LibraryMaterial[];
+  loadDocument(json: string): { document: PartDocumentHandle; report: RebuildReport; material: PartMaterial | null };
+}
+
+export type ModelingModuleFactory = (options?: Record<string, unknown>) => Promise<unknown>;
+
+export function loadModeling(factory: ModelingModuleFactory, moduleOptions?: Record<string, unknown>): Promise<ModelingKernel>;
+
+/** Properties of a part document (docs/modeling/PART_DOCUMENT.md, "Свойства документа"). */
+export interface PartDocumentProperties {
+  designation: string;
+  name: string;
+  /** Kernel library material id, 'custom' or empty. */
+  material: string;
+  /** kg/m^3; null - not set. */
+  density: number | null;
+  developer: string;
+  organization: string;
+  note: string;
+  /** As the active configuration shows them (its full designation, name and material). */
+  effective: { designation: string; name: string; material: string; density: number | null };
+}

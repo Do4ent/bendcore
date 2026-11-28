@@ -1,0 +1,1907 @@
+{
+ "features": [
+  {
+   "id": "Outline",
+   "label": "Outline",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XY"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "(0) - (Wo) / 2",
+      "y": "(yA + Lo / 2) - (Lo) / 2"
+     },
+     {
+      "fixed": true,
+      "x": "(0) + (Wo) / 2",
+      "y": "(yA + Lo / 2) - (Lo) / 2"
+     },
+     {
+      "fixed": true,
+      "x": "(0) + (Wo) / 2",
+      "y": "(yA + Lo / 2) + (Lo) / 2"
+     },
+     {
+      "fixed": true,
+      "x": "(0) - (Wo) / 2",
+      "y": "(yA + Lo / 2) + (Lo) / 2"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Block",
+   "label": "Block",
+   "links": {
+    "sketch": "Outline"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "H",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "Drafts",
+   "label": "Drafts",
+   "links": {},
+   "options": {
+    "neutral": "face",
+    "reversed": "true"
+   },
+   "parameters": {
+    "angle": "al"
+   },
+   "references": {
+    "faces": [
+     {
+      "kind": "face",
+      "name": "G[Block](Outline:E4)",
+      "signature": {
+       "center": [
+        -48.0,
+        53.5,
+        62.5
+       ],
+       "direction": [
+        -1.0,
+        -0.0,
+        0.0
+       ],
+       "geometry": "Plane",
+       "size": 26625.0
+      }
+     },
+     {
+      "kind": "face",
+      "name": "G[Block](Outline:E2)",
+      "signature": {
+       "center": [
+        48.0,
+        53.5,
+        62.5
+       ],
+       "direction": [
+        1.0,
+        -0.0,
+        -0.0
+       ],
+       "geometry": "Plane",
+       "size": 26625.0
+      }
+     },
+     {
+      "kind": "face",
+      "name": "G[Block](Outline:E1)",
+      "signature": {
+       "center": [
+        1.2490009027033011e-15,
+        -53.0,
+        62.5
+       ],
+       "direction": [
+        -0.0,
+        -1.0,
+        -0.0
+       ],
+       "geometry": "Plane",
+       "size": 12000.0
+      }
+     },
+     {
+      "kind": "face",
+      "name": "G[Block](Outline:E3)",
+      "signature": {
+       "center": [
+        -1.2490009027033011e-15,
+        160.0,
+        62.5
+       ],
+       "direction": [
+        -0.0,
+        1.0,
+        -0.0
+       ],
+       "geometry": "Plane",
+       "size": 12000.0
+      }
+     }
+    ],
+    "neutralFace": [
+     {
+      "kind": "face",
+      "name": "Outline:R1",
+      "signature": {
+       "center": [
+        -8.326672684688674e-17,
+        53.499999999999986,
+        0.0
+       ],
+       "direction": [
+        -0.0,
+        -0.0,
+        -1.0
+       ],
+       "geometry": "Plane",
+       "size": 20448.0
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "Draft"
+  },
+  {
+   "id": "Walls",
+   "label": "Walls",
+   "links": {},
+   "options": {
+    "direction": "inward"
+   },
+   "parameters": {
+    "thickness": "t"
+   },
+   "references": {
+    "faces": [
+     {
+      "kind": "face",
+      "name": "G[Block](Outline:R1)",
+      "signature": {
+       "center": [
+        -6.38378239159465e-16,
+        53.49999999999999,
+        125.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Plane",
+       "size": 21815.446221432838
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "Shell"
+  },
+  {
+   "id": "FlangeSketch",
+   "label": "FlangeSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XY"
+   },
+   "parameters": {
+    "offset": "H",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 5,
+      "projection": -1,
+      "radius": "1",
+      "start": 4,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 6,
+      "projection": -1,
+      "radius": "1",
+      "start": 5,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 7,
+      "projection": -1,
+      "radius": "1",
+      "start": 6,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 4,
+      "projection": -1,
+      "radius": "1",
+      "start": 7,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "-Xf",
+      "y": "y0"
+     },
+     {
+      "fixed": true,
+      "x": "Xf",
+      "y": "y0"
+     },
+     {
+      "fixed": true,
+      "x": "Xf",
+      "y": "y1"
+     },
+     {
+      "fixed": true,
+      "x": "-Xf",
+      "y": "y1"
+     },
+     {
+      "fixed": true,
+      "x": "-xi",
+      "y": "yi0"
+     },
+     {
+      "fixed": true,
+      "x": "xi",
+      "y": "yi0"
+     },
+     {
+      "fixed": true,
+      "x": "xi",
+      "y": "yi1"
+     },
+     {
+      "fixed": true,
+      "x": "-xi",
+      "y": "yi1"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Flange",
+   "label": "Flange",
+   "links": {
+    "sketch": "FlangeSketch"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "true",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "tf",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "BossSketch",
+   "label": "BossSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "YZ"
+   },
+   "parameters": {
+    "offset": "Xb",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [
+     {
+      "a": 1,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "Rp"
+     },
+     {
+      "a": 2,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "Rw"
+     }
+    ],
+    "geometry": [
+     {
+      "center": 0,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "Za"
+     },
+     {
+      "fixed": true,
+      "x": "aw",
+      "y": "Za"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Bosses",
+   "label": "Bosses",
+   "links": {
+    "sketch": "BossSketch"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "true",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "Xb - xe",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "BossesMirror",
+   "label": "BossesMirror",
+   "links": {
+    "feature": "Bosses"
+   },
+   "options": {
+    "merge": "true",
+    "plane": "YZ",
+    "what": "feature"
+   },
+   "parameters": {},
+   "references": {
+    "face": []
+   },
+   "suppressed": false,
+   "type": "Mirror"
+  },
+  {
+   "id": "RibPLine",
+   "label": "RibPLine",
+   "links": {},
+   "options": {
+    "contour": "open",
+    "plane": "XZ"
+   },
+   "parameters": {
+    "offset": "-(0)",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "Xb - 3",
+      "y": "Za - Rp"
+     },
+     {
+      "fixed": true,
+      "x": "Wo / 2 + zr * tan(al)",
+      "y": "zr"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "RibP",
+   "label": "RibP",
+   "links": {
+    "sketch": "RibPLine"
+   },
+   "options": {
+    "direction": "parallel",
+    "flip": "auto",
+    "side": "symmetric"
+   },
+   "parameters": {
+    "thickness": "tr"
+   },
+   "references": {},
+   "suppressed": false,
+   "type": "Rib"
+  },
+  {
+   "id": "RibPMirror",
+   "label": "RibPMirror",
+   "links": {
+    "feature": "RibP"
+   },
+   "options": {
+    "merge": "true",
+    "plane": "YZ",
+    "what": "feature"
+   },
+   "parameters": {},
+   "references": {
+    "face": []
+   },
+   "suppressed": false,
+   "type": "Mirror"
+  },
+  {
+   "id": "RibWLine",
+   "label": "RibWLine",
+   "links": {},
+   "options": {
+    "contour": "open",
+    "plane": "XZ"
+   },
+   "parameters": {
+    "offset": "-(aw)",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "Xb - 3",
+      "y": "Za - Rw"
+     },
+     {
+      "fixed": true,
+      "x": "Wo / 2 + zr * tan(al)",
+      "y": "zr"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "RibW",
+   "label": "RibW",
+   "links": {
+    "sketch": "RibWLine"
+   },
+   "options": {
+    "direction": "parallel",
+    "flip": "auto",
+    "side": "symmetric"
+   },
+   "parameters": {
+    "thickness": "tr"
+   },
+   "references": {},
+   "suppressed": false,
+   "type": "Rib"
+  },
+  {
+   "id": "RibWMirror",
+   "label": "RibWMirror",
+   "links": {
+    "feature": "RibW"
+   },
+   "options": {
+    "merge": "true",
+    "plane": "YZ",
+    "what": "feature"
+   },
+   "parameters": {},
+   "references": {
+    "face": []
+   },
+   "suppressed": false,
+   "type": "Mirror"
+  },
+  {
+   "id": "BoreSketch",
+   "label": "BoreSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "YZ"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [
+     {
+      "a": 1,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "Dp / 2"
+     },
+     {
+      "a": 2,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "Dw / 2"
+     }
+    ],
+    "geometry": [
+     {
+      "center": 0,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     },
+     {
+      "center": 1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "Za"
+     },
+     {
+      "fixed": true,
+      "x": "aw",
+      "y": "Za"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Bores",
+   "label": "Bores",
+   "links": {
+    "sketch": "BoreSketch"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "throughAllBoth",
+    "mode": "cut",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "10",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "PlateSketch",
+   "label": "PlateSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XY"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 1,
+      "projection": -1,
+      "radius": "1",
+      "start": 0,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 2,
+      "projection": -1,
+      "radius": "1",
+      "start": 1,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 3,
+      "projection": -1,
+      "radius": "1",
+      "start": 2,
+      "type": "line"
+     },
+     {
+      "center": -1,
+      "construction": false,
+      "counterClockwise": true,
+      "end": 0,
+      "projection": -1,
+      "radius": "1",
+      "start": 3,
+      "type": "line"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "(0) - (Wo + 2 * ep) / 2",
+      "y": "(yA + Lo / 2) - (Lo + 2 * ep) / 2"
+     },
+     {
+      "fixed": true,
+      "x": "(0) + (Wo + 2 * ep) / 2",
+      "y": "(yA + Lo / 2) - (Lo + 2 * ep) / 2"
+     },
+     {
+      "fixed": true,
+      "x": "(0) + (Wo + 2 * ep) / 2",
+      "y": "(yA + Lo / 2) + (Lo + 2 * ep) / 2"
+     },
+     {
+      "fixed": true,
+      "x": "(0) - (Wo + 2 * ep) / 2",
+      "y": "(yA + Lo / 2) + (Lo + 2 * ep) / 2"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "Plate",
+   "label": "Plate",
+   "links": {
+    "sketch": "PlateSketch"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "true",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "hb",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "DrainBossSketch",
+   "label": "DrainBossSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "XZ"
+   },
+   "parameters": {
+    "offset": "-(yA + Lo + 6)",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [
+     {
+      "a": 1,
+      "b": -1,
+      "c": -1,
+      "type": "radius",
+      "value": "Rd"
+     }
+    ],
+    "geometry": [
+     {
+      "center": 0,
+      "construction": false,
+      "counterClockwise": true,
+      "end": -1,
+      "projection": -1,
+      "radius": "1",
+      "start": -1,
+      "type": "circle"
+     }
+    ],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0",
+      "y": "zd"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "DrainBoss",
+   "label": "DrainBoss",
+   "links": {
+    "sketch": "DrainBossSketch"
+   },
+   "options": {
+    "draftDirection": "inward",
+    "extent": "blind",
+    "mode": "boss",
+    "reversed": "false",
+    "thin": "none"
+   },
+   "parameters": {
+    "distance": "10",
+    "distance2": "0",
+    "draftAngle": "0",
+    "thickness": "1"
+   },
+   "references": {
+    "limit": []
+   },
+   "suppressed": false,
+   "type": "Extrude"
+  },
+  {
+   "id": "DrainTap",
+   "label": "DrainTap",
+   "links": {},
+   "options": {
+    "drillPoint": "true",
+    "end": "through",
+    "hand": "right"
+   },
+   "parameters": {
+    "drillDepth": "0",
+    "drillDiameter": "0",
+    "nominal": "16",
+    "pitch": "1.5",
+    "threadLength": "0",
+    "x": "0",
+    "y": "yA + Lo + 6",
+    "z": "zd"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "DrainBossSketch:R1",
+      "signature": {
+       "center": [
+        -1.7763568394002505e-15,
+        166.0,
+        18.0
+       ],
+       "direction": [
+        0.0,
+        1.0,
+        0.0
+       ],
+       "geometry": "Plane",
+       "size": 615.7521601035994
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "ThreadedHole"
+  },
+  {
+   "id": "CapTapsSketch",
+   "label": "CapTapsSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "face"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "64",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "BossSketch:R1.0_2.0+R1.1_2.0+R1.1_2.1",
+      "signature": {
+       "center": [
+        64.0,
+        42.90049465248683,
+        78.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Plane",
+       "size": 6149.345054589937
+      }
+     }
+    ],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0 + rp * cos(45)",
+      "y": "(Za + rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "0 - rp * cos(45)",
+      "y": "(Za + rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "0 - rp * cos(45)",
+      "y": "(Za - rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "0 + rp * cos(45)",
+      "y": "(Za - rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw + rw * cos(45)",
+      "y": "(Za + rw * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw - rw * cos(45)",
+      "y": "(Za + rw * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw - rw * cos(45)",
+      "y": "(Za - rw * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw + rw * cos(45)",
+      "y": "(Za - rw * sin(45))"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "CapTaps",
+   "label": "CapTaps",
+   "links": {
+    "sketch": "CapTapsSketch"
+   },
+   "options": {
+    "drillPoint": "true",
+    "end": "blind",
+    "hand": "right"
+   },
+   "parameters": {
+    "drillDepth": "0",
+    "drillDiameter": "0",
+    "nominal": "6",
+    "pitch": "0",
+    "threadLength": "14",
+    "x": "0",
+    "y": "0",
+    "z": "0"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "BossSketch:R1.0_2.0+R1.1_2.0+R1.1_2.1",
+      "signature": {
+       "center": [
+        64.0,
+        42.90049465248683,
+        78.0
+       ],
+       "direction": [
+        1.0,
+        0.0,
+        0.0
+       ],
+       "geometry": "Plane",
+       "size": 6149.345054589937
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "ThreadedHole"
+  },
+  {
+   "id": "CapTapsLeftSketch",
+   "label": "CapTapsLeftSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "face"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "-64",
+    "originY": "0",
+    "originZ": "0"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "G[BossesMirror](BossSketch:R1.0_2.0+R1.1_2.0+R1.1_2.1)",
+      "signature": {
+       "center": [
+        -64.0,
+        42.90049465248683,
+        78.0
+       ],
+       "direction": [
+        -1.0,
+        -0.0,
+        -0.0
+       ],
+       "geometry": "Plane",
+       "size": 6149.345054589937
+      }
+     }
+    ],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [],
+    "points": [
+     {
+      "fixed": true,
+      "x": "0 + rp * cos(45)",
+      "y": "-(Za + rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "0 - rp * cos(45)",
+      "y": "-(Za + rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "0 - rp * cos(45)",
+      "y": "-(Za - rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "0 + rp * cos(45)",
+      "y": "-(Za - rp * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw + rw * cos(45)",
+      "y": "-(Za + rw * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw - rw * cos(45)",
+      "y": "-(Za + rw * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw - rw * cos(45)",
+      "y": "-(Za - rw * sin(45))"
+     },
+     {
+      "fixed": true,
+      "x": "aw + rw * cos(45)",
+      "y": "-(Za - rw * sin(45))"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "CapTapsLeft",
+   "label": "CapTapsLeft",
+   "links": {
+    "sketch": "CapTapsLeftSketch"
+   },
+   "options": {
+    "drillPoint": "true",
+    "end": "blind",
+    "hand": "right"
+   },
+   "parameters": {
+    "drillDepth": "0",
+    "drillDiameter": "0",
+    "nominal": "6",
+    "pitch": "0",
+    "threadLength": "14",
+    "x": "0",
+    "y": "0",
+    "z": "0"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "G[BossesMirror](BossSketch:R1.0_2.0+R1.1_2.0+R1.1_2.1)",
+      "signature": {
+       "center": [
+        -64.0,
+        42.90049465248683,
+        78.0
+       ],
+       "direction": [
+        -1.0,
+        -0.0,
+        -0.0
+       ],
+       "geometry": "Plane",
+       "size": 6149.345054589937
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "ThreadedHole"
+  },
+  {
+   "id": "BoltSketch",
+   "label": "BoltSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "face"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "H"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "FlangeSketch:R1",
+      "signature": {
+       "center": [
+        0.0,
+        53.49999999999998,
+        125.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Plane",
+       "size": 16864.890681110493
+      }
+     }
+    ],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [],
+    "points": [
+     {
+      "fixed": true,
+      "x": "-bx",
+      "y": "by0"
+     },
+     {
+      "fixed": true,
+      "x": "bx",
+      "y": "by0"
+     },
+     {
+      "fixed": true,
+      "x": "bx",
+      "y": "by1"
+     },
+     {
+      "fixed": true,
+      "x": "-bx",
+      "y": "by1"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "BoltHoles",
+   "label": "BoltHoles",
+   "links": {
+    "sketch": "BoltSketch"
+   },
+   "options": {
+    "drillPoint": "true",
+    "end": "through",
+    "type": "simple"
+   },
+   "parameters": {
+    "cbDepth": "3",
+    "cbDiameter": "10",
+    "csAngle": "90",
+    "csDiameter": "10",
+    "depth": "10",
+    "diameter": "db",
+    "drillAngle": "118",
+    "x": "0",
+    "y": "0",
+    "z": "0"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "FlangeSketch:R1",
+      "signature": {
+       "center": [
+        0.0,
+        53.49999999999998,
+        125.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Plane",
+       "size": 16864.890681110493
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "Hole"
+  },
+  {
+   "id": "PinSketch",
+   "label": "PinSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "face"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "H"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "FlangeSketch:R1",
+      "signature": {
+       "center": [
+        4.218847493575595e-15,
+        53.49999999999998,
+        125.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Plane",
+       "size": 16484.757970026138
+      }
+     }
+    ],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [],
+    "points": [
+     {
+      "fixed": true,
+      "x": "-px",
+      "y": "by0"
+     },
+     {
+      "fixed": true,
+      "x": "px",
+      "y": "by1"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "PinHoles",
+   "label": "PinHoles",
+   "links": {
+    "sketch": "PinSketch"
+   },
+   "options": {
+    "drillPoint": "true",
+    "end": "through",
+    "type": "simple"
+   },
+   "parameters": {
+    "cbDepth": "3",
+    "cbDiameter": "10",
+    "csAngle": "90",
+    "csDiameter": "10",
+    "depth": "10",
+    "diameter": "dp",
+    "drillAngle": "118",
+    "x": "0",
+    "y": "0",
+    "z": "0"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "FlangeSketch:R1",
+      "signature": {
+       "center": [
+        4.218847493575595e-15,
+        53.49999999999998,
+        125.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Plane",
+       "size": 16484.757970026138
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "Hole"
+  },
+  {
+   "id": "MountSketch",
+   "label": "MountSketch",
+   "links": {},
+   "options": {
+    "contour": "closed",
+    "plane": "face"
+   },
+   "parameters": {
+    "offset": "0",
+    "originX": "0",
+    "originY": "0",
+    "originZ": "-hb"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "G[Plate](PlateSketch:R1)",
+      "signature": {
+       "center": [
+        1.7763568394002505e-15,
+        53.5,
+        -14.0
+       ],
+       "direction": [
+        -0.0,
+        -0.0,
+        -1.0
+       ],
+       "geometry": "Plane",
+       "size": 37917.336324000775
+      }
+     }
+    ],
+    "projected": []
+   },
+   "sketch": {
+    "constraints": [],
+    "geometry": [],
+    "points": [
+     {
+      "fixed": true,
+      "x": "-(Wo / 2 + ep - 12)",
+      "y": "-(yA - ep + 12)"
+     },
+     {
+      "fixed": true,
+      "x": "Wo / 2 + ep - 12",
+      "y": "-(yA - ep + 12)"
+     },
+     {
+      "fixed": true,
+      "x": "Wo / 2 + ep - 12",
+      "y": "-(yA + Lo + ep - 12)"
+     },
+     {
+      "fixed": true,
+      "x": "-(Wo / 2 + ep - 12)",
+      "y": "-(yA + Lo + ep - 12)"
+     }
+    ],
+    "regions": []
+   },
+   "suppressed": false,
+   "type": "Sketch"
+  },
+  {
+   "id": "MountHoles",
+   "label": "MountHoles",
+   "links": {
+    "sketch": "MountSketch"
+   },
+   "options": {
+    "drillPoint": "true",
+    "end": "through",
+    "type": "simple"
+   },
+   "parameters": {
+    "cbDepth": "3",
+    "cbDiameter": "10",
+    "csAngle": "90",
+    "csDiameter": "10",
+    "depth": "10",
+    "diameter": "dm",
+    "drillAngle": "118",
+    "x": "0",
+    "y": "0",
+    "z": "0"
+   },
+   "references": {
+    "face": [
+     {
+      "kind": "face",
+      "name": "G[Plate](PlateSketch:R1)",
+      "signature": {
+       "center": [
+        1.7763568394002505e-15,
+        53.5,
+        -14.0
+       ],
+       "direction": [
+        -0.0,
+        -0.0,
+        -1.0
+       ],
+       "geometry": "Plane",
+       "size": 37917.336324000775
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "Hole"
+  },
+  {
+   "id": "FlangeRounds",
+   "label": "FlangeRounds",
+   "links": {},
+   "options": {},
+   "parameters": {
+    "radius": "rf"
+   },
+   "references": {
+    "edges": [
+     {
+      "kind": "edge",
+      "name": "G[Flange](FlangeSketch:V1_4)",
+      "signature": {
+       "center": [
+        -62.0,
+        -83.0,
+        119.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "size": 12.0
+      }
+     },
+     {
+      "kind": "edge",
+      "name": "G[Flange](FlangeSketch:V1_2)",
+      "signature": {
+       "center": [
+        62.0,
+        -83.0,
+        119.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "size": 12.0
+      }
+     },
+     {
+      "kind": "edge",
+      "name": "G[Flange](FlangeSketch:V2_3)",
+      "signature": {
+       "center": [
+        62.0,
+        190.0,
+        119.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "size": 12.0
+      }
+     },
+     {
+      "kind": "edge",
+      "name": "G[Flange](FlangeSketch:V3_4)",
+      "signature": {
+       "center": [
+        -62.0,
+        190.0,
+        119.0
+       ],
+       "direction": [
+        0.0,
+        0.0,
+        1.0
+       ],
+       "geometry": "Line",
+       "size": 12.0
+      }
+     }
+    ]
+   },
+   "suppressed": false,
+   "type": "Fillet"
+  }
+ ],
+ "format": "bendcore-part",
+ "rollback": null,
+ "variables": [
+  {
+   "expression": "96",
+   "name": "Wo"
+  },
+  {
+   "expression": "-53",
+   "name": "yA"
+  },
+  {
+   "expression": "213",
+   "name": "Lo"
+  },
+  {
+   "expression": "125",
+   "name": "H"
+  },
+  {
+   "expression": "1",
+   "name": "al"
+  },
+  {
+   "expression": "8",
+   "name": "t"
+  },
+  {
+   "expression": "30",
+   "name": "ef"
+  },
+  {
+   "expression": "14",
+   "name": "efx"
+  },
+  {
+   "expression": "Wo / 2 + efx",
+   "name": "Xf"
+  },
+  {
+   "expression": "yA - ef",
+   "name": "y0"
+  },
+  {
+   "expression": "yA + Lo + ef",
+   "name": "y1"
+  },
+  {
+   "expression": "Wo / 2 - t + H * tan(al) + 1.5",
+   "name": "xi"
+  },
+  {
+   "expression": "yA + t - H * tan(al) - 1.5",
+   "name": "yi0"
+  },
+  {
+   "expression": "yA + Lo - t + H * tan(al) + 1.5",
+   "name": "yi1"
+  },
+  {
+   "expression": "40",
+   "name": "bx"
+  },
+  {
+   "expression": "y0 + 15",
+   "name": "by0"
+  },
+  {
+   "expression": "y1 - 15",
+   "name": "by1"
+  },
+  {
+   "expression": "15",
+   "name": "px"
+  },
+  {
+   "expression": "11",
+   "name": "db"
+  },
+  {
+   "expression": "8",
+   "name": "dp"
+  },
+  {
+   "expression": "10",
+   "name": "rf"
+  },
+  {
+   "expression": "12",
+   "name": "tf"
+  },
+  {
+   "expression": "78",
+   "name": "Za"
+  },
+  {
+   "expression": "80",
+   "name": "aw"
+  },
+  {
+   "expression": "64",
+   "name": "Xb"
+  },
+  {
+   "expression": "45",
+   "name": "xe"
+  },
+  {
+   "expression": "40",
+   "name": "Rp"
+  },
+  {
+   "expression": "45",
+   "name": "Rw"
+  },
+  {
+   "expression": "52",
+   "name": "Dp"
+  },
+  {
+   "expression": "62",
+   "name": "Dw"
+  },
+  {
+   "expression": "32",
+   "name": "rp"
+  },
+  {
+   "expression": "37",
+   "name": "rw"
+  },
+  {
+   "expression": "14",
+   "name": "hb"
+  },
+  {
+   "expression": "25",
+   "name": "ep"
+  },
+  {
+   "expression": "14",
+   "name": "dm"
+  },
+  {
+   "expression": "10",
+   "name": "zr"
+  },
+  {
+   "expression": "8",
+   "name": "tr"
+  },
+  {
+   "expression": "18",
+   "name": "zd"
+  },
+  {
+   "expression": "14",
+   "name": "Rd"
+  }
+ ],
+ "version": 3
+}

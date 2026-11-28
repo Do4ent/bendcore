@@ -6,19 +6,13 @@
 
 namespace bendcore::occt {
 
-// OCCT version requirements
+// Minimum OCCT version. 7.8 is the first with TopTools_ShapeMapHasher,
+// which src/occt/ uses; third_party/build_occt.sh builds 8.0.1.
 constexpr int OCCT_VERSION_MAJOR = 7;
-constexpr int OCCT_VERSION_MINOR = 7;
+constexpr int OCCT_VERSION_MINOR = 8;
 constexpr int OCCT_VERSION_PATCH = 0;
 
-// Platform validation (Windows x64 only)
-#if !defined(_WIN32) && !defined(_WIN64)
-    #error "BendCore OCCT integration requires Windows platform (_WIN32 or _WIN64)"
-#endif
-
-#if !defined(_WIN64)
-    #error "BendCore OCCT integration requires 64-bit Windows (_WIN64)"
-#endif
+// Platforms: Linux, macOS and Windows x64 (static OCCT, see build_occt.sh).
 
 // Error codes for OCCT operations
 enum class OCCTErrorCode {

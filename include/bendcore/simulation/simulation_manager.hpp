@@ -19,16 +19,7 @@ enum class SimulationType {
     CFD,               // Fluid dynamics
     STRUCTURAL,        // Stress analysis
     THERMAL,           // Heat transfer
-    MULTI_PHYSICS,     // Combined analysis
-};
-
-/**
- * @brief Coupled physics method
- */
-enum class CouplingMethod {
-    LOOSE,             // Sequential coupling
-    TIGHT,             // Iterative coupling
-    MONOLITHIC,        // Fully coupled
+    MULTI_PHYSICS,     // CFD, thermal, structural solved one after another, no field transfer
 };
 
 /**
@@ -38,7 +29,6 @@ struct SimulationConfig {
     SimulationType type;
     EntityId geometry_id;
     std::string name;
-    CouplingMethod coupling = CouplingMethod::LOOSE;
     bool save_intermediate = false;
     size_t max_iterations = 100;
     double convergence_tolerance = 1e-6;
@@ -111,14 +101,9 @@ public:
     std::shared_ptr<ResultVisualization> getVisualization() { return visualization_; }
 
     // Export
+    // Summary table of post-processed quantities; format "csv" only (field data: ResultVisualization).
     bool exportResults(const std::string& filename, const std::string& format);
-    bool exportToVTK(const std::string& filename);
     bool exportToCSV(const std::string& filename);
-
-    // Coupling
-    bool applyCFDToStructural();
-    bool applyThermalToStructural();
-    bool applyCFDToThermal();
 
     // Validation
     [[nodiscard]] bool validateConfiguration() const;
@@ -147,8 +132,6 @@ private:
     // Internal methods
     void updateProgress(double percent, const std::string& message);
     void postProcessResults();
-    void aggregateResults();
-    void setupCoupling();
 };
 
 }  // namespace BendCore::CadCore::Simulation

@@ -1,0 +1,474 @@
+[
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "bracket.step",
+    "mass_kg": 0.1898199474219914,
+    "material": "steel",
+    "name": "bracket",
+    "parameters": {
+      "A": 60.0,
+      "B": 50.0,
+      "T": 8.0,
+      "Wd": 30.0,
+      "d": 8.0,
+      "hx": 40.0,
+      "r": 4.0
+    },
+    "volume_mm3": 24180.885021909733
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "shaft_with_keyway.step",
+    "mass_kg": 0.42473472981350563,
+    "material": "steel",
+    "name": "shaft with keyway",
+    "parameters": {
+      "L": 100.0,
+      "L1": 60.0,
+      "R1": 15.0,
+      "R2": 10.0,
+      "b": 6.0,
+      "c": 1.5,
+      "kx": 25.0,
+      "lk": 30.0,
+      "t": 4.0
+    },
+    "volume_mm3": 54106.33500808988
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "flange_with_bolt_circle.step",
+    "mass_kg": 1.2044955180205275,
+    "material": "steel",
+    "name": "flange with bolt circle",
+    "parameters": {
+      "BC": 95.0,
+      "D": 120.0,
+      "Dh": 70.0,
+      "N": 6.0,
+      "T": 12.0,
+      "c": 1.5,
+      "d0": 40.0,
+      "dh": 10.0,
+      "h2": 15.0
+    },
+    "volume_mm3": 153438.9194930608
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "cover_with_rounded_corners.step",
+    "mass_kg": 0.5493710647831085,
+    "material": "steel",
+    "name": "cover with rounded corners",
+    "parameters": {
+      "H": 12.0,
+      "L": 100.0,
+      "W": 60.0,
+      "dh": 6.0,
+      "e": 10.0,
+      "r": 8.0
+    },
+    "volume_mm3": 69983.57513160618
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "housing_with_shell.step",
+    "mass_kg": 0.308445187325199,
+    "material": "steel",
+    "name": "housing with shell",
+    "parameters": {
+      "H": 40.0,
+      "L": 80.0,
+      "W": 50.0,
+      "d": 10.0,
+      "t": 3.0
+    },
+    "volume_mm3": 39292.380550980764
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "plate_with_counterbores.step",
+    "mass_kg": 1.4693595296018687,
+    "material": "steel",
+    "name": "plate with counterbores",
+    "parameters": {
+      "D": 15.0,
+      "L": 120.0,
+      "T": 20.0,
+      "W": 80.0,
+      "c": 2.0,
+      "d": 9.0,
+      "k": 9.0,
+      "p1": 30.0,
+      "p2": 90.0
+    },
+    "volume_mm3": 187179.55791106608
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "pulley_with_groove.step",
+    "mass_kg": 1.5036553645808755,
+    "material": "steel",
+    "name": "pulley with groove",
+    "parameters": {
+      "R": 50.0,
+      "g": 8.0,
+      "gw": 10.0,
+      "rf": 1.5,
+      "ri": 15.0,
+      "w": 30.0
+    },
+    "volume_mm3": 191548.45408673573
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "bushing_with_chamfers.step",
+    "mass_kg": 0.39132358117024274,
+    "material": "steel",
+    "name": "bushing with chamfers",
+    "parameters": {
+      "R": 25.0,
+      "c1": 2.0,
+      "c2": 1.5,
+      "h": 40.0,
+      "r": 15.0
+    },
+    "volume_mm3": 49850.13772869334
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "support_with_mirrored_boss.step",
+    "mass_kg": 0.4560744357474439,
+    "material": "steel",
+    "name": "support with mirrored boss",
+    "parameters": {
+      "L": 120.0,
+      "T": 10.0,
+      "W": 40.0,
+      "bx": 35.0,
+      "hb": 25.0,
+      "rb": 8.0,
+      "rf": 2.0
+    },
+    "volume_mm3": 58098.654235343165
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "grid_plate_with_slot_pattern.step",
+    "mass_kg": 0.7906912500000001,
+    "material": "steel",
+    "name": "grid plate with slot pattern",
+    "parameters": {
+      "L": 150.0,
+      "T": 8.0,
+      "W": 100.0,
+      "a": 20.0,
+      "b": 10.0,
+      "c": 1.0,
+      "n1": 4.0,
+      "n2": 3.0,
+      "s1": 30.0,
+      "s2": 25.0,
+      "x0": 20.0,
+      "y0": 20.0
+    },
+    "volume_mm3": 100725.0
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "cast_boss_with_draft.step",
+    "mass_kg": 0.2298637649492488,
+    "material": "steel",
+    "name": "cast boss with draft",
+    "parameters": {
+      "a": 40.0,
+      "al": 5.0,
+      "h": 20.0
+    },
+    "volume_mm3": 29282.008273789652
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "plate_with_swept_grip.step",
+    "mass_kg": 0.2706517248101861,
+    "material": "steel",
+    "name": "plate with swept grip",
+    "parameters": {
+      "Hg": 25.0,
+      "L": 80.0,
+      "Rb": 20.0,
+      "T": 10.0,
+      "W": 40.0,
+      "gx": 20.0,
+      "hx": 60.0,
+      "r": 4.0
+    },
+    "volume_mm3": 34477.92672741225
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "ribbed_bracket_with_lofted_boss.step",
+    "mass_kg": 0.06458705610433252,
+    "material": "steel",
+    "name": "ribbed bracket with lofted boss",
+    "parameters": {
+      "Hr": 25.0,
+      "Lr": 22.0,
+      "T": 5.0,
+      "a": 10.0,
+      "b": 7.0,
+      "bx": 32.0,
+      "hb": 8.0,
+      "t": 2.0
+    },
+    "volume_mm3": 8227.650459150638
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 2700.0,
+    "file": "cast_housing_with_drafts_and_shell.step",
+    "mass_kg": 0.1367409878980146,
+    "material": "aluminium",
+    "name": "cast housing with drafts and shell",
+    "parameters": {
+      "H": 35.0,
+      "L": 80.0,
+      "W": 60.0,
+      "al": 3.0,
+      "d": 8.0,
+      "hx": 30.0,
+      "t": 4.0
+    },
+    "volume_mm3": 50644.810332598
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "bracket_with_stiffening_ribs.step",
+    "mass_kg": 0.2147940274668224,
+    "material": "steel",
+    "name": "bracket with stiffening ribs",
+    "parameters": {
+      "A": 60.0,
+      "B": 50.0,
+      "Hr": 30.0,
+      "Lr": 35.0,
+      "T": 6.0,
+      "W": 40.0,
+      "d": 9.0,
+      "e": 6.0,
+      "hx": 45.0,
+      "t": 4.0
+    },
+    "volume_mm3": 27362.29649258884
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 8900.0,
+    "file": "bent_tube_on_flange.step",
+    "mass_kg": 0.09032249673086452,
+    "material": "copper",
+    "name": "bent tube on flange",
+    "parameters": {
+      "L1": 30.0,
+      "L2": 40.0,
+      "R": 6.0,
+      "Rb": 25.0,
+      "Rf": 15.0,
+      "hf": 5.0,
+      "r": 4.0
+    },
+    "volume_mm3": 10148.595138299384
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "lofted_reducer.step",
+    "mass_kg": 0.3386024270002348,
+    "material": "steel",
+    "name": "lofted reducer",
+    "parameters": {
+      "R1": 20.0,
+      "R2": 14.0,
+      "R3": 10.0,
+      "Rf": 30.0,
+      "d": 10.0,
+      "h1": 25.0,
+      "h2": 15.0,
+      "hf": 6.0
+    },
+    "volume_mm3": 43134.06713378787
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 2700.0,
+    "file": "housing_with_tapped_holes.step",
+    "mass_kg": 0.16665186112547412,
+    "material": "aluminium",
+    "name": "housing with tapped holes",
+    "parameters": {
+      "H": 30.0,
+      "L": 90.0,
+      "W": 60.0,
+      "e": 10.0,
+      "t": 5.0
+    },
+    "volume_mm3": 61722.91152795338
+  },
+  {
+    "bodies": 2,
+    "density_kg_m3": 7850.0,
+    "file": "multibody_plate_with_body_booleans.step",
+    "mass_kg": 0.2925062816780895,
+    "material": "steel",
+    "name": "multibody plate with body booleans",
+    "parameters": {
+      "L": 80.0,
+      "T": 8.0,
+      "W": 50.0,
+      "c": 15.0,
+      "h": 20.0,
+      "px": 25.0,
+      "r": 6.0
+    },
+    "volume_mm3": 37261.94671058465
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 2700.0,
+    "file": "plate_with_swept_cooling_channel.step",
+    "mass_kg": 0.2872789866879231,
+    "material": "aluminium",
+    "name": "plate with swept cooling channel",
+    "parameters": {
+      "L": 100.0,
+      "L1": 50.0,
+      "Rc": 20.0,
+      "T": 16.0,
+      "W": 70.0,
+      "r": 4.0,
+      "y0": 20.0
+    },
+    "volume_mm3": 106399.62469923077
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "thin-walled_tray.step",
+    "mass_kg": 0.2793419013984079,
+    "material": "steel",
+    "name": "thin-walled tray",
+    "parameters": {
+      "L": 90.0,
+      "T": 4.0,
+      "W": 60.0,
+      "h": 20.0,
+      "r": 5.0,
+      "t": 2.5
+    },
+    "volume_mm3": 35584.95559215388
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7200.0,
+    "file": "plate_with_drafted_post.step",
+    "mass_kg": 0.4622953302035103,
+    "material": "cast iron",
+    "name": "plate with drafted post",
+    "parameters": {
+      "L": 80.0,
+      "R": 15.0,
+      "T": 10.0,
+      "W": 60.0,
+      "al": 4.0,
+      "c": 2.0,
+      "d": 8.0,
+      "h": 30.0
+    },
+    "volume_mm3": 64207.68475048754
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "revolved_cap_with_shell.step",
+    "mass_kg": 0.197144049631455,
+    "material": "steel",
+    "name": "revolved cap with shell",
+    "parameters": {
+      "Hs": 20.0,
+      "R": 25.0,
+      "hfl": 4.0,
+      "t": 3.0,
+      "wf": 8.0
+    },
+    "volume_mm3": 25113.89167279681
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "fork_with_mirrored_prong.step",
+    "mass_kg": 0.23684769953386403,
+    "material": "steel",
+    "name": "fork with mirrored prong",
+    "parameters": {
+      "L": 70.0,
+      "T": 8.0,
+      "W": 30.0,
+      "d": 10.0,
+      "g": 30.0,
+      "hp": 35.0,
+      "pw": 10.0
+    },
+    "volume_mm3": 30171.68146928204
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "hopper_block_with_lofted_pocket.step",
+    "mass_kg": 1.3039845727739703,
+    "material": "steel",
+    "name": "hopper block with lofted pocket",
+    "parameters": {
+      "H": 40.0,
+      "L": 80.0,
+      "W": 60.0,
+      "a1": 50.0,
+      "a2": 24.0,
+      "b1": 36.0,
+      "b2": 16.0,
+      "d": 8.0,
+      "dp": 25.0
+    },
+    "volume_mm3": 166112.68442980511
+  },
+  {
+    "bodies": 1,
+    "density_kg_m3": 7850.0,
+    "file": "hub_with_patterned_pins.step",
+    "mass_kg": 0.414313239155422,
+    "material": "steel",
+    "name": "hub with patterned pins",
+    "parameters": {
+      "R0": 40.0,
+      "Rp": 28.0,
+      "d": 16.0,
+      "h": 10.0,
+      "hp": 15.0,
+      "rp": 4.0
+    },
+    "volume_mm3": 52778.75658030853
+  }
+]

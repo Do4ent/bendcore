@@ -3,6 +3,8 @@
 #include <cmath>
 #include <sstream>
 #include <iomanip>
+#include <charconv>
+#include <string>
 
 namespace bendcore {
 
@@ -271,59 +273,99 @@ void Combined3DOffsetCalculatorOptimized::calculate_sections_fast(
 // Быстрая генерация G-code
 // ============================================================================
 
+namespace {
+
+// Locale-free fixed-point formatting; same text as `ostream << std::fixed
+// << std::setprecision(precision) << value`, without iostream overhead
+// (iostream double insertion was ~90% of calculate() time).
+void append_fixed(std::string& out, double value, int precision) {
+  char buf[64];
+  auto [end, ec] = std::to_chars(buf, buf + sizeof(buf), value,
+                                 std::chars_format::fixed, precision);
+  if (ec == std::errc()) {
+    out.append(buf, end);
+  } else {
+    std::ostringstream ss;  // |value| too large for buf: fall back
+    ss << std::fixed << std::setprecision(precision) << value;
+    out += ss.str();
+  }
+}
+
+}  // namespace
+
 std::string Combined3DOffsetCalculatorOptimized::generate_cnc_code_fast(
     const Result& result) const {
-  std::ostringstream ss;
+  std::string ss;
+  ss.reserve(512 + result.bends.size() * 256);
 
   // G-code заголовок
-  ss << "G20  ; Дюймы\n";
-  ss << "G90  ; Абсолютные координаты\n";
-  ss << "G00 Z5.0  ; Поднять инструмент\n\n";
+  ss += "G20  ; Дюймы\n";
+  ss += "G90  ; Абсолютные координаты\n";
+  ss += "G00 Z5.0  ; Поднять инструмент\n\n";
 
-  ss << "; Программа гибки трубопровода\n";
-  ss << "; Общая длина: " << std::fixed << std::setprecision(2)
-     << result.total_length << " мм\n";
-  ss << "; Feasibility: " << std::fixed << std::setprecision(1)
-     << result.feasibility_score << "%\n\n";
+  ss += "; Программа гибки трубопровода\n";
+  ss += "; Общая длина: ";
+  append_fixed(ss, result.total_length, 2);
+  ss += " мм\n";
+  ss += "; Feasibility: ";
+  append_fixed(ss, result.feasibility_score, 1);
+  ss += "%\n\n";
+
+  auto append_xyz = [&ss](const Point3D& p, int precision) {
+    ss += "X"; append_fixed(ss, p.x, precision);
+    ss += " Y"; append_fixed(ss, p.y, precision);
+    ss += " Z"; append_fixed(ss, p.z, precision);
+  };
 
   // Перемещение в первую точку
   if (!result.trajectory_3d.empty()) {
-    const auto& first = result.trajectory_3d[0];
-    ss << "; Перемещение в стартовую позицию\n";
-    ss << "G00 X" << std::fixed << std::setprecision(2) << first.x << " ";
-    ss << "Y" << first.y << " Z" << first.z << "\n";
-    ss << "M03 S500  ; Включить шпиндель\n\n";
+    ss += "; Перемещение в стартовую позицию\n";
+    ss += "G00 ";
+    append_xyz(result.trajectory_3d.front(), 2);
+    ss += "\n";
+    ss += "M03 S500  ; Включить шпиндель\n\n";
   }
 
   // Гибки
   for (size_t i = 0; i < result.bends.size(); ++i) {
     const auto& bend = result.bends[i];
-    ss << "; ========== Гибка " << (i + 1) << " ==========\n";
-    ss << "; Позиция: (" << std::fixed << std::setprecision(1) << bend.position.x
-       << ", " << bend.position.y << ", " << bend.position.z << ")\n";
-    ss << "; Углы: XY=" << std::fixed << std::setprecision(1) << bend.angle_xy
-       << "° Z=" << bend.angle_z << "°\n";
-    ss << "; Радиус: " << std::fixed << std::setprecision(2) << bend.radius
-       << " мм\n";
+    ss += "; ========== Гибка ";
+    ss += std::to_string(i + 1);
+    ss += " ==========\n";
+    ss += "; Позиция: (";
+    append_fixed(ss, bend.position.x, 1);
+    ss += ", ";
+    append_fixed(ss, bend.position.y, 1);
+    ss += ", ";
+    append_fixed(ss, bend.position.z, 1);
+    ss += ")\n";
+    ss += "; Углы: XY=";
+    append_fixed(ss, bend.angle_xy, 1);
+    ss += "° Z=";
+    append_fixed(ss, bend.angle_z, 1);
+    ss += "°\n";
+    ss += "; Радиус: ";
+    append_fixed(ss, bend.radius, 2);
+    ss += " мм\n";
 
-    ss << "G01 X" << std::fixed << std::setprecision(2) << bend.position.x << " ";
-    ss << "Y" << bend.position.y << " Z" << bend.position.z;
-    ss << " F100  ; Гибка\n\n";
+    ss += "G01 ";
+    append_xyz(bend.position, 2);
+    ss += " F100  ; Гибка\n\n";
   }
 
   // Финальная позиция
-  ss << "; Перемещение в конечную позицию\n";
+  ss += "; Перемещение в конечную позицию\n";
   if (!result.trajectory_3d.empty()) {
-    const auto& last = result.trajectory_3d.back();
-    ss << "G00 X" << std::fixed << std::setprecision(2) << last.x << " ";
-    ss << "Y" << last.y << " Z" << last.z << "\n";
+    ss += "G00 ";
+    append_xyz(result.trajectory_3d.back(), 2);
+    ss += "\n";
   }
 
-  ss << "M05  ; Выключить шпиндель\n";
-  ss << "G00 Z10.0  ; Поднять инструмент\n";
-  ss << "M30  ; Конец программы\n";
+  ss += "M05  ; Выключить шпиндель\n";
+  ss += "G00 Z10.0  ; Поднять инструмент\n";
+  ss += "M30  ; Конец программы\n";
 
-  return ss.str();
+  return ss;
 }
 
 // ============================================================================
