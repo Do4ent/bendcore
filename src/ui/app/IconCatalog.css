@@ -1,0 +1,64 @@
+/* Icon catalog page (src/ui/app/IconCatalog.tsx). */
+.ic-root {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px 20px 32px;
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #1d2733;
+  background: #ffffff;
+}
+.ic-root h1 {
+  font-size: 20px;
+  margin: 0 0 6px;
+}
+.ic-root h2 {
+  font-size: 15px;
+  margin: 18px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #d5dbe3;
+}
+.ic-lead {
+  margin: 2px 0;
+  color: #5b6878;
+}
+.ic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.ic-card {
+  margin: 0;
+  border: 1px solid #e3e8ef;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.ic-sizes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 48px;
+  color: #3a4a5e;
+  background: #ffffff;
+}
+.ic-dark {
+  color: #e6edf5;
+  background: #1f2a37;
+}
+.ic-card figcaption {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 6px 6px;
+  border-top: 1px solid #e3e8ef;
+  background: #f7f9fb;
+}
+.ic-card code {
+  font-size: 12px;
+}
+.ic-source {
+  font-size: 11px;
+  color: #5b6878;
+}
+.ic-tabler {
+  color: #1f6feb;
+}

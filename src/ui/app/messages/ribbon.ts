@@ -1,4 +1,4 @@
-// Strings of the ribbon of the editors (docs/ui/APP_SHELL.md, "Лента"): the ribbon itself, tab
+// Strings of the ribbon of the editors and of the icon catalog (icons.*) (docs/ui/APP_SHELL.md, "Лента"): the ribbon itself, tab
 // and group captions, captions of commands that had no button before, and the one-line
 // descriptions of the tooltips (ribbon.tip.*). Captions of most commands are the editors' own
 // messages (part.feature.*, sketch.tool.*, assembly.panel.*, drawing.tool.*). Merged in
@@ -81,6 +81,16 @@ export const ribbonRu = {
   'ribbon.showSpecification': 'Показать спецификацию',
   'ribbon.showSheet': 'Показать лист',
 
+  'icons.title': 'Значки интерфейса bendcore',
+  'icons.lead': 'Общие действия — Tabler Icons {version} (лицензия MIT), значки САПР нарисованы для bendcore в том же стиле (лицензия MIT проекта): сетка 24×24, линия 2, скруглённые концы, цвет текста, без заливок. Каждый значок — в 32, 24 и 16 пикселях на светлом и тёмном фоне.',
+  'icons.count': 'Всего значков: {total}; нарисованы для bendcore: {own}; из Tabler Icons: {tabler}.',
+  'icons.source.tabler': 'Tabler:',
+  'icons.source.bendcore': 'bendcore',
+  'icons.section.general': 'Общие действия',
+  'icons.section.sketch': 'Эскиз и ограничения',
+  'icons.section.feature': 'Операции детали и анализ',
+  'icons.section.assembly': 'Сборка',
+  'icons.section.drawing': 'Чертёж',
   'ribbon.tip.new': 'Создать новый пустой документ',
   'ribbon.tip.open': 'Открыть файл документа',
   'ribbon.tip.save': 'Сохранить документ в файл',
@@ -268,6 +278,16 @@ export const ribbonEn: Record<keyof typeof ribbonRu, string> = {
   'ribbon.showSpecification': 'Show parts list',
   'ribbon.showSheet': 'Show sheet',
 
+  'icons.title': 'bendcore interface icons',
+  'icons.lead': 'General actions are Tabler Icons {version} (MIT License); the CAD icons are drawn for bendcore in the same style (MIT License of the project): 24×24 grid, stroke 2, round ends, text colour, no fills. Each icon at 32, 24 and 16 pixels on light and dark ground.',
+  'icons.count': 'Icons: {total}; drawn for bendcore: {own}; from Tabler Icons: {tabler}.',
+  'icons.source.tabler': 'Tabler:',
+  'icons.source.bendcore': 'bendcore',
+  'icons.section.general': 'General actions',
+  'icons.section.sketch': 'Sketch and constraints',
+  'icons.section.feature': 'Part features and analysis',
+  'icons.section.assembly': 'Assembly',
+  'icons.section.drawing': 'Drawing',
   'ribbon.tip.new': 'Create a new empty document',
   'ribbon.tip.open': 'Open a document file',
   'ribbon.tip.save': 'Save the document to a file',

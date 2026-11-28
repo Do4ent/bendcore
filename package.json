@@ -29,6 +29,7 @@
     "test:e2e:drawing": "playwright test -c web/drawing/playwright.config.ts",
     "dev:app": "webpack serve --config web/app/webpack.config.js --mode development",
     "test:e2e:app": "playwright test -c web/app/playwright.config.ts",
+    "dev:icons": "webpack serve --config web/icons/webpack.config.js --mode development",
     "lint": "eslint src/ui --ext .ts,.tsx",
     "format": "prettier --write src/ui",
     "start": "electron .",

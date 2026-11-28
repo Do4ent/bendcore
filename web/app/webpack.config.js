@@ -32,7 +32,8 @@ const rules = base.module.rules.map((rule) =>
 module.exports = {
   ...base,
   context: root,
-  entry: { app: './src/ui/app/appEntry.tsx', 'wasm-worker': workerEntry },
+  // icons: the icon catalog (web/icons) as /icons.html, for its Playwright picture.
+  entry: { app: './src/ui/app/appEntry.tsx', icons: './src/ui/app/iconCatalogEntry.tsx', 'wasm-worker': workerEntry },
   output: { ...base.output, filename: workerFileName(base.output.filename), path: path.join(root, 'dist/app') },
   module: { ...base.module, rules },
   optimization: workerOptimization(base.optimization),
@@ -50,6 +51,7 @@ module.exports = {
   },
   plugins: [
     new HtmlWebpackPlugin({ template: path.join(__dirname, 'index.html'), filename: 'index.html', chunks: ['app'] }),
+    new HtmlWebpackPlugin({ template: path.join(__dirname, '../icons/index.html'), filename: 'icons.html', chunks: ['icons'] }),
     new MiniCssExtractPlugin({ filename: isProduction ? '[name].[contenthash].css' : '[name].css' }),
   ],
 };
