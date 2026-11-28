@@ -5,7 +5,7 @@
  * kernel's description and specification into the rows of the interface and the next settings.
  */
 
-import type { ProjectionMethod, SheetStyle, SpecificationTable, TextFont, ViewInfo } from '../../wasm/bendcore_drawing_api.mjs';
+import type { GostFormat, HatchMaterial, ProjectionMethod, SheetStyle, SpecificationTable, TextFont, ViewInfo } from '../../wasm/bendcore_drawing_api.mjs';
 
 export const TEXT_FONTS: readonly TextFont[] = ['gost2304', 'truetype'];
 
@@ -17,6 +17,46 @@ export function isTextFont(v: string): v is TextFont {
 export const SHEET_STYLES: readonly SheetStyle[] = ['eskd', 'iso7200'];
 export function isSheetStyle(v: string): v is SheetStyle {
   return (SHEET_STYLES as readonly string[]).includes(v);
+}
+
+/**
+ * Sheet formats of the format list (docs/ui/DRAWING_UI.md, "Формат листа"): the basic sizes of
+ * GOST 2.301 table 1 and the additional multiples of table 2 (the same sizes are the ISO 5457
+ * elongated sizes, tables 2 and 3), short × long side in mm. The kernel checks the combination.
+ */
+export interface SheetFormatOption {
+  /** option value: "A4" or "A4x3" */
+  value: string;
+  format: GostFormat;
+  multiplier: number;
+  /** short and long side, mm */
+  size: readonly [number, number];
+}
+const BASIC: readonly (readonly [GostFormat, number, number])[] = [
+  ['A0', 841, 1189], ['A1', 594, 841], ['A2', 420, 594], ['A3', 297, 420], ['A4', 210, 297],
+];
+const MULTIPLES: readonly (readonly [GostFormat, number, number, number])[] = [
+  ['A0', 2, 1189, 1682], ['A0', 3, 1189, 2523],
+  ['A1', 3, 841, 1783], ['A1', 4, 841, 2378],
+  ['A2', 3, 594, 1261], ['A2', 4, 594, 1682], ['A2', 5, 594, 2102],
+  ['A3', 3, 420, 891], ['A3', 4, 420, 1189], ['A3', 5, 420, 1486], ['A3', 6, 420, 1783], ['A3', 7, 420, 2080],
+  ['A4', 3, 297, 630], ['A4', 4, 297, 841], ['A4', 5, 297, 1051], ['A4', 6, 297, 1261], ['A4', 7, 297, 1471],
+  ['A4', 8, 297, 1682], ['A4', 9, 297, 1892],
+];
+/** Every format: each basic size followed by its multiples, A0 first. */
+export const SHEET_FORMATS: readonly SheetFormatOption[] = BASIC.flatMap(([format, a, b]) => [
+  { value: format, format, multiplier: 1, size: [a, b] as const },
+  ...MULTIPLES.filter((m) => m[0] === format).map(([f, n, s, l]) => ({ value: `${f}x${n}`, format: f, multiplier: n, size: [s, l] as const })),
+]);
+export const sheetFormatValue = (format: GostFormat, multiplier: number): string => (multiplier === 1 ? format : `${format}x${multiplier}`);
+export function sheetFormatOf(value: string): SheetFormatOption | undefined {
+  return SHEET_FORMATS.find((f) => f.value === value);
+}
+
+/** Material symbols of sections, GOST 2.306 table 1 (the kernel's views::HatchMaterial). */
+export const HATCH_MATERIALS: readonly HatchMaterial[] = ['metal', 'nonmetal', 'wood', 'glass', 'concrete', 'liquid'];
+export function isHatchMaterial(v: string): v is HatchMaterial {
+  return (HATCH_MATERIALS as readonly string[]).includes(v);
 }
 
 /** Projection methods of the document: first angle (ESKD, ISO E) and third angle (ISO A). */

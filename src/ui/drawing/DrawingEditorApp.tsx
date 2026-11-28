@@ -38,11 +38,16 @@ import { FONT_FAMILY, FONT_FILE, defaultDrawingBaseUrl, loadDrawingFrom } from '
 import { printDocument, printHtml } from './printSheet';
 import { CHARACTERISTICS, SCALES, SHEET_SIDES, STANDARD_VIEWS } from './labels';
 import {
+  HATCH_MATERIALS,
   PROJECTION_METHODS,
+  SHEET_FORMATS,
   SHEET_STYLES,
   TEXT_FONTS,
   auxiliaryParent,
+  isHatchMaterial,
   isProjectionMethod,
+  sheetFormatOf,
+  sheetFormatValue,
   isSheetStyle,
   isTextFont,
   subassemblyRows,
@@ -921,19 +926,26 @@ export default function DrawingEditorApp({
                 <button onClick={() => run(t('drawing.done.sheetAdded'), async (d) => ({ switchTo: await d.addSheet({}) }))} title={t('drawing.addSheet')} data-testid="add-sheet">+</button>
               </div>
               <div className="dr-row">
-                <label>
+                <label title={t('drawing.sheetFormatHint')}>
                   {t('drawing.format')}
                   <select
-                    value={sheet.format}
+                    value={sheetFormatValue(sheet.format, sheet.multiplier ?? 1)}
                     data-testid="sheet-format"
                     onChange={(e) => {
-                      const format = e.target.value as SheetInfo['format'];
-                      run(t('drawing.done.format'), (d) => d.setSheet(sheet.id, { format }));
+                      const f = sheetFormatOf(e.target.value);
+                      if (!f) return;
+                      run(t('drawing.done.format'), (d) => d.setSheet(sheet.id, { format: f.format, multiplier: f.multiplier }));
                     }}
                   >
-                    {['A0', 'A1', 'A2', 'A3', 'A4'].map((f) => (
-                      <option key={f} value={f}>{t(`drawing.sheetFormat.${f}` as MessageKey)}</option>
-                    ))}
+                    {SHEET_FORMATS.map((f) => {
+                      const base = t(`drawing.sheetFormat.${f.format}` as MessageKey);
+                      const name = f.multiplier === 1 ? base : t('drawing.sheetFormat.multiple', { base, n: f.multiplier });
+                      return (
+                        <option key={f.value} value={f.value}>
+                          {t('drawing.sheetFormatOption', { name, w: f.size[0], h: f.size[1] })}
+                        </option>
+                      );
+                    })}
                   </select>
                 </label>
                 <label>
@@ -1017,6 +1029,37 @@ export default function DrawingEditorApp({
                     ))}
                   </select>
                 </label>
+              </div>
+              <div className="dr-row">
+                <label className="dr-check" title={t('drawing.zonesHint')}>
+                  <input
+                    type="checkbox"
+                    checked={!!desc.zones?.enabled}
+                    data-testid="sheet-zones"
+                    onChange={() => {
+                      const enabled = !desc.zones?.enabled;
+                      run(t(enabled ? 'drawing.done.zones' : 'drawing.done.zonesOff'), (d) => d.setSettings({ zones: { enabled } }));
+                    }}
+                  />
+                  {t('drawing.zones')}
+                </label>
+                {desc.zones?.enabled && (
+                  <label>
+                    {t('drawing.zoneField')}
+                    <select
+                      value={String(desc.zones.fieldLength)}
+                      data-testid="sheet-zone-length"
+                      onChange={(e) => {
+                        const fieldLength = Number(e.target.value);
+                        run(t('drawing.done.zoneField', { length: fieldLength }), (d) => d.setSettings({ zones: { fieldLength } }));
+                      }}
+                    >
+                      {[25, 50, 75].map((l) => (
+                        <option key={l} value={String(l)}>{l}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
               {desc.sheets.length > 1 && (
                 <button onClick={() => run(t('drawing.done.sheetRemoved'), (d) => d.removeSheet(sheet.id))}>{t('drawing.removeSheet', { id: sheet.id })}</button>
@@ -1149,6 +1192,32 @@ export default function DrawingEditorApp({
                           <option key={l} value={l}>
                             {t(`drawing.balloonLine.${l}` as MessageKey)}
                           </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {(selected.kind === 'section' || (selected.localSections ?? []).length > 0) && (
+                    <label className="dr-check" title={t('drawing.hatchMaterialHint')}>
+                      {t('drawing.hatchMaterial')}{' '}
+                      <select
+                        value={selected.hatchMaterial ?? ''}
+                        data-testid="view-hatch-material"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const hatchMaterial = isHatchMaterial(v) ? v : null;
+                          const label = hatchMaterial ? t(`drawing.hatchMaterial.${hatchMaterial}`) : t('drawing.hatchMaterial.auto');
+                          run(t('drawing.done.hatchMaterial', { material: label }), (d) => d.setView(sheet.id, selected.id, { hatchMaterial }));
+                        }}
+                      >
+                        <option value="">
+                          {selected.hatchMaterialsShown && !selected.hatchMaterial
+                            ? t('drawing.hatchMaterial.autoShown', {
+                                materials: selected.hatchMaterialsShown.map((m) => t(`drawing.hatchMaterial.${m}`)).join(', '),
+                              })
+                            : t('drawing.hatchMaterial.auto')}
+                        </option>
+                        {HATCH_MATERIALS.map((m) => (
+                          <option key={m} value={m}>{t(`drawing.hatchMaterial.${m}`)}</option>
                         ))}
                       </select>
                     </label>
