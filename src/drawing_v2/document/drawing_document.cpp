@@ -776,10 +776,10 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
     const int sheetCount = int(sheets_.size());
     for (std::size_t si = 0; si < sheets_.size(); ++si) {
         SheetDef& sd = sheets_[si];
-        // ISO: основные форматы — ISO 216 (размеры те же, что у ГОСТ 2.301); кратные — по ГОСТ 2.301
-        // (совпадают с удлинёнными форматами ISO 5457).
-        auto sheetR = settings_.sheetStyle == SheetStyle::Iso7200 && sd.format.multiplier == 1
-                          ? iso216Sheet(int(sd.format.base), sd.format.orientation)
+        // ISO: основные форматы — ISO 216, кратные — удлинённые форматы ISO 5457 (табл. 2 и 3; размеры
+        // те же, что у дополнительных форматов ГОСТ 2.301, табл. 2).
+        auto sheetR = settings_.sheetStyle == SheetStyle::Iso7200
+                          ? iso5457Sheet(int(sd.format.base), sd.format.multiplier, sd.format.orientation)
                           : gostSheet(sd.format.base, sd.format.multiplier, sd.format.orientation);
         if (!sheetR) return sheetR.error();
         ComputedSheet cs;
