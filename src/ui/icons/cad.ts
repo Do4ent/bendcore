@@ -50,7 +50,7 @@ export const CAD_ICONS: Record<string, CadIcon> = {
   'sketch-construction': { section: 'sketch', body: p('M3 21l2 -2', 'M8 16l2 -2', 'M13 11l2 -2', 'M18 6l2 -2') },
   'sketch-dimension': { section: 'sketch', body: p('M3 7v10', 'M21 7v10', 'M3 12h4', 'M17 12h4', 'M6 10l-3 2l3 2', 'M18 10l3 2l-3 2', 'M9 9h6v6h-6z') },
   'sketch-finish': { section: 'sketch', body: p('M4 20h7', 'M4 20v-7', 'M9 13l3 3l8 -9') },
-  'sketch-dxf': { section: 'sketch', body: p('M14 3v4a1 1 0 0 0 1 1h4', 'M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2', 'M8 17l3 -4l3 2l2 -3') },
+  'sketch-dxf': { section: 'sketch', body: p('M3 20l5 -6l4 3l5 -7', 'M19 3v7', 'M16 7l3 3l3 -3') + c(3, 20, 1) },
   // constraints
   'constraint': { section: 'sketch', body: p('M7 20l10 -16', 'M4 14h16') + c(10.6, 14, 1.5) },
   'constraint-coincident': { section: 'sketch', body: p('M3 20l7 -7', 'M14 13l7 -7', 'M3 4l7 7', 'M14 11l7 7') + c(12, 12, 2) },
@@ -86,7 +86,6 @@ export const CAD_ICONS: Record<string, CadIcon> = {
   'gear-rim': { section: 'feature', body: p(GEAR) + c(12, 12, 3) },
   boolean: { section: 'feature', body: c(9, 12, 6) + c(15, 12, 6) },
   'body-delete': { section: 'feature', body: p('M10 4l6 3.5v7l-6 3.5l-6 -3.5v-7z', 'M10 11l6 -3.5', 'M10 11v7', 'M16 17l5 5', 'M21 17l-5 5') },
-  'body-new': { section: 'feature', body: SMALL_CUBE + PLUS_CORNER },
   'pattern-linear-body': { section: 'feature', body: p('M3 9l3 -2l3 2v4l-3 2l-3 -2z', 'M10 9l3 -2l3 2v4l-3 2l-3 -2z', 'M17 9l2 -1.3', 'M17 9v4', 'M3 19h18', 'M18 17l3 2l-3 2') },
   'pattern-circular-body': { section: 'feature', body: p('M10 2h4v4h-4z', 'M18 10h4v4h-4z', 'M10 18h4v4h-4z', 'M2 10h4v4h-4z', 'M12 12h.01') },
   'mirror-body': { section: 'feature', body: p('M12 3v18', 'M8 7l-3 -2l-3 2v6l3 2l3 -2z', 'M16 7l3 -2l3 2v6l-3 2l-3 -2z') },

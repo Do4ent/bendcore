@@ -3,8 +3,8 @@
 // files of the @tabler/icons package (devDependency, exact version in package.json) into
 // src/ui/icons/tabler.ts. Run after changing TABLER_NAMES or the package version:
 //   node scripts/gen_tabler_icons.mjs
-// The Jest test src/ui/icons/__tests__/icons.test.ts checks that the generated file matches the
-// installed package.
+// `--check` compares the file with the installed package instead of writing it (the Jest test
+// src/ui/icons/__tests__/icons.test.ts runs it).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -73,6 +73,13 @@ export function generate() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  fs.writeFileSync(path.join(root, 'src', 'ui', 'icons', 'tabler.ts'), generate());
+  const target = path.join(root, 'src', 'ui', 'icons', 'tabler.ts');
+  if (process.argv.includes('--check')) {
+    // The generated file must be what the installed package gives (Jest: src/ui/icons/__tests__).
+    const same = fs.readFileSync(target, 'utf8') === generate();
+    console.log(same ? 'tabler.ts matches the package' : 'tabler.ts differs from the package: run node scripts/gen_tabler_icons.mjs');
+    process.exit(same ? 0 : 1);
+  }
+  fs.writeFileSync(target, generate());
   console.log(`src/ui/icons/tabler.ts: ${TABLER_NAMES.length} icons`);
 }

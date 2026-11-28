@@ -77,7 +77,7 @@ export function sketchRibbon(t: Translate, s: SketchRibbonState, a: SketchRibbon
       id: 'sketchEdit',
       label: t('ribbon.tab.sketchEdit'),
       groups: [
-        { id: 'draw', label: t('ribbon.group.draw'), items: [tool('select'), ...DRAW_TOOLS.map(tool)] },
+        { id: 'draw', label: t('sketch.drawing'), items: [tool('select'), ...DRAW_TOOLS.map(tool)] },
         { id: 'edit', label: t('ribbon.group.edit'), items: EDIT_TOOLS.map(tool) },
         { id: 'dimensions', label: t('ribbon.group.dimensions'), items: DIMENSION_TOOLS.map(tool) },
         {
