@@ -220,7 +220,35 @@ export function messagesOfSource(src: string, file: string): KernelMessageSource
   while ((m = named.exec(text)) !== null) add(m[1], m.index, expressionAt(text, named.lastIndex));
   const input = /\bInputError\(/g;
   while ((m = input.exec(text)) !== null) add('InvalidInput', m.index, expressionAt(text, input.lastIndex));
+  // Local helpers that build the error from a text: `Error invalid(std::string m) { return
+  // Error{ErrorCode::InvalidInput, ...}; }`, `[[noreturn]] void bad(const std::string& m) { throw
+  // FormatError(m); }` — every call `invalid("...")` is a message of the helper's code.
+  for (const [name, code] of helpersOf(text)) {
+    const call = new RegExp(`(?<![\\w.>:])${name}\\(`, 'g');
+    while ((m = call.exec(text)) !== null) {
+      if (/(?:Error|void)\s+$/.test(text.slice(Math.max(0, m.index - 12), m.index))) continue; // the definition
+      let from = call.lastIndex;
+      let expr = expressionAt(text, from);
+      // bad(ErrorCode::Fault, "text"): the text is the second argument.
+      if (/^\s*(?:ErrorCode::\w+|code)\s*$/.test(expr) && text[from + expr.length] === ',') {
+        from += expr.length + 1;
+        expr = expressionAt(text, from);
+      }
+      add(code, m.index, name === 'fontError' ? `"TrueType: " + (${expr})` : expr);
+    }
+  }
   MESSAGE_CALLS.lastIndex = 0;
   while ((m = MESSAGE_CALLS.exec(text)) !== null) add('message', m.index, expressionAt(text, MESSAGE_CALLS.lastIndex));
+  return out;
+}
+
+/** Error-building helpers defined in a file: name -> ErrorCode (a thrown parse failure is ParseError). */
+function helpersOf(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const make = /\bError\s+(\w+)\s*\(\s*(?:const\s+)?std::string&?\s*\w*\s*\)\s*\{\s*return\s+Error\s*\{\s*ErrorCode::(\w+)\s*,/g;
+  let m: RegExpExecArray | null;
+  while ((m = make.exec(text)) !== null) out.set(m[1], m[2]);
+  const thrown = /\bvoid\s+(\w+)\s*\(\s*const\s+std::string&\s*\w*\s*\)\s*\{\s*throw\s+(?:FormatError|ParseFailure)\b/g;
+  while ((m = thrown.exec(text)) !== null) out.set(m[1], 'ParseError');
   return out;
 }
