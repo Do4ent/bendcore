@@ -176,9 +176,23 @@ const Ribbon: React.FC<RibbonProps> = ({ title, quick = [], tabs, activeTab, sta
     setCurrent(id);
   }, [boxes]);
 
+  // The tab the strip shows right now, read from its scroll position. A command of another tab
+  // scrolled into view (keyboard focus, automation) moves the strip before the scroll event
+  // updates `current`; re-aligning to the stale state would scroll the command away again under
+  // the pointer, so the alignments below keep the tab the strip actually shows.
+  const shownNow = useCallback((): string | null => {
+    const strip = stripRef.current;
+    // Without layout (zero widths: hidden strip, test DOM) the scroll position says nothing.
+    if (!strip || strip.clientWidth <= 0) return current;
+    const all = boxes();
+    if (!all.some((b) => b.width > 0)) return current;
+    return panelAt(all, strip.scrollLeft, strip.clientWidth) ?? current;
+  }, [boxes, current]);
+
   // Keep the current tab in view when the tabs or the width change.
   useLayoutEffect(() => {
-    const id = current && shownTabs.some((x) => x.id === current) ? current : shownTabs[0]?.id;
+    const now = shownNow();
+    const id = now && shownTabs.some((x) => x.id === now) ? now : shownTabs[0]?.id;
     if (id) scrollTo(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabKey, prefs.collapsed, peek]);
@@ -190,11 +204,12 @@ const Ribbon: React.FC<RibbonProps> = ({ title, quick = [], tabs, activeTab, sta
     const strip = stripRef.current;
     if (!strip || typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(() => {
-      if (current) scrollTo(current);
+      const id = shownNow();
+      if (id) scrollTo(id);
     });
     ro.observe(strip);
     return () => ro.disconnect();
-  }, [current, scrollTo]);
+  }, [shownNow, scrollTo]);
   useEffect(
     () => () => {
       if (tipTimer.current !== null) window.clearTimeout(tipTimer.current);
