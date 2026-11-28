@@ -376,6 +376,9 @@ Result<std::string> DrawingDocument::toJson() const {
         if (g.enabled != def.enabled || g.mass != def.mass || g.material != def.material || !g.headers.empty())
             j["settings"]["group"] = {{"enabled", g.enabled}, {"mass", g.mass}, {"material", g.material}, {"headers", g.headers}};
     }
+    // Разметка зон — только включённая (прежние версии файл прочтут).
+    if (settings_.zones.enabled || settings_.zones.fieldLength != kZoneFieldLength)
+        j["settings"]["zones"] = {{"enabled", settings_.zones.enabled}, {"fieldLength", settings_.zones.fieldLength}};
     json sheets = json::array();
     for (const SheetDef& s : sheets_) {
         json js;
@@ -414,6 +417,7 @@ Result<std::string> DrawingDocument::toJson() const {
             if (!v.bearings) jv["bearings"] = false;
             if (v.rotated) jv["rotated"] = true;
             if (v.bearingSymbol == annotations::BearingSymbol::RollingElement) jv["bearingSymbol"] = "rollingElement";
+            if (v.hatchMaterial) jv["hatchMaterial"] = toString(*v.hatchMaterial);
             if (v.balloonLine != annotations::BalloonLine::Auto) jv["balloonLine"] = annotations::toString(v.balloonLine);
             if (!v.balloonShelves.empty()) {
                 json bs = json::array();
@@ -552,6 +556,14 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                 d.settings_.group.material = flag(g, "material", false);
                 d.settings_.group.headers = g.value("headers", std::map<std::string, std::string>{});
             }
+            if (s.contains("zones")) {
+                const json& z = s.at("zones");
+                if (!z.is_object()) fail("'zones' must be an object");
+                d.settings_.zones.enabled = flag(z, "enabled", false);
+                d.settings_.zones.fieldLength = num(z, "fieldLength", kZoneFieldLength);
+                if (!(d.settings_.zones.fieldLength >= 25.0 && d.settings_.zones.fieldLength <= 75.0))
+                    fail("zones: the field length must be 25..75 mm");
+            }
         }
         for (const json& js : field(j, "sheets")) {
             SheetDef s;
@@ -629,6 +641,12 @@ Result<DrawingDocument> DrawingDocument::fromJson(std::string_view text, int* lo
                 }
                 if (jv.contains("method")) v.method = enumValue(jv.at("method"), kHlr, "HLR method");
                 v.autoMethod = flag(jv, "autoMethod", false);
+                if (jv.contains("hatchMaterial") && !jv.at("hatchMaterial").is_null()) {
+                    const json& hm = jv.at("hatchMaterial");
+                    const auto m = hm.is_string() ? hatchMaterialFromString(hm.get<std::string>()) : std::nullopt;
+                    if (!m) fail("unknown hatch material (metal, nonmetal, wood, glass, concrete, liquid)");
+                    v.hatchMaterial = *m;
+                }
                 if (jv.contains("stepPoints")) {
                     if (!jv.at("stepPoints").is_array()) fail("stepPoints must be an array");
                     for (const json& p : jv.at("stepPoints")) v.stepPoints.push_back(vecFrom(p));

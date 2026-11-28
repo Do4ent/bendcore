@@ -58,6 +58,12 @@ struct ModelProperties {
 // (docs/drawing/DRAWING_DOCUMENT.md, «Свойства детали в основной надписи»).
 ModelProperties titleProperties(const ModelProperties& link, const std::optional<ModelProperties>& doc);
 
+// Обозначение материала в сечениях (ГОСТ 2.306, табл. 1) по наименованию или id материала:
+// материал библиотеки ядра (kernel::builtInMaterials — по id или наименованию) — по категории
+// (металлы — металл, пластмассы — неметалл, PMMA — стекло, светопрозрачный материал); иначе —
+// по ключевым словам наименования (views::hatchMaterialByName).
+views::HatchMaterial hatchMaterialOf(std::string_view material);
+
 // Ссылка документа чертежа на модель.
 struct ModelLink {
     ModelKind kind = ModelKind::Part;
@@ -292,6 +298,10 @@ struct ViewDef {
     std::map<assembly_v2::DefinitionId, Point2> balloonShelves;
     views::HlrMethod method = views::HlrMethod::Exact;
     bool autoMethod = false;  // выбор алгоритма HLR по геометрии (views::chooseHlrMethod)
+    // Обозначение материала в сечениях вида (ГОСТ 2.306, табл. 1) вручную для всех фигур сечения;
+    // пусто — по материалу детали (hatchMaterialOf: свойства документа детали, графа «Материал»
+    // листа; у сборки — материал каждой детали).
+    std::optional<views::HatchMaterial> hatchMaterial;
 };
 
 // Размер на виде. Ссылки — ModelRef::persistent (имя + сигнатура); индекс вычисляется при
@@ -454,6 +464,9 @@ struct ComputedView {
     std::vector<annotations::GearImage> gears;      // зубчатые венцы ГОСТ 2.402 на виде
     std::vector<annotations::GearMesh> gearMeshes;  // зацепления на виде (сборка)
     std::vector<annotations::BearingImage> bearings;  // подшипники ГОСТ 2.420 в разрезе
+    // Обозначение материала фигур сечения по номеру детали области (SectionView::regionOwner;
+    // деталь — один элемент). Нет элемента — металл.
+    std::vector<views::HatchMaterial> ownerMaterials;
     // Auxiliary: поворот относительно ориентации по стрелке (0 — не повернут) и стрелка на parent.
     double rotationDeg = 0.0;
     std::optional<views::ViewArrowGeometry> arrow;

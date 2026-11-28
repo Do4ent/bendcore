@@ -787,6 +787,19 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
         cs.sheet = sheetR.value();
         cs.index = int(si) + 1;
         cs.count = sheetCount;
+        if (settings_.zones.enabled) {
+            // Зоны: ЕСКД — от осей рамки, русские буквы; ISO 5457 — от меток центрирования (осей
+            // листа), латинские буквы.
+            const bool iso = settings_.sheetStyle == SheetStyle::Iso7200;
+            const Sheet& sh = cs.sheet;
+            const Rect frame = iso ? Rect{kIso5457LeftMargin, kIso5457Margin, sh.widthMm - kIso5457Margin, sh.heightMm - kIso5457Margin}
+                                   : Rect{20.0, 5.0, sh.widthMm - 5.0, sh.heightMm - 5.0};
+            const Point2 axis = iso ? Point2{sh.widthMm / 2.0, sh.heightMm / 2.0}
+                                    : Point2{(frame.x0 + frame.x1) / 2.0, (frame.y0 + frame.y1) / 2.0};
+            auto grid = zoneGrid(frame, axis, iso ? ZoneLetters::Latin : ZoneLetters::Cyrillic, settings_.zones.fieldLength);
+            if (!grid) return Error{grid.error().code, "sheet '" + sd.id + "': " + grid.error().message};
+            cs.zones = std::move(grid).value();
+        }
 
         // 1. Ориентации видов.
         std::map<std::string, ViewFrame> frames;
@@ -1066,6 +1079,23 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
                 cv.scale = secScale[v.id].second;
             }
             if (sections.count(v.id)) cv.section = sections[v.id];
+            if (cv.section) {
+                // Обозначение материала (ГОСТ 2.306, табл. 1): вручную для вида, иначе по детали —
+                // у детали графа «Материал» листа, свойства документа детали, свойства чертежа; у
+                // сборки — материал определения каждой дочерней формы.
+                if (v.hatchMaterial) {
+                    const std::size_t n = model.kind == ModelKind::Assembly ? std::max<std::size_t>(1, model.childOwner.size()) : 1;
+                    cv.ownerMaterials.assign(n, *v.hatchMaterial);
+                } else if (model.kind == ModelKind::Part) {
+                    const std::string material = !sd.title.material.empty()
+                                                     ? sd.title.material
+                                                     : titleProperties(model_.properties, model.documentProperties).material;
+                    cv.ownerMaterials.assign(1, hatchMaterialOf(material));
+                } else if (model.assembly) {
+                    for (const assembly_v2::DefinitionId id : model.childOwner)
+                        cv.ownerMaterials.push_back(hatchMaterialOf(model.assembly->definition(id).properties.material));
+                }
+            }
             if (v.kind == ViewKind::Auxiliary) {
                 // ГОСТ 2.305, п. 5.4: буква над видом; масштаб — в скобках, если отличается от масштаба
                 // листа (ГОСТ 2.316); поворот — знаком «повернуто» (п. 5.6) при выводе.
@@ -1851,6 +1881,30 @@ Result<UpdateReport> DrawingDocument::update(const ModelSnapshot& model, ViewCac
     return report;
 }
 
+std::map<std::uint32_t, std::string> DrawingDocument::positionZones() const {
+    std::map<std::uint32_t, std::string> out;
+    const TextMetrics* metrics = textMetrics(font_);
+    annotations::AnnotationStyle style;
+    style.font = metrics;
+    for (const ComputedSheet& cs : computed_) {
+        if (!cs.zones) continue;
+        auto put = [&](const annotations::Balloon& b) {
+            if (out.count(b.definition)) return;
+            // Центр номера позиции: подпись полки (над полкой) или кружка.
+            Point2 p = b.at;
+            if (auto g = annotations::balloonGeometry(b, {}, style); g && !g.value().labels.empty()) {
+                const annotations::DimensionLabel& l = g.value().labels.front();
+                p = {l.position.x, l.position.y + l.height / 2.0};
+            }
+            out[b.definition] = zoneOf(*cs.zones, p);
+        };
+        for (const annotations::Balloon& b : cs.balloons) put(b);
+        for (const auto& b : cs.manualBalloons)
+            if (b) put(*b);
+    }
+    return out;
+}
+
 const TextMetrics* DrawingDocument::textMetrics(const TrueTypeFont* trueType) const {
     if (settings_.textFont == TextFont::Gost2304) return &gostStrokeFont();
     return trueType;
@@ -1878,6 +1932,16 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
         Result<TitleBlockLayout> lay = settings_.sheetStyle == SheetStyle::Iso7200 ? addIsoFrameAndTitleBlock(d, cs.isoTitle, io)
                                                                                  : addFrameAndTitleBlock(d, cs.title, fo);
         if (!lay) return Error{lay.error().code, "sheet '" + cs.id + "': " + lay.error().message};
+        if (cs.zones) {
+            // Разметка зон: ЕСКД — в полосе 5 мм у края листа (поля рамки), ISO 5457 — 10 мм, без
+            // штрихов на осях (там метки центрирования).
+            const bool iso = settings_.sheetStyle == SheetStyle::Iso7200;
+            std::optional<Point2> axes;
+            if (iso) axes = Point2{cs.sheet.widthMm / 2.0, cs.sheet.heightMm / 2.0};
+            auto zm = zoneMarkingGeometry(*cs.zones, lay.value().sheet, iso ? kIso5457Margin : 5.0, axes);
+            if (!zm) return Error{zm.error().code, "sheet '" + cs.id + "': " + zm.error().message};
+            if (auto st = addZoneMarking(d, zm.value(), metrics); !st) return Error{st.error().code, "sheet '" + cs.id + "': " + st.error().message};
+        }
         if (auto st = ensureViewLayers(d); !st) return st.error();
         std::map<std::string, const ComputedView*> byId;
         for (const ComputedView& cv : cs.views) byId[cv.id] = &cv;
@@ -1887,7 +1951,13 @@ Result<std::vector<Drawing>> DrawingDocument::render(const TrueTypeFont* font) c
             auto fail = [&](const Error& e) { return Error{e.code, "sheet '" + cs.id + "', view '" + cv.id + "': " + e.message}; };
             if (auto st = renderView(d, cv.sheetView, ro); !st) return fail(st.error());
             if (cv.section) {
-                if (auto h = renderSectionHatch(d, cv.sheetView, *cv.section, 0.0, ro); !h) return fail(h.error());
+                std::vector<HatchMaterial> materials;
+                for (std::size_t ri = 0; ri < cv.section->regions.size(); ++ri) {
+                    const int owner = ri < cv.section->regionOwner.size() ? cv.section->regionOwner[ri] : 0;
+                    materials.push_back(owner >= 0 && std::size_t(owner) < cv.ownerMaterials.size() ? cv.ownerMaterials[std::size_t(owner)]
+                                                                                                 : HatchMaterial::Metal);
+                }
+                if (auto h = renderSectionHatch(d, cv.sheetView, *cv.section, 0.0, ro, materials); !h) return fail(h.error());
                 if (!cv.section->breakLines.empty())
                     if (auto st = renderBreakLines(d, cv.sheetView, *cv.section, ro); !st) return fail(st.error());
             }

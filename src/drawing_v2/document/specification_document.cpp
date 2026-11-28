@@ -30,7 +30,7 @@ bool sameContent(const annotations::Specification& a, const annotations::Specifi
             const auto& p = x.items[k];
             const auto& q = y.items[k];
             if (p.position != q.position || p.designation != q.designation || p.name != q.name || p.quantity != q.quantity ||
-                p.format != q.format || p.note != q.note)
+                p.format != q.format || p.note != q.note || p.zone != q.zone)
                 return false;
         }
     }
@@ -49,7 +49,8 @@ bool sameGroup(const annotations::GroupSpecification& a, const annotations::Grou
             const auto& p = x.items[k];
             const auto& q = y.items[k];
             if (p.item.position != q.item.position || p.item.designation != q.item.designation || p.item.name != q.item.name ||
-                p.quantities != q.quantities || p.item.format != q.item.format || p.item.note != q.item.note)
+                p.quantities != q.quantities || p.item.format != q.item.format || p.item.note != q.item.note ||
+                p.item.zone != q.item.zone)
                 return false;
         }
     }
@@ -80,8 +81,10 @@ Result<bool> SpecificationDocument::update(const ModelSnapshot& model) {
     if (!spec) return spec.error();
     if (!title_.designation.empty()) spec.value().designation = title_.designation;
     if (!title_.name.empty()) spec.value().name = title_.name;
-    const bool changed = !spec_ || !sameContent(*spec_, spec.value());
+    const std::optional<annotations::Specification> before = spec_;
     spec_ = std::move(spec).value();
+    applyZones();
+    const bool changed = !before || !sameContent(*before, *spec_);
     const std::string hash = hashHex(model.contentHash);
     if (hash != model_.resultHash) {
         ++model_.revision;
@@ -134,15 +137,49 @@ Result<bool> SpecificationDocument::updateGroup(const ModelSnapshot& model, cons
             for (const assembly_v2::BomRow& r : own.value().rows)
                 if (r.level == 0 && r.designation == item.designation && r.name == item.name) item.definition = r.definition;
         }
-    const bool changed = !spec_ || !sameContent(*spec_, spec) || !group_ || !sameGroup(*group_, group.value());
+    const std::optional<annotations::Specification> before = spec_;
+    const std::optional<annotations::GroupSpecification> beforeGroup = group_;
     spec_ = std::move(spec);
     group_ = std::move(group).value();
+    applyZones();
+    const bool changed = !before || !sameContent(*before, *spec_) || !beforeGroup || !sameGroup(*beforeGroup, *group_);
     const std::string hash = hashHex(model.contentHash);
     if (hash != model_.resultHash) {
         ++model_.revision;
         model_.resultHash = hash;
     }
     return changed;
+}
+
+bool SpecificationDocument::applyZones() {
+    bool changed = false;
+    std::map<int, std::string> byPosition;
+    if (spec_) {
+        for (auto& sec : spec_->sections)
+            for (auto& item : sec.items) {
+                std::string zone;
+                if (item.definition)
+                    if (auto it = zones_.find(*item.definition); it != zones_.end()) zone = it->second;
+                changed = changed || item.zone != zone;
+                item.zone = zone;
+                if (item.position > 0) byPosition[item.position] = zone;
+            }
+    }
+    if (group_) {
+        for (auto& sec : group_->sections)
+            for (auto& gi : sec.items) {
+                const auto it = byPosition.find(gi.item.position);
+                const std::string zone = gi.item.position > 0 && it != byPosition.end() ? it->second : std::string();
+                changed = changed || gi.item.zone != zone;
+                gi.item.zone = zone;
+            }
+    }
+    return changed;
+}
+
+bool SpecificationDocument::setPositionZones(std::map<std::uint32_t, std::string> zones) {
+    zones_ = std::move(zones);
+    return applyZones();
 }
 
 Result<annotations::SpecDocument> SpecificationDocument::render(const TrueTypeFont* font) const {
