@@ -98,6 +98,10 @@ export interface ViewInfo {
   /** Rolling bearings in a section through the axis — conventionally (ГОСТ 2.420). */
   bearings: boolean;
   bearingSymbol: 'diagonals' | 'rollingElement';
+  /** Material symbol of the section figures set by hand (ГОСТ 2.306); null — by the part material. */
+  hatchMaterial: HatchMaterial | null;
+  /** Section views: material symbols drawn (by part or by hand). */
+  hatchMaterialsShown?: HatchMaterial[];
   inGroup: boolean;
   computedScale?: ScaleInfo;
   label?: string;
@@ -235,11 +239,19 @@ export interface SheetInfo {
 }
 export type TextFont = 'gost2304' | 'truetype';
 
+/** Graphic symbols of materials in sections, ГОСТ 2.306-68, table 1. */
+export type HatchMaterial = 'metal' | 'nonmetal' | 'wood' | 'glass' | 'concrete' | 'liquid';
+
+/** Zone marking on the sheet margins (ГОСТ 2.104, ISO 5457): field length 25…75 mm. */
+export interface ZoneSettings { enabled: boolean; fieldLength: number }
+
 export interface DrawingSettingsChanges {
   textFont?: TextFont;
   /** Projected views move to the opposite side of their parent; each keeps its content. */
   projection?: ProjectionMethod;
   sheetStyle?: SheetStyle;
+  /** Zones on the sheet margins and the zone column of the specification (ГОСТ 2.106). */
+  zones?: Partial<ZoneSettings>;
   dissolvedAssemblies?: string[];
   /** Group drawing of a part (GOST 2.113); headers: column key → text (empty or null — default). */
   group?: { enabled?: boolean; mass?: boolean; material?: boolean; headers?: Record<string, string | null> };
@@ -280,6 +292,7 @@ export interface DrawingDescription {
   model: { kind: 'part' | 'assembly'; path: string; resultHash: string; revision: number; properties: ModelProperties };
   projection: ProjectionMethod;
   sheetStyle: SheetStyle;
+  zones: ZoneSettings;
   /** Text font of the sheets: single-stroke GOST 2.304 type B or the TrueType font of setFont. */
   textFont: TextFont;
   /** Sub-assemblies listed by their parts in the specification and positions (assembly only). */
@@ -399,6 +412,8 @@ export interface ViewSpec {
   balloonLine?: 'auto' | 'right' | 'left' | 'above' | 'below';
   bearings?: boolean;
   bearingSymbol?: 'diagonals' | 'rollingElement';
+  /** setView only: material symbol by hand; null — by the part material. */
+  hatchMaterial?: HatchMaterial | null;
 }
 export interface SheetOptions {
   id?: string;
@@ -462,7 +477,7 @@ export class DrawingHandle {
   addView(sheet: string, spec: ViewSpec): string;
   removeView(sheet: string, view: string): string[];
   moveView(sheet: string, view: string, x: number, y: number): EditResult & { moved: string; group: boolean };
-  setView(sheet: string, view: string, changes: Partial<Pick<ViewSpec, 'scale' | 'position' | 'hidden' | 'centerLines' | 'autoBalloons' | 'detailRadius' | 'balloonLine' | 'bearings' | 'bearingSymbol' | 'rotated'>>): EditResult;
+  setView(sheet: string, view: string, changes: Partial<Pick<ViewSpec, 'scale' | 'position' | 'hidden' | 'centerLines' | 'autoBalloons' | 'detailRadius' | 'balloonLine' | 'bearings' | 'bearingSymbol' | 'rotated' | 'hatchMaterial'>>): EditResult;
   addDimension(sheet: string, view: string, picks: number[], options?: { id?: string; offset?: number; tolerance?: string; leaderAngle?: number }): string;
   setDimension(sheet: string, id: string, changes: { offset?: number; textShift?: number; decimals?: number; tolerance?: string | null; toleranceDisplay?: DimensionInfo['toleranceDisplay']; textOverride?: string | null; prefix?: string; suffix?: string; groupLetter?: string }): EditResult;
   addRoughness(sheet: string, view: string, pick: number, spec?: RoughnessSpec & { id?: string; at?: number }): string;

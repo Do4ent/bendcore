@@ -380,6 +380,8 @@ dd::UpdateReport runUpdate(Session& s, const dd::ModelSnapshot& snap) {
         spec = s.spec->specification();
     }
     dd::UpdateReport rep = take(s.doc.update(snap, *s.cache, spec));
+    // Graph "Zone" of the specification (GOST 2.106): zones of the position numbers on the sheets.
+    if (s.spec) s.spec->setPositionZones(s.doc.positionZones());
     s.shown = snap;
     s.lastReport = rep;
     return rep;
@@ -489,7 +491,8 @@ json viewDefJson(const dd::ViewDef& v) {
               {"autoBalloons", v.autoBalloons},
               {"balloonLine", an::toString(v.balloonLine)},
               {"bearings", v.bearings},
-              {"bearingSymbol", v.bearingSymbol == an::BearingSymbol::RollingElement ? "rollingElement" : "diagonals"}};
+              {"bearingSymbol", v.bearingSymbol == an::BearingSymbol::RollingElement ? "rollingElement" : "diagonals"},
+              {"hatchMaterial", v.hatchMaterial ? json(vw::toString(*v.hatchMaterial)) : json(nullptr)}};
     if (v.kind == dd::ViewKind::Axonometric) j["axonometry"] = enumName(v.axonometry, kAxo);
     if (v.kind == dd::ViewKind::Section) {
         j["planePoint"] = vec3Json(v.planePoint);
@@ -562,6 +565,17 @@ json describe(Session& s) {
                 const vw::Box2 b = cv.sheetView.sheetBounds();
                 v["bounds"] = {{"minX", b.minX}, {"minY", b.minY}, {"maxX", b.maxX}, {"maxY", b.maxY}};
                 v["fromCache"] = cv.fromCache;
+                if (cv.section) {
+                    // Material symbols of the section figures (GOST 2.306), by part or set by hand.
+                    std::set<std::string> used;
+                    for (std::size_t ri = 0; ri < cv.section->regions.size(); ++ri) {
+                        const int owner = ri < cv.section->regionOwner.size() ? cv.section->regionOwner[ri] : 0;
+                        used.insert(vw::toString(owner >= 0 && std::size_t(owner) < cv.ownerMaterials.size()
+                                                     ? cv.ownerMaterials[std::size_t(owner)]
+                                                     : vw::HatchMaterial::Metal));
+                    }
+                    v["hatchMaterialsShown"] = used;
+                }
                 if (cv.kind == dd::ViewKind::Auxiliary) {
                     v["letter"] = cv.letter;
                     v["rotationDeg"] = cv.rotationDeg;
@@ -713,6 +727,7 @@ json describe(Session& s) {
                        {"revision", ml.revision}, {"properties", propertiesJson(ml.properties)}}},
             {"projection", enumName(s.doc.settings().projection, kProjection)},
             {"sheetStyle", enumName(s.doc.settings().sheetStyle, kSheetStyles)},
+            {"zones", {{"enabled", s.doc.settings().zones.enabled}, {"fieldLength", s.doc.settings().zones.fieldLength}}},
             {"textFont", dv::toString(s.doc.settings().textFont)},
             {"dissolvedAssemblies", s.spec ? json(s.spec->settings().dissolved) : json::array()},
             {"group", groupJson(s)},
@@ -979,7 +994,7 @@ std::string setModelProperties(std::uint32_t handle, std::string text) {
 // ---- document settings
 
 // {textFont: "gost2304" | "truetype", projection: "firstAngle" | "thirdAngle" (projected views move
-// to the opposite side of their parent), sheetStyle: "eskd" | "iso7200"} (undoable, part of the
+// to the opposite side of their parent), sheetStyle: "eskd" | "iso7200", zones: {enabled, fieldLength}} (undoable, part of the
 // edit state) and, for an assembly,
 // {dissolvedAssemblies: [component keys]} - sub-assemblies listed by their parts (GOST 2.106).
 std::string setSettings(std::uint32_t handle, std::string text) {
@@ -1049,6 +1064,19 @@ std::string setSettings(std::uint32_t handle, std::string text) {
                 s.doc.settings().textFont = *f;
             }
             if (j.contains("sheetStyle")) s.doc.settings().sheetStyle = enumFrom(j.at("sheetStyle"), kSheetStyles, "sheet style");
+            if (j.contains("zones")) {
+                // Zone marking on the sheet margins (GOST 2.104, ISO 5457): {enabled, fieldLength}.
+                const json& z = j.at("zones");
+                if (!z.is_object()) throw InputError("zones must be an object {enabled, fieldLength}");
+                dd::ZoneSettings& zs = s.doc.settings().zones;
+                zs.enabled = boolOr(z, "enabled", zs.enabled);
+                if (z.contains("fieldLength")) {
+                    if (!z.at("fieldLength").is_number()) throw InputError("zones: fieldLength must be a number");
+                    const double l = z.at("fieldLength").get<double>();
+                    if (!(l >= 25.0 && l <= 75.0)) throw InputError("zones: the field length must be 25..75 mm");
+                    zs.fieldLength = l;
+                }
+            }
             if (j.contains("projection")) s.doc.setProjectionMethod(enumFrom(j.at("projection"), kProjection, "projection method"));
             if (j.contains("dissolvedAssemblies")) {
                 if (!s.spec) raise({k::ErrorCode::Unsupported, "dissolved sub-assemblies need an assembly model"});
@@ -1361,6 +1389,17 @@ std::string setView(std::uint32_t handle, std::string sheetId, std::string viewI
             if (j.contains("centerLines")) v->centerLines = boolOr(j, "centerLines", true);
             if (j.contains("autoBalloons")) v->autoBalloons = boolOr(j, "autoBalloons", false);
             if (j.contains("bearings")) v->bearings = boolOr(j, "bearings", true);
+            if (j.contains("hatchMaterial")) {
+                // null - by the material of the part; otherwise one of the GOST 2.306 symbols.
+                if (j.at("hatchMaterial").is_null()) {
+                    v->hatchMaterial.reset();
+                } else {
+                    const std::string name = strOr(j, "hatchMaterial");
+                    const auto m = vw::hatchMaterialFromString(name);
+                    if (!m) throw InputError("unknown hatch material '" + name + "'");
+                    v->hatchMaterial = *m;
+                }
+            }
             if (j.contains("bearingSymbol")) {
                 const std::string sym = strOr(j, "bearingSymbol");
                 if (sym == "diagonals") v->bearingSymbol = an::BearingSymbol::Diagonals;
