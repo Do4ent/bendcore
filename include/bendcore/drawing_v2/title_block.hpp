@@ -11,6 +11,7 @@
 #include <bendcore/drawing_v2/truetype_font.hpp>
 
 #include <map>
+#include <optional>
 #include <string>
 
 namespace bendcore::drawing_v2 {
@@ -160,5 +161,53 @@ Status addProjectionSymbol(Drawing& drawing, const ProjectionSymbolGeometry& sym
 // листа вне 1…листов, текст не помещается в поле (при заданном шрифте).
 Result<TitleBlockLayout> addIsoFrameAndTitleBlock(Drawing& drawing, const Iso7200Data& data,
                                                   const IsoFrameOptions& options = {});
+
+// ---------------------------------------------------------------- зоны поля чертежа
+
+// Разбивка поля чертежа на зоны (ГОСТ 2.104-2006 — обозначение зон на полях вне рамки; ISO 5457,
+// п. 3.5 — система координатной сетки). Колонки нумеруются цифрами слева направо, строки —
+// буквами сверху вниз (от угла, противоположного основной надписи); зона — «буква + цифра»
+// («B3», «Б3»). Деление — от осей симметрии axis полями длиной fieldLength в обе стороны до
+// рамки (число полей по каждой стороне чётное); крайнее поле короче fieldLength/5 присоединяется к
+// соседнему. Буквы: Latin — заглавные латинские без I и O (ISO 5457), Cyrillic — заглавные
+// русские без Ё, З, Й, О, Х, Ъ, Ы, Ь (как у обозначений ГОСТ 2.316); больше букв, чем в наборе, —
+// удвоенные («AA», «BB», ISO 5457). Сверка правил ЕСКД — docs/STANDARDS_VERIFICATION.md.
+enum class ZoneLetters { Latin, Cyrillic };
+
+struct ZoneGrid {
+    Rect frame;                    // поле чертежа (рамка)
+    std::vector<double> columns;   // границы колонок по x слева направо (колонок — size() − 1)
+    std::vector<double> rows;      // границы строк по y сверху вниз (строк — size() − 1)
+    std::vector<std::string> columnLabels;  // «1», «2», …
+    std::vector<std::string> rowLabels;     // «A», «B», … / «А», «Б», …
+};
+
+inline constexpr double kZoneFieldLength = 50.0;  // ISO 5457, п. 3.5
+
+// Сетка зон рамки frame. Ошибки InvalidInput: fieldLength вне 25…75 мм; ось вне рамки; пустая рамка.
+Result<ZoneGrid> zoneGrid(const Rect& frame, Point2 axis, ZoneLetters letters,
+                          double fieldLength = kZoneFieldLength);
+
+// Зона точки p («B3»): точка вне рамки относится к ближайшей зоне.
+std::string zoneOf(const ZoneGrid& grid, Point2 p);
+
+struct ZoneMarkingGeometry {
+    std::vector<LineSeg> ticks;  // границы зон в полосе разметки — сплошные тонкие
+    struct Label {
+        Rect cell;  // клетка обозначения в полосе (текст — по центру, h = 3,5)
+        std::string text;
+    };
+    std::vector<Label> labels;
+};
+
+// Разметка зон в полосе шириной band у края листа sheet: цифры — сверху и снизу, буквы — слева и
+// справа; штрихи — на границах зон поперёк полосы (без границ, совпадающих с осями симметрии,
+// если skipAxes — там метки центрирования ISO 5457). Ошибка — band ≤ 0 или полоса шире поля.
+Result<ZoneMarkingGeometry> zoneMarkingGeometry(const ZoneGrid& grid, const Rect& sheet, double band,
+                                                std::optional<Point2> skipAxes = std::nullopt);
+// Вывод разметки на слой layer (создаётся при необходимости): штрихи — сплошные тонкие,
+// обозначения — h = 3,5 (по метрикам font — до 2,5, если не помещаются в клетку).
+Status addZoneMarking(Drawing& drawing, const ZoneMarkingGeometry& marking, const TextMetrics* font = nullptr,
+                      const std::string& layer = "FRAME");
 
 }  // namespace bendcore::drawing_v2

@@ -155,7 +155,7 @@ std::vector<HatchPattern> hatchPatterns(const SectionView& section, double tol) 
 
 Result<double> renderSectionHatch(Drawing& drawing, const SheetView& view,
                                   const SectionView& section, double spacing,
-                                  const RenderOptions& o) {
+                                  const RenderOptions& o, const std::vector<HatchMaterial>& materials) {
     Status st = ensureViewLayers(drawing, o);
     if (!st) return st.error();
     if (section.regions.empty())
@@ -168,18 +168,38 @@ Result<double> renderSectionHatch(Drawing& drawing, const SheetView& view,
     }
     const std::vector<HatchPattern> patterns = hatchPatterns(section);
     for (std::size_t ri = 0; ri < section.regions.size(); ++ri) {
-        Hatch h;
+        const HatchMaterial material = ri < materials.size() ? materials[ri] : HatchMaterial::Metal;
         // Металлы: 45° к линиям рамки (ГОСТ 2.306, п. 3); смежные детали — встречный наклон
-        // или другой шаг (ГОСТ 2.306, п. 4).
-        h.angleDeg = patterns[ri].angleDeg;
-        h.spacing = std::clamp(spacing * patterns[ri].spacingFactor, 1.0, 10.0);
+        // или другой шаг (ГОСТ 2.306, п. 4). У сетки неметалла и узоров без наклона встречный
+        // наклон не различим — смежная деталь получает другой шаг (×0,6).
+        HatchPattern pattern = patterns[ri];
+        if (material != HatchMaterial::Metal && std::abs(pattern.angleDeg - 45.0) > 1e-9 && pattern.spacingFactor == 1.0)
+            pattern.spacingFactor = 0.6;
+        const double step = std::clamp(spacing * pattern.spacingFactor, 1.0, 10.0);
+        std::vector<std::vector<Point2>> loops;
         for (const auto& loop : section.regions[ri]) {
             std::vector<Point2> l;
             for (const Point2& p : loop) l.push_back(view.toSheet(p));
-            h.loops.push_back(std::move(l));
+            loops.push_back(std::move(l));
         }
-        st = addEntity(drawing, std::move(h), o.hatchLayer, LineType::SolidThin);
-        if (!st) return st.error();
+        auto g = materialHatchGeometry(loops, material, pattern, step);
+        if (!g) return g.error();
+        for (Hatch& h : g.value().hatches) {
+            st = addEntity(drawing, std::move(h), o.hatchLayer, LineType::SolidThin);
+            if (!st) return st.error();
+        }
+        for (const LineSeg& l : g.value().lines) {
+            st = addEntity(drawing, l, o.hatchLayer, LineType::SolidThin);
+            if (!st) return st.error();
+        }
+        for (Polyline& p : g.value().polylines) {
+            st = addEntity(drawing, std::move(p), o.hatchLayer, LineType::SolidThin);
+            if (!st) return st.error();
+        }
+        for (const Circle& c : g.value().dots) {
+            st = addEntity(drawing, c, o.hatchLayer, LineType::SolidThin);
+            if (!st) return st.error();
+        }
     }
     return spacing;
 }
@@ -294,9 +314,22 @@ Status renderCenterLines(Drawing& drawing, const SheetView& view, const CenterGe
         const Point2 c = view.toSheet(m.center);
         const double r = m.radius * view.scale;
         const bool solid = 2.0 * r < 12.0;
+        if (m.radial) {
+            // Элемент кругового массива: радиальная линия; вторая линия — осевая окружность.
+            st = centerLine(drawing, c, *m.radial, r, solid, o);
+            if (!st) return st;
+            continue;
+        }
         st = centerLine(drawing, c, {1, 0}, r, solid, o);
         if (!st) return st;
         st = centerLine(drawing, c, {0, 1}, r, solid, o);
+        if (!st) return st;
+    }
+    for (const PitchCircle& pc : g.circles) {
+        const double r = pc.radius * view.scale;
+        if (r < 1e-6) continue;
+        st = addEntity(drawing, Circle{view.toSheet(pc.center), r}, o.centerLayer,
+                       2.0 * r < 12.0 ? LineType::SolidThin : LineType::DashDotThin);
         if (!st) return st;
     }
     for (const AxisLine& a : g.axes) {

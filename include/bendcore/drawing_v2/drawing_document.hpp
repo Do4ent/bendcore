@@ -412,6 +412,11 @@ struct GroupDrawingSettings {
 enum class SheetStyle { Eskd, Iso7200 };
 const char* toString(SheetStyle style) noexcept;  // "eskd", "iso7200"
 
+struct ZoneSettings {
+    bool enabled = false;
+    double fieldLength = kZoneFieldLength;  // длина поля зоны, мм (25…75)
+};
+
 struct DrawingSettings {
     double lineThickness = 0.5;  // s, ГОСТ 2.303
     // Метод проекций (ГОСТ 2.305 — первый угол; ISO 128-30: E — первый, A — третий). Менять —
@@ -427,6 +432,10 @@ struct DrawingSettings {
     // метрики — для основной надписи, размеров и полок) или TrueType (DejaVu Sans и др.).
     TextFont textFont = TextFont::Gost2304;
     GroupDrawingSettings group;
+    // Разметка зон на полях листа (ГОСТ 2.104; ISO 5457, п. 3.5) и графа «Зона» спецификации
+    // ГОСТ 2.106 (DrawingDocument::positionZones). ЕСКД — русские буквы, полоса 5 мм у края листа,
+    // деление от осей рамки; ISO — латинские буквы, полоса 10 мм, деление от меток центрирования.
+    ZoneSettings zones;
 };
 
 // ---------------------------------------------------------------- результат обновления
@@ -459,6 +468,7 @@ struct ComputedSheet {
     int count = 1;  // листов в чертеже
     TitleBlockData title;
     Iso7200Data isoTitle;  // основная надпись ISO 7200 (DrawingSettings::sheetStyle == Iso7200)
+    std::optional<ZoneGrid> zones;  // сетка зон (DrawingSettings::zones.enabled)
     std::vector<ComputedView> views;
     std::vector<annotations::DimensionResult> dimensions;  // по SheetDef::dimensions
     std::vector<std::optional<annotations::SymbolGeometry>> roughness;  // nullopt — висячий
@@ -631,6 +641,12 @@ public:
     // видов (position) сохраняются. Возвращает число перенесённых видов; после вызова нужен update.
     std::size_t setProjectionMethod(views::ProjectionMethod method);
 
+    // Зоны позиций (графа «Зона» спецификации ГОСТ 2.106): для каждой составной части с позицией
+    // на листе с разметкой зон — зона, в которой стоит номер позиции (центр номера на полке или в
+    // кружке); на нескольких листах или видах — первая по порядку листов и позиций (автоматические
+    // позиции видов, затем ручные). Пусто — зоны выключены или документ не обновлён.
+    std::map<std::uint32_t, std::string> positionZones() const;
+
     bool computed() const { return !computed_.empty(); }
     // Групповой чертёж последнего обновления; nullptr — режим выключен или у модели нет исполнений.
     const GroupDrawingResult* groupDrawing() const { return group_ ? &*group_ : nullptr; }
@@ -751,6 +767,11 @@ public:
     Result<bool> update(const ModelSnapshot& model);
     const annotations::Specification* specification() const { return spec_ ? &*spec_ : nullptr; }
     const annotations::GroupSpecification* groupSpecification() const { return group_ ? &*group_ : nullptr; }
+    // Графа «Зона» (ГОСТ 2.106): зоны составных частей по определению (DrawingDocument::positionZones
+    // сборочного чертежа). Сохраняются в документе (не в файле) и применяются при каждом update;
+    // позиции групповой спецификации получают зону по номеру позиции. Возвращает true, если графа
+    // изменилась.
+    bool setPositionZones(std::map<std::uint32_t, std::string> zones);
     // Загрузка исполнений компонентов для configurationBom (не сохраняется в файле).
     void setLoadOptions(assembly_v2::LoadOptions options) { loadOptions_ = std::move(options); }
     const assembly_v2::LoadOptions& loadOptions() const { return loadOptions_; }
@@ -769,6 +790,8 @@ private:
     std::optional<annotations::Specification> spec_;
     std::optional<annotations::GroupSpecification> group_;
     assembly_v2::LoadOptions loadOptions_;
+    std::map<std::uint32_t, std::string> zones_;
+    bool applyZones();
     Result<bool> updateGroup(const ModelSnapshot& model, const annotations::SpecificationOptions& base);
 };
 

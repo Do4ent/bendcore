@@ -14,6 +14,7 @@ add_library(bendcore_drawing_views STATIC
   src/drawing_v2/views/sections.cpp
   src/drawing_v2/views/section_cuts.cpp
   src/drawing_v2/views/center_lines.cpp
+  src/drawing_v2/views/hatch_materials.cpp
   src/drawing_v2/views/sheet_layout.cpp
   src/drawing_v2/views/render.cpp
 )
