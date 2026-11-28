@@ -45,9 +45,9 @@ function messagesOf(paths: string[]): KernelMessageSource[] {
 }
 
 /** The areas whose messages must be covered (the task of the coverage test). */
-const COVERED = ['src/modeling', 'src/assembly_v2', 'src/drawing_v2'];
+const COVERED = ['src/modeling', 'src/assembly_v2', 'src/drawing_v2', 'src/kernel', 'src/dxf_reader.cpp'];
 /** Further kernel sources a template may be written for (kernel core, DXF reader, bindings). */
-const EXTRA = ['src/kernel', 'src/wasm', 'src/dxf_reader.cpp'];
+const EXTRA = ['src/wasm'];
 
 const entryOf = (m: KernelMessageSource) => `${m.code}\t${m.skeleton}`;
 /** A skeleton as a text: each value is one field character. */
@@ -130,7 +130,8 @@ describe('coverage of the kernel messages', () => {
 
   test('every template matches a message of the kernel sources', () => {
     const all = [...covered, ...extra];
-    const dead = KERNEL_TEMPLATES.filter(([id]) => !all.some((m) => templateOf(m.skeleton) === id || loose.find((l) => l.id === id)!.re.test(sample(m.skeleton))));
+    const samples = [...new Set(all.map((m) => sample(m.skeleton)))];
+    const dead = KERNEL_TEMPLATES.filter(([id]) => !samples.some((s) => loose.find((l) => l.id === id)!.re.test(s)));
     expect(dead.map(([id, p]) => `${id}: ${p}`)).toEqual([]);
   });
 
@@ -138,7 +139,7 @@ describe('coverage of the kernel messages', () => {
     const latin = /[A-Za-z]{3,}/g;
     const allowed = new Set(['OCCT', 'DXF', 'INSUNITS', 'ASCII', 'bendcore', 'json', 'step', 'stp', 'brep', 'sketch', 'JSON', 'WebAssembly', 'ISO',
       // Names of file formats and fonts, as the user sees them in the interface.
-      'true', 'false', 'sin', 'gost', 'truetype', 'Rmax', 'PDF', 'CSV', 'STL', 'TrueType', 'DejaVu', 'Sans', 'Liberation', 'BENDCORE', 'DRAWING', 'FONT', 'base', 'R2000']);
+      'true', 'false', 'sin', 'gost', 'truetype', 'FFFD', 'EOF', 'STEP', 'IGES', 'ZIP', 'BRep', 'LWPOLYLINE', 'POLYLINE', 'SECTION', 'ENDSEC', 'SEQEND', 'LAYER', 'solid', 'CRC', 'RRGGBB', 'Rmax', 'PDF', 'CSV', 'STL', 'TrueType', 'DejaVu', 'Sans', 'Liberation', 'BENDCORE', 'DRAWING', 'FONT', 'base', 'R2000']);
     for (const [id, pattern] of KERNEL_TEMPLATES) {
       const key = `kernel.msg.${id}` as MessageKey;
       expect([id, key in ru, key in en]).toEqual([id, true, true]);
