@@ -52,9 +52,9 @@ function messagesOf(paths: string[]): KernelMessageSource[] {
 }
 
 /** The areas whose messages must be covered (the task of the coverage test). */
-const COVERED = ['src/modeling', 'src/assembly_v2', 'src/drawing_v2', 'src/kernel', 'src/dxf_reader.cpp'];
+const COVERED = ['src/modeling', 'src/assembly_v2', 'src/drawing_v2', 'src/kernel', 'src/dxf_reader.cpp', 'src/wasm'];
 /** Further kernel sources a template may be written for (kernel core, DXF reader, bindings). */
-const EXTRA = ['src/wasm'];
+const EXTRA: string[] = [];
 
 const entryOf = (m: KernelMessageSource) => `${m.code}\t${m.skeleton}`;
 /** A skeleton as a text: each value is one field character. */
