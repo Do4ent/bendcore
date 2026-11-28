@@ -107,9 +107,9 @@ test('multiple formats of GOST 2.301 and the ISO 5457 elongated sizes', async ({
   const b = s.views[0].bounds!;
   expect(b.minX).toBeGreaterThan(20);
   expect(b.maxX).toBeLessThan(625);
-  // The kernel's SVG has the size of the sheet.
+  // The kernel's SVG has the size of the sheet (mm).
   const svg = page.getByTestId('sheet-svg').locator('svg');
-  await expect(svg).toHaveAttribute('width', /^630(\.0+)?mm$/);
+  await expect(svg).toHaveAttribute('viewBox', '0 0 630 297');
 
   await page.getByTestId('sheet-style').selectOption('iso7200');
   await expectNoError(page);
