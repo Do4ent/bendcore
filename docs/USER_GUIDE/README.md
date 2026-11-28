@@ -81,4 +81,4 @@
 - Перечень данных, требующих сверки: `docs/STANDARDS_VERIFICATION.md`.
 - Типы операций детали: `src/modeling/document/part_features.cpp`,
   `src/modeling/document/sketch_features.cpp` (реестр типов), `src/ui/modeling/labels.ts`
-  (подписи на панели инструментов).
+  (подписи на ленте).

@@ -131,6 +131,10 @@ message}`, исключения OCCT (`Standard_Failure`) и `std::exception` п
 
 ## Вьюпорт (`KernelViewport`, `KernelViewerApp`)
 
+**Лента просмотра STEP** (`src/ui/kernel/viewerRibbon.ts`; устройство — `docs/ui/APP_SHELL.md`,
+«Лента»): быстрый доступ — Открыть STEP/IGES…, Экспорт…; вкладка «Просмотр» — «Тесселяция»
+(линейный и угловой допуски, **Перестроить сетку**), «Измерения» (**Измерить**, **Сечение**).
+
 - **Геометрия** — только из ядра: `positions`, `normals`, `indices` идут в один
   `BufferGeometry` как есть (без пересчёта нормалей). Для каждой тройки `faceSpans`
   создаётся группа отрисовки (`addGroup(firstIndex, indexCount)`), у сетки два материала:
