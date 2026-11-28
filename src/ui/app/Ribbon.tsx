@@ -168,13 +168,23 @@ const Ribbon: React.FC<RibbonProps> = ({ title, quick = [], tabs, activeTab, sta
     const strip = stripRef.current;
     if (!strip) return;
     const all = boxes();
-    const id = panelAt(all, strip.scrollLeft, strip.clientWidth);
+    let id = panelAt(all, strip.scrollLeft, strip.clientWidth);
+    // A minimal scroll that brings a command of the neighbouring tab into view (keyboard focus,
+    // automation) leaves the middle of the strip on the current tab; aligning back to it would
+    // move the command out from under the pointer. A strip moved off the current tab's start is
+    // aligned to the neighbour in the direction of the move instead.
+    const cur = all.findIndex((b) => b.id === current);
+    if (id === current && cur >= 0) {
+      const delta = strip.scrollLeft - all[cur].left;
+      const next = delta > 0.5 ? all[cur + 1] : delta < -0.5 ? all[cur - 1] : undefined;
+      if (next && next.width > 0) id = next.id;
+    }
     const box = all.find((b) => b.id === id);
     if (!box) return;
     const clamped = clampToPanel(box, strip.scrollLeft, strip.clientWidth);
     if (Math.abs(clamped - strip.scrollLeft) > 0.5) strip.scrollLeft = clamped;
     setCurrent(id);
-  }, [boxes]);
+  }, [boxes, current]);
 
   // The tab the strip shows right now, read from its scroll position. A command of another tab
   // scrolled into view (keyboard focus, automation) moves the strip before the scroll event
