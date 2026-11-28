@@ -106,6 +106,14 @@ NAUO — `OperationFailed` (маркеры в файл не попадают —
 `XCAFPrs_DocumentExplorer` (OCCT): унаследованный от родителя, его заменяет цвет прототипа,
 а тот — цвет вхождения. Цвета граней детали действуют поверх цвета вхождения.
 
+**Деталь из документа детали.** `assembly_v2::partStepDocument(document, fallbackName)` и экспорт
+страницы детали (`exportFile('step')`) строят документ из одного прототипа-детали: PRODUCT `id` —
+обозначение документа детали (с активным исполнением — полное обозначение исполнения), `name`
+и `description` — наименование (пустое — обозначение, затем имя файла;
+`docs/modeling/PART_DOCUMENT.md`, «Свойства документа»). В сборке обозначение и наименование
+детали попадают в PRODUCT через `PartProperties` (`ASSEMBLY_DOCUMENT.md`, раздел 9). Тест —
+`assembly_document_part_properties` (`PartPropertiesInStep`), WASM — `tests/wasm/part_properties.test.mjs`.
+
 ## Допуски и единицы
 
 - Длины в мм. При чтении файл в метрах или дюймах пересчитывается OCCT; тест проверяет
